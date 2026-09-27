@@ -10,15 +10,15 @@ export default function PuritiesPage() {
       endpoint="/api/v1/masters/purities"
       columns={[
         { key: "karat", label: "Karat" },
-        { key: "purity", label: "Purity" },
-        { key: "default_making_charge", label: "Making charge" },
-        { key: "default_wastage_pct", label: "Wastage %" },
+        { key: "permille", label: "Permille" },
+        { key: "default_making_cents", label: "Making (cents)" },
+        { key: "default_wastage_mg", label: "Wastage (mg)" },
       ]}
       fields={[
         { name: "karat", label: "Karat (e.g. 22K)", type: "text", required: true },
-        { name: "purity", label: "Purity decimal (e.g. 0.916)", type: "number", required: true },
-        { name: "defaultMakingCharge", label: "Default making charge", type: "number" },
-        { name: "defaultWastagePct", label: "Default wastage %", type: "number" },
+        { name: "permille", label: "Permille (e.g. 916)", type: "number", required: true },
+        { name: "defaultMakingLkr", label: "Default making LKR", type: "number" },
+        { name: "defaultWastageMg", label: "Default wastage mg", type: "number" },
       ]}
       deactivateEndpoint={(id) => `/api/v1/masters/purities/${id}/deactivate`}
       emptyHint="No purities yet."

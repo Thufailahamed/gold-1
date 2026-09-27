@@ -15,6 +15,8 @@ const LINKS = [
   { href: "/suppliers", label: "Suppliers", perm: "masters:view" },
   { href: "/customers", label: "Customers", perm: "masters:view" },
   { href: "/products", label: "Products", perm: "products:view" },
+  { href: "/scan", label: "Scan", perm: "products:view" },
+  { href: "/inventory", label: "Inventory", perm: "products:view" },
   { href: "/settings", label: "Settings", perm: "settings:view" },
   { href: "/audit", label: "Audit", perm: "audit:view" },
 ];
