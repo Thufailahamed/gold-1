@@ -68,6 +68,15 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: "Purchasing",
+    tag: "Trade",
+    items: [
+      { href: "/purchases/orders", label: "Orders", icon: TruckIcon, perm: "purchases:view" },
+      { href: "/purchases/invoices", label: "Invoices", icon: CoinsIcon, perm: "purchases:view" },
+      { href: "/purchases/reports", label: "Reports", icon: HistoryIcon, perm: "purchases:view" },
+    ],
+  },
+  {
     title: "Organisation",
     tag: "Org",
     items: [

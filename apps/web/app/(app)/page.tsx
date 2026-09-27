@@ -28,7 +28,7 @@ import {
 
 const CARDS = [
   { title: "Today's Sales", value: "LKR 0", hint: "Sales module not connected yet", icon: BanknoteIcon },
-  { title: "Today's Purchases", value: "LKR 0", hint: "Purchases module not connected yet", icon: TruckIcon },
+  { title: "Today's Purchases", value: null as string | null, hint: "Live from purchase invoices", icon: TruckIcon },
   { title: "Gold Purchased", value: "0 g", hint: "Old-gold module not connected yet", icon: ScaleIcon },
   { title: "Gold Sold", value: "0 g", hint: "Sales module not connected yet", icon: CoinsIcon },
   { title: "Cash", value: "LKR 0", hint: "Cash module not connected yet", icon: BanknoteIcon },
@@ -54,6 +54,12 @@ function greeting(): string {
 export default function DashboardPage() {
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
   const firstName = me.data?.user.name?.split(" ")[0] ?? "there";
+  const todayPurchases = useQuery({
+    queryKey: ["dash-purchases-today"],
+    queryFn: () =>
+      api<{ value_cents: number }>(`/api/v1/purchases/reports/summary?period=today`),
+    retry: false,
+  });
 
   return (
     <Page>
@@ -103,7 +109,19 @@ export default function DashboardPage() {
 
       <StatGrid cols={4}>
         {CARDS.map((c) => (
-          <StatCard key={c.title} label={c.title} value={c.value} sub={c.hint} icon={<c.icon size={16} />} />
+          <StatCard
+            key={c.title}
+            label={c.title}
+            value={
+              c.title === "Today's Purchases"
+                ? todayPurchases.data
+                  ? `${(todayPurchases.data.value_cents / 100).toLocaleString("en-US")} LKR`
+                  : "—"
+                : c.value ?? "—"
+            }
+            sub={c.hint}
+            icon={<c.icon size={16} />}
+          />
         ))}
       </StatGrid>
 
