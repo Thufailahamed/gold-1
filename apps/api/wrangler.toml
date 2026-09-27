@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "goldos"
-database_id = "REPLACE_WITH_REAL_ID"
+database_id = "27c637f8-6a15-4012-bd7e-8b7b601df400"
 
 [[r2_buckets]]
 binding = "R2"

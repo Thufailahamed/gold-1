@@ -3,9 +3,14 @@
 ## Prereqs
 
 Cloudflare account with Workers, D1 (`goldos`), R2 (`goldos-assets`).
-`apps/api/wrangler.toml` binds `DB` and `R2`. Replace `REPLACE_WITH_REAL_ID`
-with the real D1 `database_id` (remote migration in Task 8 was deferred —
-no database ID was provided, so only local D1 has been migrated).
+`apps/api/wrangler.toml` binds `DB` and `R2`.
+
+Live (2026-09-27):
+- API: https://goldos-api.thufailahamed627.workers.dev
+- D1: `goldos` (27c637f8-6a15-4012-bd7e-8b7b601df400), region APAC
+- R2: `goldos-assets`
+- Web `apps/web/.env.local` points `NEXT_PUBLIC_API_URL` at the Workers URL
+  (git-ignored; set the same env var when deploying to Pages).
 
 ## Migrate
 
