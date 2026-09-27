@@ -1,0 +1,20 @@
+export const PERMISSIONS = {
+  USERS_READ: "users:read",
+  USERS_WRITE: "users:write",
+  BRANCHES_MANAGE: "branches:manage",
+  SETTINGS_WRITE: "settings:write",
+  AUDIT_READ: "audit:read",
+} as const;
+
+export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+
+export function hasPermission(granted: string[], required: string): boolean {
+  return granted.includes(required);
+}
+
+export const DEFAULT_ROLES: Record<string, string[]> = {
+  admin: ["users:read", "users:write", "branches:manage", "settings:write", "audit:read"],
+  manager: ["users:read", "branches:manage", "audit:read"],
+  cashier: ["users:read"],
+  viewer: [],
+};
