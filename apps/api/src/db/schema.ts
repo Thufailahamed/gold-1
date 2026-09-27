@@ -237,3 +237,67 @@ export const stockMovements = sqliteTable("stock_movements", {
   createdAt: integer("created_at").notNull(),
   createdBy: text("created_by"),
 });
+
+export const counters = sqliteTable("counters", {
+  name: text("name").primaryKey(),
+  next: integer("next").notNull().default(1),
+});
+
+export const purchaseOrders = sqliteTable("purchase_orders", {
+  id: text("id").primaryKey(),
+  number: text("number").notNull().unique(),
+  supplierId: text("supplier_id").notNull(),
+  branchId: text("branch_id").notNull(),
+  status: text("status").notNull().default("DRAFT"),
+  notes: text("notes"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+export const purchaseOrderItems = sqliteTable("purchase_order_items", {
+  id: text("id").primaryKey(),
+  orderId: text("order_id").notNull(),
+  categoryId: text("category_id").notNull(),
+  purityId: text("purity_id").notNull(),
+  grossMg: integer("gross_mg").notNull(),
+  netMg: integer("net_mg").notNull(),
+  estCostCents: integer("est_cost_cents").notNull(),
+  notes: text("notes"),
+});
+
+export const purchaseInvoices = sqliteTable("purchase_invoices", {
+  id: text("id").primaryKey(),
+  number: text("number").notNull().unique(),
+  orderId: text("order_id"),
+  supplierId: text("supplier_id").notNull(),
+  branchId: text("branch_id").notNull(),
+  subtotalCents: integer("subtotal_cents").notNull(),
+  chargesCents: integer("charges_cents").notNull().default(0),
+  totalCents: integer("total_cents").notNull(),
+  paidCents: integer("paid_cents").notNull().default(0),
+  status: text("status").notNull().default("UNPAID"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+export const purchaseInvoiceItems = sqliteTable("purchase_invoice_items", {
+  id: text("id").primaryKey(),
+  invoiceId: text("invoice_id").notNull(),
+  productId: text("product_id").notNull(),
+  grossMg: integer("gross_mg").notNull(),
+  netMg: integer("net_mg").notNull(),
+  purityId: text("purity_id").notNull(),
+  costCents: integer("cost_cents").notNull(),
+  makingCents: integer("making_cents").notNull().default(0),
+});
+
+export const purchasePayments = sqliteTable("purchase_payments", {
+  id: text("id").primaryKey(),
+  invoiceId: text("invoice_id").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  method: text("method").notNull(),
+  refEntity: text("ref_entity").notNull().default("purchase_payment"),
+  refId: text("ref_id").notNull(),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
