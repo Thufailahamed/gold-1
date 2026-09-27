@@ -262,112 +262,16 @@ INSERT INTO stone_types (id, name, code, created_at) VALUES
   ('stone-pearl', 'Pearl', 'PEARL', 1759000000000);
 ```
 
-- [ ] **Step 2: Write 0006_decimal.sql (table rebuilds)**
+- [ ] **Step 2: Write 0006_decimal.sql (ADD + backfill + DROP COLUMN)**
 
-Purities first (products references purities — rebuild order: purities, then products; gold_rates references purities but keeps purity_id TEXT — no FK issue during rebuild since we copy same ids):
+D1 enforces FKs: `DROP TABLE` on a referenced parent fails. So no table
+rebuilds — use `ALTER TABLE ADD COLUMN` → `UPDATE` backfill →
+`ALTER TABLE DROP COLUMN`. `default_wastage_mg` is set to 0 for converted
+rows (old percent defaults do not translate to absolute mg). New-column
+FKs (e.g. metal_type_id DEFAULT 'metal-gold') require 0005 applied first.
+See the committed file for the exact 43 statements.
 
-```sql
-CREATE TABLE purities_new (
-  id TEXT PRIMARY KEY,
-  karat TEXT NOT NULL UNIQUE,
-  permille INTEGER NOT NULL,
-  default_making_cents INTEGER NOT NULL DEFAULT 0,
-  default_wastage_mg INTEGER NOT NULL DEFAULT 0,
-  is_active INTEGER NOT NULL DEFAULT 1,
-  created_at INTEGER NOT NULL
-);
-INSERT INTO purities_new (id, karat, permille, default_making_cents, default_wastage_mg, is_active, created_at)
-  SELECT id, karat, CAST(ROUND(purity * 1000) AS INTEGER), CAST(ROUND(default_making_charge * 100) AS INTEGER), CAST(ROUND(default_wastage_pct * 1000) AS INTEGER), is_active, created_at FROM purities;
-DROP TABLE purities;
-ALTER TABLE purities_new RENAME TO purities;
-
-CREATE TABLE gold_rates_new (
-  id TEXT PRIMARY KEY,
-  purity_id TEXT NOT NULL REFERENCES purities(id),
-  rate_cents_per_g INTEGER NOT NULL,
-  effective_from INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  created_by TEXT REFERENCES users(id),
-  UNIQUE (purity_id, effective_from)
-);
-INSERT INTO gold_rates_new (id, purity_id, rate_per_gram_placeholder, effective_from, created_at, created_by)
-```
-
-No — column lists must match. Write correctly:
-```sql
-INSERT INTO gold_rates_new (id, purity_id, rate_cents_per_g, effective_from, created_at, created_by)
-  SELECT id, purity_id, CAST(ROUND(rate_per_gram * 100) AS INTEGER), effective_from, created_at, created_by FROM gold_rates;
-DROP TABLE gold_rates;
-ALTER TABLE gold_rates_new RENAME TO gold_rates;
-CREATE INDEX idx_gold_rates_current ON gold_rates(purity_id, effective_from DESC);
-```
-
-Parties (suppliers + customers share shape — repeat block twice):
-```sql
-CREATE TABLE suppliers_new (
-  id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT, address TEXT,
-  nic TEXT UNIQUE, credit_limit_cents INTEGER NOT NULL DEFAULT 0,
-  opening_balance_cents INTEGER NOT NULL DEFAULT 0,
-  is_active INTEGER NOT NULL DEFAULT 1,
-  branch_id TEXT NOT NULL REFERENCES branches(id),
-  created_at INTEGER NOT NULL, created_by TEXT REFERENCES users(id)
-);
-INSERT INTO suppliers_new (id, name, phone, address, nic, credit_limit_cents, opening_balance_cents, is_active, branch_id, created_at, created_by)
-  SELECT id, name, phone, address, nic, CAST(ROUND(credit_limit * 100) AS INTEGER), CAST(ROUND(opening_balance * 100) AS INTEGER), is_active, branch_id, created_at, created_by FROM suppliers;
-DROP TABLE suppliers;
-ALTER TABLE suppliers_new RENAME TO suppliers;
-```
-(Repeat identical block for customers.)
-
-Products rebuild WITH all new columns (0005 did not touch products):
-```sql
-CREATE TABLE products_new (
-  id TEXT PRIMARY KEY,
-  barcode TEXT NOT NULL UNIQUE,
-  sku TEXT NOT NULL UNIQUE,
-  category_id TEXT NOT NULL REFERENCES categories(id),
-  subcategory_id TEXT REFERENCES subcategories(id),
-  design_id TEXT REFERENCES designs(id),
-  product_type_id TEXT REFERENCES product_types(id),
-  metal_type_id TEXT NOT NULL REFERENCES metal_types(id),
-  stone_type_id TEXT REFERENCES stone_types(id),
-  purity_id TEXT NOT NULL REFERENCES purities(id),
-  name TEXT NOT NULL,
-  gross_mg INTEGER NOT NULL,
-  stone_mg INTEGER NOT NULL DEFAULT 0,
-  net_mg INTEGER NOT NULL,
-  fine_gold_mg INTEGER NOT NULL DEFAULT 0,
-  making_cents INTEGER NOT NULL DEFAULT 0,
-  wastage_mg INTEGER NOT NULL DEFAULT 0,
-  cost_cents INTEGER,
-  selling_price_cents INTEGER,
-  location TEXT,
-  notes TEXT,
-  image_keys TEXT NOT NULL DEFAULT '[]',
-  status TEXT NOT NULL DEFAULT 'IN_STOCK',
-  branch_id TEXT NOT NULL REFERENCES branches(id),
-  created_at INTEGER NOT NULL,
-  created_by TEXT REFERENCES users(id)
-);
-INSERT INTO products_new (id, barcode, sku, category_id, purity_id, name, gross_mg, stone_mg, net_mg, fine_gold_mg, making_cents, status, branch_id, created_at, created_by)
-  SELECT id, barcode, 'SKU-' || SUBSTR(UPPER(HEX(RANDOMBLOB(3))), 1, 6), category_id, purity_id, name,
-    CAST(ROUND(gross_weight * 1000) AS INTEGER), CAST(ROUND(stone_weight * 1000) AS INTEGER),
-    CAST(ROUND(net_weight * 1000) AS INTEGER),
-    CAST(ROUND(net_weight * 1000 * purity * 1000) / 1000 AS INTEGER),
-```
-
-No — fine gold needs permille from NEW purities table. SQLite can't easily join in this dialect... it can: subquery `(SELECT permille FROM purities WHERE purities.id = products.purity_id)`. Write:
-```sql
-    CAST(ROUND(CAST(ROUND(net_weight * 1000) AS INTEGER) * (SELECT permille FROM purities WHERE purities.id = products.purity_id) / 1000.0) AS INTEGER),
-    CAST(ROUND(making_charge * 100) AS INTEGER), status, branch_id, created_at, created_by FROM products;
-DROP TABLE products;
-ALTER TABLE products_new RENAME TO products;
-CREATE INDEX idx_products_barcode ON products(barcode);
-CREATE INDEX idx_products_branch_status ON products(branch_id, status);
-CREATE UNIQUE INDEX idx_products_sku ON products(sku);
-```
-
-Wait — status mapping old→new happens in 0007, but 0006 rebuild copies `status` TEXT as-is (in_stock/sold/void survive; CHECK not added yet). 0007 does the mapping. Correct per plan (0007 = status map). But new-column defaults: metal_type_id NOT NULL — copy must supply it: add `'metal-gold'` literal in SELECT (metal_types seeded in 0005 — 0006 runs after 0005, FK satisfied). Add `metal_type_id` to column list + `'metal-gold'` in SELECT. Also default_wastage interpretation change: old default_wastage_pct (%) → default_wastage_mg is WRONG conversion (pct×1000 ≠ mg). Purities' wastage: old semantics percent, new semantics absolute mg default. Honest approach: set default_wastage_mg = 0 for converted rows (percent defaults don't translate), note in commit/docs. Change SELECT to `0` for that column. Making charge LKR→cents is exact. Purity decimal→permille exact for 3dp values.
+(SQL moved to the committed migration file — ADD/backfill/DROP approach.)
 
 - [ ] **Step 3: Update Drizzle schema + seed**
 

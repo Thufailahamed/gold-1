@@ -104,9 +104,9 @@ export const categories = sqliteTable("categories", {
 export const purities = sqliteTable("purities", {
   id: text("id").primaryKey(),
   karat: text("karat").notNull().unique(),
-  purity: real("purity").notNull(),
-  defaultMakingCharge: real("default_making_charge").notNull().default(0),
-  defaultWastagePct: real("default_wastage_pct").notNull().default(0),
+  permille: integer("permille").notNull(),
+  defaultMakingCents: integer("default_making_cents").notNull().default(0),
+  defaultWastageMg: integer("default_wastage_mg").notNull().default(0),
   isActive: integer("is_active").notNull().default(1),
   createdAt: integer("created_at").notNull(),
 });
@@ -114,7 +114,7 @@ export const purities = sqliteTable("purities", {
 export const goldRates = sqliteTable("gold_rates", {
   id: text("id").primaryKey(),
   purityId: text("purity_id").notNull(),
-  ratePerGram: real("rate_per_gram").notNull(),
+  rateCentsPerG: integer("rate_cents_per_g").notNull(),
   effectiveFrom: integer("effective_from").notNull(),
   createdAt: integer("created_at").notNull(),
   createdBy: text("created_by"),
@@ -127,8 +127,8 @@ function partyColumns() {
     phone: text("phone"),
     address: text("address"),
     nic: text("nic").unique(),
-    creditLimit: real("credit_limit").notNull().default(0),
-    openingBalance: real("opening_balance").notNull().default(0),
+    creditLimitCents: integer("credit_limit_cents").notNull().default(0),
+    openingBalanceCents: integer("opening_balance_cents").notNull().default(0),
     isActive: integer("is_active").notNull().default(1),
     branchId: text("branch_id").notNull(),
     createdAt: integer("created_at").notNull(),
@@ -139,17 +139,51 @@ function partyColumns() {
 export const suppliers = sqliteTable("suppliers", partyColumns());
 export const customers = sqliteTable("customers", partyColumns());
 
+function catalogMaster(table: string) {
+  return {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    code: text("code").notNull().unique(),
+    isActive: integer("is_active").notNull().default(1),
+    createdAt: integer("created_at").notNull(),
+    createdBy: text("created_by"),
+  };
+}
+
+export const subcategories = sqliteTable("subcategories", {
+  ...catalogMaster("subcategories"),
+  categoryId: text("category_id").notNull(),
+});
+
+export const designs = sqliteTable("designs", catalogMaster("designs"));
+export const productTypes = sqliteTable("product_types", catalogMaster("product_types"));
+export const metalTypes = sqliteTable("metal_types", catalogMaster("metal_types"));
+export const stoneTypes = sqliteTable("stone_types", catalogMaster("stone_types"));
+
 export const products = sqliteTable("products", {
   id: text("id").primaryKey(),
   barcode: text("barcode").notNull().unique(),
+  sku: text("sku").notNull().unique(),
   categoryId: text("category_id").notNull(),
+  subcategoryId: text("subcategory_id"),
+  designId: text("design_id"),
+  productTypeId: text("product_type_id"),
+  metalTypeId: text("metal_type_id").notNull(),
+  stoneTypeId: text("stone_type_id"),
   purityId: text("purity_id").notNull(),
   name: text("name").notNull(),
-  grossWeight: real("gross_weight").notNull(),
-  stoneWeight: real("stone_weight").notNull().default(0),
-  netWeight: real("net_weight").notNull(),
-  makingCharge: real("making_charge").notNull().default(0),
-  status: text("status").notNull().default("in_stock"),
+  grossMg: integer("gross_mg").notNull(),
+  stoneMg: integer("stone_mg").notNull().default(0),
+  netMg: integer("net_mg").notNull(),
+  fineGoldMg: integer("fine_gold_mg").notNull().default(0),
+  makingCents: integer("making_cents").notNull().default(0),
+  wastageMg: integer("wastage_mg").notNull().default(0),
+  costCents: integer("cost_cents"),
+  sellingPriceCents: integer("selling_price_cents"),
+  location: text("location"),
+  notes: text("notes"),
+  imageKeys: text("image_keys").notNull().default("[]"),
+  status: text("status").notNull().default("IN_STOCK"),
   branchId: text("branch_id").notNull(),
   createdAt: integer("created_at").notNull(),
   createdBy: text("created_by"),
