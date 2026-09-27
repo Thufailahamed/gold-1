@@ -301,3 +301,73 @@ export const purchasePayments = sqliteTable("purchase_payments", {
   createdAt: integer("created_at").notNull(),
   createdBy: text("created_by"),
 });
+
+export const salesInvoices = sqliteTable("sales_invoices", {
+  id: text("id").primaryKey(),
+  number: text("number").notNull().unique(),
+  customerId: text("customer_id"),
+  branchId: text("branch_id").notNull(),
+  salespersonId: text("salesperson_id"),
+  subtotalCents: integer("subtotal_cents").notNull(),
+  discountCents: integer("discount_cents").notNull().default(0),
+  totalCents: integer("total_cents").notNull(),
+  paidCents: integer("paid_cents").notNull().default(0),
+  status: text("status").notNull().default("UNPAID"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+export const salesItems = sqliteTable("sales_items", {
+  id: text("id").primaryKey(),
+  invoiceId: text("invoice_id").notNull(),
+  productId: text("product_id").notNull(),
+  priceCents: integer("price_cents").notNull(),
+  discountCents: integer("discount_cents").notNull().default(0),
+  costCents: integer("cost_cents").notNull(),
+});
+
+export const salesPayments = sqliteTable("sales_payments", {
+  id: text("id").primaryKey(),
+  invoiceId: text("invoice_id").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  method: text("method").notNull(),
+  refEntity: text("ref_entity").notNull().default("sale_payment"),
+  refId: text("ref_id").notNull(),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+export const salesReturns = sqliteTable("sales_returns", {
+  id: text("id").primaryKey(),
+  number: text("number").notNull().unique(),
+  invoiceId: text("invoice_id").notNull(),
+  type: text("type").notNull(),
+  reason: text("reason").notNull(),
+  approvedBy: text("approved_by"),
+  refundCents: integer("refund_cents").notNull().default(0),
+  creditCents: integer("credit_cents").notNull().default(0),
+  exchangeSaleId: text("exchange_sale_id"),
+  status: text("status").notNull().default("COMPLETE"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+export const salesReturnItems = sqliteTable("sales_return_items", {
+  id: text("id").primaryKey(),
+  returnId: text("return_id").notNull(),
+  productId: text("product_id").notNull(),
+  invoiceItemId: text("invoice_item_id").notNull(),
+});
+
+export const goldMovements = sqliteTable("gold_movements", {
+  id: text("id").primaryKey(),
+  productId: text("product_id").notNull(),
+  direction: text("direction").notNull(),
+  fineMg: integer("fine_mg").notNull(),
+  purityPermille: integer("purity_permille").notNull(),
+  refEntity: text("ref_entity").notNull(),
+  refId: text("ref_id").notNull(),
+  branchId: text("branch_id"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});

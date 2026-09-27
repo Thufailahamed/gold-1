@@ -57,6 +57,12 @@ export const SEED_PERMISSIONS = [
   "purchases:edit",
   "purchases:cancel",
   "purchases:export",
+  "sales:view",
+  "sales:create",
+  "sales:edit",
+  "sales:cancel",
+  "sales:export",
+  "sales:approve",
 ] as const;
 
 export const SEED_ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -69,18 +75,20 @@ export const SEED_ROLE_PERMISSIONS: Record<string, string[]> = {
     "audit:view", "audit:export", "masters:view", "masters:export",
     "products:view", "products:export", "accounts:manage",
     "purchases:view", "purchases:export",
+    "sales:view", "sales:export",
   ],
-  cashier: ["users:view", "branches:view", "masters:view", "products:view", "accounts:view", "purchases:view"],
-  salesperson: ["branches:view", "masters:view", "products:view", "purchases:view"],
+  cashier: ["users:view", "branches:view", "masters:view", "products:view", "accounts:view", "purchases:view", "sales:view", "sales:create"],
+  salesperson: ["branches:view", "masters:view", "products:view", "purchases:view", "sales:view", "sales:create"],
   inventory_officer: [
     "branches:view", "masters:view", "masters:create", "masters:edit",
     "masters:cancel", "masters:export", "products:view", "products:create",
     "products:edit", "products:cancel", "products:export",
     "purchases:view", "purchases:create", "purchases:edit",
+    "sales:view",
   ],
   gold_officer: [
     "branches:view", "masters:view", "masters:create", "masters:export",
-    "products:view", "purchases:view",
+    "products:view", "purchases:view", "sales:view",
   ],
   manufacturing_staff: ["products:view"],
 };
