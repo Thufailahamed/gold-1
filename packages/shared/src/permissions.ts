@@ -29,6 +29,11 @@ export const PERMISSIONS = {
   PRODUCTS_EXPORT: "products:export",
   ACCOUNTS_VIEW: "accounts:view",
   ACCOUNTS_MANAGE: "accounts:manage",
+  PURCHASES_VIEW: "purchases:view",
+  PURCHASES_CREATE: "purchases:create",
+  PURCHASES_EDIT: "purchases:edit",
+  PURCHASES_CANCEL: "purchases:cancel",
+  PURCHASES_EXPORT: "purchases:export",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -54,9 +59,11 @@ export const DEFAULT_ROLES: Record<string, string[]> = {
     "products:view",
     "products:export",
     "accounts:manage",
+    "purchases:view",
+    "purchases:export",
   ],
-  cashier: ["users:view", "branches:view", "masters:view", "products:view", "accounts:view"],
-  salesperson: ["branches:view", "masters:view", "products:view"],
+  cashier: ["users:view", "branches:view", "masters:view", "products:view", "accounts:view", "purchases:view"],
+  salesperson: ["branches:view", "masters:view", "products:view", "purchases:view"],
   inventory_officer: [
     "branches:view",
     "masters:view",
@@ -69,6 +76,9 @@ export const DEFAULT_ROLES: Record<string, string[]> = {
     "products:edit",
     "products:cancel",
     "products:export",
+    "purchases:view",
+    "purchases:create",
+    "purchases:edit",
   ],
   gold_officer: [
     "branches:view",
@@ -76,6 +86,7 @@ export const DEFAULT_ROLES: Record<string, string[]> = {
     "masters:create",
     "masters:export",
     "products:view",
+    "purchases:view",
   ],
   manufacturing_staff: ["products:view"],
 };

@@ -160,3 +160,55 @@ export const editUserSchema = z.object({
 
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type EditUserInput = z.infer<typeof editUserSchema>;
+
+const purchaseItemSchema = z.object({
+  categoryId: z.string().min(1),
+  subcategoryId: z.string().min(1).optional(),
+  designId: z.string().min(1).optional(),
+  productTypeId: z.string().min(1).optional(),
+  metalTypeId: z.string().min(1),
+  stoneTypeId: z.string().min(1).optional(),
+  purityId: z.string().min(1),
+  name: z.string().min(1).max(100),
+  grossG: z.number().gt(0).max(100000),
+  stoneG: z.number().min(0).max(100000).optional().default(0),
+  makingLkr: z.number().min(0).optional().default(0),
+  wastageG: z.number().min(0).optional().default(0),
+  costLkr: z.number().min(0),
+  location: z.string().max(100).optional(),
+  notes: z.string().max(2000).optional(),
+});
+
+export const createOrderSchema = z.object({
+  supplierId: z.string().min(1),
+  branchId: z.string().min(1),
+  notes: z.string().max(2000).optional(),
+  items: z
+    .array(
+      purchaseItemSchema.omit({ location: true, notes: true, costLkr: true }).extend({
+        estCostLkr: z.number().min(0),
+        notes: z.string().max(2000).optional(),
+      })
+    )
+    .min(1),
+});
+
+export const createInvoiceSchema = z.object({
+  orderId: z.string().min(1).optional(),
+  supplierId: z.string().min(1),
+  branchId: z.string().min(1),
+  chargesLkr: z.number().min(0).optional().default(0),
+  paidLkr: z.number().min(0).optional().default(0),
+  paidMethod: z.enum(["cash", "bank"]).optional(),
+  items: z.array(purchaseItemSchema).min(1),
+});
+
+export const payInvoiceSchema = z.object({
+  amountLkr: z.number().gt(0),
+  method: z.enum(["cash", "bank"]),
+});
+
+export const voidInvoiceSchema = z.object({ reason: z.string().min(1).max(500) });
+
+export type CreateOrderInput = z.infer<typeof createOrderSchema>;
+export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
