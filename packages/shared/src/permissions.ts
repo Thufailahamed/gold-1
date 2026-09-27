@@ -27,6 +27,8 @@ export const PERMISSIONS = {
   PRODUCTS_EDIT: "products:edit",
   PRODUCTS_CANCEL: "products:cancel",
   PRODUCTS_EXPORT: "products:export",
+  ACCOUNTS_VIEW: "accounts:view",
+  ACCOUNTS_MANAGE: "accounts:manage",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -51,8 +53,9 @@ export const DEFAULT_ROLES: Record<string, string[]> = {
     "masters:export",
     "products:view",
     "products:export",
+    "accounts:manage",
   ],
-  cashier: ["users:view", "branches:view", "masters:view", "products:view"],
+  cashier: ["users:view", "branches:view", "masters:view", "products:view", "accounts:view"],
   salesperson: ["branches:view", "masters:view", "products:view"],
   inventory_officer: [
     "branches:view",
