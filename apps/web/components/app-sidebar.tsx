@@ -22,6 +22,7 @@ import {
   SettingsIcon,
   HistoryIcon,
   ScaleIcon,
+  TrendingUpIcon,
   LogOutIcon,
   XIcon,
 } from "./icons";
@@ -74,6 +75,16 @@ const SECTIONS: NavSection[] = [
       { href: "/purchases/orders", label: "Orders", icon: TruckIcon, perm: "purchases:view" },
       { href: "/purchases/invoices", label: "Invoices", icon: CoinsIcon, perm: "purchases:view" },
       { href: "/purchases/reports", label: "Reports", icon: HistoryIcon, perm: "purchases:view" },
+    ],
+  },
+  {
+    title: "Sales",
+    tag: "Counter",
+    items: [
+      { href: "/pos", label: "POS", icon: ScanBarcodeIcon, perm: "sales:create" },
+      { href: "/sales/invoices", label: "Invoices", icon: CoinsIcon, perm: "sales:view" },
+      { href: "/sales/returns", label: "Returns", icon: HistoryIcon, perm: "sales:view" },
+      { href: "/sales/reports", label: "Reports", icon: TrendingUpIcon, perm: "sales:view" },
     ],
   },
   {

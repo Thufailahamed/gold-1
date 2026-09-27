@@ -27,10 +27,10 @@ import {
 } from "@/components/icons";
 
 const CARDS = [
-  { title: "Today's Sales", value: "LKR 0", hint: "Sales module not connected yet", icon: BanknoteIcon },
+  { title: "Today's Sales", value: null as string | null, hint: "Live from sales invoices", icon: BanknoteIcon },
   { title: "Today's Purchases", value: null as string | null, hint: "Live from purchase invoices", icon: TruckIcon },
   { title: "Gold Purchased", value: "0 g", hint: "Old-gold module not connected yet", icon: ScaleIcon },
-  { title: "Gold Sold", value: "0 g", hint: "Sales module not connected yet", icon: CoinsIcon },
+  { title: "Gold Sold", value: null as string | null, hint: "Live from sales", icon: CoinsIcon },
   { title: "Cash", value: "LKR 0", hint: "Cash module not connected yet", icon: BanknoteIcon },
   { title: "Inventory", value: "0", hint: "Pieces on hand", icon: ArchiveIcon },
   { title: "Pending Approvals", value: "0", hint: "Approvals module not connected yet", icon: CheckCircleIcon },
@@ -60,6 +60,25 @@ export default function DashboardPage() {
       api<{ value_cents: number }>(`/api/v1/purchases/reports/summary?period=today`),
     retry: false,
   });
+  const todaySales = useQuery({
+    queryKey: ["dash-sales-today"],
+    queryFn: () => api<{ value_cents: number; gold_mg: number }>(`/api/v1/sales/reports/summary?period=today`),
+    retry: false,
+  });
+
+  function cardValue(title: string, fallback: string | null): string {
+    if (title === "Today's Purchases")
+      return todayPurchases.data
+        ? `${(todayPurchases.data.value_cents / 100).toLocaleString("en-US")} LKR`
+        : "—";
+    if (title === "Today's Sales")
+      return todaySales.data
+        ? `${(todaySales.data.value_cents / 100).toLocaleString("en-US")} LKR`
+        : "—";
+    if (title === "Gold Sold")
+      return todaySales.data ? `${(todaySales.data.gold_mg / 1000).toLocaleString("en-US")} g` : "—";
+    return fallback ?? "—";
+  }
 
   return (
     <Page>
@@ -112,13 +131,7 @@ export default function DashboardPage() {
           <StatCard
             key={c.title}
             label={c.title}
-            value={
-              c.title === "Today's Purchases"
-                ? todayPurchases.data
-                  ? `${(todayPurchases.data.value_cents / 100).toLocaleString("en-US")} LKR`
-                  : "—"
-                : c.value ?? "—"
-            }
+            value={cardValue(c.title, c.value)}
             sub={c.hint}
             icon={<c.icon size={16} />}
           />
