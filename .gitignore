@@ -7,3 +7,4 @@ dist/
 seed.sql
 *.log
 *.tsbuildinfo
+.turbo/
