@@ -123,10 +123,12 @@ export const goldRates = sqliteTable("gold_rates", {
 function partyColumns() {
   return {
     id: text("id").primaryKey(),
+    code: text("code").unique(),
     name: text("name").notNull(),
     phone: text("phone"),
     address: text("address"),
     nic: text("nic").unique(),
+    notes: text("notes"),
     creditLimitCents: integer("credit_limit_cents").notNull().default(0),
     openingBalanceCents: integer("opening_balance_cents").notNull().default(0),
     isActive: integer("is_active").notNull().default(1),
@@ -195,6 +197,29 @@ export const passwordResets = sqliteTable("password_resets", {
   tokenHash: text("token_hash").notNull().unique(),
   expiresAt: integer("expires_at").notNull(),
   usedAt: integer("used_at"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+export const chartOfAccounts = sqliteTable("chart_of_accounts", {
+  code: text("code").primaryKey(),
+  name: text("name").notNull(),
+  type: text("type").notNull(),
+  isActive: integer("is_active").notNull().default(1),
+  branchId: text("branch_id"),
+});
+
+export const journalEntries = sqliteTable("journal_entries", {
+  id: text("id").primaryKey(),
+  accountCode: text("account_code").notNull(),
+  debitCents: integer("debit_cents").notNull().default(0),
+  creditCents: integer("credit_cents").notNull().default(0),
+  partyType: text("party_type"),
+  partyId: text("party_id"),
+  refEntity: text("ref_entity").notNull(),
+  refId: text("ref_id").notNull(),
+  memo: text("memo"),
+  branchId: text("branch_id"),
   createdAt: integer("created_at").notNull(),
   createdBy: text("created_by"),
 });
