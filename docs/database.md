@@ -37,7 +37,14 @@ Conventions: `id TEXT PK` (UUID), timestamps as INTEGER millis, FKs enforced.
 
 ## Phase-3 products table (migration `0003_products`)
 
-- `products(id, barcode UNIQUE 'PRD-'+6 chars, category_id FK, purity_id FK, name, gross_weight, stone_weight, net_weight, making_charge, status 'in_stock'|'sold'|'void', branch_id FK, created_at, created_by)` — indexed on (barcode) and (branch_id, status). `sold` reserved for POS phase.
+- `products(id, barcode UNIQUE 'PRD-'+6 chars, category_id FK, purity_id FK, name, gross_weight, stone_weight, net_weight, making_charge, status 'in_stock'|'sold'|'void', branch_id FK, created_at, created_by)` — indexed on (barcode) and (branch_id, status). Superseded by 0005–0007 below.
+
+## Product foundation (migrations `0005_catalog`, `0006_decimal`, `0007_inventory`)
+
+- New masters: `subcategories(id, category_id FK, name, code UNIQUE)`, `designs`, `product_types`, `metal_types`, `stone_types` (id/name/code UNIQUE). Seeded metals GOLD/SILVER/PLATINUM, stones NONE/DIAMOND/RUBY/SAPPHIRE/EMERALD/PEARL.
+- Minor units: weights INTEGER mg, money INTEGER cents, purity INTEGER permille. Converted in place (`ROUND(x*1000)` / `ROUND(x*100)`); old REAL columns dropped. `default_wastage_mg` reset to 0 for converted rows (percent defaults don't translate). API speaks grams/LKR, converts at the boundary.
+- Products now: `sku UNIQUE`, `subcategory/design/product_type/metal/stone` FKs, `gross_mg/stone_mg/net_mg/fine_gold_mg`, `making_cents`, `wastage_mg`, `cost_cents?`, `selling_price_cents?`, `location?`, `notes?`, `image_keys` JSON (R2), status in 11-value set (IN_STOCK, RESERVED, SOLD, RETURNED, IN_REPAIR, IN_MANUFACTURING, TRANSFER_PENDING, MELTING, MELTED, LOST, VOID).
+- `stock_movements(id, product_id FK, type, from_status, to_status, from_branch, to_branch, weight_mg, reason, created_at, created_by)` — append-only, indexed by (product, time) and (branch, time). Types: INTAKE, TRANSFER_OUT, TRANSFER_IN, RETURN, LOSS, VOID.
 
 ## Later-phase reservations (not yet created)
 

@@ -5,11 +5,14 @@ reserved for their phases.
 
 ## ID formats
 
-- Products: `PRD-` + 6 chars (A–Z sans 0/O/1/I confusion, 2–9), e.g. `PRD-9D3J6S`
-- Old-gold lots: `OLD-` (reserved)
-- Melting batches: `MLT-` (reserved)
-- Manufacturing jobs: `MFG-` (reserved)
+- Products: `JW-` + 6 chars (A–Z sans 0/O/1/I confusion, 2–9), e.g. `JW-M2Q39H`. Legacy `PRD-` codes grandfathered — lookup accepts both.
+- SKU: `SKU-` + 6 chars, unique per piece (internal/stock use).
+- Old-gold lots: `OG-` (reserved)
+- Melting batches: `MELT-` (reserved)
+- Manufacturing orders: `MO-` (reserved)
 - Repairs: `REP-` (reserved)
+
+Lookup regex: `^(PRD|JW)-[A-Z0-9]{6}$`.
 
 ## Products (implemented)
 
