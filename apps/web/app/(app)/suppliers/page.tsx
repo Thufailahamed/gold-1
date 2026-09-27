@@ -38,7 +38,7 @@ export default function SuppliersPage() {
       endpoint="/api/v1/suppliers"
       columns={PARTY_COLUMNS}
       fields={PARTY_FIELDS}
-      deactivateEndpoint={(id) => `/api/v1/suppliers/${id}`}
+      deactivateEndpoint={(id) => `/api/v1/suppliers/${id}/status`}
       deactivateBody={(reason) => ({ isActive: 0, reason })}
       defaults={defaults}
       emptyHint="No suppliers yet. Create the first one."

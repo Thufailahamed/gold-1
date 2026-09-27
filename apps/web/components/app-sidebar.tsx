@@ -7,16 +7,16 @@ import type { MeData } from "@/lib/api";
 
 const LINKS = [
   { href: "/", label: "Dashboard", perm: null as string | null },
-  { href: "/users", label: "Users", perm: "users:read" },
-  { href: "/branches", label: "Branches", perm: "branches:manage" },
-  { href: "/categories", label: "Categories", perm: "masters:read" },
-  { href: "/purities", label: "Purities", perm: "masters:read" },
-  { href: "/gold-rates", label: "Gold Rates", perm: "masters:read" },
-  { href: "/suppliers", label: "Suppliers", perm: "masters:read" },
-  { href: "/customers", label: "Customers", perm: "masters:read" },
-  { href: "/products", label: "Products", perm: "products:read" },
-  { href: "/settings", label: "Settings", perm: "settings:write" },
-  { href: "/audit", label: "Audit", perm: "audit:read" },
+  { href: "/users", label: "Users", perm: "users:view" },
+  { href: "/branches", label: "Branches", perm: "branches:view" },
+  { href: "/categories", label: "Categories", perm: "masters:view" },
+  { href: "/purities", label: "Purities", perm: "masters:view" },
+  { href: "/gold-rates", label: "Gold Rates", perm: "masters:view" },
+  { href: "/suppliers", label: "Suppliers", perm: "masters:view" },
+  { href: "/customers", label: "Customers", perm: "masters:view" },
+  { href: "/products", label: "Products", perm: "products:view" },
+  { href: "/settings", label: "Settings", perm: "settings:view" },
+  { href: "/audit", label: "Audit", perm: "audit:view" },
 ];
 
 export function AppSidebar({ me }: { me: MeData }) {

@@ -38,7 +38,7 @@ export default function CustomersPage() {
       endpoint="/api/v1/customers"
       columns={PARTY_COLUMNS}
       fields={PARTY_FIELDS}
-      deactivateEndpoint={(id) => `/api/v1/customers/${id}`}
+      deactivateEndpoint={(id) => `/api/v1/customers/${id}/status`}
       deactivateBody={(reason) => ({ isActive: 0, reason })}
       defaults={defaults}
       emptyHint="No customers yet. Create the first one."
