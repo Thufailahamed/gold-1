@@ -113,11 +113,21 @@ export async function priceFor(
   };
 }
 
-export async function createProduct(
+export type BuiltProduct = {
+  stmts: D1PreparedStatement[];
+  id: string;
+  barcode: string;
+  sku: string;
+  netMg: number;
+};
+
+export async function buildCreateProductStmts(
   db: D1Database,
   input: CreateProductInput,
-  actorId: string
-): Promise<ProductRow> {
+  actorId: string,
+  branchId: string,
+  now: number
+): Promise<BuiltProduct> {
   await checkRef(db, "categories", input.categoryId, "Category");
   if (input.subcategoryId) await checkRef(db, "subcategories", input.subcategoryId, "Subcategory");
   if (input.designId) await checkRef(db, "designs", input.designId, "Design");
@@ -134,7 +144,7 @@ export async function createProduct(
     });
   const branch = await db
     .prepare("SELECT id FROM branches WHERE id = ? AND is_active = 1")
-    .bind(input.branchId)
+    .bind(branchId)
     .first();
   if (!branch) throw Object.assign(new Error("Branch not found"), { code: "NOT_FOUND" });
   const purity = await db
@@ -146,8 +156,7 @@ export async function createProduct(
   const sku = await uniqueCode(db, "sku", "SKU-");
   const makingCents = lkrToCents(input.makingLkr);
   const id = crypto.randomUUID();
-  const now = Date.now();
-  await db.batch([
+  const stmts = [
     db
       .prepare(
         "INSERT INTO products (id, barcode, sku, category_id, subcategory_id, design_id, product_type_id, metal_type_id, stone_type_id, purity_id, name, gross_mg, stone_mg, net_mg, fine_gold_mg, making_cents, wastage_mg, cost_cents, selling_price_cents, location, notes, image_keys, status, branch_id, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'IN_STOCK', ?, ?, ?)"
@@ -175,7 +184,7 @@ export async function createProduct(
         input.location ?? null,
         input.notes ?? null,
         "[]",
-        input.branchId,
+        branchId,
         now,
         actorId
       ),
@@ -183,17 +192,28 @@ export async function createProduct(
       .prepare(
         "INSERT INTO stock_movements (id, product_id, type, from_status, to_status, from_branch, to_branch, weight_mg, reason, created_at, created_by) VALUES (?, ?, 'INTAKE', NULL, 'IN_STOCK', NULL, ?, ?, 'intake', ?, ?)"
       )
-      .bind(crypto.randomUUID(), id, input.branchId, netMg, now, actorId),
+      .bind(crypto.randomUUID(), id, branchId, netMg, now, actorId),
     buildAuditStmt(db, {
       userId: actorId,
       action: "product.create",
       entity: "product",
       entityId: id,
       next: { ...input, barcode, sku },
-      branchId: input.branchId,
+      branchId,
     }),
-  ]);
-  const created = await db.prepare(`${WITH_NAMES} WHERE p.id = ?`).bind(id).first<RawRow>();
+  ];
+  return { stmts, id, barcode, sku, netMg };
+}
+
+export async function createProduct(
+  db: D1Database,
+  input: CreateProductInput,
+  actorId: string
+): Promise<ProductRow> {
+  const now = Date.now();
+  const built = await buildCreateProductStmts(db, input, actorId, input.branchId, now);
+  await db.batch(built.stmts);
+  const created = await db.prepare(`${WITH_NAMES} WHERE p.id = ?`).bind(built.id).first<RawRow>();
   if (!created) throw new Error("Product insert failed");
   return parseRow(created);
 }
@@ -373,12 +393,13 @@ export async function findByBarcode(db: D1Database, code: string): Promise<Produ
   );
 }
 
-export async function voidProduct(
+export async function buildVoidProductStmts(
   db: D1Database,
   id: string,
   actorId: string,
-  reason: string
-): Promise<void> {
+  reason: string,
+  now: number
+): Promise<{ stmts: D1PreparedStatement[]; branchId: string; netMg: number }> {
   const prev = await db
     .prepare("SELECT id, status, branch_id, net_mg FROM products WHERE id = ?")
     .bind(id)
@@ -386,8 +407,7 @@ export async function voidProduct(
   if (!prev) throw Object.assign(new Error("Product not found"), { code: "NOT_FOUND" });
   if (prev.status === "VOID")
     throw Object.assign(new Error("Product already void"), { code: "CONFLICT" });
-  const now = Date.now();
-  await db.batch([
+  const stmts = [
     db.prepare("UPDATE products SET status = 'VOID' WHERE id = ?").bind(id),
     db
       .prepare(
@@ -414,5 +434,16 @@ export async function voidProduct(
       reason,
       branchId: prev.branch_id,
     }),
-  ]);
+  ];
+  return { stmts, branchId: prev.branch_id, netMg: prev.net_mg };
+}
+
+export async function voidProduct(
+  db: D1Database,
+  id: string,
+  actorId: string,
+  reason: string
+): Promise<void> {
+  const built = await buildVoidProductStmts(db, id, actorId, reason, Date.now());
+  await db.batch(built.stmts);
 }
