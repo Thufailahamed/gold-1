@@ -80,3 +80,11 @@ Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 | PATCH | /purchases/invoices/:id/void | purchases:cancel | IN_STOCK items only + reversal + reason |
 | GET | /purchases/reports/summary | purchases:view | ?period=today\|month\|all |
 | GET | /purchases/reports/breakdown | purchases:view | ?groupBy=supplier\|purity\|category |
+| POST | /sales/invoices | sales:create | atomic 14-step flow; split payments; approval over limit |
+| GET | /sales/invoices | sales:view | filters customer, branch, status, date range |
+| GET | /sales/invoices/:id | sales:view | items + payments + journal + returns |
+| POST | /sales/returns | sales:cancel | full/partial/exchange + approval over threshold |
+| PATCH | /sales/returns/:id/link | sales:edit | link exchange sale |
+| GET | /sales/returns | sales:view | filterable by invoice |
+| GET | /sales/reports/summary | sales:view | ?period=today\|month\|all |
+| GET | /sales/reports/breakdown | sales:view | ?groupBy=category\|purity\|branch\|salesperson\|payment\|product |

@@ -46,6 +46,12 @@ reverse/export/manage. `reverse` is reserved for future transaction modules
 | purchases:edit | ✓ | ✓ | — | — | — | ✓ | — | — |
 | purchases:cancel | ✓ | ✓ | — | — | — | — | — | — |
 | purchases:export | ✓ | ✓ | ✓ | — | — | — | — | — |
+| sales:view | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — |
+| sales:create | ✓ | ✓ | — | ✓ | ✓ | — | — | — |
+| sales:edit | ✓ | ✓ | — | — | — | — | — | — |
+| sales:cancel | ✓ | ✓ | — | — | — | — | — | — |
+| sales:export | ✓ | ✓ | ✓ | — | — | — | — | — |
+| sales:approve | ✓ | ✓ | — | — | — | — | — | — |
 
 Rules: sessions expire (12h idle / 7d absolute); inactive users are rejected;
 activation changes need a reason and are audited; users cannot change their

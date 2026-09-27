@@ -44,7 +44,14 @@ Conventions: `id TEXT PK` (UUID), timestamps as INTEGER millis, FKs enforced.
 - New masters: `subcategories(id, category_id FK, name, code UNIQUE)`, `designs`, `product_types`, `metal_types`, `stone_types` (id/name/code UNIQUE). Seeded metals GOLD/SILVER/PLATINUM, stones NONE/DIAMOND/RUBY/SAPPHIRE/EMERALD/PEARL.
 - Minor units: weights INTEGER mg, money INTEGER cents, purity INTEGER permille. Converted in place (`ROUND(x*1000)` / `ROUND(x*100)`); old REAL columns dropped. `default_wastage_mg` reset to 0 for converted rows (percent defaults don't translate). API speaks grams/LKR, converts at the boundary.
 - Products now: `sku UNIQUE`, `subcategory/design/product_type/metal/stone` FKs, `gross_mg/stone_mg/net_mg/fine_gold_mg`, `making_cents`, `wastage_mg`, `cost_cents?`, `selling_price_cents?`, `location?`, `notes?`, `image_keys` JSON (R2), status in 11-value set (IN_STOCK, RESERVED, SOLD, RETURNED, IN_REPAIR, IN_MANUFACTURING, TRANSFER_PENDING, MELTING, MELTED, LOST, VOID).
-- `stock_movements(id, product_id FK, type, from_status, to_status, from_branch, to_branch, weight_mg, reason, created_at, created_by)` — append-only, indexed by (product, time) and (branch, time). Types: INTAKE, TRANSFER_OUT, TRANSFER_IN, RETURN, LOSS, VOID.
+- `stock_movements(id, product_id FK, type, from_status, to_status, from_branch, to_branch, weight_mg, reason, created_at, created_by)` — append-only, indexed by (product, time) and (branch, time). Types: INTAKE, TRANSFER_OUT, TRANSFER_IN, RETURN, LOSS, VOID, SALE_OUT.
+
+## Sales (migration `0010_sales`)
+
+- `counters` += SINV, SRET.
+- `sales_invoices(id, number SINV-XXXX, customer_id NULL FK, branch_id FK, salesperson_id FK, subtotal_cents, discount_cents, total_cents, paid_cents, status, created_at, created_by)` + `sales_items(id, invoice_id FK, product_id FK, price_cents, discount_cents, cost_cents COGS snapshot)` + `sales_payments(id, invoice_id FK, amount_cents, method cash/card/bank/credit/other, ref, created_at, created_by)`.
+- `sales_returns(id, number SRET-XXXX, invoice_id FK, type FULL/PARTIAL/EXCHANGE, reason, approved_by NULL FK, refund_cents, credit_cents, exchange_sale_id NULL FK, status, created_at, created_by)` + `sales_return_items(return_id FK, product_id FK, invoice_item_id FK)`.
+- `gold_movements(id, product_id FK, direction IN/OUT, fine_mg, purity_permille, ref_entity, ref_id, branch_id, created_at, created_by)` — minimal outflow ledger; future gold module absorbs it.
 
 ## Purchases (migration `0009_purchases`)
 

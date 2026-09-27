@@ -33,8 +33,18 @@ Party balances are derived: customer = opening + DR − CR on 1200;
 supplier = opening + CR − DR on 2000. Manual corrections go through
 `POST /accounts/adjustments` (reason required, accounts:manage).
 
-Gold ledger tables (grams in/out per process) arrive with old gold /
-melting / manufacturing phases.
+## Sale postings (live)
+
+Counter sale posts in the invoice batch: DR per payment leg (1000 Cash /
+1010 Card-Bank-Other / 1200 Receivable with customer party) / CR 4000
+Revenue; DR 5000 COGS (cost snapshots incl. allocated charges) / CR 1100
+Inventory. Each item writes a `gold_movements` OUT row (fine mg +
+permille) — the future gold ledger absorbs these rows. Returns post the
+mirror (DR 4000 / CR original methods or 1200 store credit; DR 1100 /
+CR 5000) plus gold IN rows. Original sales are never modified.
+
+Gold ledger tables (melting/recovery/manufacturing flows) still arrive
+with their phases.
 
 ## Purchase postings (live)
 
