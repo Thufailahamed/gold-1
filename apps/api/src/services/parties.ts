@@ -7,10 +7,12 @@ export type PartyTable = "suppliers" | "customers";
 
 export type PartyRow = {
   id: string;
+  code: string;
   name: string;
   phone: string | null;
   address: string | null;
   nic: string | null;
+  notes: string | null;
   credit_limit: number;
   opening_balance: number;
   is_active: number;
@@ -19,14 +21,16 @@ export type PartyRow = {
 };
 
 const PARTY_COLS =
-  "id, name, phone, address, nic, credit_limit_cents, opening_balance_cents, is_active, branch_id, created_at";
+  "id, code, name, phone, address, nic, notes, credit_limit_cents, opening_balance_cents, is_active, branch_id, created_at";
 
 type RawPartyRow = {
   id: string;
+  code: string;
   name: string;
   phone: string | null;
   address: string | null;
   nic: string | null;
+  notes: string | null;
   credit_limit_cents: number;
   opening_balance_cents: number;
   is_active: number;
@@ -40,6 +44,23 @@ function toPartyRow(r: RawPartyRow): PartyRow {
     credit_limit: centsToLkr(r.credit_limit_cents),
     opening_balance: centsToLkr(r.opening_balance_cents),
   };
+}
+
+const PARTY_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+async function randomPartyCode(
+  db: D1Database,
+  table: PartyTable,
+  prefix: "CUS-" | "SUP-"
+): Promise<string> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const bytes = crypto.getRandomValues(new Uint8Array(6));
+    let s = prefix;
+    for (const b of bytes) s += PARTY_ALPHABET[b % PARTY_ALPHABET.length];
+    const dup = await db.prepare(`SELECT id FROM ${table} WHERE code = ?`).bind(s).first();
+    if (!dup) return s;
+  }
+  throw Object.assign(new Error("Could not generate unique code"), { code: "INTERNAL" });
 }
 
 export async function createParty(
@@ -62,17 +83,20 @@ export async function createParty(
   }
   const id = crypto.randomUUID();
   const now = Date.now();
+  const code = await randomPartyCode(db, table, table === "customers" ? "CUS-" : "SUP-");
   await db.batch([
     db
       .prepare(
-        `INSERT INTO ${table} (id, name, phone, address, nic, credit_limit_cents, opening_balance_cents, is_active, branch_id, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
+        `INSERT INTO ${table} (id, code, name, phone, address, nic, notes, credit_limit_cents, opening_balance_cents, is_active, branch_id, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
       )
       .bind(
         id,
+        code,
         input.name,
         input.phone ?? null,
         input.address ?? null,
         input.nic ?? null,
+        input.notes ?? null,
         lkrToCents(input.creditLimit),
         lkrToCents(input.openingBalance),
         input.branchId,
@@ -90,10 +114,12 @@ export async function createParty(
   ]);
   return {
     id,
+    code,
     name: input.name,
     phone: input.phone ?? null,
     address: input.address ?? null,
     nic: input.nic ?? null,
+    notes: input.notes ?? null,
     credit_limit: input.creditLimit,
     opening_balance: input.openingBalance,
     is_active: 1,
@@ -140,6 +166,7 @@ export async function updateParty(
     phone?: string;
     address?: string;
     creditLimit?: number;
+    notes?: string;
     isActive?: number;
   },
   actorId: string,
@@ -168,6 +195,10 @@ export async function updateParty(
     sets.push("credit_limit_cents = ?");
     vals.push(lkrToCents(patch.creditLimit));
   }
+  if (patch.notes !== undefined) {
+    sets.push("notes = ?");
+    vals.push(patch.notes);
+  }
   if (patch.isActive !== undefined) {
     sets.push("is_active = ?");
     vals.push(patch.isActive);
@@ -186,4 +217,13 @@ export async function updateParty(
       branchId: prev.branch_id,
     }),
   ]);
+}
+
+export async function getPartyDetail(db: D1Database, table: PartyTable, id: string): Promise<PartyRow> {
+  const row = await db
+    .prepare(`SELECT ${PARTY_COLS} FROM ${table} WHERE id = ?`)
+    .bind(id)
+    .first<RawPartyRow>();
+  if (!row) throw Object.assign(new Error("Record not found"), { code: "NOT_FOUND" });
+  return toPartyRow(row);
 }
