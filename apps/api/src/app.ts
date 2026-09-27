@@ -11,6 +11,7 @@ import { health } from "./routes/health";
 import { customers, suppliers } from "./routes/parties";
 import { inventory } from "./routes/inventory";
 import { products } from "./routes/products";
+import { purchases } from "./routes/purchases";
 import { rates } from "./routes/rates";
 import { roles } from "./routes/roles";
 import { settings } from "./routes/settings";
@@ -33,5 +34,6 @@ app.route("/api/v1/customers", customers);
 app.route("/api/v1/products", products);
 app.route("/api/v1/inventory", inventory);
 app.route("/api/v1/accounts", accounts);
+app.route("/api/v1/purchases", purchases);
 
 export default app;
