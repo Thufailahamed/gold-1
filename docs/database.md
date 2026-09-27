@@ -46,6 +46,12 @@ Conventions: `id TEXT PK` (UUID), timestamps as INTEGER millis, FKs enforced.
 - Products now: `sku UNIQUE`, `subcategory/design/product_type/metal/stone` FKs, `gross_mg/stone_mg/net_mg/fine_gold_mg`, `making_cents`, `wastage_mg`, `cost_cents?`, `selling_price_cents?`, `location?`, `notes?`, `image_keys` JSON (R2), status in 11-value set (IN_STOCK, RESERVED, SOLD, RETURNED, IN_REPAIR, IN_MANUFACTURING, TRANSFER_PENDING, MELTING, MELTED, LOST, VOID).
 - `stock_movements(id, product_id FK, type, from_status, to_status, from_branch, to_branch, weight_mg, reason, created_at, created_by)` — append-only, indexed by (product, time) and (branch, time). Types: INTAKE, TRANSFER_OUT, TRANSFER_IN, RETURN, LOSS, VOID.
 
+## Accounting foundation (migration `0008_ledger`)
+
+- `chart_of_accounts(code PK, name, type ASSET/LIABILITY/EQUITY/REVENUE/EXPENSE, is_active, branch_id NULL)` — seeded 11 accounts (1000 Cash, 1010 Bank, 1100 Gold Inventory, 1200 Receivables, 2000 Payables, 2100 Tax, 3000 Equity, 3100 Opening, 4000 Revenue, 5000 COGS, 6000 Expenses).
+- `journal_entries(id, account_code FK, debit_cents, credit_cents, party_type?, party_id?, ref_entity, ref_id, memo?, branch_id?, created_at, created_by)` — append-only, indexed by (account, time), (party, time), (ref).
+- Parties gain `code` (CUS-/SUP-XXXXXX, backfilled) and `notes`.
+
 ## Later-phase reservations (not yet created)
 
 - Gold ledger: gross/stone/net weight, purity, karat, fine-gold equiv, rate,

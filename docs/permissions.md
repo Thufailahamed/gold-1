@@ -39,6 +39,8 @@ reverse/export/manage. `reverse` is reserved for future transaction modules
 | products:edit | ✓ | ✓ | — | — | — | ✓ | — | — |
 | products:cancel | ✓ | ✓ | — | — | — | ✓ | — | — |
 | products:export | ✓ | ✓ | ✓ | — | — | ✓ | — | — |
+| accounts:view | ✓ | ✓ | ✓ | ✓ | — | — | — | — |
+| accounts:manage | ✓ | ✓ | ✓ | — | — | — | — | — |
 
 Rules: sessions expire (12h idle / 7d absolute); inactive users are rejected;
 activation changes need a reason and are audited; users cannot change their

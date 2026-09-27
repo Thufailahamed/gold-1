@@ -62,3 +62,9 @@ Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 | POST | /inventory/movements | products:edit | IN_STOCK→TRANSFER_PENDING/RETURNED/LOST/VOID; locked → 409 |
 | GET | /inventory/movements | products:view | filterable by productId, branchId, type |
 | GET | /inventory/stock?groupBy= | products:view | branch/purity/product totals (mg + value at current rates) |
+| GET | /accounts | accounts:view | chart with balances; optional ?branchId= |
+| POST | /accounts/adjustments | accounts:manage | balanced two-leg entry + reason; amounts in cents |
+| GET | /customers/:id | masters:view | profile incl. code + notes |
+| GET | /customers/:id/ledger | masters:view | opening + journal lines + balance |
+| GET | /suppliers/:id | masters:view | profile incl. code + notes |
+| GET | /suppliers/:id/ledger | masters:view | opening + journal lines + balance |
