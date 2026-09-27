@@ -424,6 +424,35 @@ export async function linkExchange(
   ]);
 }
 
+export async function listReturns(
+  db: D1Database,
+  opts: PageOpts & { invoiceId?: string; branchId?: string }
+) {
+  const offset = (opts.page - 1) * opts.limit;
+  const conds: string[] = [];
+  const vals: unknown[] = [];
+  if (opts.invoiceId) {
+    conds.push("r.invoice_id = ?");
+    vals.push(opts.invoiceId);
+  }
+  if (opts.branchId) {
+    conds.push("i.branch_id = ?");
+    vals.push(opts.branchId);
+  }
+  const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
+  const count = await db
+    .prepare(`SELECT COUNT(*) AS total FROM sales_returns r JOIN sales_invoices i ON i.id = r.invoice_id ${where}`)
+    .bind(...vals)
+    .first<{ total: number }>();
+  const { results } = await db
+    .prepare(
+      `SELECT r.* FROM sales_returns r JOIN sales_invoices i ON i.id = r.invoice_id ${where} ORDER BY r.created_at DESC LIMIT ? OFFSET ?`
+    )
+    .bind(...vals, opts.limit, offset)
+    .all();
+  return { rows: results ?? [], total: count?.total ?? 0 };
+}
+
 export async function getSale(db: D1Database, id: string) {
   const inv = await db
     .prepare(
