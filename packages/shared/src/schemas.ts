@@ -71,19 +71,60 @@ export type CreatePurityInput = z.infer<typeof createPuritySchema>;
 export type CreateGoldRateInput = z.infer<typeof createGoldRateSchema>;
 export type CreatePartyInput = z.infer<typeof createPartySchema>;
 
-export const BARCODE_RE = /^PRD-[A-Z0-9]{6}$/;
+export const BARCODE_RE = /^(PRD|JW)-[A-Z0-9]{6}$/;
 
 export const createProductSchema = z.object({
   name: z.string().min(1).max(100),
   categoryId: z.string().min(1),
+  subcategoryId: z.string().min(1).optional(),
+  designId: z.string().min(1).optional(),
+  productTypeId: z.string().min(1).optional(),
+  metalTypeId: z.string().min(1),
+  stoneTypeId: z.string().min(1).optional(),
   purityId: z.string().min(1),
-  grossWeight: z.number().gt(0).max(100000),
-  stoneWeight: z.number().min(0).max(100000).optional().default(0),
-  makingCharge: z.number().min(0).optional().default(0),
+  grossG: z.number().gt(0).max(100000),
+  stoneG: z.number().min(0).max(100000).optional().default(0),
+  makingLkr: z.number().min(0).optional().default(0),
+  wastageG: z.number().min(0).optional().default(0),
+  costLkr: z.number().min(0).optional(),
+  sellingPriceLkr: z.number().min(0).optional(),
+  location: z.string().max(100).optional(),
+  notes: z.string().max(2000).optional(),
   branchId: z.string().min(1),
 });
 
+export const editProductSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  subcategoryId: z.string().min(1).optional(),
+  designId: z.string().min(1).optional(),
+  productTypeId: z.string().min(1).optional(),
+  metalTypeId: z.string().min(1).optional(),
+  stoneTypeId: z.string().min(1).optional(),
+  makingLkr: z.number().min(0).optional(),
+  wastageG: z.number().min(0).optional(),
+  costLkr: z.number().min(0).optional(),
+  sellingPriceLkr: z.number().min(0).optional(),
+  location: z.string().max(100).optional(),
+  notes: z.string().max(2000).optional(),
+});
+
+const refSchema = z.object({
+  name: z.string().min(1).max(100),
+  code: z.string().min(1).max(20),
+});
+
+export const createSubcategorySchema = z.object({
+  categoryId: z.string().min(1),
+  name: z.string().min(1).max(100),
+  code: z.string().min(1).max(20),
+});
+export const createDesignSchema = refSchema;
+export const createProductTypeSchema = refSchema;
+export const createMetalTypeSchema = refSchema;
+export const createStoneTypeSchema = refSchema;
+
 export type CreateProductInput = z.infer<typeof createProductSchema>;
+export type EditProductInput = z.infer<typeof editProductSchema>;
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
