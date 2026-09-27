@@ -198,3 +198,106 @@ export async function deactivatePurity(
     }),
   ]);
 }
+
+export type SimpleRow = {
+  id: string;
+  name: string;
+  code: string;
+  is_active: number;
+  created_at: number;
+};
+
+async function createSimple(
+  db: D1Database,
+  table: string,
+  entity: string,
+  input: { name: string; code: string; categoryId?: string },
+  actorId: string
+): Promise<SimpleRow> {
+  const dup = await db
+    .prepare(`SELECT id FROM ${table} WHERE code = ?`)
+    .bind(input.code)
+    .first();
+  if (dup) throw Object.assign(new Error("Code already in use"), { code: "CONFLICT" });
+  if (table === "subcategories") {
+    const cat = await db
+      .prepare("SELECT id FROM categories WHERE id = ? AND is_active = 1")
+      .bind(input.categoryId)
+      .first();
+    if (!cat) throw Object.assign(new Error("Category not found"), { code: "NOT_FOUND" });
+  }
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  const extraCols = table === "subcategories" ? ", category_id" : "";
+  const extraVals = table === "subcategories" ? [input.categoryId] : [];
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO ${table} (id, name, code${extraCols}, is_active, created_at, created_by) VALUES (?, ?, ?${extraCols ? ", ?" : ""}, 1, ?, ?)`
+      )
+      .bind(id, input.name, input.code, ...extraVals, now, actorId),
+    buildAuditStmt(db, {
+      userId: actorId,
+      action: `${entity}.create`,
+      entity,
+      entityId: id,
+      next: input,
+    }),
+  ]);
+  return { id, name: input.name, code: input.code, is_active: 1, created_at: now };
+}
+
+async function listSimple(
+  db: D1Database,
+  table: string,
+  categoryId: string | undefined,
+  opts: PageOpts
+): Promise<{ rows: SimpleRow[]; total: number }> {
+  const like = `%${opts.search ?? ""}%`;
+  const offset = (opts.page - 1) * opts.limit;
+  const extra = table === "subcategories" && categoryId ? "AND category_id = ?" : "";
+  const base = table === "subcategories" && categoryId ? [like, like, categoryId] : [like, like];
+  const count = await db
+    .prepare(`SELECT COUNT(*) AS total FROM ${table} WHERE (name LIKE ? OR code LIKE ?) ${extra}`)
+    .bind(...base)
+    .first<{ total: number }>();
+  const { results } = await db
+    .prepare(
+      `SELECT id, name, code, is_active, created_at FROM ${table} WHERE (name LIKE ? OR code LIKE ?) ${extra} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+    )
+    .bind(...base, opts.limit, offset)
+    .all<SimpleRow>();
+  return { rows: results ?? [], total: count?.total ?? 0 };
+}
+
+export const createSubcategory = (
+  db: D1Database,
+  input: { categoryId: string; name: string; code: string },
+  actorId: string
+) => createSimple(db, "subcategories", "subcategory", input, actorId);
+export const createDesign = (db: D1Database, input: { name: string; code: string }, actorId: string) =>
+  createSimple(db, "designs", "design", input, actorId);
+export const createProductType = (
+  db: D1Database,
+  input: { name: string; code: string },
+  actorId: string
+) => createSimple(db, "product_types", "product_type", input, actorId);
+export const createMetalType = (
+  db: D1Database,
+  input: { name: string; code: string },
+  actorId: string
+) => createSimple(db, "metal_types", "metal_type", input, actorId);
+export const createStoneType = (
+  db: D1Database,
+  input: { name: string; code: string },
+  actorId: string
+) => createSimple(db, "stone_types", "stone_type", input, actorId);
+export const listSubcategories = (db: D1Database, categoryId: string | undefined, opts: PageOpts) =>
+  listSimple(db, "subcategories", categoryId, opts);
+export const listDesigns = (db: D1Database, opts: PageOpts) => listSimple(db, "designs", undefined, opts);
+export const listProductTypes = (db: D1Database, opts: PageOpts) =>
+  listSimple(db, "product_types", undefined, opts);
+export const listMetalTypes = (db: D1Database, opts: PageOpts) =>
+  listSimple(db, "metal_types", undefined, opts);
+export const listStoneTypes = (db: D1Database, opts: PageOpts) =>
+  listSimple(db, "stone_types", undefined, opts);
