@@ -18,12 +18,14 @@ export const SEED_PERMISSIONS = [
   "branches:manage",
   "settings:write",
   "audit:read",
+  "masters:read",
+  "masters:write",
 ] as const;
 
 export const SEED_ROLE_PERMISSIONS: Record<string, string[]> = {
-  admin: ["users:read", "users:write", "branches:manage", "settings:write", "audit:read"],
-  manager: ["users:read", "branches:manage", "audit:read"],
-  cashier: ["users:read"],
+  admin: ["users:read", "users:write", "branches:manage", "settings:write", "audit:read", "masters:read", "masters:write"],
+  manager: ["users:read", "branches:manage", "audit:read", "masters:read", "masters:write"],
+  cashier: ["users:read", "masters:read"],
   viewer: [],
 };
 

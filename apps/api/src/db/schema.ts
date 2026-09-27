@@ -1,4 +1,4 @@
-import { integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
@@ -89,3 +89,52 @@ export const idempotencyKeys = sqliteTable("idempotency_keys", {
   key: text("key").primaryKey(),
   createdAt: integer("created_at").notNull(),
 });
+
+export const categories = sqliteTable("categories", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  code: text("code").notNull().unique(),
+  description: text("description"),
+  isActive: integer("is_active").notNull().default(1),
+  branchId: text("branch_id"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+export const purities = sqliteTable("purities", {
+  id: text("id").primaryKey(),
+  karat: text("karat").notNull().unique(),
+  purity: real("purity").notNull(),
+  defaultMakingCharge: real("default_making_charge").notNull().default(0),
+  defaultWastagePct: real("default_wastage_pct").notNull().default(0),
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const goldRates = sqliteTable("gold_rates", {
+  id: text("id").primaryKey(),
+  purityId: text("purity_id").notNull(),
+  ratePerGram: real("rate_per_gram").notNull(),
+  effectiveFrom: integer("effective_from").notNull(),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+function partyColumns() {
+  return {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    phone: text("phone"),
+    address: text("address"),
+    nic: text("nic").unique(),
+    creditLimit: real("credit_limit").notNull().default(0),
+    openingBalance: real("opening_balance").notNull().default(0),
+    isActive: integer("is_active").notNull().default(1),
+    branchId: text("branch_id").notNull(),
+    createdAt: integer("created_at").notNull(),
+    createdBy: text("created_by"),
+  };
+}
+
+export const suppliers = sqliteTable("suppliers", partyColumns());
+export const customers = sqliteTable("customers", partyColumns());
