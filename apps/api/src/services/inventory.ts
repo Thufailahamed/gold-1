@@ -2,10 +2,17 @@ import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
 import { currentGoldRatesCents } from "./rates";
 
-export type MovementType = "INTAKE" | "TRANSFER_OUT" | "TRANSFER_IN" | "RETURN" | "LOSS" | "VOID";
+export type MovementType =
+  | "INTAKE"
+  | "TRANSFER_OUT"
+  | "TRANSFER_IN"
+  | "RETURN"
+  | "LOSS"
+  | "VOID"
+  | "SALE_OUT";
 
 const ALLOW: Record<string, string[]> = {
-  IN_STOCK: ["TRANSFER_PENDING", "RETURNED", "LOST", "VOID"],
+  IN_STOCK: ["TRANSFER_PENDING", "RETURNED", "LOST", "VOID", "SOLD"],
   TRANSFER_PENDING: ["IN_STOCK"],
   RETURNED: ["IN_STOCK", "VOID"],
   LOST: [],
@@ -53,6 +60,66 @@ function moveStmt(
     .bind(id, productId, type, fromS, toS, fromB, toB, weightMg, reason, now, actorId);
 }
 
+export async function buildMoveStmts(
+  db: D1Database,
+  productId: string,
+  toStatus: string,
+  opts: {
+    toBranchId?: string;
+    reason?: string;
+    actorId: string;
+    now: number;
+    auditAction?: string;
+  }
+): Promise<{ stmts: D1PreparedStatement[]; branchId: string; netMg: number; fromStatus: string }> {
+  const prev = await db
+    .prepare("SELECT id, status, branch_id, net_mg FROM products WHERE id = ?")
+    .bind(productId)
+    .first<{ id: string; status: string; branch_id: string; net_mg: number }>();
+  if (!prev) throw Object.assign(new Error("Product not found"), { code: "NOT_FOUND" });
+  checkTransition(prev.status, toStatus);
+  if ((toStatus === "VOID" || toStatus === "LOST") && !opts.reason)
+    throw Object.assign(new Error("Reason required for VOID/LOST"), { code: "VALIDATION" });
+  const type: MovementType =
+    toStatus === "VOID"
+      ? "VOID"
+      : toStatus === "LOST"
+        ? "LOSS"
+        : toStatus === "RETURNED"
+          ? "RETURN"
+          : toStatus === "SOLD"
+            ? "SALE_OUT"
+            : "TRANSFER_IN";
+  const stmts = [
+    db.prepare("UPDATE products SET status = ? WHERE id = ?").bind(toStatus, productId),
+    moveStmt(
+      db,
+      crypto.randomUUID(),
+      productId,
+      type,
+      prev.status,
+      toStatus,
+      prev.branch_id,
+      prev.branch_id,
+      prev.net_mg,
+      opts.reason ?? null,
+      opts.now,
+      opts.actorId
+    ),
+    buildAuditStmt(db, {
+      userId: opts.actorId,
+      action: opts.auditAction ?? `inventory.${type.toLowerCase()}`,
+      entity: "product",
+      entityId: productId,
+      prev: { status: prev.status },
+      next: { status: toStatus },
+      reason: opts.reason,
+      branchId: prev.branch_id,
+    }),
+  ];
+  return { stmts, branchId: prev.branch_id, netMg: prev.net_mg, fromStatus: prev.status };
+}
+
 export async function recordMovement(
   db: D1Database,
   input: MoveInput,
@@ -96,30 +163,17 @@ export async function recordMovement(
     return { movementId: inId };
   }
 
-  const type: MovementType =
-    input.toStatus === "VOID"
-      ? "VOID"
-      : input.toStatus === "LOST"
-        ? "LOSS"
-        : input.toStatus === "RETURNED"
-          ? "RETURN"
-          : "TRANSFER_IN";
-  const moveId = crypto.randomUUID();
-  await db.batch([
-    db.prepare("UPDATE products SET status = ? WHERE id = ?").bind(input.toStatus, input.productId),
-    moveStmt(db, moveId, input.productId, type, prev.status, input.toStatus, prev.branch_id, prev.branch_id, prev.net_mg, input.reason ?? null, now, actorId),
-    buildAuditStmt(db, {
-      userId: actorId,
-      action: `inventory.${type.toLowerCase()}`,
-      entity: "product",
-      entityId: input.productId,
-      prev: { status: prev.status },
-      next: { status: input.toStatus },
-      reason: input.reason,
-      branchId: prev.branch_id,
-    }),
-  ]);
-  return { movementId: moveId };
+  const built = await buildMoveStmts(db, input.productId, input.toStatus, {
+    reason: input.reason,
+    actorId,
+    now,
+  });
+  await db.batch(built.stmts);
+  const row = await db
+    .prepare("SELECT id FROM stock_movements WHERE product_id = ? ORDER BY created_at DESC LIMIT 1")
+    .bind(input.productId)
+    .first<{ id: string }>();
+  return { movementId: row?.id ?? "" };
 }
 
 export async function listMovements(
