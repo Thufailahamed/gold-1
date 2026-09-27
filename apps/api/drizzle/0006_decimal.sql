@@ -22,7 +22,7 @@ ALTER TABLE products ADD COLUMN sku TEXT;
 ALTER TABLE products ADD COLUMN subcategory_id TEXT REFERENCES subcategories(id);
 ALTER TABLE products ADD COLUMN design_id TEXT REFERENCES designs(id);
 ALTER TABLE products ADD COLUMN product_type_id TEXT REFERENCES product_types(id);
-ALTER TABLE products ADD COLUMN metal_type_id TEXT NOT NULL DEFAULT 'metal-gold' REFERENCES metal_types(id);
+ALTER TABLE products ADD COLUMN metal_type_id TEXT NOT NULL DEFAULT 'metal-gold';
 ALTER TABLE products ADD COLUMN stone_type_id TEXT REFERENCES stone_types(id);
 ALTER TABLE products ADD COLUMN gross_mg INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE products ADD COLUMN stone_mg INTEGER NOT NULL DEFAULT 0;
