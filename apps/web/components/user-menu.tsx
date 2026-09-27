@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { api, type MeData } from "@/lib/api";
 import { logout } from "@/lib/auth";
+import { controlClass } from "@/components/ui";
+import { ChevronDownIcon, LogOutIcon, ShieldIcon } from "./icons";
 
 const pwSchema = z.object({
   currentPassword: z.string().min(1),
@@ -16,9 +18,19 @@ const pwSchema = z.object({
 export function UserMenu({ me }: { me: MeData }) {
   const [open, setOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
   const { register, handleSubmit, reset } = useForm<z.infer<typeof pwSchema>>({
     resolver: zodResolver(pwSchema),
   });
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
 
   async function onLogout() {
     await logout().catch(() => undefined);
@@ -39,68 +51,85 @@ export function UserMenu({ me }: { me: MeData }) {
     }
   }
 
+  const initials = (me.user.name || me.user.email || "U").slice(0, 2).toUpperCase();
+
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 rounded-md border border-stone-300 px-3 py-1.5 text-sm hover:bg-stone-100"
+        aria-expanded={open}
+        className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-2 transition-colors hover:bg-ink/5"
       >
-        {me.user.name}
+        <span className="flex size-7 items-center justify-center rounded-md bg-ink font-mono text-[11px] font-bold text-gold">
+          {initials}
+        </span>
+        <span className="hidden max-w-[9rem] truncate text-sm font-medium text-ink sm:block">
+          {me.user.name || "Account"}
+        </span>
+        <ChevronDownIcon size={14} className="hidden text-ink-4 sm:block" />
       </button>
       {open ? (
-        <div className="absolute right-0 z-20 mt-2 w-56 rounded-md border border-stone-200 bg-white shadow-lg">
-          <div className="border-b border-stone-100 px-4 py-2 text-xs text-stone-500">
-            {me.user.email}
+        <div className="g-floating absolute right-0 z-40 mt-2 w-60 animate-fade-in overflow-hidden">
+          <div className="border-b border-ink/[0.07] px-4 py-3">
+            <div className="truncate text-sm font-semibold text-ink">{me.user.name}</div>
+            <div className="mt-0.5 truncate font-mono text-[11px] text-ink-4">{me.user.email}</div>
           </div>
-          <button
-            onClick={() => {
-              setPwOpen(true);
-              setOpen(false);
-            }}
-            className="block w-full px-4 py-2 text-left text-sm hover:bg-stone-100"
-          >
-            Change password
-          </button>
-          <button
-            onClick={onLogout}
-            className="block w-full px-4 py-2 text-left text-sm hover:bg-stone-100"
-          >
-            Sign out
-          </button>
+          <div className="p-1.5">
+            <button
+              onClick={() => {
+                setPwOpen(true);
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-ink-2 transition-colors hover:bg-ink/5"
+            >
+              <ShieldIcon size={15} className="text-ink-4" />
+              Change password
+            </button>
+            <button
+              onClick={onLogout}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-ink-2 transition-colors hover:bg-rose-50 hover:text-rose-700"
+            >
+              <LogOutIcon size={15} className="text-ink-4" />
+              Sign out
+            </button>
+          </div>
         </div>
       ) : null}
       {pwOpen ? (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
+          onClick={() => setPwOpen(false)}
+        >
           <form
             onSubmit={handleSubmit(onPassword)}
-            className="w-full max-w-sm space-y-3 rounded-xl bg-white p-6 shadow-lg"
+            className="g-floating w-full max-w-sm animate-fade-in space-y-4 p-6"
+            onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="font-semibold">Change password</h2>
             <div>
-              <label className="mb-1 block text-sm font-medium">Current password</label>
-              <input
-                type="password"
-                className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
-                {...register("currentPassword")}
-              />
+              <div className="g-kicker">Security</div>
+              <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
+                Change password
+              </h2>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">New password (min 8)</label>
-              <input
-                type="password"
-                className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
-                {...register("newPassword")}
-              />
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">Current password</label>
+              <input type="password" className={controlClass} {...register("currentPassword")} />
             </div>
-            <div className="flex justify-end gap-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">
+                New password (min 8)
+              </label>
+              <input type="password" className={controlClass} {...register("newPassword")} />
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
               <button
                 type="button"
                 onClick={() => setPwOpen(false)}
-                className="rounded-md border px-3 py-2 text-sm"
+                className="g-btn g-btn-secondary h-9 px-3.5 text-sm"
               >
                 Cancel
               </button>
-              <button type="submit" className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white">
+              <button type="submit" className="g-btn g-btn-primary h-9 px-3.5 text-sm">
                 Save
               </button>
             </div>

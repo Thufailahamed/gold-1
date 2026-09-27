@@ -6,6 +6,20 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { centsToLkr, mgToG } from "@goldos/shared";
 import { api } from "@/lib/api";
+import {
+  Page,
+  Hero,
+  heroBtnGhost,
+  Panel,
+  Pill,
+  Tabs,
+  TableCard,
+  EmptyBlock,
+  Callout,
+  Skeleton,
+  controlClass,
+} from "@/components/ui";
+import { EditIcon, GemIcon, PrinterIcon, RefreshCwIcon, XIcon } from "@/components/icons";
 
 type Detail = {
   product: {
@@ -80,59 +94,111 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     voidIt.mutate(reason);
   }
 
-  if (detail.isLoading) return <div className="h-64 animate-pulse rounded-xl bg-stone-200" />;
+  if (detail.isLoading)
+    return (
+      <Page>
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-32 rounded-xl" />
+        <Skeleton className="h-64 rounded-xl" />
+      </Page>
+    );
   if (detail.isError || !detail.data)
     return (
-      <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-        Product not found. <button onClick={() => router.push("/products")} className="underline">Back to list</button>
-      </div>
+      <Page>
+        <Callout
+          tone="danger"
+          title="Product not found"
+          action={
+            <button
+              onClick={() => router.push("/products")}
+              className="g-btn g-btn-secondary h-8 px-3 text-xs"
+            >
+              Back to list
+            </button>
+          }
+        >
+          The requested product could not be loaded.
+        </Callout>
+      </Page>
     );
   const { product, livePrice, noRate } = detail.data;
 
   return (
-    <div className="space-y-4">
-      <button onClick={() => router.push("/products")} className="text-sm text-stone-500 hover:underline">
-        ← Products
-      </button>
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">{product.name}</h1>
-          <p className="font-mono text-sm text-stone-500">{product.barcode} · {product.sku}</p>
-        </div>
-        <div className="flex gap-2">
-          {product.status !== "VOID" ? (
-            <button onClick={() => setEditing(true)} className="rounded-md border border-stone-300 px-3 py-1.5 text-sm hover:bg-stone-100">
-              Edit
-            </button>
-          ) : null}
-          {product.status === "IN_STOCK" ? (
-            <button onClick={onVoid} className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50">
-              Void
-            </button>
-          ) : (
-            <span className="rounded-md bg-stone-200 px-3 py-1.5 text-sm">{product.status}</span>
-          )}
-        </div>
-      </div>
+    <Page>
+      <Hero
+        back={{ href: "/products", label: "Products" }}
+        kicker="Catalog · Piece detail"
+        title={product.name}
+        meta={
+          <>
+            <Pill tone="ghost" className="font-mono normal-case tracking-normal">
+              {product.barcode}
+            </Pill>
+            <Pill tone="ghost" className="font-mono normal-case tracking-normal">
+              {product.sku}
+            </Pill>
+            <Pill tone="ghost" dot>
+              {product.status.replace(/_/g, " ")}
+            </Pill>
+          </>
+        }
+        actions={
+          <>
+            {product.status !== "VOID" ? (
+              <button onClick={() => setEditing(true)} className={heroBtnGhost}>
+                <EditIcon size={14} />
+                Edit
+              </button>
+            ) : null}
+            {product.status === "IN_STOCK" ? (
+              <button
+                onClick={onVoid}
+                className="g-btn h-10 px-4 text-sm text-rose-300 shadow-[inset_0_0_0_1px_rgba(251,113,133,0.35)] transition-colors hover:bg-rose-600/20"
+              >
+                Void
+              </button>
+            ) : null}
+          </>
+        }
+        stats={[
+          {
+            label: "Live price",
+            value: livePrice
+              ? `${centsToLkr(livePrice.amount_cents).toLocaleString("en-US")} LKR`
+              : "—",
+          },
+          { label: "Net weight", value: `${mgToG(product.net_mg)} g` },
+          { label: "Karat", value: product.karat },
+          {
+            label: "Making",
+            value: `${centsToLkr(product.making_cents).toLocaleString("en-US")} LKR`,
+          },
+        ]}
+        note={
+          livePrice
+            ? "Live price = net weight × board rate + making"
+            : "Publish a board rate to enable live pricing for this piece"
+        }
+      />
+
       {noRate || !livePrice ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
-          No rate published for {product.karat} — price unavailable.
-        </div>
-      ) : (
-        <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-stone-500">Live price</p>
-          <p className="text-3xl font-semibold">{centsToLkr(livePrice.amount_cents).toLocaleString("en-US")} LKR</p>
-          <p className="mt-1 text-xs text-stone-400">
-            {mgToG(product.net_mg)}g × {centsToLkr(livePrice.rate_cents_per_g).toLocaleString("en-US")} + {centsToLkr(product.making_cents).toLocaleString("en-US")} making
-          </p>
-        </div>
-      )}
-      <div className="flex gap-2">
-        <button onClick={() => setTab("specs")} className={`rounded-md px-3 py-1.5 text-sm ${tab === "specs" ? "bg-stone-900 text-white" : "border"}`}>Specs</button>
-        <button onClick={() => setTab("moves")} className={`rounded-md px-3 py-1.5 text-sm ${tab === "moves" ? "bg-stone-900 text-white" : "border"}`}>Movements</button>
-      </div>
+        <Callout tone="warning" title="Price unavailable">
+          No rate published for {product.karat} — publish a board rate to enable live pricing.
+        </Callout>
+      ) : null}
+
+      <Tabs
+        ariaLabel="Product detail sections"
+        items={[
+          { key: "specs" as const, label: "Specs", icon: <GemIcon size={15} /> },
+          { key: "moves" as const, label: "Movements", icon: <RefreshCwIcon size={15} /> },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
+
       {tab === "specs" ? (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {[
             ["Category", product.category_name],
             ["Karat", `${product.karat} (${product.permille})`],
@@ -142,78 +208,99 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             ["Fine gold", `${mgToG(product.fine_gold_mg)}g`],
             ["Wastage", `${mgToG(product.wastage_mg)}g`],
             ["Making", `${centsToLkr(product.making_cents).toLocaleString("en-US")} LKR`],
-            ["Cost", product.cost_cents !== null ? `${centsToLkr(product.cost_cents).toLocaleString("en-US")} LKR` : "—"],
-            ["Selling", product.selling_price_cents !== null ? `${centsToLkr(product.selling_price_cents).toLocaleString("en-US")} LKR` : "—"],
+            [
+              "Cost",
+              product.cost_cents !== null
+                ? `${centsToLkr(product.cost_cents).toLocaleString("en-US")} LKR`
+                : "—",
+            ],
+            [
+              "Selling",
+              product.selling_price_cents !== null
+                ? `${centsToLkr(product.selling_price_cents).toLocaleString("en-US")} LKR`
+                : "—",
+            ],
             ["Location", product.location ?? "—"],
             ["Status", product.status],
             ["Branch", product.branch_id],
             ["Notes", product.notes ?? "—"],
           ].map(([k, v]) => (
-            <div key={k} className="rounded-xl border border-stone-200 bg-white p-4">
-              <p className="text-xs text-stone-500">{k}</p>
-              <p className="mt-1 font-medium">{v}</p>
+            <div key={k} className="g-surface p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-4">{k}</p>
+              <p className="mt-1.5 break-words text-sm font-medium text-ink">{v}</p>
             </div>
           ))}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-stone-200 text-left text-xs uppercase text-stone-500">
-                <th className="px-4 py-2">Type</th>
-                <th className="px-4 py-2">From → To</th>
-                <th className="px-4 py-2">Reason</th>
-                <th className="px-4 py-2">Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(moves.data?.rows ?? []).map((m) => (
-                <tr key={m.id} className="border-b border-stone-100 last:border-0">
-                  <td className="px-4 py-2 font-mono text-xs">{m.type}</td>
-                  <td className="px-4 py-2">{m.from_status ?? "—"} → {m.to_status}</td>
-                  <td className="px-4 py-2">{m.reason ?? "—"}</td>
-                  <td className="px-4 py-2">{new Date(m.created_at).toLocaleString()}</td>
+        <TableCard title="Movement history" description="Every status change for this piece">
+          {(moves.data?.rows ?? []).length === 0 && !moves.isLoading ? (
+            <EmptyBlock title="No movements" description="This piece has no recorded movements yet." />
+          ) : (
+            <table className="g-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>From → To</th>
+                  <th>Reason</th>
+                  <th>Time</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {(moves.data?.rows ?? []).map((m) => (
+                  <tr key={m.id}>
+                    <td>
+                      <Pill tone="neutral" className="font-mono normal-case tracking-normal">
+                        {m.type}
+                      </Pill>
+                    </td>
+                    <td className="text-xs text-ink-3">
+                      {m.from_status ?? "—"} → {m.to_status}
+                    </td>
+                    <td className="text-ink-3">{m.reason ?? "—"}</td>
+                    <td className="num text-xs">{new Date(m.created_at).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </TableCard>
       )}
+
       {product.image_keys.length > 0 ? (
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="mb-2 text-sm font-medium">Images</p>
-          <div className="flex flex-wrap gap-2">
+        <Panel title="Images" description={`${product.image_keys.length} attached`}>
+          <div className="flex flex-wrap gap-3">
             {product.image_keys.map((k) => (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 key={k}
                 src={`${API}/api/v1/products/${id}/images/${k.split("/").pop()}`}
                 alt={product.barcode}
-                className="h-32 w-32 rounded-md border object-cover"
+                className="h-32 w-32 rounded-lg object-cover shadow-[inset_0_0_0_1px_rgba(28,25,23,0.1)]"
               />
             ))}
           </div>
-        </div>
+        </Panel>
       ) : null}
-      <div className="print-area rounded-xl border border-stone-200 bg-white p-4">
-        <p className="mb-2 text-sm font-medium">Barcode label</p>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={labelUrl} alt={`Label for ${product.barcode}`} className="max-w-sm" />
-        <div className="mt-3 flex gap-2 print:hidden">
+
+      <Panel title="Barcode label" description="Print-ready label for this piece" icon={<PrinterIcon size={16} />}>
+        <div className="print-area">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={labelUrl} alt={`Label for ${product.barcode}`} className="max-w-sm" />
+        </div>
+        <div className="mt-4 flex gap-2 print:hidden">
           <button
             onClick={() => router.push(`/products/${id}/print`)}
-            className="rounded-md border px-3 py-2 text-sm hover:bg-stone-100"
+            className="g-btn g-btn-secondary h-9 px-3.5 text-sm"
           >
             Print view
           </button>
-          <button
-            onClick={() => window.print()}
-            className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white"
-          >
+          <button onClick={() => window.print()} className="g-btn g-btn-primary h-9 px-3.5 text-sm">
+            <PrinterIcon size={14} />
             Print label
           </button>
         </div>
-      </div>
+      </Panel>
+
       {editing ? (
         <EditDialog
           id={id}
@@ -224,7 +311,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
           }}
         />
       ) : null}
-    </div>
+    </Page>
   );
 }
 
@@ -259,40 +346,67 @@ function EditDialog({ id, onClose }: { id: string; onClose: () => void }) {
     }
   }
 
-  const cls = "w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold";
+  const cls = controlClass;
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-6 shadow-lg">
-        <h2 className="font-semibold">Edit product (weights locked)</h2>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="g-floating w-full max-w-md animate-fade-in space-y-4 p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="g-kicker">Edit</div>
+            <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
+              Edit product <span className="text-ink-4">(weights locked)</span>
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
+          >
+            <XIcon size={16} />
+          </button>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 block text-sm font-medium">Making LKR</label>
+            <label className="mb-1.5 block text-xs font-medium text-ink-3">Making LKR</label>
             <input type="number" step="any" value={makingLkr} onChange={(e) => setMakingLkr(e.target.value)} className={cls} />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium">Wastage g</label>
+            <label className="mb-1.5 block text-xs font-medium text-ink-3">Wastage g</label>
             <input type="number" step="any" value={wastageG} onChange={(e) => setWastageG(e.target.value)} className={cls} />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium">Cost LKR</label>
+            <label className="mb-1.5 block text-xs font-medium text-ink-3">Cost LKR</label>
             <input type="number" step="any" value={costLkr} onChange={(e) => setCostLkr(e.target.value)} className={cls} />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium">Selling LKR</label>
+            <label className="mb-1.5 block text-xs font-medium text-ink-3">Selling LKR</label>
             <input type="number" step="any" value={sellingPriceLkr} onChange={(e) => setSellingPriceLkr(e.target.value)} className={cls} />
           </div>
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium">Location</label>
+          <label className="mb-1.5 block text-xs font-medium text-ink-3">Location</label>
           <input value={location} onChange={(e) => setLocation(e.target.value)} className={cls} />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium">Notes</label>
+          <label className="mb-1.5 block text-xs font-medium text-ink-3">Notes</label>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} className={cls} />
         </div>
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-md border px-3 py-2 text-sm">Cancel</button>
-          <button onClick={save} disabled={pending} className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white disabled:opacity-50">
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="g-btn g-btn-secondary h-10 px-4 text-sm">
+            Cancel
+          </button>
+          <button
+            onClick={save}
+            disabled={pending}
+            className="g-btn g-btn-primary h-10 px-4 text-sm"
+          >
             Save
           </button>
         </div>

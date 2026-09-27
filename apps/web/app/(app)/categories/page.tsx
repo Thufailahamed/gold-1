@@ -20,6 +20,7 @@ export default function CategoriesPage() {
       ]}
       deactivateEndpoint={(id) => `/api/v1/masters/categories/${id}/deactivate`}
       emptyHint="No categories yet. Create the first one."
+      note="Categories group pieces for reporting, filters and pricing"
     />
   );
 }

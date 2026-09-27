@@ -8,6 +8,19 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
+import { cn } from "@/lib/cn";
+import {
+  Page,
+  Hero,
+  heroBtnPrimary,
+  TableCard,
+  TableSkeleton,
+  Pager,
+  StatusPill,
+  EmptyBlock,
+  controlClass,
+} from "@/components/ui";
+import { ArrowRightIcon, PlusIcon, SearchIcon, XIcon } from "@/components/icons";
 
 type Branch = { id: string; name: string; code: string; address: string | null; is_active: number };
 
@@ -65,115 +78,164 @@ export default function BranchesPage() {
     }
   }
 
+  const rows = list.data?.rows ?? [];
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Branches</h1>
-          <p className="text-sm text-stone-500">Shops in the network</p>
-        </div>
-        {canCreate ? (
-          <button
-            onClick={() => setDialog(true)}
-            className="rounded-md bg-stone-900 px-3 py-2 text-sm font-medium text-white hover:bg-stone-800"
-          >
-            New
-          </button>
-        ) : null}
-      </div>
-      <input
-        placeholder="Search…"
-        value={search}
-        onChange={(e) => {
-          setSearch(e.target.value);
-          setPage(1);
-        }}
-        className="w-full max-w-sm rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
+    <Page>
+      <Hero
+        kicker="Organisation"
+        title="Branches"
+        description="Shops in the network."
+        actions={
+          canCreate ? (
+            <button onClick={() => setDialog(true)} className={heroBtnPrimary}>
+              <PlusIcon size={15} />
+              New branch
+              <ArrowRightIcon size={14} className="g-btn-arrow" />
+            </button>
+          ) : undefined
+        }
+        stats={[
+          { label: "Branches", value: list.isLoading ? "—" : (list.data?.total ?? 0) },
+          {
+            label: "Active",
+            value: list.isLoading ? "—" : rows.filter((r) => r.is_active).length,
+          },
+        ]}
+        note="Per-branch settings overrides live under each branch's Settings action"
       />
-      {list.isLoading ? (
-        <div className="space-y-2">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="h-12 animate-pulse rounded-md bg-stone-200" />
-          ))}
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-          <table className="w-full text-sm">
+
+      <TableCard
+        toolbar={
+          <div className="relative w-full max-w-sm">
+            <SearchIcon
+              size={15}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-4"
+            />
+            <input
+              placeholder="Search…"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className={cn(controlClass, "pl-9")}
+            />
+          </div>
+        }
+        footer={
+          <Pager
+            page={page}
+            onChange={setPage}
+            pageSize={20}
+            count={rows.length}
+            total={list.data?.total ?? 0}
+            unit="branches"
+          />
+        }
+      >
+        {list.isLoading ? (
+          <TableSkeleton rows={4} cols={4} />
+        ) : rows.length === 0 ? (
+          <EmptyBlock title="No branches" description="Create the first branch to get started." />
+        ) : (
+          <table className="g-table">
             <thead>
-              <tr className="border-b border-stone-200 text-left text-xs uppercase text-stone-500">
-                <th className="px-4 py-2">Name</th>
-                <th className="px-4 py-2">Code</th>
-                <th className="px-4 py-2">Status</th>
-                <th className="px-4 py-2" />
+              <tr>
+                <th>Name</th>
+                <th>Code</th>
+                <th>Status</th>
+                <th className="!text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {(list.data?.rows ?? []).map((b) => (
-                <tr key={b.id} className="border-b border-stone-100 last:border-0">
-                  <td className="px-4 py-2">{b.name}</td>
-                  <td className="px-4 py-2 font-mono">{b.code}</td>
-                  <td className="px-4 py-2">{b.is_active ? "Active" : "Inactive"}</td>
-                  <td className="px-4 py-2 text-right">
-                    {canSettings ? (
-                      <button
-                        onClick={() => setSettingsId(b.id)}
-                        className="mr-3 text-xs hover:underline"
-                      >
-                        Settings
-                      </button>
-                    ) : null}
-                    {canEdit ? (
-                      <button
-                        onClick={() => toggleActive(b)}
-                        className="text-xs text-red-600 hover:underline"
-                      >
-                        {b.is_active ? "Deactivate" : "Activate"}
-                      </button>
-                    ) : null}
+              {rows.map((b) => (
+                <tr key={b.id}>
+                  <td className="font-medium text-ink">{b.name}</td>
+                  <td className="font-mono text-xs">{b.code}</td>
+                  <td>
+                    <StatusPill
+                      status={b.is_active ? "active" : "inactive"}
+                      label={b.is_active ? "Active" : "Inactive"}
+                    />
+                  </td>
+                  <td className="text-right">
+                    <div className="flex items-center justify-end gap-3">
+                      {canSettings ? (
+                        <button
+                          onClick={() => setSettingsId(b.id)}
+                          className="text-xs font-medium text-ink-3 transition-colors hover:text-ink hover:underline"
+                        >
+                          Settings
+                        </button>
+                      ) : null}
+                      {canEdit ? (
+                        <button
+                          onClick={() => toggleActive(b)}
+                          className={cn(
+                            "text-xs font-medium transition-colors hover:underline",
+                            b.is_active ? "text-rose-700" : "text-emerald-700"
+                          )}
+                        >
+                          {b.is_active ? "Deactivate" : "Activate"}
+                        </button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </TableCard>
+
       {dialog ? (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/30 p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
+          onClick={() => setDialog(false)}
+        >
           <form
             onSubmit={handleSubmit((v) => create.mutate(v))}
-            className="w-full max-w-md space-y-3 rounded-xl bg-white p-6 shadow-lg"
+            className="g-floating w-full max-w-md animate-fade-in space-y-4 p-6"
+            onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="font-semibold">New branch</h2>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Name</label>
-              <input
-                className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
-                {...register("name")}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Code</label>
-              <input
-                className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
-                {...register("code")}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Address</label>
-              <input
-                className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
-                {...register("address")}
-              />
-            </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="g-kicker">Organisation</div>
+                <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
+                  New branch
+                </h2>
+              </div>
               <button
                 type="button"
                 onClick={() => setDialog(false)}
-                className="rounded-md border px-3 py-2 text-sm"
+                aria-label="Close"
+                className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
+              >
+                <XIcon size={16} />
+              </button>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">Name</label>
+              <input className={controlClass} {...register("name")} />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">Code</label>
+              <input className={controlClass} {...register("code")} />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">Address</label>
+              <input className={controlClass} {...register("address")} />
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setDialog(false)}
+                className="g-btn g-btn-secondary h-10 px-4 text-sm"
               >
                 Cancel
               </button>
-              <button type="submit" className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white">
+              <button type="submit" className="g-btn g-btn-primary h-10 px-4 text-sm">
                 Save
               </button>
             </div>
@@ -181,7 +243,7 @@ export default function BranchesPage() {
         </div>
       ) : null}
       {settingsId ? <BranchSettings id={settingsId} onClose={() => setSettingsId(null)} /> : null}
-    </div>
+    </Page>
   );
 }
 
@@ -208,39 +270,59 @@ function BranchSettings({ id, onClose }: { id: string; onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-6 shadow-lg">
-        <h2 className="font-semibold">Branch settings</h2>
-        <p className="text-xs text-stone-500">Keys are stored as branch.{id}.*</p>
-        <div className="flex gap-2">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="g-floating w-full max-w-md animate-fade-in space-y-4 p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="g-kicker">Branch settings</div>
+            <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
+              Overrides
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
+          >
+            <XIcon size={16} />
+          </button>
+        </div>
+        <p className="text-xs text-ink-4">
+          Keys are stored as <span className="font-mono">branch.{id.slice(0, 8)}…</span>
+        </p>
+        <div className="flex flex-col gap-2 sm:flex-row">
           <input
             placeholder="key (e.g. receipt_footer)"
             value={key}
             onChange={(e) => setKey(e.target.value)}
-            className="flex-1 rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
+            className={cn(controlClass, "flex-1")}
           />
           <input
             placeholder="value"
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            className="flex-1 rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
+            className={cn(controlClass, "flex-1")}
           />
-          <button onClick={save} className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white">
+          <button onClick={save} className="g-btn g-btn-primary h-10 px-4 text-sm">
             Save
           </button>
         </div>
         {saved.length > 0 ? (
-          <ul className="space-y-1 text-sm text-stone-600">
+          <ul className="space-y-1 text-sm text-ink-3">
             {saved.map((k) => (
-              <li key={k} className="font-mono text-xs">{k} ✓</li>
+              <li key={k} className="font-mono text-xs">
+                {k} ✓
+              </li>
             ))}
           </ul>
         ) : null}
-        <div className="flex justify-end">
-          <button onClick={onClose} className="rounded-md border px-3 py-2 text-sm">
-            Close
-          </button>
-        </div>
       </div>
     </div>
   );

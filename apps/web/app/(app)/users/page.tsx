@@ -8,6 +8,22 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
+import { cn } from "@/lib/cn";
+import {
+  Page,
+  Hero,
+  heroBtnPrimary,
+  TableCard,
+  TableSkeleton,
+  Pager,
+  StatusPill,
+  EmptyBlock,
+  Pill,
+  DetailList,
+  Skeleton,
+  controlClass,
+} from "@/components/ui";
+import { ArrowRightIcon, PlusIcon, SearchIcon, XIcon } from "@/components/icons";
 
 type User = { id: string; email: string; name: string; is_active: number };
 type Role = { id: string; name: string };
@@ -85,117 +101,167 @@ export default function UsersPage() {
   const rows = list.data?.rows ?? [];
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Users</h1>
-          <p className="text-sm text-stone-500">Accounts, roles and branch access</p>
-        </div>
-        {canCreate ? (
-          <button
-            onClick={() => setDialog(true)}
-            className="rounded-md bg-stone-900 px-3 py-2 text-sm font-medium text-white hover:bg-stone-800"
-          >
-            New
-          </button>
-        ) : null}
-      </div>
-      <input
-        placeholder="Search…"
-        value={search}
-        onChange={(e) => {
-          setSearch(e.target.value);
-          setPage(1);
-        }}
-        className="w-full max-w-sm rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
+    <Page>
+      <Hero
+        kicker="Organisation"
+        title="Users"
+        description="Accounts, roles and branch access."
+        actions={
+          canCreate ? (
+            <button onClick={() => setDialog(true)} className={heroBtnPrimary}>
+              <PlusIcon size={15} />
+              New user
+              <ArrowRightIcon size={14} className="g-btn-arrow" />
+            </button>
+          ) : undefined
+        }
+        stats={[
+          { label: "Accounts", value: list.isLoading ? "—" : (list.data?.total ?? 0) },
+          { label: "Roles", value: roles.data?.length ?? "—" },
+          { label: "Branches", value: branches.data?.total ?? "—" },
+          {
+            label: "Active (page)",
+            value: list.isLoading ? "—" : rows.filter((r) => r.is_active).length,
+          },
+        ]}
+        note="Role and branch changes take effect on the account's next request"
       />
-      {list.isLoading ? (
-        <div className="space-y-2">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="h-12 animate-pulse rounded-md bg-stone-200" />
-          ))}
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-          <table className="w-full text-sm">
+
+      <TableCard
+        toolbar={
+          <div className="relative w-full max-w-sm">
+            <SearchIcon
+              size={15}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-4"
+            />
+            <input
+              placeholder="Search…"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className={cn(controlClass, "pl-9")}
+            />
+          </div>
+        }
+        footer={
+          <Pager
+            page={page}
+            onChange={setPage}
+            pageSize={20}
+            count={rows.length}
+            total={list.data?.total ?? 0}
+            unit="accounts"
+          />
+        }
+      >
+        {list.isLoading ? (
+          <TableSkeleton rows={5} cols={4} />
+        ) : rows.length === 0 ? (
+          <EmptyBlock title="No users found" description="Try a different search." />
+        ) : (
+          <table className="g-table">
             <thead>
-              <tr className="border-b border-stone-200 text-left text-xs uppercase text-stone-500">
-                <th className="px-4 py-2">Name</th>
-                <th className="px-4 py-2">Email</th>
-                <th className="px-4 py-2">Status</th>
-                <th className="px-4 py-2" />
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Status</th>
+                <th className="!text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-b border-stone-100 last:border-0">
-                  <td className="px-4 py-2">
-                    <button onClick={() => setDetailId(r.id)} className="hover:underline">
-                      {r.name}
+                <tr key={r.id}>
+                  <td>
+                    <button
+                      onClick={() => setDetailId(r.id)}
+                      className="group flex items-center gap-3 text-left"
+                    >
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-ink font-mono text-[10px] font-bold text-gold transition-colors group-hover:bg-gold group-hover:text-ink">
+                        {(r.name || r.email).slice(0, 2).toUpperCase()}
+                      </span>
+                      <span className="font-medium text-ink group-hover:underline">{r.name}</span>
                     </button>
                   </td>
-                  <td className="px-4 py-2">{r.email}</td>
-                  <td className="px-4 py-2">{r.is_active ? "Active" : "Inactive"}</td>
-                  <td className="px-4 py-2 text-right">
+                  <td className="text-ink-3">{r.email}</td>
+                  <td>
+                    <StatusPill
+                      status={r.is_active ? "active" : "inactive"}
+                      label={r.is_active ? "Active" : "Inactive"}
+                    />
+                  </td>
+                  <td className="text-right">
                     {canEdit ? (
-                      <>
+                      <div className="flex items-center justify-end gap-3">
                         <button
                           onClick={() => setEditId(r.id)}
-                          className="mr-3 text-xs hover:underline"
+                          className="text-xs font-medium text-ink-3 transition-colors hover:text-ink hover:underline"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => toggleActive(r)}
-                          className="text-xs text-red-600 hover:underline"
+                          className={cn(
+                            "text-xs font-medium transition-colors hover:underline",
+                            r.is_active ? "text-rose-700" : "text-emerald-700"
+                          )}
                         >
                           {r.is_active ? "Deactivate" : "Activate"}
                         </button>
-                      </>
+                      </div>
                     ) : null}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </TableCard>
+
       {dialog ? (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/30 p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
+          onClick={() => setDialog(false)}
+        >
           <form
             onSubmit={handleSubmit((v) => create.mutate(v))}
-            className="max-h-[90vh] w-full max-w-md space-y-3 overflow-y-auto rounded-xl bg-white p-6 shadow-lg"
+            className="g-floating max-h-[90vh] w-full max-w-md animate-fade-in space-y-4 overflow-y-auto p-6 scrollbar-thin"
+            onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="font-semibold">New user</h2>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Name</label>
-              <input
-                className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
-                {...register("name")}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Email</label>
-              <input
-                type="email"
-                className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
-                {...register("email")}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Password (min 8)</label>
-              <input
-                type="password"
-                className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
-                {...register("password")}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Role</label>
-              <select
-                className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
-                {...register("role")}
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="g-kicker">Organisation</div>
+                <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
+                  New user
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDialog(false)}
+                aria-label="Close"
+                className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
               >
+                <XIcon size={16} />
+              </button>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">Name</label>
+              <input className={controlClass} {...register("name")} />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">Email</label>
+              <input type="email" className={controlClass} {...register("email")} />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">
+                Password (min 8)
+              </label>
+              <input type="password" className={controlClass} {...register("password")} />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">Role</label>
+              <select className={controlClass} {...register("role")}>
                 <option value="">Select…</option>
                 {(roles.data ?? []).map((r) => (
                   <option key={r.id} value={r.id}>
@@ -205,12 +271,8 @@ export default function UsersPage() {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Branches</label>
-              <select
-                multiple
-                className="h-24 w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
-                {...register("branchIds")}
-              >
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">Branches</label>
+              <select multiple className={cn(controlClass, "h-28 py-2")} {...register("branchIds")}>
                 {(branches.data?.rows ?? []).map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.name} ({b.code})
@@ -218,18 +280,18 @@ export default function UsersPage() {
                 ))}
               </select>
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 pt-1">
               <button
                 type="button"
                 onClick={() => setDialog(false)}
-                className="rounded-md border px-3 py-2 text-sm"
+                className="g-btn g-btn-secondary h-10 px-4 text-sm"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={create.isPending}
-                className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white disabled:opacity-50"
+                className="g-btn g-btn-primary h-10 px-4 text-sm"
               >
                 Save
               </button>
@@ -248,7 +310,7 @@ export default function UsersPage() {
         />
       ) : null}
       {detailId ? <DetailDrawer id={detailId} onClose={() => setDetailId(null)} /> : null}
-    </div>
+    </Page>
   );
 }
 
@@ -288,30 +350,51 @@ function EditDialog({ id, canApprove, onClose }: { id: string; canApprove: boole
   }
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-6 shadow-lg">
-        <h2 className="font-semibold">Edit user</h2>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="g-floating w-full max-w-md animate-fade-in space-y-4 p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="g-kicker">Organisation</div>
+            <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
+              Edit user
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
+          >
+            <XIcon size={16} />
+          </button>
+        </div>
         {detail.isLoading ? (
-          <div className="h-24 animate-pulse rounded bg-stone-200" />
+          <Skeleton className="h-24" />
         ) : (
           <>
             <div>
-              <label className="mb-1 block text-sm font-medium">Name</label>
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">Name</label>
               <input
                 defaultValue={detail.data?.name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
+                className={controlClass}
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">
                 Role {canApprove ? "" : "(needs users:approve to change)"}
               </label>
               <select
                 defaultValue={detail.data?.roles[0] ?? ""}
                 disabled={!canApprove}
                 onChange={(e) => setRole(e.target.value)}
-                className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold disabled:opacity-50"
+                className={controlClass}
               >
                 {(roles.data ?? []).map((r) => (
                   <option key={r.id} value={r.id}>
@@ -321,14 +404,14 @@ function EditDialog({ id, canApprove, onClose }: { id: string; canApprove: boole
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Branches</label>
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">Branches</label>
               <select
                 multiple
                 value={branchIds ?? detail.data?.branchIds ?? []}
                 onChange={(e) =>
                   setBranchIds(Array.from(e.target.selectedOptions).map((o) => o.value))
                 }
-                className="h-24 w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
+                className={cn(controlClass, "h-28 py-2")}
               >
                 {(branches.data?.rows ?? []).map((b) => (
                   <option key={b.id} value={b.id}>
@@ -339,11 +422,11 @@ function EditDialog({ id, canApprove, onClose }: { id: string; canApprove: boole
             </div>
           </>
         )}
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-md border px-3 py-2 text-sm">
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="g-btn g-btn-secondary h-10 px-4 text-sm">
             Cancel
           </button>
-          <button onClick={save} className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white">
+          <button onClick={save} className="g-btn g-btn-primary h-10 px-4 text-sm">
             Save
           </button>
         </div>
@@ -367,38 +450,87 @@ function DetailDrawer({ id, onClose }: { id: string; onClose: () => void }) {
     queryFn: () => api<{ rows: AuditRow[]; total: number }>(`/api/v1/audit?userId=${id}&limit=20`),
   });
   return (
-    <div className="fixed inset-0 flex justify-end bg-black/30">
-      <div className="w-full max-w-md space-y-4 overflow-y-auto bg-white p-6 shadow-lg">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold">User detail</h2>
-          <button onClick={onClose} className="text-sm text-stone-500 hover:underline">
-            Close
+    <div className="fixed inset-0 z-50 flex justify-end bg-ink/60 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="h-full w-full max-w-md animate-fade-in space-y-5 overflow-y-auto bg-paper p-6 shadow-4 scrollbar-thin"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label="User detail"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="g-kicker">User detail</div>
+            <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
+              {detail.data?.name ?? "…"}
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
+          >
+            <XIcon size={16} />
           </button>
         </div>
         {detail.data ? (
-          <div className="space-y-1 text-sm">
-            <p><span className="text-stone-500">Name:</span> {detail.data.name}</p>
-            <p><span className="text-stone-500">Email:</span> {detail.data.email}</p>
-            <p><span className="text-stone-500">Status:</span> {detail.data.is_active ? "Active" : "Inactive"}</p>
-            <p><span className="text-stone-500">Roles:</span> {detail.data.roles.join(", ")}</p>
-            <p><span className="text-stone-500">Branches:</span> {detail.data.branchIds.length}</p>
-          </div>
-        ) : null}
-        <h3 className="font-medium">Activity</h3>
-        {(activity.data?.rows ?? []).length === 0 ? (
-          <p className="text-sm text-stone-500">No activity recorded.</p>
+          <>
+            <DetailList
+              columns={1}
+              items={[
+                { label: "Email", value: detail.data.email },
+                {
+                  label: "Status",
+                  value: (
+                    <StatusPill
+                      status={detail.data.is_active ? "active" : "inactive"}
+                      label={detail.data.is_active ? "Active" : "Inactive"}
+                    />
+                  ),
+                },
+                {
+                  label: "Roles",
+                  value: (
+                    <span className="flex flex-wrap gap-1.5">
+                      {detail.data.roles.map((r) => (
+                        <Pill key={r} tone="neutral">
+                          {r}
+                        </Pill>
+                      ))}
+                    </span>
+                  ),
+                },
+                { label: "Branches", value: <span className="num-tabular">{detail.data.branchIds.length}</span> },
+              ]}
+            />
+          </>
         ) : (
-          <ul className="space-y-2 text-sm">
-            {(activity.data?.rows ?? []).map((a) => (
-              <li key={a.id} className="rounded-md border border-stone-200 px-3 py-2">
-                <span className="font-mono text-xs">{a.action}</span>
-                <span className="text-stone-500"> · {a.entity} · </span>
-                <span className="text-stone-400">{new Date(a.created_at).toLocaleString()}</span>
-                {a.reason ? <p className="text-stone-500">Reason: {a.reason}</p> : null}
-              </li>
-            ))}
-          </ul>
+          <Skeleton className="h-32" />
         )}
+        <div>
+          <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-4">
+            Activity
+          </div>
+          {(activity.data?.rows ?? []).length === 0 ? (
+            <p className="text-sm text-ink-4">No activity recorded.</p>
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {(activity.data?.rows ?? []).map((a) => (
+                <li key={a.id} className="g-surface p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <Pill tone="neutral" className="font-mono normal-case tracking-normal">
+                      {a.action}
+                    </Pill>
+                    <span className="text-[11px] text-ink-5">
+                      {new Date(a.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 text-xs text-ink-4">{a.entity}</div>
+                  {a.reason ? <p className="mt-1 text-xs text-ink-3">Reason: {a.reason}</p> : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );

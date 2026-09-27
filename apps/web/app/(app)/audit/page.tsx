@@ -4,6 +4,19 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
+import { cn } from "@/lib/cn";
+import {
+  Page,
+  Hero,
+  heroBtnGhost,
+  TableCard,
+  TableSkeleton,
+  Pager,
+  EmptyBlock,
+  Pill,
+  controlClass,
+} from "@/components/ui";
+import { FileDownIcon, SearchIcon } from "@/components/icons";
 
 type Row = {
   id: string;
@@ -47,83 +60,88 @@ export default function AuditPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Audit Log</h1>
-          <p className="text-sm text-stone-500">Immutable record of important actions</p>
-        </div>
-        {canExport ? (
-          <button
-            onClick={exportCsv}
-            className="rounded-md border border-stone-300 px-3 py-2 text-sm hover:bg-stone-100"
-          >
-            Export CSV
-          </button>
-        ) : null}
-      </div>
-      <input
-        placeholder="Filter by entity (user, product, branch…)"
-        value={entity}
-        onChange={(e) => {
-          setEntity(e.target.value);
-          setPage(1);
-        }}
-        className="w-full max-w-sm rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
+    <Page>
+      <Hero
+        kicker="System"
+        title="Audit Log"
+        description="Immutable record of important actions."
+        actions={
+          canExport ? (
+            <button onClick={exportCsv} className={heroBtnGhost}>
+              <FileDownIcon size={14} />
+              Export CSV
+            </button>
+          ) : undefined
+        }
+        stats={[
+          { label: "Entries", value: list.isLoading ? "—" : (list.data?.total ?? 0).toLocaleString("en-US") },
+          { label: "On this page", value: list.isLoading ? "—" : rows.length },
+        ]}
+        note="Entries are immutable — export CSV for external review"
       />
-      {list.isLoading ? (
-        <div className="space-y-2">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="h-12 animate-pulse rounded-md bg-stone-200" />
-          ))}
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-stone-300 bg-white p-8 text-center text-sm text-stone-500">
-          No audit entries found.
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-          <table className="w-full text-sm">
+
+      <TableCard
+        toolbar={
+          <div className="relative w-full max-w-sm">
+            <SearchIcon
+              size={15}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-4"
+            />
+            <input
+              placeholder="Filter by entity (user, product, branch…)"
+              value={entity}
+              onChange={(e) => {
+                setEntity(e.target.value);
+                setPage(1);
+              }}
+              className={cn(controlClass, "pl-9")}
+            />
+          </div>
+        }
+        footer={
+          <Pager
+            page={page}
+            onChange={setPage}
+            pageSize={30}
+            count={rows.length}
+            total={list.data?.total ?? 0}
+            unit="entries"
+          />
+        }
+      >
+        {list.isLoading ? (
+          <TableSkeleton rows={6} cols={4} />
+        ) : rows.length === 0 ? (
+          <EmptyBlock title="No audit entries" description="No audit entries match the filter." />
+        ) : (
+          <table className="g-table">
             <thead>
-              <tr className="border-b border-stone-200 text-left text-xs uppercase text-stone-500">
-                <th className="px-4 py-2">Action</th>
-                <th className="px-4 py-2">Entity</th>
-                <th className="px-4 py-2">Reason</th>
-                <th className="px-4 py-2">Time</th>
+              <tr>
+                <th>Action</th>
+                <th>Entity</th>
+                <th>Reason</th>
+                <th>Time</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-b border-stone-100 last:border-0">
-                  <td className="px-4 py-2 font-mono text-xs">{r.action}</td>
-                  <td className="px-4 py-2">
-                    {r.entity}/{r.entity_id.slice(0, 8)}
+                <tr key={r.id}>
+                  <td>
+                    <Pill tone="neutral" className="font-mono normal-case tracking-normal">
+                      {r.action}
+                    </Pill>
                   </td>
-                  <td className="px-4 py-2">{r.reason ?? "—"}</td>
-                  <td className="px-4 py-2">{new Date(r.created_at).toLocaleString()}</td>
+                  <td className="text-ink-3">
+                    {r.entity}/<span className="font-mono text-xs">{r.entity_id.slice(0, 8)}</span>
+                  </td>
+                  <td className="text-ink-3">{r.reason ?? "—"}</td>
+                  <td className="num text-xs">{new Date(r.created_at).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      )}
-      <div className="flex items-center gap-2 text-sm text-stone-500">
-        <button
-          disabled={page <= 1}
-          onClick={() => setPage((p) => p - 1)}
-          className="rounded border px-2 py-1 disabled:opacity-40"
-        >
-          Prev
-        </button>
-        <span>Page {page}</span>
-        <button
-          disabled={rows.length < 30}
-          onClick={() => setPage((p) => p + 1)}
-          className="rounded border px-2 py-1 disabled:opacity-40"
-        >
-          Next
-        </button>
-      </div>
-    </div>
+        )}
+      </TableCard>
+    </Page>
   );
 }

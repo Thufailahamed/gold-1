@@ -1,5 +1,8 @@
 "use client";
 
+import { EmptyBlock } from "@/components/ui";
+import { AlertCircleIcon } from "@/components/icons";
+
 export default function AppError({
   error,
   reset,
@@ -8,15 +11,17 @@ export default function AppError({
   reset: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-red-200 bg-red-50 p-8 text-center">
-      <p className="font-medium text-red-800">Something went wrong</p>
-      <p className="mt-1 text-sm text-red-600">{error.message || "An unexpected error occurred."}</p>
-      <button
-        onClick={reset}
-        className="mt-4 rounded-md bg-stone-900 px-4 py-2 text-sm text-white"
-      >
-        Try again
-      </button>
+    <div className="g-surface animate-fade-in">
+      <EmptyBlock
+        icon={<AlertCircleIcon size={22} className="text-rose-700" />}
+        title="Something went wrong"
+        description={error.message || "An unexpected error occurred."}
+        action={
+          <button onClick={reset} className="g-btn g-btn-primary h-10 px-4 text-sm">
+            Try again
+          </button>
+        }
+      />
     </div>
   );
 }

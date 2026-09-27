@@ -10,6 +10,18 @@ import { toast } from "sonner";
 import { centsToLkr, mgToG } from "@goldos/shared";
 import { api } from "@/lib/api";
 import { ScanField } from "@/components/scan-field";
+import {
+  Page,
+  Hero,
+  heroBtnPrimary,
+  TableCard,
+  TableSkeleton,
+  Pager,
+  StatusPill,
+  EmptyBlock,
+  controlClass,
+} from "@/components/ui";
+import { ArrowRightIcon, GemIcon, PlusIcon, SearchIcon, XIcon } from "@/components/icons";
 
 type Product = {
   id: string;
@@ -179,131 +191,195 @@ export default function ProductsPage() {
   const rows = list.data?.rows ?? [];
   const netPreview =
     typeof gross === "number" && typeof stone === "number" ? gross - stone : null;
-  const inputCls =
-    "w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold";
+  const inputCls = controlClass;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Products</h1>
-          <p className="text-sm text-stone-500">Unique pieces with barcodes</p>
-        </div>
-        <button
-          onClick={() => setDialog(true)}
-          className="rounded-md bg-stone-900 px-3 py-2 text-sm font-medium text-white hover:bg-stone-800"
-        >
-          New
-        </button>
-      </div>
+    <Page>
+      <Hero
+        kicker="Catalog"
+        title="Products"
+        description="Unique pieces with barcodes, weights and live pricing."
+        actions={
+          <button onClick={() => setDialog(true)} className={heroBtnPrimary}>
+            <PlusIcon size={15} />
+            New product
+            <ArrowRightIcon size={14} className="g-btn-arrow" />
+          </button>
+        }
+        stats={[
+          { label: "Pieces", value: list.isLoading ? "—" : (list.data?.total ?? 0).toLocaleString("en-US") },
+          { label: "In stock (page)", value: list.isLoading ? "—" : rows.filter((r) => r.status === "IN_STOCK").length },
+          { label: "Categories", value: cats.data?.total ?? "—" },
+          { label: "Purities", value: purs.data?.total ?? "—" },
+        ]}
+        note="Every piece carries a unique barcode — print labels from the detail page"
+      />
+
       <ScanField />
-      <div className="flex flex-wrap gap-2">
-        <input
-          placeholder="Search name, barcode, SKU…"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-          className="w-full max-w-sm rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
-        />
-      </div>
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        <select value={fCat} onChange={(e) => { setFCat(e.target.value); setPage(1); }} className={inputCls}>
-          <option value="">All categories</option>
-          {(cats.data?.rows ?? []).map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-        <select value={fPur} onChange={(e) => { setFPur(e.target.value); setPage(1); }} className={inputCls}>
-          <option value="">All purities</option>
-          {(purs.data?.rows ?? []).map((p) => (
-            <option key={p.id} value={p.id}>{p.karat}</option>
-          ))}
-        </select>
-        <select value={fStatus} onChange={(e) => { setFStatus(e.target.value); setPage(1); }} className={inputCls}>
-          <option value="">All statuses</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-        <input placeholder="Branch ID" value={fBranch} onChange={(e) => { setFBranch(e.target.value); setPage(1); }} className={inputCls} />
-        <input placeholder="Min grams" type="number" step="any" value={fMinG} onChange={(e) => { setFMinG(e.target.value); setPage(1); }} className={inputCls} />
-        <input placeholder="Max grams" type="number" step="any" value={fMaxG} onChange={(e) => { setFMaxG(e.target.value); setPage(1); }} className={inputCls} />
-        <input placeholder="Min price LKR" type="number" step="any" value={fMinP} onChange={(e) => { setFMinP(e.target.value); setPage(1); }} className={inputCls} />
-        <input placeholder="Max price LKR" type="number" step="any" value={fMaxP} onChange={(e) => { setFMaxP(e.target.value); setPage(1); }} className={inputCls} />
-      </div>
-      {list.isLoading ? (
-        <div className="space-y-2">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="h-12 animate-pulse rounded-md bg-stone-200" />
-          ))}
-        </div>
-      ) : list.isError ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          Failed to load. Check the API connection and retry.
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-stone-300 bg-white p-8 text-center text-sm text-stone-500">
-          No products match these filters.
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-          <table className="w-full text-sm">
+
+      <TableCard
+        toolbar={
+          <div className="flex flex-col gap-3">
+            <div className="relative w-full max-w-sm">
+              <SearchIcon
+                size={15}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-4"
+              />
+              <input
+                placeholder="Search name, barcode, SKU…"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className={`${inputCls} w-full pl-9`}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              <select value={fCat} onChange={(e) => { setFCat(e.target.value); setPage(1); }} className={inputCls}>
+                <option value="">All categories</option>
+                {(cats.data?.rows ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <select value={fPur} onChange={(e) => { setFPur(e.target.value); setPage(1); }} className={inputCls}>
+                <option value="">All purities</option>
+                {(purs.data?.rows ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>{p.karat}</option>
+                ))}
+              </select>
+              <select value={fStatus} onChange={(e) => { setFStatus(e.target.value); setPage(1); }} className={inputCls}>
+                <option value="">All statuses</option>
+                {STATUSES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              <input placeholder="Branch ID" value={fBranch} onChange={(e) => { setFBranch(e.target.value); setPage(1); }} className={inputCls} />
+              <input placeholder="Min grams" type="number" step="any" value={fMinG} onChange={(e) => { setFMinG(e.target.value); setPage(1); }} className={inputCls} />
+              <input placeholder="Max grams" type="number" step="any" value={fMaxG} onChange={(e) => { setFMaxG(e.target.value); setPage(1); }} className={inputCls} />
+              <input placeholder="Min price LKR" type="number" step="any" value={fMinP} onChange={(e) => { setFMinP(e.target.value); setPage(1); }} className={inputCls} />
+              <input placeholder="Max price LKR" type="number" step="any" value={fMaxP} onChange={(e) => { setFMaxP(e.target.value); setPage(1); }} className={inputCls} />
+            </div>
+          </div>
+        }
+        footer={
+          <Pager
+            page={page}
+            onChange={setPage}
+            pageSize={20}
+            count={rows.length}
+            total={list.data?.total ?? 0}
+            unit="products"
+          />
+        }
+      >
+        {list.isLoading ? (
+          <TableSkeleton rows={6} cols={8} />
+        ) : list.isError ? (
+          <EmptyBlock
+            title="Failed to load products"
+            description="Check the API connection and retry."
+          />
+        ) : rows.length === 0 ? (
+          <EmptyBlock
+            title="No products found"
+            description="No products match these filters. Adjust the search or create a new piece."
+          />
+        ) : (
+          <table className="g-table">
             <thead>
-              <tr className="border-b border-stone-200 text-left text-xs uppercase text-stone-500">
-                <th className="px-4 py-2">Barcode</th>
-                <th className="px-4 py-2">SKU</th>
-                <th className="px-4 py-2">Name</th>
-                <th className="px-4 py-2">Category</th>
-                <th className="px-4 py-2">Karat</th>
-                <th className="px-4 py-2">Net g</th>
-                <th className="px-4 py-2">Fine g</th>
-                <th className="px-4 py-2">Price</th>
-                <th className="px-4 py-2">Status</th>
+              <tr>
+                <th>Barcode</th>
+                <th>SKU</th>
+                <th>Name</th>
+                <th>Category</th>
+                <th>Karat</th>
+                <th className="!text-right">Net g</th>
+                <th className="!text-right">Fine g</th>
+                <th className="!text-right">Price</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-b border-stone-100 last:border-0">
-                  <td className="px-4 py-2 font-mono">
-                    <Link href={`/products/${r.id}`} className="hover:underline">
+                <tr key={r.id}>
+                  <td>
+                    <Link
+                      href={`/products/${r.id}`}
+                      className="font-mono text-xs font-medium text-gold-dark transition-colors hover:text-ink"
+                    >
                       {r.barcode}
                     </Link>
                   </td>
-                  <td className="px-4 py-2 font-mono text-xs">{r.sku}</td>
-                  <td className="px-4 py-2">{r.name}</td>
-                  <td className="px-4 py-2">{r.category_name}</td>
-                  <td className="px-4 py-2">{r.karat}</td>
-                  <td className="px-4 py-2">{mgToG(r.net_mg)}</td>
-                  <td className="px-4 py-2">{mgToG(r.fine_gold_mg)}</td>
-                  <td className="px-4 py-2">
+                  <td className="font-mono text-xs text-ink-4">{r.sku}</td>
+                  <td>
+                    <Link href={`/products/${r.id}`} className="group flex items-center gap-3">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-bone text-ink-4 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.06)] transition-colors group-hover:bg-ink group-hover:text-gold">
+                        <GemIcon size={14} />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-ink group-hover:underline">
+                          {r.name}
+                        </div>
+                        <div className="mt-0.5 truncate text-xs text-ink-4">{r.category_name}</div>
+                      </div>
+                    </Link>
+                  </td>
+                  <td className="text-ink-3">{r.category_name}</td>
+                  <td>{r.karat}</td>
+                  <td className="num">{mgToG(r.net_mg)}</td>
+                  <td className="num">{mgToG(r.fine_gold_mg)}</td>
+                  <td className="num">
                     {r.selling_price_cents !== null
                       ? centsToLkr(r.selling_price_cents).toLocaleString("en-US")
                       : "—"}
                   </td>
-                  <td className="px-4 py-2">{r.status}</td>
+                  <td>
+                    <StatusPill status={r.status} />
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </TableCard>
+
       {dialog ? (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/30 p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
+          onClick={() => setDialog(false)}
+        >
           <form
             onSubmit={handleSubmit((v) => create.mutate(v))}
-            className="max-h-[90vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-xl bg-white p-6 shadow-lg"
+            className="g-floating max-h-[90vh] w-full max-w-lg animate-fade-in space-y-4 overflow-y-auto p-6 scrollbar-thin"
+            onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="font-semibold">New product</h2>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="g-kicker">Catalog</div>
+                <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
+                  New product
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDialog(false)}
+                aria-label="Close"
+                className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
+              >
+                <XIcon size={16} />
+              </button>
+            </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Name</label>
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">
+                Name <span className="ml-0.5 text-gold-dark">*</span>
+              </label>
               <input className={inputCls} {...register("name")} />
-              {errors.name ? <p className="mt-1 text-xs text-red-600">Required</p> : null}
+              {errors.name ? <p className="mt-1 text-xs text-rose-700">Required</p> : null}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium">Category</label>
+                <label className="mb-1.5 block text-xs font-medium text-ink-3">Category</label>
                 <select className={inputCls} {...register("categoryId")}>
                   <option value="">Select…</option>
                   {(cats.data?.rows ?? []).map((c) => (
@@ -312,7 +388,7 @@ export default function ProductsPage() {
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Subcategory</label>
+                <label className="mb-1.5 block text-xs font-medium text-ink-3">Subcategory</label>
                 <select className={inputCls} {...register("subcategoryId")}>
                   <option value="">None</option>
                   {(subcats.data?.rows ?? []).map((c) => (
@@ -321,7 +397,7 @@ export default function ProductsPage() {
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Design</label>
+                <label className="mb-1.5 block text-xs font-medium text-ink-3">Design</label>
                 <select className={inputCls} {...register("designId")}>
                   <option value="">None</option>
                   {(designs.data?.rows ?? []).map((c) => (
@@ -330,7 +406,7 @@ export default function ProductsPage() {
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Product type</label>
+                <label className="mb-1.5 block text-xs font-medium text-ink-3">Product type</label>
                 <select className={inputCls} {...register("productTypeId")}>
                   <option value="">None</option>
                   {(ptypes.data?.rows ?? []).map((c) => (
@@ -339,7 +415,7 @@ export default function ProductsPage() {
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Metal</label>
+                <label className="mb-1.5 block text-xs font-medium text-ink-3">Metal</label>
                 <select className={inputCls} {...register("metalTypeId")}>
                   <option value="">Select…</option>
                   {(metals.data?.rows ?? []).map((c) => (
@@ -348,7 +424,7 @@ export default function ProductsPage() {
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Stone</label>
+                <label className="mb-1.5 block text-xs font-medium text-ink-3">Stone</label>
                 <select className={inputCls} {...register("stoneTypeId")}>
                   <option value="">None</option>
                   {(stones.data?.rows ?? []).map((c) => (
@@ -357,7 +433,7 @@ export default function ProductsPage() {
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Purity</label>
+                <label className="mb-1.5 block text-xs font-medium text-ink-3">Purity</label>
                 <select className={inputCls} {...register("purityId")}>
                   <option value="">Select…</option>
                   {(purs.data?.rows ?? []).map((p) => (
@@ -366,68 +442,80 @@ export default function ProductsPage() {
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Branch ID</label>
+                <label className="mb-1.5 block text-xs font-medium text-ink-3">Branch ID</label>
                 <input className={inputCls} {...register("branchId")} />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium">Gross g</label>
+                <label className="mb-1.5 block text-xs font-medium text-ink-3">Gross g</label>
                 <input type="number" step="any" className={inputCls} {...register("grossG")} />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Stone g</label>
+                <label className="mb-1.5 block text-xs font-medium text-ink-3">Stone g</label>
                 <input type="number" step="any" className={inputCls} {...register("stoneG")} />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Wastage g</label>
+                <label className="mb-1.5 block text-xs font-medium text-ink-3">Wastage g</label>
                 <input type="number" step="any" className={inputCls} {...register("wastageG")} />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Making LKR</label>
+                <label className="mb-1.5 block text-xs font-medium text-ink-3">Making LKR</label>
                 <input type="number" step="any" className={inputCls} {...register("makingLkr")} />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Cost LKR</label>
+                <label className="mb-1.5 block text-xs font-medium text-ink-3">Cost LKR</label>
                 <input type="number" step="any" className={inputCls} {...register("costLkr")} />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Price LKR</label>
+                <label className="mb-1.5 block text-xs font-medium text-ink-3">Price LKR</label>
                 <input type="number" step="any" className={inputCls} {...register("sellingPriceLkr")} />
               </div>
             </div>
             {netPreview !== null ? (
-              <p className="text-sm text-stone-500">Net weight: {netPreview}g</p>
+              <p className="text-sm text-ink-4">
+                Net weight: <span className="num-tabular text-ink">{netPreview}g</span>
+              </p>
             ) : null}
             <div>
-              <label className="mb-1 block text-sm font-medium">Location</label>
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">Location</label>
               <input className={inputCls} {...register("location")} />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Notes</label>
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">Notes</label>
               <input className={inputCls} {...register("notes")} />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Images (≤5MB each)</label>
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">
+                Images (≤5MB each)
+              </label>
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 multiple
                 onChange={(e) => setImages(Array.from(e.target.files ?? []))}
-                className="w-full text-sm"
+                className="w-full text-sm text-ink-4 file:mr-3 file:rounded-lg file:border-0 file:bg-ink file:px-3 file:py-2 file:text-xs file:font-medium file:text-paper hover:file:bg-ink-2"
               />
             </div>
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setDialog(false)} className="rounded-md border px-3 py-2 text-sm">
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setDialog(false)}
+                className="g-btn g-btn-secondary h-10 px-4 text-sm"
+              >
                 Cancel
               </button>
-              <button type="submit" disabled={create.isPending} className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white disabled:opacity-50">
+              <button
+                type="submit"
+                disabled={create.isPending}
+                className="g-btn g-btn-primary h-10 px-4 text-sm"
+              >
                 {create.isPending ? "Saving…" : "Save"}
               </button>
             </div>
           </form>
         </div>
       ) : null}
-    </div>
+    </Page>
   );
 }

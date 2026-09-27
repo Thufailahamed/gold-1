@@ -2,14 +2,292 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --gold: #c9a227;
+@layer base {
+  :root {
+    color-scheme: light;
+    --gold: #c9a227;
+    --gold-dark: #a8861b;
+    --gold-soft: #f3e9c6;
+    --ink: #1c1917;
+    --paper: #ffffff;
+    --bone: #fafaf9;
+    --ease-brand: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  html {
+    background: var(--bone);
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-bone text-ink antialiased;
+    font-family: var(--font-sans), Inter, ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display), Inter, ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  ::selection {
+    background: var(--gold);
+    color: var(--ink);
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--gold-dark);
+    outline-offset: 3px;
+  }
 }
 
-body {
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  background-color: #fafaf9;
-  color: #1c1917;
+@layer components {
+  .g-display {
+    font-family: var(--font-display), Inter, ui-sans-serif, system-ui, sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 0.96;
+  }
+
+  .g-metric {
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+    font-feature-settings: "tnum";
+  }
+
+  .g-kicker {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--gold-dark);
+  }
+
+  .g-surface {
+    background: var(--paper);
+    border-radius: 12px;
+    box-shadow: inset 0 0 0 1px rgba(28, 25, 23, 0.08);
+  }
+
+  .g-elevated {
+    background: var(--paper);
+    border-radius: 12px;
+    box-shadow:
+      0 16px 40px -16px rgba(28, 25, 23, 0.18),
+      inset 0 0 0 1px rgba(28, 25, 23, 0.06);
+  }
+
+  .g-floating {
+    background: var(--paper);
+    border-radius: 12px;
+    box-shadow:
+      0 28px 64px -24px rgba(28, 25, 23, 0.32),
+      inset 0 0 0 1px rgba(28, 25, 23, 0.08);
+  }
+
+  .g-btn {
+    @apply relative inline-flex items-center justify-center gap-2 overflow-hidden whitespace-nowrap font-medium;
+    font-family: var(--font-display), Inter, ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: -0.01em;
+    border-radius: 8px;
+    transition:
+      transform 180ms var(--ease-brand),
+      background 220ms var(--ease-brand),
+      color 220ms var(--ease-brand),
+      box-shadow 220ms var(--ease-brand);
+  }
+
+  .g-btn .g-btn-arrow {
+    transition: transform 220ms var(--ease-brand);
+  }
+
+  .g-btn:hover .g-btn-arrow {
+    transform: translateX(4px);
+  }
+
+  .g-btn-primary {
+    @apply bg-ink text-paper;
+  }
+
+  .g-btn-primary::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 2px;
+    background: var(--gold);
+    transform: scaleX(0.18);
+    transform-origin: left;
+    transition: transform 240ms var(--ease-brand);
+  }
+
+  .g-btn-primary:hover {
+    background: #292524;
+    transform: translateY(-1px);
+  }
+
+  .g-btn-primary:hover::after {
+    transform: scaleX(1);
+  }
+
+  .g-btn-secondary {
+    @apply bg-transparent text-ink;
+    box-shadow: inset 0 0 0 1px rgba(28, 25, 23, 0.22);
+  }
+
+  .g-btn-secondary:hover {
+    @apply bg-ink text-paper;
+    transform: translateY(-1px);
+  }
+
+  .g-btn:disabled {
+    @apply cursor-not-allowed opacity-50;
+    transform: none;
+  }
+
+  /* Form controls — pair with the controlClass export in components/ui.tsx */
+  .g-control {
+    @apply h-10 w-full rounded-lg bg-paper px-3 text-sm text-ink;
+    box-shadow: inset 0 0 0 1px rgba(28, 25, 23, 0.14);
+    transition: box-shadow 200ms var(--ease-brand);
+  }
+
+  .g-control::placeholder {
+    color: #a8a29e;
+  }
+
+  .g-control:focus {
+    outline: none;
+    box-shadow:
+      inset 0 0 0 1px var(--ink),
+      0 0 0 3px rgba(201, 162, 39, 0.3);
+  }
+
+  .g-control:disabled {
+    @apply cursor-not-allowed opacity-60;
+  }
+
+  select.g-control {
+    padding-right: 2rem;
+  }
+
+  textarea.g-control {
+    @apply h-auto py-2;
+  }
+
+  /* Data tables — wrap in <TableCard> and use class="g-table" */
+  .g-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.875rem;
+  }
+
+  .g-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: rgba(250, 250, 249, 0.92);
+    backdrop-filter: blur(8px);
+    padding: 0.7rem 1rem;
+    text-align: left;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #78716c;
+    white-space: nowrap;
+    border-bottom: 1px solid rgba(28, 25, 23, 0.1);
+  }
+
+  .g-table tbody td {
+    padding: 0.8rem 1rem;
+    vertical-align: middle;
+    color: #292524;
+    border-bottom: 1px solid rgba(28, 25, 23, 0.06);
+  }
+
+  .g-table thead th:first-child,
+  .g-table tbody td:first-child {
+    padding-left: 1.5rem;
+  }
+
+  .g-table thead th:last-child,
+  .g-table tbody td:last-child {
+    padding-right: 1.5rem;
+  }
+
+  .g-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .g-table tbody tr {
+    transition:
+      background-color 160ms var(--ease-brand),
+      box-shadow 160ms var(--ease-brand);
+  }
+
+  .g-table tbody tr:hover {
+    background: rgba(201, 162, 39, 0.055);
+  }
+
+  .g-table tbody tr:hover td:first-child {
+    box-shadow: inset 3px 0 0 var(--gold);
+  }
+
+  .g-table tbody tr[data-selected="true"] {
+    background: rgba(201, 162, 39, 0.09);
+  }
+
+  .g-table tbody tr[data-selected="true"] td:first-child {
+    box-shadow: inset 3px 0 0 var(--gold);
+  }
+
+  .g-table .num {
+    text-align: right;
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer utilities {
+  .num-tabular {
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .text-pretty {
+    text-wrap: pretty;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(28, 25, 23, 0.22) transparent;
+  }
 }
 
 @media print {
@@ -25,5 +303,16 @@ body {
     left: 0;
     top: 0;
     border: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

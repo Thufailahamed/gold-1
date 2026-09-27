@@ -22,6 +22,7 @@ export default function PuritiesPage() {
       ]}
       deactivateEndpoint={(id) => `/api/v1/masters/purities/${id}/deactivate`}
       emptyHint="No purities yet."
+      note="Purities drive board rates and fine-gold calculations"
     />
   );
 }

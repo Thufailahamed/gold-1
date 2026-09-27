@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { api } from "@/lib/api";
+import { Page, Callout, Skeleton } from "@/components/ui";
 
 type Lookup = { product: { id: string } };
 
@@ -21,13 +22,30 @@ export default function BarcodeLookupPage({ params }: { params: Promise<{ code: 
     if (lookup.data) router.replace(`/products/${lookup.data.product.id}`);
   }, [lookup.data, router]);
 
-  if (lookup.isLoading) return <div className="h-32 animate-pulse rounded-xl bg-stone-200" />;
+  if (lookup.isLoading)
+    return (
+      <Page>
+        <Skeleton className="h-9 w-56" />
+        <Skeleton className="h-32 rounded-xl" />
+      </Page>
+    );
   return (
-    <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-      No product found for barcode {decodeURIComponent(code)}.{" "}
-      <button onClick={() => router.push("/products")} className="underline">
-        Back to list
-      </button>
-    </div>
+    <Page>
+      <Callout
+        tone="danger"
+        title="Product not found"
+        action={
+          <button
+            onClick={() => router.push("/products")}
+            className="g-btn g-btn-secondary h-8 px-3 text-xs"
+          >
+            Back to list
+          </button>
+        }
+      >
+        No product found for barcode{" "}
+        <span className="font-mono">{decodeURIComponent(code)}</span>.
+      </Callout>
+    </Page>
   );
 }

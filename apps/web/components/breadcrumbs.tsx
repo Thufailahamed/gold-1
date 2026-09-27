@@ -13,6 +13,8 @@ const LABELS: Record<string, string> = {
   suppliers: "Suppliers",
   customers: "Customers",
   products: "Products",
+  scan: "Scan",
+  inventory: "Inventory",
   settings: "Settings",
   audit: "Audit",
 };
@@ -22,8 +24,11 @@ export function Breadcrumbs() {
   const segs = pathname.split("/").filter(Boolean);
   if (segs.length === 0) return null;
   return (
-    <nav aria-label="Breadcrumb" className="mb-4 flex items-center gap-1 text-sm text-stone-500">
-      <Link href="/" className="hover:underline">
+    <nav
+      aria-label="Breadcrumb"
+      className="mb-5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-4"
+    >
+      <Link href="/" className="transition-colors hover:text-gold-dark">
         Dashboard
       </Link>
       {segs.map((s, i) => {
@@ -31,11 +36,11 @@ export function Breadcrumbs() {
         const last = i === segs.length - 1;
         return (
           <Fragment key={href}>
-            <span>/</span>
+            <span className="text-ink-5">/</span>
             {last ? (
-              <span className="font-medium text-stone-800">{LABELS[s] ?? s}</span>
+              <span className="text-ink">{LABELS[s] ?? s}</span>
             ) : (
-              <Link href={href} className="hover:underline">
+              <Link href={href} className="transition-colors hover:text-gold-dark">
                 {LABELS[s] ?? s}
               </Link>
             )}

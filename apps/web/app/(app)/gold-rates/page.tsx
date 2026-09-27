@@ -7,6 +7,19 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import {
+  Page,
+  Hero,
+  heroBtnPrimary,
+  StatGrid,
+  StatCard,
+  TableCard,
+  TableSkeleton,
+  EmptyBlock,
+  Callout,
+  controlClass,
+} from "@/components/ui";
+import { ArrowRightIcon, CoinsIcon, TrendingUpIcon, XIcon } from "@/components/icons";
 
 type Rate = {
   id: string;
@@ -67,77 +80,116 @@ export default function GoldRatesPage() {
   });
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Gold Rates</h1>
-          <p className="text-sm text-stone-500">Current buying rates per gram</p>
-        </div>
-        <button
-          onClick={() => setDialog(true)}
-          className="rounded-md bg-stone-900 px-3 py-2 text-sm font-medium text-white hover:bg-stone-800"
-        >
-          Publish rate
-        </button>
-      </div>
+    <Page>
+      <Hero
+        kicker="Masters · Live board"
+        title="Gold Rates"
+        description="Current buying rates per gram, published by purity."
+        actions={
+          <button onClick={() => setDialog(true)} className={heroBtnPrimary}>
+            <CoinsIcon size={15} />
+            Publish rate
+            <ArrowRightIcon size={14} className="g-btn-arrow" />
+          </button>
+        }
+        stats={(() => {
+          const rates = current.data ?? [];
+          const top = rates.length
+            ? rates.reduce((a, b) => (a.rate_per_gram >= b.rate_per_gram ? a : b))
+            : null;
+          return [
+            {
+              label: top ? `Board rate · ${top.karat}` : "Board rate",
+              value: top ? `${top.rate_per_gram.toLocaleString()} LKR/g` : "—",
+            },
+            { label: "Purities", value: current.isLoading ? "—" : rates.length },
+            { label: "Revisions", value: history.data?.total ?? "—" },
+          ];
+        })()}
+        note="Published rates apply instantly to intake and live pricing across all branches"
+      />
+
       {current.isLoading ? (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <StatGrid cols={4}>
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-24 animate-pulse rounded-xl bg-stone-200" />
+            <StatCard key={i} label="—" value="—" loading icon={<CoinsIcon size={16} />} />
           ))}
-        </div>
+        </StatGrid>
       ) : current.isError ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          Failed to load current rates.
-        </div>
+        <Callout tone="danger" title="Failed to load current rates">
+          Check the API connection and retry.
+        </Callout>
       ) : (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <StatGrid cols={4}>
           {current.data!.map((r) => (
-            <div key={r.purity_id} className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
-              <p className="text-sm font-medium text-stone-500">{r.karat}</p>
-              <p className="mt-1 text-2xl font-semibold">
-                {r.rate_per_gram.toLocaleString()} <span className="text-sm font-normal">LKR/g</span>
-              </p>
-              <p className="mt-1 text-xs text-stone-400">
-                From {new Date(r.effective_from).toLocaleString()}
-              </p>
-            </div>
+            <StatCard
+              key={r.purity_id}
+              label={r.karat}
+              value={r.rate_per_gram.toLocaleString()}
+              sub={`From ${new Date(r.effective_from).toLocaleString()}`}
+              icon={<TrendingUpIcon size={16} />}
+              status={<span className="text-[11px] font-semibold text-ink-4">LKR/g</span>}
+            />
           ))}
-        </div>
+        </StatGrid>
       )}
-      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-stone-200 text-left text-xs uppercase text-stone-500">
-              <th className="px-4 py-2">Karat</th>
-              <th className="px-4 py-2">Rate/g</th>
-              <th className="px-4 py-2">Effective from</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(history.data?.rows ?? []).map((r) => (
-              <tr key={r.id} className="border-b border-stone-100 last:border-0">
-                <td className="px-4 py-2">{r.karat}</td>
-                <td className="px-4 py-2">{r.rate_per_gram.toLocaleString()} LKR</td>
-                <td className="px-4 py-2">{new Date(r.effective_from).toLocaleString()}</td>
+
+      <TableCard title="Rate history" description="Last 50 published rates">
+        {history.isLoading ? (
+          <TableSkeleton rows={5} cols={3} />
+        ) : (history.data?.rows ?? []).length === 0 ? (
+          <EmptyBlock title="No rates yet" description="Publish the first board rate to begin." />
+        ) : (
+          <table className="g-table">
+            <thead>
+              <tr>
+                <th>Karat</th>
+                <th className="!text-right">Rate/g</th>
+                <th>Effective from</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {(history.data?.rows ?? []).map((r) => (
+                <tr key={r.id}>
+                  <td className="font-medium">{r.karat}</td>
+                  <td className="num">{r.rate_per_gram.toLocaleString()} LKR</td>
+                  <td className="text-ink-3">{new Date(r.effective_from).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </TableCard>
+
       {dialog ? (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/30 p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
+          onClick={() => setDialog(false)}
+        >
           <form
             onSubmit={handleSubmit((v) => create.mutate(v))}
-            className="w-full max-w-md space-y-3 rounded-xl bg-white p-6 shadow-lg"
+            className="g-floating w-full max-w-md animate-fade-in space-y-4 p-6"
+            onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="font-semibold">Publish rate</h2>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Purity</label>
-              <select
-                className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
-                {...register("purityId")}
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="g-kicker">Board rate</div>
+                <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
+                  Publish rate
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDialog(false)}
+                aria-label="Close"
+                className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
               >
+                <XIcon size={16} />
+              </button>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">Purity</label>
+              <select className={controlClass} {...register("purityId")}>
                 <option value="">Select…</option>
                 {(purities.data?.rows ?? []).map((p) => (
                   <option key={p.id} value={p.id}>
@@ -145,35 +197,37 @@ export default function GoldRatesPage() {
                   </option>
                 ))}
               </select>
-              {errors.purityId ? <p className="mt-1 text-xs text-red-600">Select a purity</p> : null}
+              {errors.purityId ? <p className="mt-1 text-xs text-rose-700">Select a purity</p> : null}
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Rate per gram (LKR)</label>
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">
+                Rate per gram (LKR)
+              </label>
               <input
                 type="number"
                 step="any"
-                className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
+                className={controlClass}
                 {...register("ratePerGram")}
               />
-              {errors.ratePerGram ? <p className="mt-1 text-xs text-red-600">Must be above 0</p> : null}
+              {errors.ratePerGram ? <p className="mt-1 text-xs text-rose-700">Must be above 0</p> : null}
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Effective from</label>
-              <input
-                type="datetime-local"
-                className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
-                {...register("effectiveFrom")}
-              />
-              {errors.effectiveFrom ? <p className="mt-1 text-xs text-red-600">Required</p> : null}
+              <label className="mb-1.5 block text-xs font-medium text-ink-3">Effective from</label>
+              <input type="datetime-local" className={controlClass} {...register("effectiveFrom")} />
+              {errors.effectiveFrom ? <p className="mt-1 text-xs text-rose-700">Required</p> : null}
             </div>
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setDialog(false)} className="rounded-md border px-3 py-2 text-sm">
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setDialog(false)}
+                className="g-btn g-btn-secondary h-10 px-4 text-sm"
+              >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={create.isPending}
-                className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white disabled:opacity-50"
+                className="g-btn g-btn-primary h-10 px-4 text-sm"
               >
                 {create.isPending ? "Publishing…" : "Publish"}
               </button>
@@ -181,6 +235,6 @@ export default function GoldRatesPage() {
           </form>
         </div>
       ) : null}
-    </div>
+    </Page>
   );
 }

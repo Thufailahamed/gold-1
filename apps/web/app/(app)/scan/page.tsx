@@ -4,6 +4,15 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import {
+  Page,
+  Hero,
+  Panel,
+  CardLink,
+  Callout,
+  Skeleton,
+} from "@/components/ui";
+import { ArrowRightIcon, ScanBarcodeIcon } from "@/components/icons";
 
 type Lookup = {
   product: { id: string; barcode: string; name: string; karat: string };
@@ -38,41 +47,68 @@ export default function ScanPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Scan</h1>
-        <p className="text-sm text-stone-500">USB/Bluetooth scanners type + Enter; manual entry works too</p>
-      </div>
-      <ScanInput onScan={onScan} />
-      {lookup.isLoading ? <div className="h-24 animate-pulse rounded-xl bg-stone-200" /> : null}
-      {lookup.isError ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          No product found for {code}.
+    <Page>
+      <Hero
+        kicker="Catalog"
+        title="Scan & lookup"
+        description="Point a USB or Bluetooth scanner at the barcode, or type the code and press Enter."
+      >
+        <div className="relative mx-auto mt-8 flex max-w-xl flex-col items-center">
+          <span className="mb-5 flex size-12 items-center justify-center rounded-2xl bg-gold text-ink">
+            <ScanBarcodeIcon size={22} />
+          </span>
+          <ScanInput onScan={onScan} />
         </div>
+      </Hero>
+
+      {lookup.isLoading ? <Skeleton className="h-24 rounded-xl" /> : null}
+      {lookup.isError ? (
+        <Callout tone="danger" title="Not found">
+          No product found for <span className="font-mono">{code}</span>.
+        </Callout>
       ) : null}
       {lookup.data ? (
-        <div className="rounded-xl border border-stone-200 bg-white p-5">
-          <p className="font-mono text-sm text-stone-500">{lookup.data.product.barcode}</p>
-          <p className="text-lg font-semibold">{lookup.data.product.name}</p>
-          <p className="text-sm text-stone-500">{lookup.data.product.karat}</p>
-          <Link href={`/products/${lookup.data.product.id}`} className="mt-2 inline-block text-sm underline">
-            Open detail →
-          </Link>
-        </div>
+        <Panel
+          title={lookup.data.product.name}
+          description={
+            <>
+              <span className="font-mono">{lookup.data.product.barcode}</span> ·{" "}
+              {lookup.data.product.karat}
+            </>
+          }
+          icon={<ScanBarcodeIcon size={16} />}
+          actions={<CardLink href={`/products/${lookup.data.product.id}`}>Open detail</CardLink>}
+        >
+          {lookup.data.livePrice ? (
+            <p className="text-sm text-ink-3">
+              Live price:{" "}
+              <span className="g-metric text-base text-ink">
+                {(lookup.data.livePrice.amount_cents / 100).toLocaleString("en-US")} LKR
+              </span>
+            </p>
+          ) : (
+            <p className="text-sm text-ink-4">No live price available for this piece.</p>
+          )}
+        </Panel>
       ) : null}
+
       {recent.length > 0 ? (
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="mb-2 text-sm font-medium">Recent scans</p>
-          <ul className="space-y-1 text-sm">
+        <Panel title="Recent scans" description="Last 10 lookups on this device">
+          <ul className="flex flex-wrap gap-2">
             {recent.map((r) => (
               <li key={r}>
-                <button onClick={() => onScan(r)} className="font-mono hover:underline">{r}</button>
+                <button
+                  onClick={() => onScan(r)}
+                  className="rounded-full bg-ink/[0.06] px-3 py-1.5 font-mono text-xs text-ink-3 transition-colors hover:bg-ink hover:text-gold"
+                >
+                  {r}
+                </button>
               </li>
             ))}
           </ul>
-        </div>
+        </Panel>
       ) : null}
-    </div>
+    </Page>
   );
 }
 
@@ -87,18 +123,28 @@ function ScanInput({ onScan }: { onScan: (code: string) => void }) {
           setV("");
         }
       }}
-      className="flex gap-2"
+      className="flex w-full flex-col gap-3 sm:flex-row"
     >
-      <input
-        autoFocus
-        value={v}
-        onChange={(e) => setV(e.target.value)}
-        placeholder="Scan or type barcode…"
-        autoComplete="off"
-        className="w-full max-w-md rounded-md border-2 border-gold px-4 py-3 font-mono text-lg outline-none"
-      />
-      <button type="submit" className="rounded-md bg-stone-900 px-4 py-2 text-sm text-white">
+      <div className="relative w-full">
+        <ScanBarcodeIcon
+          size={18}
+          className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold-dark"
+        />
+        <input
+          autoFocus
+          value={v}
+          onChange={(e) => setV(e.target.value)}
+          placeholder="Scan or type barcode…"
+          autoComplete="off"
+          className="h-12 w-full rounded-lg bg-paper pl-11 pr-4 font-mono text-base text-ink shadow-[inset_0_0_0_1.5px_rgba(201,162,39,0.6)] transition-shadow placeholder:font-sans placeholder:text-ink-5 focus:outline-none focus:shadow-[inset_0_0_0_1.5px_var(--gold,#C9A227),0_0_0_4px_rgba(201,162,39,0.25)]"
+        />
+      </div>
+      <button
+        type="submit"
+        className="g-btn h-12 bg-gold px-5 text-sm text-ink transition-colors hover:bg-gold-light"
+      >
         Look up
+        <ArrowRightIcon size={14} className="g-btn-arrow" />
       </button>
     </form>
   );
