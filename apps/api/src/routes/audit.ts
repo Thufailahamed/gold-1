@@ -7,10 +7,11 @@ import { pagination } from "./http";
 
 export const audit = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
-  .get("/", requirePerm(PERMISSIONS.AUDIT_READ), async (c) => {
+  .get("/", requirePerm(PERMISSIONS.AUDIT_VIEW), async (c) => {
     const { page, limit } = pagination(c);
     const entity = c.req.query("entity");
     const entityId = c.req.query("entityId");
+    const userId = c.req.query("userId");
     const offset = (page - 1) * limit;
 
     const conds: string[] = [];
@@ -22,6 +23,10 @@ export const audit = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     if (entityId) {
       conds.push("entity_id = ?");
       vals.push(entityId);
+    }
+    if (userId) {
+      conds.push("user_id = ?");
+      vals.push(userId);
     }
     const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
 

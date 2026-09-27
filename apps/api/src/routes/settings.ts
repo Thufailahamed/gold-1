@@ -14,7 +14,7 @@ const putSettingSchema = z.object({
 
 export const settings = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
-  .get("/:key", async (c) => {
+  .get("/:key", requirePerm(PERMISSIONS.SETTINGS_VIEW), async (c) => {
     const data = await getSetting(c.env.DB, c.req.param("key"));
     if (!data)
       return c.json(
@@ -23,7 +23,16 @@ export const settings = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     return c.json({ success: true, data }, 200);
   })
-  .put("/:key", requirePerm(PERMISSIONS.SETTINGS_WRITE), async (c) => {
+  .put("/:key", async (c) => {
+    const key = c.req.param("key");
+    const needed = key.startsWith("branch.") ? PERMISSIONS.SETTINGS_MANAGE : PERMISSIONS.SETTINGS_EDIT;
+    const perms = c.get("permissions") as string[];
+    if (!perms.includes(needed))
+      return c.json(
+        { success: false, error: { code: "FORBIDDEN", message: "Insufficient permission" } },
+        403
+      );
+    const body = await c.req.json().catch(() => null);
     const body = await c.req.json().catch(() => null);
     const parsed = putSettingSchema.safeParse(body);
     if (!parsed.success)
