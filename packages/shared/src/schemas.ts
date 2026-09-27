@@ -9,8 +9,17 @@ export const createUserSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(100),
   password: z.string().min(8),
-  role: z.enum(["admin", "manager", "cashier", "viewer"]),
-  branchId: z.string().min(1),
+  role: z.enum([
+    "owner",
+    "manager",
+    "accountant",
+    "cashier",
+    "salesperson",
+    "inventory_officer",
+    "gold_officer",
+    "manufacturing_staff",
+  ]),
+  branchIds: z.array(z.string().min(1)).min(1),
 });
 
 export const createBranchSchema = z.object({
@@ -75,3 +84,37 @@ export const createProductSchema = z.object({
 });
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
+export const resetRequestSchema = z.object({
+  email: z.string().email(),
+});
+
+export const resetConfirmSchema = z.object({
+  token: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
+const roleEnum = z.enum([
+  "owner",
+  "manager",
+  "accountant",
+  "cashier",
+  "salesperson",
+  "inventory_officer",
+  "gold_officer",
+  "manufacturing_staff",
+]);
+
+export const editUserSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  role: roleEnum.optional(),
+  branchIds: z.array(z.string().min(1)).min(1).optional(),
+});
+
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type EditUserInput = z.infer<typeof editUserSchema>;
