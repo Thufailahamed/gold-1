@@ -11,3 +11,19 @@ body {
   background-color: #fafaf9;
   color: #1c1917;
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    border: none;
+  }
+}

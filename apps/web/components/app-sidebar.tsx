@@ -14,6 +14,7 @@ const LINKS = [
   { href: "/gold-rates", label: "Gold Rates", perm: "masters:read" },
   { href: "/suppliers", label: "Suppliers", perm: "masters:read" },
   { href: "/customers", label: "Customers", perm: "masters:read" },
+  { href: "/products", label: "Products", perm: "products:read" },
   { href: "/settings", label: "Settings", perm: "settings:write" },
   { href: "/audit", label: "Audit", perm: "audit:read" },
 ];
