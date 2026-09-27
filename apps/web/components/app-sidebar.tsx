@@ -9,6 +9,11 @@ const LINKS = [
   { href: "/", label: "Dashboard", perm: null as string | null },
   { href: "/users", label: "Users", perm: "users:read" },
   { href: "/branches", label: "Branches", perm: "branches:manage" },
+  { href: "/categories", label: "Categories", perm: "masters:read" },
+  { href: "/purities", label: "Purities", perm: "masters:read" },
+  { href: "/gold-rates", label: "Gold Rates", perm: "masters:read" },
+  { href: "/suppliers", label: "Suppliers", perm: "masters:read" },
+  { href: "/customers", label: "Customers", perm: "masters:read" },
   { href: "/settings", label: "Settings", perm: "settings:write" },
   { href: "/audit", label: "Audit", perm: "audit:read" },
 ];

@@ -1,9 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Toaster } from "sonner";
 import { BranchSwitcher } from "@/components/branch-switcher";
 import { AppSidebar } from "@/components/app-sidebar";
+import { Providers } from "@/components/providers";
 import { logout, useSession } from "@/lib/auth";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -34,8 +34,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
+    <Providers>
     <div className="flex min-h-screen">
-      <Toaster richColors />
       <AppSidebar me={me} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-stone-200 bg-white px-6 py-3">
@@ -50,5 +50,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <main className="flex-1 p-6">{children}</main>
       </div>
     </div>
+    </Providers>
   );
 }
