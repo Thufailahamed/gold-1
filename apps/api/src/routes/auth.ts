@@ -1,10 +1,19 @@
 import { Hono } from "hono";
-import { loginSchema } from "@goldos/shared";
+import {
+  changePasswordSchema,
+  loginSchema,
+  PERMISSIONS,
+  resetConfirmSchema,
+  resetRequestSchema,
+} from "@goldos/shared";
 import type { Env } from "../db/client";
 import { requireAuth, type AppVariables } from "../middleware/auth";
+import { requirePerm } from "../middleware/requirePerm";
 import { writeAudit } from "../middleware/audit";
 import { createSession, destroySession } from "../services/session";
 import { verifyPassword } from "../services/hash";
+import { changePassword, confirmReset, requestReset } from "../services/password";
+import { serviceError } from "./http";
 
 type SessionRow = {
   user_id: string;
@@ -108,6 +117,63 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       },
       200
     );
+  })
+  .post("/change-password", requireAuth, async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = changePasswordSchema.safeParse(body);
+    if (!parsed.success)
+      return c.json(
+        { success: false, error: { code: "VALIDATION", message: "Invalid password data" } },
+        400
+      );
+    try {
+      await changePassword(
+        c.env.DB,
+        c.get("userId"),
+        parsed.data.currentPassword,
+        parsed.data.newPassword
+      );
+      c.header("Set-Cookie", sessionCookie("", 0));
+      return c.json({ success: true, data: { ok: true, relogin: true } }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  .post("/reset-request", requireAuth, requirePerm(PERMISSIONS.USERS_EDIT), async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = resetRequestSchema.safeParse(body);
+    if (!parsed.success)
+      return c.json(
+        { success: false, error: { code: "VALIDATION", message: "Invalid email" } },
+        400
+      );
+    try {
+      const { token, userId } = await requestReset(c.env.DB, parsed.data.email, c.get("userId"));
+      return c.json(
+        {
+          success: true,
+          data: { userId, token, expiresInMinutes: 15, deliverSecurely: true },
+        },
+        201
+      );
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  .post("/reset-confirm", async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = resetConfirmSchema.safeParse(body);
+    if (!parsed.success)
+      return c.json(
+        { success: false, error: { code: "VALIDATION", message: "Invalid reset data" } },
+        400
+      );
+    try {
+      await confirmReset(c.env.DB, parsed.data.token, parsed.data.newPassword);
+      return c.json({ success: true, data: { ok: true } }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
   });
 
 export type { SessionRow };
