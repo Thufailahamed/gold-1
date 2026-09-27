@@ -19,11 +19,17 @@ export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
     );
   }
   const row = await c.env.DB.prepare(
-    "SELECT s.id, s.user_id, s.expires_at, u.is_active FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?"
+    "SELECT s.id, s.user_id, s.expires_at, s.created_at, u.is_active FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?"
   )
     .bind(sessionId)
-    .first<{ user_id: string; expires_at: number; is_active: number }>();
-  if (!row || row.expires_at < Date.now() || !row.is_active) {
+    .first<{ user_id: string; expires_at: number; created_at: number; is_active: number }>();
+  const ABSOLUTE_MS = 1000 * 60 * 60 * 24 * 7; // 7d absolute
+  if (
+    !row ||
+    row.expires_at < Date.now() ||
+    row.created_at + ABSOLUTE_MS < Date.now() ||
+    !row.is_active
+  ) {
     return c.json(
       { success: false, error: { code: "UNAUTHORIZED", message: "Session expired" } },
       401
