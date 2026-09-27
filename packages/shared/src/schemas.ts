@@ -27,3 +27,37 @@ export const settingSchema = z.object({
 
 export type LoginInput = z.infer<typeof loginSchema>;
 export type CreateUserInput = z.infer<typeof createUserSchema>;
+
+export const createCategorySchema = z.object({
+  name: z.string().min(1).max(100),
+  code: z.string().min(1).max(20),
+  description: z.string().max(500).optional(),
+});
+
+export const createPuritySchema = z.object({
+  karat: z.string().min(1).max(10),
+  purity: z.number().gt(0).lte(1),
+  defaultMakingCharge: z.number().min(0).optional().default(0),
+  defaultWastagePct: z.number().min(0).max(100).optional().default(0),
+});
+
+export const createGoldRateSchema = z.object({
+  purityId: z.string().min(1),
+  ratePerGram: z.number().gt(0),
+  effectiveFrom: z.number().int().positive(),
+});
+
+export const createPartySchema = z.object({
+  name: z.string().min(1).max(100),
+  phone: z.string().max(20).optional(),
+  address: z.string().max(500).optional(),
+  nic: z.string().max(20).optional(),
+  creditLimit: z.number().min(0).optional().default(0),
+  openingBalance: z.number().optional().default(0),
+  branchId: z.string().min(1),
+});
+
+export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
+export type CreatePurityInput = z.infer<typeof createPuritySchema>;
+export type CreateGoldRateInput = z.infer<typeof createGoldRateSchema>;
+export type CreatePartyInput = z.infer<typeof createPartySchema>;
