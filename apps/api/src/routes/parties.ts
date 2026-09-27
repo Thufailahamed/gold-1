@@ -4,7 +4,8 @@ import { createPartySchema, PERMISSIONS } from "@goldos/shared";
 import type { Env } from "../db/client";
 import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
-import { createParty, listParties, updateParty, type PartyTable } from "../services/parties";
+import { createParty, getPartyDetail, listParties, updateParty, type PartyTable } from "../services/parties";
+import { partyLedger } from "../services/journal";
 import { pagination, serviceError } from "./http";
 
 const updatePartySchema = z.object({
@@ -12,6 +13,7 @@ const updatePartySchema = z.object({
   phone: z.string().max(20).optional(),
   address: z.string().max(500).optional(),
   creditLimit: z.number().min(0).optional(),
+  notes: z.string().max(2000).optional(),
   reason: z.string().max(500).optional(),
 });
 
@@ -62,6 +64,7 @@ function partyRouter(table: PartyTable) {
             phone: parsed.data.phone,
             address: parsed.data.address,
             creditLimit: parsed.data.creditLimit,
+            notes: parsed.data.notes,
           },
           c.get("userId"),
           parsed.data.reason
@@ -89,6 +92,24 @@ function partyRouter(table: PartyTable) {
           parsed.data.reason
         );
         return c.json({ success: true, data: { ok: true } }, 200);
+      } catch (err) {
+        return serviceError(c, err);
+      }
+    })
+    .get("/:id", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => {
+      try {
+        const data = await getPartyDetail(c.env.DB, table, c.req.param("id"));
+        return c.json({ success: true, data }, 200);
+      } catch (err) {
+        return serviceError(c, err);
+      }
+    })
+    .get("/:id/ledger", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => {
+      try {
+        const account = table === "customers" ? "1200" : "2000";
+        const partyType = table === "customers" ? "customer" : "supplier";
+        const data = await partyLedger(c.env.DB, account, partyType, c.req.param("id"));
+        return c.json({ success: true, data }, 200);
       } catch (err) {
         return serviceError(c, err);
       }

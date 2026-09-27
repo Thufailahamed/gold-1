@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "./db/client";
 import { errorHandler } from "./middleware/error";
 import { cors } from "./middleware/cors";
+import { accounts } from "./routes/accounts";
 import { audit } from "./routes/audit";
 import { auth } from "./routes/auth";
 import { branches } from "./routes/branches";
@@ -31,5 +32,6 @@ app.route("/api/v1/suppliers", suppliers);
 app.route("/api/v1/customers", customers);
 app.route("/api/v1/products", products);
 app.route("/api/v1/inventory", inventory);
+app.route("/api/v1/accounts", accounts);
 
 export default app;
