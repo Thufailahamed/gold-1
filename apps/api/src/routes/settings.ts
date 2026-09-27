@@ -33,7 +33,6 @@ export const settings = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         403
       );
     const body = await c.req.json().catch(() => null);
-    const body = await c.req.json().catch(() => null);
     const parsed = putSettingSchema.safeParse(body);
     if (!parsed.success)
       return c.json(

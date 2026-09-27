@@ -16,5 +16,9 @@ export function serviceError(c: Context, err: unknown) {
     return c.json({ success: false, error: { code, message } }, 404);
   if (code === "VALIDATION")
     return c.json({ success: false, error: { code, message } }, 400);
+  if (code === "UNAUTHORIZED")
+    return c.json({ success: false, error: { code, message } }, 401);
+  if (code === "FORBIDDEN")
+    return c.json({ success: false, error: { code, message } }, 403);
   throw err;
 }
