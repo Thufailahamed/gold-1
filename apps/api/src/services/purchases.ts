@@ -686,18 +686,24 @@ export async function purchaseSummary(
     vals.push(opts.branchId);
   }
   const where = `WHERE ${conds.join(" AND ")}`;
-  const row = await db
+  const head = await db
     .prepare(
-      `SELECT COUNT(*) AS invoices, COALESCE(SUM(i.total_cents), 0) AS value_cents, COALESCE(SUM(i.paid_cents), 0) AS paid_cents, COALESCE(SUM(it.net_mg), 0) AS gold_mg FROM purchase_invoices i LEFT JOIN purchase_invoice_items it ON it.invoice_id = i.id ${where}`
+      `SELECT COUNT(*) AS invoices, COALESCE(SUM(i.total_cents), 0) AS value_cents, COALESCE(SUM(i.paid_cents), 0) AS paid_cents FROM purchase_invoices i ${where}`
     )
     .bind(...vals)
-    .first<{ invoices: number; value_cents: number; paid_cents: number; gold_mg: number }>();
+    .first<{ invoices: number; value_cents: number; paid_cents: number }>();
+  const gold = await db
+    .prepare(
+      `SELECT COALESCE(SUM(it.net_mg), 0) AS gold_mg FROM purchase_invoice_items it JOIN purchase_invoices i ON i.id = it.invoice_id ${where}`
+    )
+    .bind(...vals)
+    .first<{ gold_mg: number }>();
   return {
-    invoices: row?.invoices ?? 0,
-    value_cents: row?.value_cents ?? 0,
-    paid_cents: row?.paid_cents ?? 0,
-    outstanding_cents: (row?.value_cents ?? 0) - (row?.paid_cents ?? 0),
-    gold_mg: row?.gold_mg ?? 0,
+    invoices: head?.invoices ?? 0,
+    value_cents: head?.value_cents ?? 0,
+    paid_cents: head?.paid_cents ?? 0,
+    outstanding_cents: (head?.value_cents ?? 0) - (head?.paid_cents ?? 0),
+    gold_mg: gold?.gold_mg ?? 0,
   };
 }
 

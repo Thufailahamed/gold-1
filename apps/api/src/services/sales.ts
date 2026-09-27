@@ -323,7 +323,7 @@ export async function createReturn(
     });
     stmts.push(...moved.stmts);
     const p = await db
-      .prepare("SELECT fine_gold_mg, purity_permille FROM products JOIN purities ON purities.id = products.purity_id WHERE products.id = ?")
+      .prepare("SELECT fine_gold_mg, pu.permille AS purity_permille FROM products JOIN purities pu ON pu.id = products.purity_id WHERE products.id = ?")
       .bind(it.product_id)
       .first<{ fine_gold_mg: number; purity_permille: number }>();
     if (p) {
@@ -398,7 +398,9 @@ export async function linkExchange(
   actorId: string
 ): Promise<void> {
   const ret = await db
-    .prepare("SELECT id, type, branch_id FROM sales_returns WHERE id = ?")
+    .prepare(
+      "SELECT r.id, r.type, i.branch_id FROM sales_returns r JOIN sales_invoices i ON i.id = r.invoice_id WHERE r.id = ?"
+    )
     .bind(returnId)
     .first<{ id: string; type: string; branch_id: string }>();
   if (!ret) throw Object.assign(new Error("Return not found"), { code: "NOT_FOUND" });
@@ -548,17 +550,23 @@ export async function salesSummary(
     vals.push(opts.branchId);
   }
   const where = `WHERE ${conds.join(" AND ")}`;
-  const row = await db
+  const head = await db
     .prepare(
-      `SELECT COUNT(*) AS invoices, COALESCE(SUM(i.total_cents), 0) AS value_cents, COALESCE(SUM(i.discount_cents), 0) AS discount_cents, COALESCE(SUM(it.net_mg), 0) AS gold_mg FROM sales_invoices i LEFT JOIN sales_items it ON it.invoice_id = i.id ${where}`
+      `SELECT COUNT(*) AS invoices, COALESCE(SUM(i.total_cents), 0) AS value_cents, COALESCE(SUM(i.discount_cents), 0) AS discount_cents FROM sales_invoices i ${where}`
     )
     .bind(...vals)
-    .first<{ invoices: number; value_cents: number; discount_cents: number; gold_mg: number }>();
+    .first<{ invoices: number; value_cents: number; discount_cents: number }>();
+  const gold = await db
+    .prepare(
+      `SELECT COALESCE(SUM(p.net_mg), 0) AS gold_mg FROM sales_items it JOIN products p ON p.id = it.product_id JOIN sales_invoices i ON i.id = it.invoice_id ${where}`
+    )
+    .bind(...vals)
+    .first<{ gold_mg: number }>();
   return {
-    invoices: row?.invoices ?? 0,
-    value_cents: row?.value_cents ?? 0,
-    discount_cents: row?.discount_cents ?? 0,
-    gold_mg: row?.gold_mg ?? 0,
+    invoices: head?.invoices ?? 0,
+    value_cents: head?.value_cents ?? 0,
+    discount_cents: head?.discount_cents ?? 0,
+    gold_mg: gold?.gold_mg ?? 0,
   };
 }
 
@@ -597,7 +605,7 @@ export async function salesBreakdown(
   const bcond = opts.branchId ? "AND i.branch_id = ?" : "";
   const vals: unknown[] = opts.branchId ? [opts.from, opts.to, opts.branchId] : [opts.from, opts.to];
   const valueCol = opts.groupBy === "payment" ? "pay.amount_cents" : "it.price_cents - it.discount_cents";
-  const mgCol = opts.groupBy === "payment" ? "0" : "it.net_mg";
+  const mgCol = opts.groupBy === "payment" ? "0" : "p.net_mg";
   const countCol = opts.groupBy === "payment" ? "COUNT(*)" : "COUNT(DISTINCT i.id)";
   const { results } = await db
     .prepare(

@@ -18,7 +18,7 @@ const ALLOW: Record<string, string[]> = {
   LOST: [],
   VOID: [],
   RESERVED: [],
-  SOLD: [],
+  SOLD: ["RETURNED"],
   IN_REPAIR: [],
   IN_MANUFACTURING: [],
   MELTING: [],
