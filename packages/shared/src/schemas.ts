@@ -45,9 +45,9 @@ export const createCategorySchema = z.object({
 
 export const createPuritySchema = z.object({
   karat: z.string().min(1).max(10),
-  purity: z.number().gt(0).lte(1),
-  defaultMakingCharge: z.number().min(0).optional().default(0),
-  defaultWastagePct: z.number().min(0).max(100).optional().default(0),
+  permille: z.number().int().gt(0).lte(1000),
+  defaultMakingLkr: z.number().min(0).optional().default(0),
+  defaultWastageMg: z.number().min(0).optional().default(0),
 });
 
 export const createGoldRateSchema = z.object({

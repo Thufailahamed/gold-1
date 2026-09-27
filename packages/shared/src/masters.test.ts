@@ -3,8 +3,8 @@ import { hasPermission } from "./permissions";
 import { createGoldRateSchema, createPartySchema, createPuritySchema } from "./schemas";
 
 describe("masters schemas", () => {
-  it("rejects purity above 1", () => {
-    expect(() => createPuritySchema.parse({ karat: "22K", purity: 1.5 })).toThrow();
+  it("rejects permille above 1000", () => {
+    expect(() => createPuritySchema.parse({ karat: "22K", permille: 1500 })).toThrow();
   });
   it("rejects negative credit limit", () => {
     expect(() => createPartySchema.parse({ name: "X", creditLimit: -5 })).toThrow();

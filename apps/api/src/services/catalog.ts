@@ -13,9 +13,9 @@ export type CategoryRow = {
 export type PurityRow = {
   id: string;
   karat: string;
-  purity: number;
-  default_making_charge: number;
-  default_wastage_pct: number;
+  permille: number;
+  default_making_cents: number;
+  default_wastage_mg: number;
   is_active: number;
   created_at: number;
 };
@@ -132,9 +132,16 @@ export async function createPurity(
   await db.batch([
     db
       .prepare(
-        "INSERT INTO purities (id, karat, purity, default_making_charge, default_wastage_pct, is_active, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)"
+        "INSERT INTO purities (id, karat, permille, default_making_cents, default_wastage_mg, is_active, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)"
       )
-      .bind(id, input.karat, input.purity, input.defaultMakingCharge, input.defaultWastagePct, now),
+      .bind(
+        id,
+        input.karat,
+        input.permille,
+        Math.round(input.defaultMakingLkr * 100),
+        Math.round(input.defaultWastageMg),
+        now
+      ),
     buildAuditStmt(db, {
       userId: actorId,
       action: "purity.create",
@@ -146,9 +153,9 @@ export async function createPurity(
   return {
     id,
     karat: input.karat,
-    purity: input.purity,
-    default_making_charge: input.defaultMakingCharge,
-    default_wastage_pct: input.defaultWastagePct,
+    permille: input.permille,
+    default_making_cents: input.defaultMakingLkr,
+    default_wastage_mg: input.defaultWastageMg,
     is_active: 1,
     created_at: now,
   };
@@ -161,7 +168,7 @@ export async function listPurities(
   return paginate(
     db,
     "purities",
-    "id, karat, purity, default_making_charge, default_wastage_pct, is_active, created_at",
+    "id, karat, permille, default_making_cents, default_wastage_mg, is_active, created_at",
     "karat LIKE ? OR karat LIKE ?",
     opts
   ) as Promise<{ rows: PurityRow[]; total: number }>;

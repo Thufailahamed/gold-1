@@ -1,4 +1,5 @@
 import type { CreateGoldRateInput } from "@goldos/shared";
+import { centsToLkr, lkrToCents } from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
 
@@ -11,8 +12,17 @@ export type GoldRateRow = {
   created_at: number;
 };
 
+export type GoldRateCentsRow = {
+  id: string;
+  purity_id: string;
+  karat: string;
+  rate_cents_per_g: number;
+  effective_from: number;
+  created_at: number;
+};
+
 const WITH_KARAT =
-  "SELECT g.id, g.purity_id, p.karat, g.rate_per_gram, g.effective_from, g.created_at FROM gold_rates g JOIN purities p ON p.id = g.purity_id";
+  "SELECT g.id, g.purity_id, p.karat, g.rate_cents_per_g, g.effective_from, g.created_at FROM gold_rates g JOIN purities p ON p.id = g.purity_id";
 
 export async function createGoldRate(
   db: D1Database,
@@ -35,12 +45,13 @@ export async function createGoldRate(
     });
   const id = crypto.randomUUID();
   const now = Date.now();
+  const rateCents = lkrToCents(input.ratePerGram);
   await db.batch([
     db
       .prepare(
-        "INSERT INTO gold_rates (id, purity_id, rate_per_gram, effective_from, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?)"
+        "INSERT INTO gold_rates (id, purity_id, rate_cents_per_g, effective_from, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?)"
       )
-      .bind(id, input.purityId, input.ratePerGram, input.effectiveFrom, now, actorId),
+      .bind(id, input.purityId, rateCents, input.effectiveFrom, now, actorId),
     buildAuditStmt(db, {
       userId: actorId,
       action: "gold_rate.create",
@@ -74,17 +85,26 @@ export async function listGoldRates(
   const { results } = await db
     .prepare(`${WITH_KARAT} WHERE p.karat LIKE ? ORDER BY g.effective_from DESC LIMIT ? OFFSET ?`)
     .bind(like, opts.limit, offset)
-    .all<GoldRateRow>();
-  return { rows: results ?? [], total: count?.total ?? 0 };
+    .all<GoldRateCentsRow>();
+  const rows: GoldRateRow[] = (results ?? []).map((r) => ({
+    ...r,
+    rate_per_gram: centsToLkr(r.rate_cents_per_g),
+  }));
+  return { rows, total: count?.total ?? 0 };
 }
 
-export async function currentGoldRates(db: D1Database): Promise<GoldRateRow[]> {
+export async function currentGoldRatesCents(db: D1Database): Promise<GoldRateCentsRow[]> {
   const now = Date.now();
   const { results } = await db
     .prepare(
       `${WITH_KARAT} WHERE g.effective_from <= ? AND g.effective_from = (SELECT MAX(effective_from) FROM gold_rates WHERE purity_id = g.purity_id AND effective_from <= ?) ORDER BY p.karat`
     )
     .bind(now, now)
-    .all<GoldRateRow>();
+    .all<GoldRateCentsRow>();
   return results ?? [];
+}
+
+export async function currentGoldRates(db: D1Database): Promise<GoldRateRow[]> {
+  const rows = await currentGoldRatesCents(db);
+  return rows.map((r) => ({ ...r, rate_per_gram: centsToLkr(r.rate_cents_per_g) }));
 }

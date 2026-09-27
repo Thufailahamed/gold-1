@@ -1,4 +1,5 @@
 import type { CreatePartyInput } from "@goldos/shared";
+import { centsToLkr, lkrToCents } from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
 
@@ -18,7 +19,28 @@ export type PartyRow = {
 };
 
 const PARTY_COLS =
-  "id, name, phone, address, nic, credit_limit, opening_balance, is_active, branch_id, created_at";
+  "id, name, phone, address, nic, credit_limit_cents, opening_balance_cents, is_active, branch_id, created_at";
+
+type RawPartyRow = {
+  id: string;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  nic: string | null;
+  credit_limit_cents: number;
+  opening_balance_cents: number;
+  is_active: number;
+  branch_id: string;
+  created_at: number;
+};
+
+function toPartyRow(r: RawPartyRow): PartyRow {
+  return {
+    ...r,
+    credit_limit: centsToLkr(r.credit_limit_cents),
+    opening_balance: centsToLkr(r.opening_balance_cents),
+  };
+}
 
 export async function createParty(
   db: D1Database,
@@ -43,7 +65,7 @@ export async function createParty(
   await db.batch([
     db
       .prepare(
-        `INSERT INTO ${table} (id, name, phone, address, nic, credit_limit, opening_balance, is_active, branch_id, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
+        `INSERT INTO ${table} (id, name, phone, address, nic, credit_limit_cents, opening_balance_cents, is_active, branch_id, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
       )
       .bind(
         id,
@@ -51,8 +73,8 @@ export async function createParty(
         input.phone ?? null,
         input.address ?? null,
         input.nic ?? null,
-        input.creditLimit,
-        input.openingBalance,
+        lkrToCents(input.creditLimit),
+        lkrToCents(input.openingBalance),
         input.branchId,
         now,
         actorId
@@ -105,8 +127,8 @@ export async function listParties(
       `SELECT ${PARTY_COLS} FROM ${table} WHERE (name LIKE ? OR phone LIKE ?) ${scope} ORDER BY created_at DESC LIMIT ? OFFSET ?`
     )
     .bind(...rowBind)
-    .all<PartyRow>();
-  return { rows: results ?? [], total: count?.total ?? 0 };
+    .all<RawPartyRow>();
+  return { rows: (results ?? []).map(toPartyRow), total: count?.total ?? 0 };
 }
 
 export async function updateParty(
@@ -126,7 +148,7 @@ export async function updateParty(
   const prev = await db
     .prepare(`SELECT ${PARTY_COLS} FROM ${table} WHERE id = ?`)
     .bind(id)
-    .first<PartyRow>();
+    .first<RawPartyRow>();
   if (!prev) throw Object.assign(new Error("Record not found"), { code: "NOT_FOUND" });
   const sets: string[] = [];
   const vals: unknown[] = [];
@@ -143,8 +165,8 @@ export async function updateParty(
     vals.push(patch.address);
   }
   if (patch.creditLimit !== undefined) {
-    sets.push("credit_limit = ?");
-    vals.push(patch.creditLimit);
+    sets.push("credit_limit_cents = ?");
+    vals.push(lkrToCents(patch.creditLimit));
   }
   if (patch.isActive !== undefined) {
     sets.push("is_active = ?");
