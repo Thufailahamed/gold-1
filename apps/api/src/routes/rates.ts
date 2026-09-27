@@ -8,7 +8,7 @@ import { pagination, serviceError } from "./http";
 
 export const rates = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
-  .post("/", requirePerm(PERMISSIONS.MASTERS_WRITE), async (c) => {
+  .post("/", requirePerm(PERMISSIONS.MASTERS_CREATE), async (c) => {
     const body = await c.req.json().catch(() => null);
     const parsed = createGoldRateSchema.safeParse(body);
     if (!parsed.success)
@@ -23,11 +23,11 @@ export const rates = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return serviceError(c, err);
     }
   })
-  .get("/current", requirePerm(PERMISSIONS.MASTERS_READ), async (c) => {
+  .get("/current", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => {
     const data = await currentGoldRates(c.env.DB);
     return c.json({ success: true, data }, 200);
   })
-  .get("/", requirePerm(PERMISSIONS.MASTERS_READ), async (c) => {
+  .get("/", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => {
     const data = await listGoldRates(c.env.DB, pagination(c));
     return c.json({ success: true, data }, 200);
   });

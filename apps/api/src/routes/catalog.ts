@@ -18,7 +18,7 @@ const deactivateSchema = z.object({ reason: z.string().min(1).max(500) });
 
 export const catalog = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
-  .post("/categories", requirePerm(PERMISSIONS.MASTERS_WRITE), async (c) => {
+  .post("/categories", requirePerm(PERMISSIONS.MASTERS_CREATE), async (c) => {
     const body = await c.req.json().catch(() => null);
     const parsed = createCategorySchema.safeParse(body);
     if (!parsed.success)
@@ -33,11 +33,11 @@ export const catalog = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return serviceError(c, err);
     }
   })
-  .get("/categories", requirePerm(PERMISSIONS.MASTERS_READ), async (c) => {
+  .get("/categories", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => {
     const data = await listCategories(c.env.DB, pagination(c));
     return c.json({ success: true, data }, 200);
   })
-  .patch("/categories/:id/deactivate", requirePerm(PERMISSIONS.MASTERS_WRITE), async (c) => {
+  .patch("/categories/:id/deactivate", requirePerm(PERMISSIONS.MASTERS_CANCEL), async (c) => {
     const body = await c.req.json().catch(() => null);
     const parsed = deactivateSchema.safeParse(body);
     if (!parsed.success)
@@ -52,7 +52,7 @@ export const catalog = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return serviceError(c, err);
     }
   })
-  .post("/purities", requirePerm(PERMISSIONS.MASTERS_WRITE), async (c) => {
+  .post("/purities", requirePerm(PERMISSIONS.MASTERS_CREATE), async (c) => {
     const body = await c.req.json().catch(() => null);
     const parsed = createPuritySchema.safeParse(body);
     if (!parsed.success)
@@ -67,11 +67,11 @@ export const catalog = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return serviceError(c, err);
     }
   })
-  .get("/purities", requirePerm(PERMISSIONS.MASTERS_READ), async (c) => {
+  .get("/purities", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => {
     const data = await listPurities(c.env.DB, pagination(c));
     return c.json({ success: true, data }, 200);
   })
-  .patch("/purities/:id/deactivate", requirePerm(PERMISSIONS.MASTERS_WRITE), async (c) => {
+  .patch("/purities/:id/deactivate", requirePerm(PERMISSIONS.MASTERS_CANCEL), async (c) => {
     const body = await c.req.json().catch(() => null);
     const parsed = deactivateSchema.safeParse(body);
     if (!parsed.success)

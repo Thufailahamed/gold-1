@@ -19,7 +19,7 @@ const voidSchema = z.object({ reason: z.string().min(1).max(500) });
 
 export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
-  .post("/", requirePerm(PERMISSIONS.PRODUCTS_WRITE), async (c) => {
+  .post("/", requirePerm(PERMISSIONS.PRODUCTS_CREATE), async (c) => {
     const body = await c.req.json().catch(() => null);
     const parsed = createProductSchema.safeParse(body);
     if (!parsed.success)
@@ -34,7 +34,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return serviceError(c, err);
     }
   })
-  .get("/", requirePerm(PERMISSIONS.PRODUCTS_READ), async (c) => {
+  .get("/", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
     const perms = c.get("permissions") as string[];
     const canManageAll = perms.includes(PERMISSIONS.BRANCHES_MANAGE);
     const data = await listProducts(c.env.DB, c.get("userId"), canManageAll, {
@@ -45,7 +45,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     });
     return c.json({ success: true, data }, 200);
   })
-  .get("/barcode/:code", requirePerm(PERMISSIONS.PRODUCTS_READ), async (c) => {
+  .get("/barcode/:code", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
     try {
       const data = await findByBarcode(c.env.DB, c.req.param("code"));
       return c.json({ success: true, data }, 200);
@@ -53,7 +53,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return serviceError(c, err);
     }
   })
-  .get("/:id", requirePerm(PERMISSIONS.PRODUCTS_READ), async (c) => {
+  .get("/:id", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
     try {
       const data = await getProduct(c.env.DB, c.req.param("id"));
       return c.json({ success: true, data }, 200);
@@ -61,7 +61,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return serviceError(c, err);
     }
   })
-  .get("/:id/label", requirePerm(PERMISSIONS.PRODUCTS_READ), async (c) => {
+  .get("/:id/label", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
     try {
       const { product } = await getProduct(c.env.DB, c.req.param("id"));
       const { livePrice } = await priceFor(
@@ -86,7 +86,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return serviceError(c, err);
     }
   })
-  .patch("/:id/void", requirePerm(PERMISSIONS.PRODUCTS_WRITE), async (c) => {
+  .patch("/:id/void", requirePerm(PERMISSIONS.PRODUCTS_CANCEL), async (c) => {
     const body = await c.req.json().catch(() => null);
     const parsed = voidSchema.safeParse(body);
     if (!parsed.success)

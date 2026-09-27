@@ -16,7 +16,7 @@ const updateBranchSchema = z.object({
 
 export const branches = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
-  .post("/", requirePerm(PERMISSIONS.BRANCHES_MANAGE), async (c) => {
+  .post("/", requirePerm(PERMISSIONS.BRANCHES_CREATE), async (c) => {
     const body = await c.req.json().catch(() => null);
     const parsed = createBranchSchema.safeParse(body);
     if (!parsed.success)
@@ -31,13 +31,13 @@ export const branches = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return serviceError(c, err);
     }
   })
-  .get("/", async (c) => {
+  .get("/", requirePerm(PERMISSIONS.BRANCHES_VIEW), async (c) => {
     const perms = c.get("permissions") as string[];
     const canManageAll = perms.includes(PERMISSIONS.BRANCHES_MANAGE);
     const data = await listBranches(c.env.DB, c.get("userId"), canManageAll, pagination(c));
     return c.json({ success: true, data }, 200);
   })
-  .patch("/:id", requirePerm(PERMISSIONS.BRANCHES_MANAGE), async (c) => {
+  .patch("/:id", requirePerm(PERMISSIONS.BRANCHES_EDIT), async (c) => {
     const body = await c.req.json().catch(() => null);
     const parsed = updateBranchSchema.safeParse(body);
     if (!parsed.success)
