@@ -6,6 +6,8 @@ export const PERMISSIONS = {
   AUDIT_READ: "audit:read",
   MASTERS_READ: "masters:read",
   MASTERS_WRITE: "masters:write",
+  PRODUCTS_READ: "products:read",
+  PRODUCTS_WRITE: "products:write",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -15,8 +17,8 @@ export function hasPermission(granted: string[], required: string): boolean {
 }
 
 export const DEFAULT_ROLES: Record<string, string[]> = {
-  admin: ["users:read", "users:write", "branches:manage", "settings:write", "audit:read", "masters:read", "masters:write"],
-  manager: ["users:read", "branches:manage", "audit:read", "masters:read", "masters:write"],
-  cashier: ["users:read", "masters:read"],
+  admin: ["users:read", "users:write", "branches:manage", "settings:write", "audit:read", "masters:read", "masters:write", "products:read", "products:write"],
+  manager: ["users:read", "branches:manage", "audit:read", "masters:read", "masters:write", "products:read", "products:write"],
+  cashier: ["users:read", "masters:read", "products:read"],
   viewer: [],
 };

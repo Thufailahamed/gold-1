@@ -61,3 +61,17 @@ export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
 export type CreatePurityInput = z.infer<typeof createPuritySchema>;
 export type CreateGoldRateInput = z.infer<typeof createGoldRateSchema>;
 export type CreatePartyInput = z.infer<typeof createPartySchema>;
+
+export const BARCODE_RE = /^PRD-[A-Z0-9]{6}$/;
+
+export const createProductSchema = z.object({
+  name: z.string().min(1).max(100),
+  categoryId: z.string().min(1),
+  purityId: z.string().min(1),
+  grossWeight: z.number().gt(0).max(100000),
+  stoneWeight: z.number().min(0).max(100000).optional().default(0),
+  makingCharge: z.number().min(0).optional().default(0),
+  branchId: z.string().min(1),
+});
+
+export type CreateProductInput = z.infer<typeof createProductSchema>;
