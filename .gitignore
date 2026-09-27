@@ -6,3 +6,4 @@ dist/
 .superpowers/
 seed.sql
 *.log
+*.tsbuildinfo
