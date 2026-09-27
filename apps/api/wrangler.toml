@@ -1,0 +1,12 @@
+name = "goldos-api"
+main = "src/app.ts"
+compatibility_date = "2024-09-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "goldos"
+database_id = "REPLACE_WITH_REAL_ID"
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "goldos-assets"
