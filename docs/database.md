@@ -46,6 +46,12 @@ Conventions: `id TEXT PK` (UUID), timestamps as INTEGER millis, FKs enforced.
 - Products now: `sku UNIQUE`, `subcategory/design/product_type/metal/stone` FKs, `gross_mg/stone_mg/net_mg/fine_gold_mg`, `making_cents`, `wastage_mg`, `cost_cents?`, `selling_price_cents?`, `location?`, `notes?`, `image_keys` JSON (R2), status in 11-value set (IN_STOCK, RESERVED, SOLD, RETURNED, IN_REPAIR, IN_MANUFACTURING, TRANSFER_PENDING, MELTING, MELTED, LOST, VOID).
 - `stock_movements(id, product_id FK, type, from_status, to_status, from_branch, to_branch, weight_mg, reason, created_at, created_by)` — append-only, indexed by (product, time) and (branch, time). Types: INTAKE, TRANSFER_OUT, TRANSFER_IN, RETURN, LOSS, VOID.
 
+## Purchases (migration `0009_purchases`)
+
+- `counters(name PK, next)` — PO/PINV sequences, bumped inside the batch.
+- `purchase_orders(id, number UNIQUE PO-XXXX, supplier_id FK, branch_id FK, status DRAFT/SENT/RECEIVED/CANCELLED, notes, created_at, created_by)` + `purchase_order_items(id, order_id FK, category_id, purity_id, gross_mg, net_mg, est_cost_cents, notes)` — drafts, no postings.
+- `purchase_invoices(id, number UNIQUE PINV-XXXX, order_id NULL FK, supplier_id FK, branch_id FK, subtotal_cents, charges_cents, total_cents, paid_cents, status UNPAID/PARTIAL/PAID/VOID, created_at, created_by)` + `purchase_invoice_items(id, invoice_id FK, product_id FK, gross_mg, net_mg, purity_id FK, cost_cents incl. charge share, making_cents)` + `purchase_payments(id, invoice_id FK, amount_cents, method cash/bank, ref, created_at, created_by)`.
+
 ## Accounting foundation (migration `0008_ledger`)
 
 - `chart_of_accounts(code PK, name, type ASSET/LIABILITY/EQUITY/REVENUE/EXPENSE, is_active, branch_id NULL)` — seeded 11 accounts (1000 Cash, 1010 Bank, 1100 Gold Inventory, 1200 Receivables, 2000 Payables, 2100 Tax, 3000 Equity, 3100 Opening, 4000 Revenue, 5000 COGS, 6000 Expenses).

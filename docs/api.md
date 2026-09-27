@@ -68,3 +68,15 @@ Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 | GET | /customers/:id/ledger | masters:view | opening + journal lines + balance |
 | GET | /suppliers/:id | masters:view | profile incl. code + notes |
 | GET | /suppliers/:id/ledger | masters:view | opening + journal lines + balance |
+| POST | /purchases/orders | purchases:create | draft, no postings |
+| GET | /purchases/orders | purchases:view | filters supplier, branch, status |
+| GET | /purchases/orders/:id | purchases:view | order + items |
+| PATCH | /purchases/orders/:id/cancel | purchases:cancel | DRAFT/SENT only + reason |
+| POST | /purchases/orders/:id/receive | purchases:create | full atomic 7-step flow → invoice |
+| POST | /purchases/invoices | purchases:create | direct intake, same atomic flow |
+| GET | /purchases/invoices | purchases:view | filters supplier, branch, status, date range |
+| GET | /purchases/invoices/:id | purchases:view | items + payments + journal |
+| POST | /purchases/invoices/:id/payments | purchases:edit | amount ≤ outstanding, cash/bank |
+| PATCH | /purchases/invoices/:id/void | purchases:cancel | IN_STOCK items only + reversal + reason |
+| GET | /purchases/reports/summary | purchases:view | ?period=today\|month\|all |
+| GET | /purchases/reports/breakdown | purchases:view | ?groupBy=supplier\|purity\|category |

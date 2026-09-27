@@ -35,3 +35,12 @@ supplier = opening + CR − DR on 2000. Manual corrections go through
 
 Gold ledger tables (grams in/out per process) arrive with old gold /
 melting / manufacturing phases.
+
+## Purchase postings (live)
+
+Receive/direct invoice posts in the invoice batch: DR 1100 Gold Inventory /
+CR 2000 Supplier Payables (both tagged with the supplier party, so the
+supplier ledger updates automatically); payment posts DR 2000 / CR 1000 Cash
+or 1010 Bank. Void posts the mirror reversal DR 2000 / CR 1100. Additional
+charges are folded into each item's `cost_cents` by net-weight share, so
+inventory valuation already includes freight and handling.
