@@ -138,3 +138,19 @@ function partyColumns() {
 
 export const suppliers = sqliteTable("suppliers", partyColumns());
 export const customers = sqliteTable("customers", partyColumns());
+
+export const products = sqliteTable("products", {
+  id: text("id").primaryKey(),
+  barcode: text("barcode").notNull().unique(),
+  categoryId: text("category_id").notNull(),
+  purityId: text("purity_id").notNull(),
+  name: text("name").notNull(),
+  grossWeight: real("gross_weight").notNull(),
+  stoneWeight: real("stone_weight").notNull().default(0),
+  netWeight: real("net_weight").notNull(),
+  makingCharge: real("making_charge").notNull().default(0),
+  status: text("status").notNull().default("in_stock"),
+  branchId: text("branch_id").notNull(),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
