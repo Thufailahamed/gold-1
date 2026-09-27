@@ -212,3 +212,36 @@ export const voidInvoiceSchema = z.object({ reason: z.string().min(1).max(500) }
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
+
+const saleItemSchema = z.object({
+  productId: z.string().min(1),
+  priceLkr: z.number().min(0).optional(),
+  discountLkr: z.number().min(0).optional().default(0),
+});
+
+const splitPaySchema = z.object({
+  method: z.enum(["cash", "card", "bank", "credit", "other"]),
+  amountLkr: z.number().gt(0),
+});
+
+export const createSaleSchema = z.object({
+  customerId: z.string().min(1).optional(),
+  branchId: z.string().min(1),
+  salespersonId: z.string().min(1).optional(),
+  items: z.array(saleItemSchema).min(1),
+  payments: z.array(splitPaySchema).min(1),
+  approvedBy: z.string().min(1).optional(),
+  exchangeReturnId: z.string().min(1).optional(),
+});
+
+export const createReturnSchema = z.object({
+  invoiceId: z.string().min(1),
+  itemIds: z.array(z.string().min(1)).optional(),
+  type: z.enum(["FULL", "PARTIAL", "EXCHANGE"]),
+  reason: z.string().min(1).max(500),
+  refundMethod: z.enum(["original", "cash", "bank", "credit"]).optional().default("original"),
+  approvedBy: z.string().min(1).optional(),
+});
+
+export type CreateSaleInput = z.infer<typeof createSaleSchema>;
+export type CreateReturnInput = z.infer<typeof createReturnSchema>;
