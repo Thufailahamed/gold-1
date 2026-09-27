@@ -8,6 +8,7 @@ import { branches } from "./routes/branches";
 import { catalog } from "./routes/catalog";
 import { health } from "./routes/health";
 import { customers, suppliers } from "./routes/parties";
+import { inventory } from "./routes/inventory";
 import { products } from "./routes/products";
 import { rates } from "./routes/rates";
 import { roles } from "./routes/roles";
@@ -29,5 +30,6 @@ app.route("/api/v1/gold-rates", rates);
 app.route("/api/v1/suppliers", suppliers);
 app.route("/api/v1/customers", customers);
 app.route("/api/v1/products", products);
+app.route("/api/v1/inventory", inventory);
 
 export default app;
