@@ -10,25 +10,70 @@
  * Never commit plaintext passwords. seed.sql is git-ignored.
  */
 
-export const SEED_ROLES = ["admin", "manager", "cashier", "viewer"] as const;
+export const SEED_ROLES = [
+  "owner",
+  "manager",
+  "accountant",
+  "cashier",
+  "salesperson",
+  "inventory_officer",
+  "gold_officer",
+  "manufacturing_staff",
+] as const;
 
 export const SEED_PERMISSIONS = [
-  "users:read",
-  "users:write",
+  "users:view",
+  "users:create",
+  "users:edit",
+  "users:approve",
+  "users:cancel",
+  "users:export",
+  "roles:view",
+  "roles:manage",
+  "branches:view",
+  "branches:create",
+  "branches:edit",
+  "branches:approve",
   "branches:manage",
-  "settings:write",
-  "audit:read",
-  "masters:read",
-  "masters:write",
-  "products:read",
-  "products:write",
+  "settings:view",
+  "settings:edit",
+  "settings:manage",
+  "audit:view",
+  "audit:export",
+  "masters:view",
+  "masters:create",
+  "masters:edit",
+  "masters:cancel",
+  "masters:export",
+  "products:view",
+  "products:create",
+  "products:edit",
+  "products:cancel",
+  "products:export",
 ] as const;
 
 export const SEED_ROLE_PERMISSIONS: Record<string, string[]> = {
-  admin: ["users:read", "users:write", "branches:manage", "settings:write", "audit:read", "masters:read", "masters:write", "products:read", "products:write"],
-  manager: ["users:read", "branches:manage", "audit:read", "masters:read", "masters:write", "products:read", "products:write"],
-  cashier: ["users:read", "masters:read", "products:read"],
-  viewer: [],
+  owner: [...SEED_PERMISSIONS],
+  manager: (SEED_PERMISSIONS as readonly string[]).filter(
+    (p) => p !== "users:approve" && p !== "branches:approve"
+  ),
+  accountant: [
+    "users:view", "roles:view", "branches:view", "settings:view",
+    "audit:view", "audit:export", "masters:view", "masters:export",
+    "products:view", "products:export",
+  ],
+  cashier: ["users:view", "branches:view", "masters:view", "products:view"],
+  salesperson: ["branches:view", "masters:view", "products:view"],
+  inventory_officer: [
+    "branches:view", "masters:view", "masters:create", "masters:edit",
+    "masters:cancel", "masters:export", "products:view", "products:create",
+    "products:edit", "products:cancel", "products:export",
+  ],
+  gold_officer: [
+    "branches:view", "masters:view", "masters:create", "masters:export",
+    "products:view",
+  ],
+  manufacturing_staff: ["products:view"],
 };
 
 export function buildSeedSql(opts: {
@@ -51,7 +96,7 @@ export function buildSeedSql(opts: {
   lines.push(
     `INSERT INTO users (id, email, name, password_hash, is_active, created_at, updated_at) VALUES ('${opts.adminId}', '${opts.adminEmail}', '${opts.adminName}', '${opts.adminPasswordHash}', 1, ${now}, ${now});`
   );
-  lines.push(`INSERT INTO user_roles (user_id, role_id) VALUES ('${opts.adminId}', 'admin');`);
+  lines.push(`INSERT INTO user_roles (user_id, role_id) VALUES ('${opts.adminId}', 'owner');`);
   lines.push(
     `INSERT INTO branches (id, name, code, is_active, created_at, created_by) VALUES ('${opts.branchId}', 'Main Branch', 'MAIN', 1, ${now}, '${opts.adminId}');`
   );

@@ -154,3 +154,13 @@ export const products = sqliteTable("products", {
   createdAt: integer("created_at").notNull(),
   createdBy: text("created_by"),
 });
+
+export const passwordResets = sqliteTable("password_resets", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: integer("expires_at").notNull(),
+  usedAt: integer("used_at"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
