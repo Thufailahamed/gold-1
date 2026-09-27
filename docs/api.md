@@ -38,3 +38,9 @@ Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 | POST | /customers | masters:write | branch-scoped, NIC unique |
 | GET | /customers | masters:read | branch-scoped unless branches:manage; paginated |
 | PATCH | /customers/:id | masters:write | incl. isActive deactivate; optional reason |
+| POST | /products | products:write | auto PRD- barcode; net = gross − stone |
+| GET | /products | products:read | filterable by status, categoryId, branchId; paginated |
+| GET | /products/:id | products:read | detail + live price (or no_rate) |
+| GET | /products/barcode/:code | products:read | scan lookup, case-insensitive |
+| GET | /products/:id/label | products:read | Code128 SVG label, image/svg+xml |
+| PATCH | /products/:id/void | products:write | reason required; never deletes |

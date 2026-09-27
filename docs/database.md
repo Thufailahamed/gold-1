@@ -29,6 +29,10 @@ Conventions: `id TEXT PK` (UUID), timestamps as INTEGER millis, FKs enforced.
 - `gold_rates(id, purity_id FK, rate_per_gram, effective_from, created_at, created_by)` — UNIQUE(purity_id, effective_from), immutable history; current = MAX(effective_from) <= now per purity
 - `suppliers`, `customers(id, name, phone, address, nic UNIQUE NULLABLE, credit_limit, opening_balance, is_active, branch_id FK, created_at, created_by)`
 
+## Phase-3 products table (migration `0003_products`)
+
+- `products(id, barcode UNIQUE 'PRD-'+6 chars, category_id FK, purity_id FK, name, gross_weight, stone_weight, net_weight, making_charge, status 'in_stock'|'sold'|'void', branch_id FK, created_at, created_by)` — indexed on (barcode) and (branch_id, status). `sold` reserved for POS phase.
+
 ## Later-phase reservations (not yet created)
 
 - Gold ledger: gross/stone/net weight, purity, karat, fine-gold equiv, rate,
