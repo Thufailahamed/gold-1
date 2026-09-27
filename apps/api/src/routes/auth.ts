@@ -16,7 +16,10 @@ type SessionRow = {
 const SESSION_RE = /(?:^|;\s*)session=([^;]+)/;
 
 function sessionCookie(id: string, maxAge: number): string {
-  return `session=${id}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
+  // SameSite=None so the browser sends the cookie cross-site (web app on a
+  // different origin than the API). Requires Secure; localhost is a secure
+  // context so local development keeps working.
+  return `session=${id}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=${maxAge}`;
 }
 
 export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()

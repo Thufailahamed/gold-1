@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "./db/client";
 import { errorHandler } from "./middleware/error";
+import { cors } from "./middleware/cors";
 import { audit } from "./routes/audit";
 import { auth } from "./routes/auth";
 import { branches } from "./routes/branches";
@@ -14,6 +15,7 @@ import { users } from "./routes/users";
 
 const app = new Hono<{ Bindings: Env }>();
 app.onError(errorHandler);
+app.use("/api/*", cors);
 app.route("/api/v1/health", health);
 app.route("/api/v1/auth", auth);
 app.route("/api/v1/users", users);
