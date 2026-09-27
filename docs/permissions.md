@@ -11,6 +11,8 @@ denies with 403 otherwise. Sidebar links hide without the matching permission.
 | branches:manage | ✓ | ✓ | — | — |
 | settings:write | ✓ | — | — | — |
 | audit:read | ✓ | ✓ | — | — |
+| masters:read | ✓ | ✓ | ✓ | — |
+| masters:write | ✓ | ✓ | — | — |
 
 Rules: sessions expire (12h idle / 7d absolute); inactive users are rejected;
 deactivation needs a reason and is audited; users cannot deactivate themselves.

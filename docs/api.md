@@ -23,3 +23,18 @@ Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 | GET | /settings/:key | auth | |
 | PUT | /settings/:key | settings:write | type-checked, audited |
 | GET | /audit | audit:read | filterable by entity, entityId; paginated |
+| POST | /masters/categories | masters:write | name + code unique |
+| GET | /masters/categories | masters:read | paginated |
+| PATCH | /masters/categories/:id/deactivate | masters:write | requires reason |
+| POST | /masters/purities | masters:write | karat unique, 0 < purity <= 1 |
+| GET | /masters/purities | masters:read | paginated |
+| PATCH | /masters/purities/:id/deactivate | masters:write | requires reason |
+| POST | /gold-rates | masters:write | immutable; UNIQUE(purity, effective_from) |
+| GET | /gold-rates/current | masters:read | latest rate per purity |
+| GET | /gold-rates | masters:read | history, filterable by karat; paginated |
+| POST | /suppliers | masters:write | branch-scoped, NIC unique |
+| GET | /suppliers | masters:read | branch-scoped unless branches:manage; paginated |
+| PATCH | /suppliers/:id | masters:write | incl. isActive deactivate; optional reason |
+| POST | /customers | masters:write | branch-scoped, NIC unique |
+| GET | /customers | masters:read | branch-scoped unless branches:manage; paginated |
+| PATCH | /customers/:id | masters:write | incl. isActive deactivate; optional reason |
