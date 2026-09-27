@@ -19,7 +19,7 @@ choice.
 Decisions (user-confirmed):
 - Auto-remap admin→owner, manager→manager, cashier→cashier, viewer→salesperson;
   old role rows removed by migration.
-- Full domain×action matrix now (~40 perms).
+- Full domain×action matrix now (28 perms).
 - Password reset via admin-issued single-use tokens (15-min); no email yet.
 
 ## 2. Auth

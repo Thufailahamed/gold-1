@@ -7,9 +7,8 @@ Engine: Cloudflare D1 (SQLite). Migrations: sequential SQL in
 ## Phase-1 tables (migration `0001_core`)
 
 - `users(id, email UNIQUE, name, password_hash, is_active, created_at, updated_at, created_by)`
-- `roles(id, name UNIQUE)` — admin, manager, cashier, viewer
-- `permissions(id, name UNIQUE)` — users:read, users:write, branches:manage,
-  settings:write, audit:read, masters:read, masters:write
+- `roles(id, name UNIQUE)` — owner, manager, accountant, cashier, salesperson, inventory_officer, gold_officer, manufacturing_staff
+- `permissions(id, name UNIQUE)` — 28 `domain:action` permissions (users, roles, branches, settings, audit, masters, products × view/create/edit/approve/cancel/export/manage as applicable; `reverse` reserved for transaction modules)
 - `role_permissions(role_id, permission_id)` — composite PK
 - `user_roles(user_id, role_id)` — composite PK
 - `branches(id, name, code UNIQUE, address, is_active, created_at, created_by)`
@@ -17,10 +16,17 @@ Engine: Cloudflare D1 (SQLite). Migrations: sequential SQL in
 - `sessions(id, user_id, expires_at, created_at)` — 12h idle, 7d absolute
 - `audit_logs(id, user_id, action, entity, entity_id, prev_json, new_json,
   reason, ip, branch_id, created_at)` — append-only, indexed on (entity, entity_id)
-- `settings(key PK, value_json, type)` — string | number | boolean | json
+- `settings(key PK, value_json, type)` — string | number | boolean | json.
+  Branch-scoped keys use `branch.{branchId}.{key}` and require settings:manage
+  to write.
 - `idempotency_keys(key PK, created_at)` — reserved for Phase-2 money/gold writes
 
 Conventions: `id TEXT PK` (UUID), timestamps as INTEGER millis, FKs enforced.
+
+## Foundation upgrade (migration `0004_foundation`)
+
+- `password_resets(id, user_id FK, token_hash UNIQUE, expires_at, used_at NULL, created_at, created_by)` — only token hashes stored; 15-min TTL; single-use.
+- Roles replaced: admin→owner, viewer→salesperson remapped; old role/permission rows removed; 28-permission matrix seeded (see permissions.md).
 
 ## Phase-2 masters tables (migration `0002_masters`)
 

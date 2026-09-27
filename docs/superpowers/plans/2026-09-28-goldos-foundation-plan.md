@@ -22,7 +22,7 @@
 
 ## Permission matrix (SINGLE SOURCE OF TRUTH — migration, DEFAULT_ROLES, seed, and test must match exactly)
 
-Seeded permissions (29):
+Seeded permissions (28):
 users:view, users:create, users:edit, users:approve, users:cancel, users:export,
 roles:view, roles:manage,
 branches:view, branches:create, branches:edit, branches:approve, branches:manage,
@@ -32,7 +32,7 @@ masters:view, masters:create, masters:edit, masters:cancel, masters:export,
 products:view, products:create, products:edit, products:cancel, products:export
 
 Grants:
-- owner: all 29.
+- owner: all 28.
 - manager: all except users:approve and branches:approve (27).
 - accountant: users:view, roles:view, branches:view, settings:view, audit:view, audit:export, masters:view, masters:export, products:view, products:export (10).
 - cashier: users:view, branches:view, masters:view, products:view (4).
@@ -76,7 +76,7 @@ Grants:
 
 **Interfaces:**
 - Consumes: existing `z`, `hasPermission` shape.
-- Produces: new `PERMISSIONS` (29 keys), `DEFAULT_ROLES` (8 roles, exact matrix), `changePasswordSchema`, `resetRequestSchema`, `resetConfirmSchema`, `editUserSchema` (+ types). Note: `createUserSchema` role enum changes to the 8 new ids and `branchId` → `branchIds: z.array(z.string().min(1)).min(1)`.
+- Produces: new `PERMISSIONS` (28 keys), `DEFAULT_ROLES` (8 roles, exact matrix), `changePasswordSchema`, `resetRequestSchema`, `resetConfirmSchema`, `editUserSchema` (+ types). Note: `createUserSchema` role enum changes to the 8 new ids and `branchId` → `branchIds: z.array(z.string().min(1)).min(1)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -241,7 +241,7 @@ git commit -m "feat: 8-role matrix and foundation schemas"
 
 **Interfaces:**
 - Consumes: Task 1 matrix (must match exactly).
-- Produces: remote+local `password_resets` table; 8 roles; 29 perms; remapped memberships.
+- Produces: remote+local `password_resets` table; 8 roles; 28 perms; remapped memberships.
 
 - [ ] **Step 1: Write apps/api/drizzle/0004_foundation.sql**
 
@@ -335,13 +335,13 @@ export const passwordResets = sqliteTable("password_resets", {
   createdBy: text("created_by"),
 });
 ```
-seed.ts: SEED_ROLES = owner/manager/accountant/cashier/salesperson/inventory_officer/gold_officer/manufacturing_staff; SEED_PERMISSIONS = the 29 names; SEED_ROLE_PERMISSIONS = exact matrix from plan header.
+seed.ts: SEED_ROLES = owner/manager/accountant/cashier/salesperson/inventory_officer/gold_officer/manufacturing_staff; SEED_PERMISSIONS = the 28 names; SEED_ROLE_PERMISSIONS = exact matrix from plan header.
 
 - [ ] **Step 3: Apply local, verify counts + remap**
 
 Run: `pnpm --filter goldos-api exec wrangler d1 execute DB --local --file ./drizzle/0004_foundation.sql 2>&1 | grep -E "success|ERROR" | head -2`
 Run: `pnpm --filter goldos-api exec wrangler d1 execute DB --local --command "SELECT COUNT(*) AS roles FROM roles; SELECT COUNT(*) AS perms FROM permissions; SELECT role_id, COUNT(*) AS g FROM role_permissions GROUP BY role_id ORDER BY role_id; SELECT * FROM user_roles;" 2>&1 | grep -E '"roles"|"perms"|"role_id"|"user_id"'`
-Expected: roles 8, perms 29, owner 29 / manager 27 / manufacturing_staff 1, admin-1 now owner. (Local test users cashier2/cashier3 remap to same ids — unchanged.)
+Expected: roles 8, perms 28, owner 28 / manager 27 / manufacturing_staff 1, admin-1 now owner. (Local test users cashier2/cashier3 remap to same ids — unchanged.)
 
 - [ ] **Step 4: Commit**
 
