@@ -10,8 +10,8 @@ export type AuditEntry = {
   ip?: string;
 };
 
-export async function writeAudit(db: D1Database, entry: AuditEntry): Promise<void> {
-  await db
+export function buildAuditStmt(db: D1Database, entry: AuditEntry): D1PreparedStatement {
+  return db
     .prepare(
       "INSERT INTO audit_logs (id, user_id, action, entity, entity_id, prev_json, new_json, reason, ip, branch_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
@@ -27,6 +27,9 @@ export async function writeAudit(db: D1Database, entry: AuditEntry): Promise<voi
       entry.ip ?? null,
       entry.branchId ?? null,
       Date.now()
-    )
-    .run();
+    );
+}
+
+export async function writeAudit(db: D1Database, entry: AuditEntry): Promise<void> {
+  await buildAuditStmt(db, entry).run();
 }
