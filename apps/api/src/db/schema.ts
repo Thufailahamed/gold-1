@@ -198,3 +198,17 @@ export const passwordResets = sqliteTable("password_resets", {
   createdAt: integer("created_at").notNull(),
   createdBy: text("created_by"),
 });
+
+export const stockMovements = sqliteTable("stock_movements", {
+  id: text("id").primaryKey(),
+  productId: text("product_id").notNull(),
+  type: text("type").notNull(),
+  fromStatus: text("from_status"),
+  toStatus: text("to_status").notNull(),
+  fromBranch: text("from_branch"),
+  toBranch: text("to_branch"),
+  weightMg: integer("weight_mg").notNull(),
+  reason: text("reason"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
