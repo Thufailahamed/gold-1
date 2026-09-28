@@ -460,6 +460,16 @@ describe("cashBreakdownTotal names repair collections", () => {
   });
 });
 
+describe("cashBreakdownTotal names customer advances", () => {
+  it("classifies a custom advance as cash in", () => {
+    const t = cashBreakdownTotal([
+      { refEntity: "custom_advance", label: "Customer advances", direction: "in", cents: 40_000 },
+    ]);
+    expect(t.unclassified).toBe(0);
+    expect(t.totalIn).toBe(40_000);
+  });
+});
+
 describe("monthly core helpers", () => {
   it("bounds February leap year", () => {
     expect(monthBounds(2024, 2)).toEqual({ from: "2024-02-01", to: "2024-02-29", label: "2024-02" });

@@ -26,6 +26,7 @@ const CASH_LABELS: Record<string, string> = {
   // that guard exists.
   old_gold_purchase: "Old gold purchases",
   repair: "Repair collections",
+  custom_advance: "Customer advances",
 };
 
 const GOLD_LINES: { key: GoldKey; label: string; types: string[] }[] = [

@@ -746,3 +746,29 @@ export const repairEvents = sqliteTable("repair_events", {
   reason: text("reason"),
   createdAt: integer("created_at").notNull(),
 });
+
+export const customOrders = sqliteTable("custom_orders", {
+  id: text("id").primaryKey(),
+  number: text("number").notNull().unique(),
+  customerId: text("customer_id").notNull(),
+  branchId: text("branch_id").notNull(),
+  design: text("design").notNull(),
+  description: text("description"),
+  goldReqMg: integer("gold_req_mg").notNull(),
+  goldSource: text("gold_source").notNull(),
+  quoteCents: integer("quote_cents").notNull(),
+  advanceCents: integer("advance_cents").notNull().default(0),
+  manufacturingOrderId: text("manufacturing_order_id"),
+  saleId: text("sale_id"),
+  status: text("status").notNull().default("QUOTE"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const customOrderGold = sqliteTable("custom_order_gold", {
+  id: text("id").primaryKey(),
+  orderId: text("order_id").notNull(),
+  kind: text("kind").notNull(),
+  refId: text("ref_id").notNull(),
+  fineMg: integer("fine_mg").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
