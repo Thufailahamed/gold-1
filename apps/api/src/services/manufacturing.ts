@@ -1,10 +1,19 @@
-import { fineGoldMg, gToMg, lkrToCents, type CreateMfgOrderInput, type ProduceMfgInput } from "@goldos/shared";
+import {
+  allocateGoldValue,
+  allocateProportional,
+  fineGoldMg,
+  gToMg,
+  lkrToCents,
+  type CreateMfgOrderInput,
+  type ProduceMfgInput,
+} from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
 import { postGoldStmts } from "./gold";
 import { buildCreateProductStmts } from "./products";
-import { currentGoldRatesCents } from "./rates";
 import { getSetting } from "./settings";
+import { businessDateFor } from "./busdate";
+import { buildEntryStmts } from "./journal";
 
 async function nextMO(db: D1Database, stmts: D1PreparedStatement[]): Promise<string> {
   const row = await db
@@ -239,8 +248,10 @@ export async function qcCheck(
 export async function finishOrder(
   db: D1Database,
   orderId: string,
+  input: { paidFrom?: "cash" | "bank" },
   actorId: string
 ): Promise<{ productIds: string[]; barcodes: string[] }> {
+  const orderPaidFrom = input.paidFrom;
   const order = await loadOrder(db, orderId);
   if (order.status !== "QC_PASSED")
     throw Object.assign(new Error("Only QC-passed orders can finish"), { code: "CONFLICT" });
@@ -254,31 +265,62 @@ export async function finishOrder(
   if (!outputs || outputs.length === 0)
     throw Object.assign(new Error("Order has no outputs"), { code: "VALIDATION" });
   const { results: mats } = await db
-    .prepare("SELECT lot_batch_id, lot_number, fine_mg FROM manufacturing_materials WHERE order_id = ?")
+    .prepare(
+      `SELECT m.lot_batch_id, m.lot_number, m.fine_mg,
+              o.fine_mg AS lot_fine_mg, o.cost_cents AS lot_cost_cents
+       FROM manufacturing_materials m
+       JOIN melting_outputs o ON o.batch_id = m.lot_batch_id AND o.lot_number = m.lot_number
+       WHERE m.order_id = ?`
+    )
     .bind(orderId)
-    .all<{ lot_batch_id: string; lot_number: string; fine_mg: number }>();
-  const rates = await currentGoldRatesCents(db);
-  const byPurity = new Map(rates.map((r) => [r.purity_id, r.rate_cents_per_g]));
+    .all<{
+      lot_batch_id: string;
+      lot_number: string;
+      fine_mg: number;
+      lot_fine_mg: number;
+      lot_cost_cents: number;
+    }>();
   const now = Date.now();
   const stmts: D1PreparedStatement[] = [];
   const productIds: string[] = [];
   const barcodes: string[] = [];
 
-  const goldValues = new Map<string, number>();
+  // Book value of the fine gold consumed, per lot. The two weights passed to
+  // allocateProportional sum to the lot's full fine weight, which is what
+  // makes it return the consumed share rather than the whole lot.
+  const consumedByLot = new Map<string, number>();
+  for (const m of mats ?? []) {
+    const key = `${m.lot_batch_id}|${m.lot_number}`;
+    consumedByLot.set(key, (consumedByLot.get(key) ?? 0) + m.fine_mg);
+  }
+  let vIn = 0;
+  for (const m of mats ?? []) {
+    const key = `${m.lot_batch_id}|${m.lot_number}`;
+    const consumed = consumedByLot.get(key) ?? 0;
+    const shares = allocateProportional(m.lot_cost_cents, [
+      consumed,
+      Math.max(m.lot_fine_mg - consumed, 0),
+    ]);
+    vIn += shares[0] ?? 0;
+  }
+  const fineIn = (mats ?? []).reduce((s, m) => s + m.fine_mg, 0);
+
   const outFine = new Map<string, { fineMg: number; permille: number }>();
   for (const o of outputs) {
-    const rate = byPurity.get(o.purity_id);
-    if (rate === undefined)
-      throw Object.assign(new Error("No board rate for output purity"), { code: "VALIDATION" });
     const pur = await db
       .prepare("SELECT permille FROM purities WHERE id = ?")
       .bind(o.purity_id)
       .first<{ permille: number }>();
     if (!pur) throw Object.assign(new Error("Purity not found"), { code: "NOT_FOUND" });
-    const fineMg = fineGoldMg(o.net_mg, pur.permille);
-    goldValues.set(o.id, Math.round((fineMg * rate) / 1000));
-    outFine.set(o.id, { fineMg, permille: pur.permille });
+    outFine.set(o.id, { fineMg: fineGoldMg(o.net_mg, pur.permille), permille: pur.permille });
   }
+  // Deliberately NOT allocateProportional: the shortfall from vIn is the
+  // manufacturing loss. Normalising would silently discard it.
+  const goldValues = allocateGoldValue(
+    vIn,
+    fineIn,
+    outputs.map((o) => outFine.get(o.id)!.fineMg)
+  );
   const extras = order.labour_cents + order.making_cents + order.stone_cost_cents;
   const weights = outputs.map((o) => o.net_mg);
   const totalW = weights.reduce((s, v) => s + v, 0);
@@ -287,7 +329,7 @@ export async function finishOrder(
   for (let i = 0; i < outputs.length; i++) {
     const o = outputs[i]!;
     const share = shares[i]! + (i === 0 ? extras - shares.reduce((s, x) => s + x, 0) : 0);
-    const costCents = (goldValues.get(o.id) ?? 0) + share;
+    const costCents = (goldValues[i] ?? 0) + share;
     const built = await buildCreateProductStmts(
       db,
       {
@@ -332,6 +374,44 @@ export async function finishOrder(
         .prepare("INSERT INTO gold_ledger (id, occurred_at, branch_id, source, destination, type, weight_mg, permille, fine_mg, ref_entity, ref_id, product_id, old_gold_id, user_id, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, 'MANUFACTURING_INPUT', ?, ?, ?, 'manufacturing_order', ?, NULL, NULL, ?, ?, ?, ?)")
         .bind(crypto.randomUUID(), now, order.branch_id, `melting-lot:${m.lot_number}`, `manufacturing:${orderId}`, lot.weight_mg, lot.permille, m.fine_mg, orderId, actorId, null, now, actorId)
     );
+  }
+  const goldOut = goldValues.reduce((s, v) => s + v, 0);
+  const mfgLossCents = Math.max(vIn - goldOut, 0);
+  if (extras > 0 || mfgLossCents > 0) {
+    // Accrue by default. Assuming cash would invent a cash movement that did
+    // not happen and would put the daily closing's expected cash permanently
+    // out — the shop can settle the bill later without restating the books.
+    const creditAccount =
+      orderPaidFrom === "cash" ? "1000" : orderPaidFrom === "bank" ? "1010" : "2200";
+    const lines: { account: string; debitCents: number; creditCents: number }[] = [];
+    if (extras > 0) {
+      lines.push({ account: "1100", debitCents: extras, creditCents: 0 });
+      lines.push({ account: creditAccount, debitCents: 0, creditCents: extras });
+    }
+    if (mfgLossCents > 0) {
+      lines.push({ account: "5200", debitCents: mfgLossCents, creditCents: 0 });
+      lines.push({ account: "1100", debitCents: 0, creditCents: mfgLossCents });
+    }
+    // The two pairs combine to one balanced set, so checkBalanced accepts
+    // them as a single entry: sum(debit) = extras + mfgLoss = sum(credit).
+    const entry = await buildEntryStmts(
+      db,
+      {
+        lines,
+        refEntity: "mfg_order",
+        refId: orderId,
+        refNo: order.number,
+        memo: `Manufacturing ${order.number}`,
+        branchId: order.branch_id,
+        actorId,
+        auditAction: "mfg.cost",
+        auditEntity: "manufacturing_order",
+        auditEntityId: orderId,
+        sourceModule: "manufacturing",
+      },
+      { entryDate: await businessDateFor(db, now) }
+    );
+    stmts.push(...entry.stmts);
   }
   if (order.loss_mg > 0) {
     const firstPur = await db

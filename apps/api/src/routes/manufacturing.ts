@@ -42,6 +42,9 @@ function dayBounds(period: string): { from: number; to: number } {
 
 const voidSchema = z.object({ reason: z.string().min(1).max(500) });
 
+/** paidFrom is optional: omit it to accrue the labour to 2200 Other Payables. */
+const finishSchema = z.object({ paidFrom: z.enum(["cash", "bank"]).optional() });
+
 export const manufacturing = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
   .post("/orders", requirePerm(PERMISSIONS.MFG_CREATE), async (c) => {
@@ -138,8 +141,17 @@ export const manufacturing = new Hono<{ Bindings: Env; Variables: AppVariables }
     }
   })
   .post("/orders/:id/finish", requirePerm(PERMISSIONS.MFG_EDIT), async (c) => {
+    // An empty body is the common case and simply means "accrue", so a
+    // malformed body is not an error here.
+    const body = await c.req.json().catch(() => null);
+    const parsed = finishSchema.safeParse(body);
     try {
-      const data = await finishOrder(c.env.DB, c.req.param("id"), c.get("userId"));
+      const data = await finishOrder(
+        c.env.DB,
+        c.req.param("id"),
+        { paidFrom: parsed.success ? parsed.data.paidFrom : undefined },
+        c.get("userId")
+      );
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
