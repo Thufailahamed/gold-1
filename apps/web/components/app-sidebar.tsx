@@ -36,6 +36,7 @@ interface NavItem {
   label: string;
   icon: IconCmp;
   perm: string | null;
+  anyPerm?: string[];
   tag?: string;
 }
 
@@ -138,6 +139,13 @@ const SECTIONS: NavSection[] = [
     items: [
       { href: "/settings", label: "Settings", icon: SettingsIcon, perm: "settings:view" },
       { href: "/audit", label: "Audit", icon: HistoryIcon, perm: "audit:view" },
+      {
+        href: "/approvals",
+        label: "Approvals",
+        icon: ClipboardCheckIcon,
+        perm: null,
+        anyPerm: ["sales:approve", "oldgold:approve", "mfg:approve", "users:approve", "branches:approve", "accounts:manage", "gold:manage", "products:cancel", "purchases:cancel"],
+      },
       { href: "/accounts", label: "Accounts", icon: ScaleIcon, perm: "accounts:view" },
       { href: "/expenses", label: "Expenses", icon: BanknoteIcon, perm: "accounts:view" },
       { href: "/day-closing", label: "Day Closing", icon: ClipboardCheckIcon, perm: "accounts:view" },
@@ -245,7 +253,9 @@ export function AppSidebar({
 
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4 scrollbar-thin" aria-label="Main">
         {SECTIONS.map((section) => {
-          const visible = section.items.filter((i) => !i.perm || hasPermission(me.permissions, i.perm));
+          const visible = section.items.filter(
+            (i) => !i.perm || hasPermission(me.permissions, i.perm) || (i.anyPerm ?? []).some((p) => hasPermission(me.permissions, p))
+          );
           if (visible.length === 0) return null;
           return (
             <div key={section.title}>
