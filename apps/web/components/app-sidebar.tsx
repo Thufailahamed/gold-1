@@ -23,6 +23,7 @@ import {
   HistoryIcon,
   ScaleIcon,
   BanknoteIcon,
+  ClipboardCheckIcon,
   TrendingUpIcon,
   LogOutIcon,
   XIcon,
@@ -131,6 +132,7 @@ const SECTIONS: NavSection[] = [
       { href: "/audit", label: "Audit", icon: HistoryIcon, perm: "audit:view" },
       { href: "/accounts", label: "Accounts", icon: ScaleIcon, perm: "accounts:view" },
       { href: "/expenses", label: "Expenses", icon: BanknoteIcon, perm: "accounts:view" },
+      { href: "/day-closing", label: "Day Closing", icon: ClipboardCheckIcon, perm: "accounts:view" },
     ],
   },
 ];
