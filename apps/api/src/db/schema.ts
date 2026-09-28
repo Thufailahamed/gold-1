@@ -206,22 +206,37 @@ export const chartOfAccounts = sqliteTable("chart_of_accounts", {
   name: text("name").notNull(),
   type: text("type").notNull(),
   isActive: integer("is_active").notNull().default(1),
+  isSystem: integer("is_system").notNull().default(0),
+  description: text("description"),
   branchId: text("branch_id"),
 });
 
 export const journalEntries = sqliteTable("journal_entries", {
   id: text("id").primaryKey(),
+  entryNo: text("entry_no").notNull(),
+  entryDate: text("entry_date").notNull(),
+  memo: text("memo"),
+  refEntity: text("ref_entity"),
+  refId: text("ref_id"),
+  refNo: text("ref_no"),
+  sourceModule: text("source_module").notNull(),
+  status: text("status").notNull().default("POSTED"),
+  reversesEntryId: text("reverses_entry_id"),
+  branchId: text("branch_id"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+export const journalLines = sqliteTable("journal_lines", {
+  id: text("id").primaryKey(),
+  entryId: text("entry_id").notNull(),
+  lineNo: integer("line_no").notNull(),
   accountCode: text("account_code").notNull(),
   debitCents: integer("debit_cents").notNull().default(0),
   creditCents: integer("credit_cents").notNull().default(0),
   partyType: text("party_type"),
   partyId: text("party_id"),
-  refEntity: text("ref_entity").notNull(),
-  refId: text("ref_id").notNull(),
   memo: text("memo"),
-  branchId: text("branch_id"),
-  createdAt: integer("created_at").notNull(),
-  createdBy: text("created_by"),
 });
 
 export const stockMovements = sqliteTable("stock_movements", {
@@ -276,6 +291,7 @@ export const purchaseInvoices = sqliteTable("purchase_invoices", {
   totalCents: integer("total_cents").notNull(),
   paidCents: integer("paid_cents").notNull().default(0),
   status: text("status").notNull().default("UNPAID"),
+  journalEntryId: text("journal_entry_id"),
   createdAt: integer("created_at").notNull(),
   createdBy: text("created_by"),
 });
@@ -313,6 +329,7 @@ export const salesInvoices = sqliteTable("sales_invoices", {
   totalCents: integer("total_cents").notNull(),
   paidCents: integer("paid_cents").notNull().default(0),
   status: text("status").notNull().default("UNPAID"),
+  journalEntryId: text("journal_entry_id"),
   createdAt: integer("created_at").notNull(),
   createdBy: text("created_by"),
 });
@@ -348,6 +365,7 @@ export const salesReturns = sqliteTable("sales_returns", {
   creditCents: integer("credit_cents").notNull().default(0),
   exchangeSaleId: text("exchange_sale_id"),
   status: text("status").notNull().default("COMPLETE"),
+  journalEntryId: text("journal_entry_id"),
   createdAt: integer("created_at").notNull(),
   createdBy: text("created_by"),
 });
@@ -423,6 +441,7 @@ export const oldGoldPurchases = sqliteTable("old_gold_purchases", {
   valueCents: integer("value_cents").notNull(),
   paidCents: integer("paid_cents").notNull(),
   method: text("method").notNull(),
+  journalEntryId: text("journal_entry_id"),
   createdAt: integer("created_at").notNull(),
   createdBy: text("created_by"),
 });
@@ -457,6 +476,7 @@ export const meltingBatches = sqliteTable("melting_batches", {
   wasteMg: integer("waste_mg").notNull().default(0),
   lossMg: integer("loss_mg").notNull().default(0),
   recoveryMg: integer("recovery_mg").notNull().default(0),
+  inputCostCents: integer("input_cost_cents").notNull().default(0),
   differenceReason: text("difference_reason"),
   approvedBy: text("approved_by"),
   notes: text("notes"),
@@ -480,6 +500,7 @@ export const meltingOutputs = sqliteTable("melting_outputs", {
   weightMg: integer("weight_mg").notNull(),
   permille: integer("permille").notNull(),
   fineMg: integer("fine_mg").notNull(),
+  costCents: integer("cost_cents").notNull().default(0),
   outputType: text("output_type").notNull().default("grain"),
 });
 
