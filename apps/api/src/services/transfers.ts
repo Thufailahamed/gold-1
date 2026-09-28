@@ -164,3 +164,27 @@ export async function cancelTransfer(db: D1Database, id: string, reason: string,
     buildAuditStmt(db, { userId: actorId, action: "transfer.cancel", entity: "transfer", entityId: id, reason }),
   ]);
 }
+
+export async function reconcileTransfer(db: D1Database, id: string): Promise<{ passed: boolean; warnings: string[] }> {
+  const doc = await loadTransfer(db, id);
+  const warnings: string[] = [];
+  for (const line of doc.lines) {
+    const { results: moves } = await db.prepare("SELECT type, from_status, to_status FROM stock_movements WHERE product_id = ? AND reason LIKE ?").bind(line.productId, `%Transfer ${doc.number}%`).all<{ type: string; from_status: string; to_status: string }>();
+    const outCount = (moves ?? []).filter((m) => m.type === "TRANSFER_OUT").length;
+    const inCount = (moves ?? []).filter((m) => m.type === "TRANSFER_IN").length;
+    if (outCount !== 1) warnings.push(`${line.barcode}: expected 1 TRANSFER_OUT, found ${outCount}`);
+    if (line.status === "RECEIVED" && inCount !== 1) warnings.push(`${line.barcode}: RECEIVED without exactly 1 TRANSFER_IN`);
+    if (line.status === "IN_TRANSIT" && inCount !== 0) warnings.push(`${line.barcode}: IN_TRANSIT with premature TRANSFER_IN`);
+    const prod = await db.prepare("SELECT status, branch_id, barcode FROM products WHERE id = ?").bind(line.productId).first<{ status: string; branch_id: string; barcode: string }>();
+    if (!prod) warnings.push(`${line.barcode}: product row missing`);
+    else {
+      if (prod.barcode !== line.barcode) warnings.push(`${line.barcode}: barcode changed on product row`);
+      if (line.status === "RECEIVED" && (prod.status !== "IN_STOCK" || prod.branch_id !== doc.toBranchId)) warnings.push(`${line.barcode}: RECEIVED but not IN_STOCK at receiver`);
+      if (line.status === "IN_TRANSIT" && (prod.status !== "TRANSFER_PENDING" || prod.branch_id !== doc.fromBranchId)) warnings.push(`${line.barcode}: IN_TRANSIT but not TRANSFER_PENDING at sender`);
+    }
+    const gold = await db.prepare("SELECT COUNT(*) AS n FROM gold_ledger WHERE ref_entity = 'transfer_line' AND ref_id = ?").bind(line.id).first<{ n: number }>();
+    if (line.status !== "PENDING" && (gold?.n ?? 0) !== 1) warnings.push(`${line.barcode}: expected 1 gold TRANSFER row, found ${gold?.n ?? 0}`);
+    if (line.status === "PENDING" && (gold?.n ?? 0) !== 0) warnings.push(`${line.barcode}: PENDING line with gold movement`);
+  }
+  return { passed: warnings.length === 0, warnings };
+}
