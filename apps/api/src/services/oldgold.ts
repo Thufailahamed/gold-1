@@ -326,8 +326,8 @@ export async function purchaseItem(
   );
   await db.batch([
     db
-      .prepare("INSERT INTO old_gold_purchases (id, item_id, value_cents, paid_cents, method, journal_entry_id, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind(purchaseId, itemId, item.purchase_value_cents, paidCents, opts.method, journal.entryId, now, actorId),
+      .prepare("INSERT INTO old_gold_purchases (id, item_id, value_cents, paid_cents, method, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind(purchaseId, itemId, item.purchase_value_cents, paidCents, opts.method, now, actorId),
     db
       .prepare("UPDATE old_gold_items SET paid_cents = ?, status = 'PURCHASED' WHERE id = ?")
       .bind(paidCents, itemId),
@@ -335,6 +335,12 @@ export async function purchaseItem(
       .prepare("INSERT INTO gold_movements (id, product_id, old_gold_id, direction, fine_mg, purity_permille, ref_entity, ref_id, branch_id, created_at, created_by) VALUES (?, NULL, ?, 'IN', ?, ?, 'old_gold_purchase', ?, ?, ?, ?)")
       .bind(crypto.randomUUID(), itemId, item.fine_mg, item.tested_permille ?? 0, purchaseId, item.branch_id, now, actorId),
     ...journal.stmts,
+    // AFTER the journal statements. The link is a foreign key, and D1 runs a
+    // batch in order, so setting it on the INSERT above would reference an
+    // entry that does not exist yet.
+    db
+      .prepare("UPDATE old_gold_purchases SET journal_entry_id = ? WHERE id = ?")
+      .bind(journal.entryId, purchaseId),
   ]);
   return { purchaseId };
 }
