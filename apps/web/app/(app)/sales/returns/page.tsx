@@ -14,6 +14,7 @@ import {
   Pill,
   controlClass,
 } from "@/components/ui";
+import { RotateCcwIcon } from "@/components/icons";
 
 type Ret = { id: string; number: string; type: string; reason: string; refund_cents: number; status: string; created_at: number };
 
@@ -56,7 +57,11 @@ export default function ReturnsPage() {
           className={controlClass}
         />
       </div>
-      <TableCard>
+      <TableCard
+        title="Return register"
+        icon={<RotateCcwIcon size={17} />}
+        actions={<span className="g-metric text-[11px] font-medium uppercase tracking-[0.14em] text-ink-4">{String(list.data?.total ?? rows.length).padStart(2, "0")} on file</span>}
+      >
         {list.isLoading ? (
           <TableSkeleton rows={5} cols={6} />
         ) : list.isError ? (

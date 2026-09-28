@@ -19,7 +19,7 @@ import {
   heroBtnPrimary,
   heroBtnGhost,
 } from "@/components/ui";
-import { ScanBarcodeIcon } from "@/components/icons";
+import { ScanBarcodeIcon, GemIcon, BookOpenIcon, RefreshCwIcon } from "@/components/icons";
 
 type Detail = {
   batch: {

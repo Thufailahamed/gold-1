@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Page, Hero, TableCard, TableSkeleton, Pager, EmptyBlock, Pill, controlClass, heroBtnGhost } from "@/components/ui";
-import { FileDownIcon } from "@/components/icons";
+import { BookOpenIcon, FileDownIcon } from "@/components/icons";
 
 const TYPES = ["PURCHASE", "OLD_GOLD_PURCHASE", "SALE", "MELTING_INPUT", "MELTING_OUTPUT", "MANUFACTURING_INPUT", "MANUFACTURING_OUTPUT", "TRANSFER", "RETURN", "ADJUSTMENT", "LOSS", "RECOVERY"];
 
@@ -95,6 +95,9 @@ export default function GoldLedgerPage() {
         </select>
       </div>
       <TableCard
+        title="Ledger entries"
+        icon={<BookOpenIcon size={17} />}
+        actions={<span className="g-metric text-[11px] font-medium uppercase tracking-[0.14em] text-ink-4">{String(total).padStart(2, "0")} on file</span>}
         footer={<Pager page={page} onChange={setPage} pageSize={20} count={rows.length} total={total} unit="entries" />}
       >
         {list.isLoading ? (

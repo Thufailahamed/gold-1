@@ -22,6 +22,7 @@ import {
   heroBtnPrimary,
   heroBtnGhost,
 } from "@/components/ui";
+import { FileTextIcon } from "@/components/icons";
 
 type Detail = {
   invoice: {

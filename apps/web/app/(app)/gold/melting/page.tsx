@@ -18,6 +18,7 @@ import {
   controlClass,
   heroBtnPrimary,
 } from "@/components/ui";
+import { GemIcon } from "@/components/icons";
 
 type Batch = { id: string; number: string; status: string; input_fine_mg: number; output_fine_mg: number; loss_mg: number; created_at: number };
 
@@ -97,7 +98,12 @@ export default function MeltingPage() {
           ))}
         </select>
       </div>
-      <TableCard footer={<Pager page={page} onChange={setPage} pageSize={20} count={rows.length} total={total} unit="batches" />}>
+      <TableCard
+        title="Batches"
+        icon={<GemIcon size={17} />}
+        actions={<span className="g-metric text-[11px] font-medium uppercase tracking-[0.14em] text-ink-4">{String(total).padStart(2, "0")} on file</span>}
+        footer={<Pager page={page} onChange={setPage} pageSize={20} count={rows.length} total={total} unit="batches" />}
+      >
         {list.isLoading ? (
           <TableSkeleton rows={5} cols={5} />
         ) : list.isError ? (

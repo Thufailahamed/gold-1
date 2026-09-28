@@ -22,7 +22,7 @@ import {
   heroBtnPrimary,
   heroBtnGhost,
 } from "@/components/ui";
-import { PrinterIcon } from "@/components/icons";
+import { FileTextIcon, PrinterIcon } from "@/components/icons";
 
 type Detail = {
   invoice: {
@@ -140,7 +140,7 @@ export default function SaleDetailPage({ params }: { params: Promise<{ id: strin
           </>
         }
       />
-      <TableCard title="Items sold" description={`${items.length} piece${items.length === 1 ? "" : "s"}`}>
+      <TableCard title="Items sold" icon={<FileTextIcon size={17} />} description={`${items.length} piece${items.length === 1 ? "" : "s"}`}>
         {items.length === 0 ? (
           <EmptyBlock title="No items" description="This invoice has no line items." />
         ) : (
