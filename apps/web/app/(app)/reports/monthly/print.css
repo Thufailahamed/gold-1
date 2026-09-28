@@ -1,0 +1,8 @@
+@media print {
+  nav, aside, .no-print { display: none !important; }
+  main { padding: 0 !important; }
+  .print-header { display: block !important; }
+}
+@media screen {
+  .print-header { display: none; }
+}
