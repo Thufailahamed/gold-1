@@ -11,14 +11,18 @@ import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
 import { businessDateFor } from "../services/busdate";
 import {
+  accountStatement,
   buildEntryStmts,
   createAccount,
+  getJournalEntry,
   listAccounts,
+  listJournalEntries,
   reverseEntry,
   setAccountActive,
+  trialBalance,
   updateAccount,
 } from "../services/journal";
-import { serviceError } from "./http";
+import { pagination, serviceError } from "./http";
 
 const reverseSchema = z.object({
   entryId: z.string().min(1),
@@ -38,6 +42,49 @@ const adjustSchema = z.object({
 
 export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
+  // Literal paths are registered before the /:code handlers below. Hono
+  // matches in registration order, so GET /journal reaching /:code first
+  // would be read as an account code of "journal".
+  .get("/journal", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    const q = (k: string) => c.req.query(k) ?? undefined;
+    const data = await listJournalEntries(c.env.DB, {
+      ...pagination(c),
+      from: q("from"),
+      to: q("to"),
+      branchId: q("branchId"),
+      accountCode: q("accountCode"),
+      sourceModule: q("sourceModule"),
+      refEntity: q("refEntity"),
+    });
+    return c.json({ success: true, data }, 200);
+  })
+  .get("/journal/:id", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    try {
+      return c.json({ success: true, data: await getJournalEntry(c.env.DB, c.req.param("id")) }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  .get("/trial-balance", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    const date = c.req.query("date") ?? (await businessDateFor(c.env.DB, Date.now()));
+    const rows = await trialBalance(c.env.DB, { date, branchId: c.req.query("branchId") ?? undefined });
+    return c.json({ success: true, data: { date, rows } }, 200);
+  })
+  .get("/:code/statement", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    const to = c.req.query("to") ?? (await businessDateFor(c.env.DB, Date.now()));
+    const from = c.req.query("from") ?? "1970-01-01";
+    try {
+      const data = await accountStatement(c.env.DB, {
+        code: c.req.param("code"),
+        from,
+        to,
+        branchId: c.req.query("branchId") ?? undefined,
+      });
+      return c.json({ success: true, data: { code: c.req.param("code"), from, to, ...data } }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
   .get("/", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     const rows = await listAccounts(c.env.DB, c.req.query("branchId") ?? undefined);
     return c.json({ success: true, data: rows }, 200);
