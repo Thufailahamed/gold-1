@@ -267,6 +267,37 @@ export async function goldLineage(
         add("refined_lot", `${id}:${o.lot_number}`, `${o.lot_number} (${o.fine_mg}mg fine)`, `/gold/melting/${id}`);
         edge("melting_batch", id, "refined_lot", `${id}:${o.lot_number}`, "produced");
       }
+      const { results: mfgOrders } = await db
+        .prepare("SELECT DISTINCT m.order_id, o.number FROM manufacturing_materials m JOIN manufacturing_orders o ON o.id = m.order_id WHERE m.lot_batch_id = ?")
+        .bind(id)
+        .all<{ order_id: string; number: string }>();
+      for (const m of mfgOrders ?? []) {
+        add("manufacturing_order", m.order_id, m.number, `/manufacturing/orders/${m.order_id}`);
+        edge("melting_batch", id, "manufacturing_order", m.order_id, "consumed by");
+        await expand("manufacturing_order", m.order_id, depth + 1);
+      }
+    } else if (kind === "manufacturing_order") {
+      const { results: mats } = await db
+        .prepare("SELECT m.lot_batch_id, m.lot_number FROM manufacturing_materials m WHERE m.order_id = ?")
+        .bind(id)
+        .all<{ lot_batch_id: string; lot_number: string }>();
+      for (const m of mats ?? []) {
+        const bat = await db
+          .prepare("SELECT number FROM melting_batches WHERE id = ?")
+          .bind(m.lot_batch_id)
+          .first<{ number: string }>();
+        add("melting_batch", m.lot_batch_id, bat?.number ?? m.lot_batch_id, `/gold/melting/${m.lot_batch_id}`);
+        edge("melting_batch", m.lot_batch_id, "manufacturing_order", id, "consumed by");
+      }
+      const { results: prods } = await db
+        .prepare("SELECT mo.product_id, p.barcode, p.name FROM manufacturing_outputs mo JOIN products p ON p.id = mo.product_id WHERE mo.order_id = ? AND mo.product_id IS NOT NULL")
+        .bind(id)
+        .all<{ product_id: string; barcode: string; name: string }>();
+      for (const p of prods ?? []) {
+        add("product", p.product_id, `${p.barcode} ${p.name}`, `/products/${p.product_id}`);
+        edge("manufacturing_order", id, "product", p.product_id, "produced");
+        await expand("product", p.product_id, depth + 1);
+      }
     } else if (kind === "purchase_invoice") {
       const { results } = await db
         .prepare("SELECT product_id FROM purchase_invoice_items WHERE invoice_id = ?")
@@ -290,6 +321,8 @@ export async function goldLineage(
       (await db.prepare("SELECT number FROM old_gold_items WHERE id = ?").bind(id).first<{ number: string }>())?.number ?? id,
     melting_batch: async (id) =>
       (await db.prepare("SELECT number FROM melting_batches WHERE id = ?").bind(id).first<{ number: string }>())?.number ?? id,
+    manufacturing_order: async (id) =>
+      (await db.prepare("SELECT number FROM manufacturing_orders WHERE id = ?").bind(id).first<{ number: string }>())?.number ?? id,
     product: async (id) => {
       const p = await db.prepare("SELECT barcode FROM products WHERE id = ?").bind(id).first<{ barcode: string }>();
       return p?.barcode ?? id;
@@ -301,6 +334,7 @@ export async function goldLineage(
     kind === "sale_invoice" ? `/sales/invoices/${id}`
     : kind === "old_gold" ? `/old-gold/items/${id}`
     : kind === "melting_batch" ? `/gold/melting/${id}`
+    : kind === "manufacturing_order" ? `/manufacturing/orders/${id}`
     : kind === "product" ? `/products/${id}`
     : kind === "purchase_invoice" ? `/purchases/invoices/${id}`
     : "#";
