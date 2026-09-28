@@ -602,3 +602,35 @@ export const bankReconciliations = sqliteTable("bank_reconciliations", {
   createdAt: integer("created_at").notNull(),
   createdBy: text("created_by"),
 });
+
+export const expenseCategories = sqliteTable("expense_categories", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  accountCode: text("account_code").notNull(),
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+export const expenses = sqliteTable("expenses", {
+  id: text("id").primaryKey(),
+  number: text("number").notNull().unique(),
+  categoryId: text("category_id").notNull(),
+  branchId: text("branch_id").notNull(),
+  incurredOn: text("incurred_on").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  vendor: text("vendor"),
+  description: text("description").notNull(),
+  paymentAccountCode: text("payment_account_code").notNull(),
+  bankAccountId: text("bank_account_id"),
+  status: text("status").notNull().default("POSTED"),
+  receiptKey: text("receipt_key"),
+  journalEntryId: text("journal_entry_id"),
+  requestedBy: text("requested_by"),
+  approvedBy: text("approved_by"),
+  approvedAt: integer("approved_at"),
+  rejectionReason: text("rejection_reason"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
