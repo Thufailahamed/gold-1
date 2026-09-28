@@ -16,7 +16,7 @@ import {
   controlClass,
   controlSmClass,
 } from "@/components/ui";
-import { PlusIcon, ScanBarcodeIcon, TrashIcon } from "@/components/icons";
+import { PlusIcon, ScanBarcodeIcon, TrashIcon, UserCheckIcon, TagsIcon, CreditCardIcon } from "@/components/icons";
 
 type Lookup = {
   product: {
@@ -261,7 +261,7 @@ export default function PosPage() {
       </TableCard>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Panel title="Customer" description="Optional — required for credit">
+        <Panel title="Customer" icon={<UserCheckIcon size={17} />} description="Optional — required for credit">
           <input
             placeholder="Search customers…"
             value={customerSearch}
@@ -275,7 +275,7 @@ export default function PosPage() {
             ))}
           </select>
         </Panel>
-        <Panel title="Discount" description={`${pct.toFixed(1)}% of subtotal`}>
+        <Panel title="Discount" icon={<TagsIcon size={17} />} description={`${pct.toFixed(1)}% of subtotal`}>
           <p className="num-tabular text-lg font-semibold text-ink">{fmt(discount)} LKR</p>
           <label className="mt-3 block text-sm text-ink-2">Approver user ID (over limit)
             <input
@@ -286,7 +286,7 @@ export default function PosPage() {
             />
           </label>
         </Panel>
-        <Panel title="Payment" description={`Total ${fmt(total)} LKR`}>
+        <Panel title="Payment" icon={<CreditCardIcon size={17} />} description={`Total ${fmt(total)} LKR`}>
           <form
             onSubmit={(e) => {
               e.preventDefault();

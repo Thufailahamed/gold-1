@@ -126,9 +126,19 @@ export async function recordMovement(
   actorId: string
 ): Promise<{ movementId: string }> {
   const prev = await db
-    .prepare("SELECT id, status, branch_id, net_mg FROM products WHERE id = ?")
+    .prepare(
+      "SELECT p.id, p.status, p.branch_id, p.net_mg, p.fine_gold_mg, p.purity_id, pu.permille FROM products p JOIN purities pu ON pu.id = p.purity_id WHERE p.id = ?"
+    )
     .bind(input.productId)
-    .first<{ id: string; status: string; branch_id: string; net_mg: number }>();
+    .first<{
+      id: string;
+      status: string;
+      branch_id: string;
+      net_mg: number;
+      fine_gold_mg: number;
+      purity_id: string;
+      permille: number;
+    }>();
   if (!prev) throw Object.assign(new Error("Product not found"), { code: "NOT_FOUND" });
   checkTransition(prev.status, input.toStatus);
   if ((input.toStatus === "VOID" || input.toStatus === "LOST") && !input.reason)
@@ -149,6 +159,32 @@ export async function recordMovement(
       moveStmt(db, crypto.randomUUID(), input.productId, "TRANSFER_OUT", prev.status, "TRANSFER_PENDING", prev.branch_id, input.toBranchId, prev.net_mg, input.reason ?? null, now, actorId),
       db.prepare("UPDATE products SET status = 'IN_STOCK', branch_id = ? WHERE id = ?").bind(input.toBranchId, input.productId),
       moveStmt(db, inId, input.productId, "TRANSFER_IN", "TRANSFER_PENDING", "IN_STOCK", prev.branch_id, input.toBranchId, prev.net_mg, input.reason ?? null, now, actorId),
+      // The gold ledger is how the shop knows where its gold is. Without this
+      // row the ledger keeps attributing the product to the origin branch
+      // while products.branch_id has already moved, and gold_stock_consistency
+      // fails for the destination by exactly the transferred weight.
+      // Direction is the convention gold_stock_consistency reads: source is
+      // the branch the gold left, destination is the branch it arrived at.
+      db
+        .prepare(
+          "INSERT INTO gold_ledger (id, occurred_at, branch_id, source, destination, type, weight_mg, permille, fine_mg, ref_entity, ref_id, product_id, old_gold_id, user_id, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, 'TRANSFER', ?, ?, ?, 'inventory_transfer', ?, ?, NULL, ?, ?, ?, ?)"
+        )
+        .bind(
+          crypto.randomUUID(),
+          now,
+          input.toBranchId,
+          `branch:${prev.branch_id}`,
+          `branch:${input.toBranchId}`,
+          prev.net_mg,
+          prev.permille,
+          prev.fine_gold_mg,
+          inId,
+          input.productId,
+          actorId,
+          input.reason ?? null,
+          now,
+          actorId
+        ),
       buildAuditStmt(db, {
         userId: actorId,
         action: "inventory.transfer",

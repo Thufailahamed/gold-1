@@ -76,7 +76,7 @@ export default function GoldStockPage() {
         </StatGrid>
       ) : null}
       {stock.data && "byPurity" in stock.data ? (
-        <TableCard title="By purity">
+        <TableCard title="By purity" icon={<GemIcon size={17} />}>
           {stock.data.byPurity.length === 0 ? (
             <EmptyBlock title="No stock" description="No fine gold on hand by purity." />
           ) : (
@@ -100,7 +100,7 @@ export default function GoldStockPage() {
         </TableCard>
       ) : null}
       {stock.data && "byBranch" in stock.data ? (
-        <TableCard title="By branch">
+        <TableCard title="By branch" icon={<StoreIcon size={17} />}>
           {stock.data.byBranch.length === 0 ? (
             <EmptyBlock title="No stock" description="No fine gold on hand by branch." />
           ) : (

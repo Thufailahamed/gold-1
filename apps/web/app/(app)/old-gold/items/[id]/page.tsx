@@ -22,6 +22,7 @@ import {
   heroBtnPrimary,
   heroBtnGhost,
 } from "@/components/ui";
+import { FlaskConicalIcon, CreditCardIcon } from "@/components/icons";
 
 type Detail = {
   item: {
@@ -172,7 +173,7 @@ export default function OldGoldDetailPage({ params }: { params: Promise<{ id: st
       ) : null}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel title="Tests" description={`${tests.length} recorded`}>
+        <Panel title="Tests" icon={<FlaskConicalIcon size={17} />} description={`${tests.length} recorded`}>
           {tests.length === 0 ? (
             <EmptyBlock title="No tests" description="Record a purity test from the testing queue." />
           ) : (
@@ -191,7 +192,7 @@ export default function OldGoldDetailPage({ params }: { params: Promise<{ id: st
           )}
         </Panel>
         {purchase ? (
-          <Panel title="Purchase" description={`Paid ${fmt(purchase.paid_cents)} of ${fmt(purchase.value_cents)} LKR`}>
+          <Panel title="Purchase" icon={<CreditCardIcon size={17} />} description={`Paid ${fmt(purchase.paid_cents)} of ${fmt(purchase.value_cents)} LKR`}>
             <ul className="space-y-2 g-metric text-xs">
               {journal.map((j) => (
                 <li key={j.id} className="flex items-center justify-between gap-3">

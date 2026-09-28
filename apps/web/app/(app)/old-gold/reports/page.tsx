@@ -15,6 +15,7 @@ import {
   type PillTone,
   Tabs,
 } from "@/components/ui";
+import { TrendingUpIcon, ArchiveIcon } from "@/components/icons";
 
 type Summary = { items: number; gross_mg: number; fine_mg: number; value_cents: number; paid_cents: number; outstanding_cents: number };
 type Row = { key: string; items: number; value_cents: number; fine_mg: number };
@@ -98,7 +99,7 @@ export default function OldGoldReportsPage() {
           </div>
         ))}
       </div>
-      <TableCard title={`By ${groupBy}`} description={`${(breakdown.data ?? []).length} groups`}>
+      <TableCard title={`By ${groupBy}`} icon={<TrendingUpIcon size={17} />} description={`${(breakdown.data ?? []).length} groups`}>
         {breakdown.isLoading ? (
           <TableSkeleton rows={5} cols={4} />
         ) : (breakdown.data ?? []).length === 0 ? (
@@ -126,7 +127,7 @@ export default function OldGoldReportsPage() {
           </table>
         )}
       </TableCard>
-      <Panel title="Pending processing" description={`${(pending.data ?? []).length} items awaiting settlement or melt`}>
+      <Panel title="Pending processing" icon={<ArchiveIcon size={17} />} description={`${(pending.data ?? []).length} items awaiting settlement or melt`}>
         {(pending.data ?? []).length === 0 ? (
           <EmptyBlock title="All clear" description="No old-gold items pending processing." />
         ) : (
