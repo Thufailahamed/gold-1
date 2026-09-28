@@ -108,4 +108,32 @@ export const monthly = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return c.json({ success: false, error: { code: "FORBIDDEN", message: "branchId required without branches:manage" } }, 403);
     const report = await buildMonthlyReport(c.env.DB, parsed.data);
     return c.json({ success: true, data: report.cashflow }, 200);
+  })
+  .get("/aging", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    const parsed = monthlyQuerySchema.safeParse({
+      month: c.req.query("month"),
+      year: c.req.query("year"),
+      branchId: c.req.query("branchId") ?? undefined,
+    });
+    if (!parsed.success)
+      return c.json({ success: false, error: { code: "VALIDATION", message: "month 1-12 and year required" } }, 400);
+    const perms = c.get("permissions") as string[];
+    if (!shopWideAllowed(perms, parsed.data.branchId))
+      return c.json({ success: false, error: { code: "FORBIDDEN", message: "branchId required without branches:manage" } }, 403);
+    const report = await buildMonthlyReport(c.env.DB, parsed.data);
+    return c.json({ success: true, data: { receivables: report.receivables, payables: report.payables } }, 200);
+  })
+  .get("/valuation", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    const parsed = monthlyQuerySchema.safeParse({
+      month: c.req.query("month"),
+      year: c.req.query("year"),
+      branchId: c.req.query("branchId") ?? undefined,
+    });
+    if (!parsed.success)
+      return c.json({ success: false, error: { code: "VALIDATION", message: "month 1-12 and year required" } }, 400);
+    const perms = c.get("permissions") as string[];
+    if (!shopWideAllowed(perms, parsed.data.branchId))
+      return c.json({ success: false, error: { code: "FORBIDDEN", message: "branchId required without branches:manage" } }, 403);
+    const report = await buildMonthlyReport(c.env.DB, parsed.data);
+    return c.json({ success: true, data: report.inventory }, 200);
   });
