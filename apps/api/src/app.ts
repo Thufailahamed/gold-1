@@ -19,6 +19,7 @@ import { counts } from "./routes/counts";
 import { stockTransferRoutes } from "./routes/transfers";
 import { discrepancies } from "./routes/discrepancies";
 import { overview } from "./routes/overview";
+import { repairRoutes } from "./routes/repairs";
 import { customers, suppliers } from "./routes/parties";
 import { inventory } from "./routes/inventory";
 import { oldgold } from "./routes/oldgold";
@@ -64,5 +65,6 @@ app.route("/api/v1/counts", counts);
 app.route("/api/v1/transfers", stockTransferRoutes);
 app.route("/api/v1/discrepancies", discrepancies);
 app.route("/api/v1/branch-overview", overview);
+app.route("/api/v1/repairs", repairRoutes);
 
 export default app;

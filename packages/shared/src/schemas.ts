@@ -531,3 +531,25 @@ export const requestTransferSchema = z.object({
   reason: z.string().max(500).optional(),
 });
 export type RequestTransferInput = z.infer<typeof requestTransferSchema>;
+
+export const createRepairSchema = z.object({
+  customerId: z.string().min(1),
+  branchId: z.string().min(1),
+  itemDesc: z.string().min(1).max(500),
+  weightG: z.number().gt(0).max(100000),
+  conditionIn: z.string().min(1).max(1000),
+  repairType: z.string().min(1).max(100),
+  estimateLkr: z.number().gt(0),
+});
+export const repairPaymentSchema = z.object({
+  method: z.enum(["cash", "card", "bank", "credit"]),
+  amountLkr: z.number().gt(0),
+  bankAccountId: z.string().min(1).optional(),
+});
+export const collectRepairSchema = z.object({
+  payments: z.array(repairPaymentSchema).min(1).max(10),
+  actualLkr: z.number().gt(0).optional(),
+  conditionOut: z.string().min(1).max(1000),
+});
+export type CreateRepairInput = z.infer<typeof createRepairSchema>;
+export type CollectRepairInput = z.infer<typeof collectRepairSchema>;
