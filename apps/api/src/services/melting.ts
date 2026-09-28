@@ -1,8 +1,10 @@
-import { fineGoldMg, gToMg } from "@goldos/shared";
+import { fineGoldMg, gToMg, meltingLossValue } from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
 import { postGoldStmts } from "./gold";
 import { getSetting } from "./settings";
+import { businessDateFor } from "./busdate";
+import { buildEntryStmts } from "./journal";
 
 async function nextMelt(db: D1Database, stmts: D1PreparedStatement[]): Promise<string> {
   const row = await db
@@ -201,15 +203,25 @@ export async function approveBatch(
       throw Object.assign(new Error(`Loss exceeds ${threshold}% approval threshold`), { code: "FORBIDDEN" });
     await requireGoldApprover(db, input.approvedBy, actorId);
   }
+  // The book cost of each input is what the shop actually paid the customer
+  // for that old gold. melting_inputs.old_gold_id is NOT NULL UNIQUE, so old
+  // gold is the only thing that can enter a batch today and purchase_value is
+  // the only cost basis. If catalogue products ever become meltable this has
+  // to branch on a null old_gold_id in the same change.
   const { results: inputs } = await db
-    .prepare("SELECT old_gold_id, net_mg, fine_mg FROM melting_inputs WHERE batch_id = ?")
+    .prepare(
+      "SELECT i.old_gold_id, i.net_mg, i.fine_mg, COALESCE(o.purchase_value_cents, 0) AS book_cents FROM melting_inputs i JOIN old_gold_items o ON o.id = i.old_gold_id WHERE i.batch_id = ?"
+    )
     .bind(batchId)
-    .all<{ old_gold_id: string; net_mg: number; fine_mg: number }>();
+    .all<{ old_gold_id: string; net_mg: number; fine_mg: number; book_cents: number }>();
   const outputs = await db
     .prepare("SELECT weight_mg, permille, fine_mg FROM melting_outputs WHERE batch_id = ?")
     .bind(batchId)
     .first<{ weight_mg: number; permille: number; fine_mg: number }>();
   if (!outputs) throw Object.assign(new Error("Batch has no output"), { code: "VALIDATION" });
+  const inputCostCents = (inputs ?? []).reduce((s, i) => s + i.book_cents, 0);
+  const lossValueCents = meltingLossValue(inputCostCents, outputs.fine_mg, batch.loss_mg);
+  const lotCostCents = inputCostCents - lossValueCents;
 
   const stmts: D1PreparedStatement[] = [];
   for (const i of inputs ?? []) {
@@ -229,6 +241,40 @@ export async function approveBatch(
       .prepare("INSERT INTO gold_ledger (id, occurred_at, branch_id, source, destination, type, weight_mg, permille, fine_mg, ref_entity, ref_id, product_id, old_gold_id, user_id, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, 'MELTING_OUTPUT', ?, ?, ?, 'melting_batch', ?, NULL, NULL, ?, ?, ?, ?)")
       .bind(crypto.randomUUID(), Date.now(), batch.branch_id, `melting:${batchId}`, `branch:${batch.branch_id}`, outputs.weight_mg, outputs.permille, outputs.fine_mg, batchId, actorId, input.reason, Date.now(), actorId)
   );
+  // The lot carries book cost forward, less the value of the gold lost, so
+  // manufacturing values its output at what the shop actually paid rather
+  // than at the day's board rate.
+  stmts.push(
+    db
+      .prepare("UPDATE melting_batches SET input_cost_cents = ? WHERE id = ?")
+      .bind(inputCostCents, batchId),
+    db
+      .prepare("UPDATE melting_outputs SET cost_cents = ? WHERE batch_id = ?")
+      .bind(lotCostCents, batchId)
+  );
+  if (lossValueCents > 0) {
+    const lossEntry = await buildEntryStmts(
+      db,
+      {
+        lines: [
+          { account: "5100", debitCents: lossValueCents, creditCents: 0 },
+          { account: "1100", debitCents: 0, creditCents: lossValueCents },
+        ],
+        refEntity: "melt_batch",
+        refId: batchId,
+        refNo: batch.number,
+        memo: `Melting loss ${batch.number}: ${batch.loss_mg}mg fine`,
+        branchId: batch.branch_id,
+        actorId,
+        auditAction: "melt.loss",
+        auditEntity: "melting_batch",
+        auditEntityId: batchId,
+        sourceModule: "melting",
+      },
+      { entryDate: await businessDateFor(db, Date.now()) }
+    );
+    stmts.push(...lossEntry.stmts);
+  }
   if (batch.loss_mg > 0) {
     stmts.push(
       db
