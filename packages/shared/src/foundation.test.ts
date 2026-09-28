@@ -7,8 +7,13 @@ describe("foundation matrix", () => {
     const all = Object.values(PERMISSIONS);
     for (const p of all) expect(DEFAULT_ROLES["owner"]).toContain(p);
   });
-  it("manufacturing_staff has only products:view", () => {
-    expect(DEFAULT_ROLES["manufacturing_staff"]).toEqual(["products:view"]);
+  it("manufacturing_staff has products:view plus mfg workflow perms", () => {
+    expect(DEFAULT_ROLES["manufacturing_staff"]).toEqual([
+      "products:view",
+      "mfg:view",
+      "mfg:create",
+      "mfg:edit",
+    ]);
   });
   it("manager cannot approve users", () => {
     expect(DEFAULT_ROLES["manager"]).not.toContain("users:approve");
