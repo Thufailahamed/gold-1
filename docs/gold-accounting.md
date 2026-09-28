@@ -33,7 +33,16 @@ Party balances are derived: customer = opening + DR − CR on 1200;
 supplier = opening + CR − DR on 2000. Manual corrections go through
 `POST /accounts/adjustments` (reason required, accounts:manage).
 
-## Sale postings (live)
+## Old-gold postings (live)
+
+Counter purchase posts in the purchase batch: DR 1100 Gold Inventory (full
+value, customer party) / CR 1000 Cash or 1010 Bank (paid) + CR 1200
+Receivables with the customer party (remainder owed — shows as credit
+balance on the customer ledger). Plus a `gold_movements` IN row (fine mg +
+permille, linked via `old_gold_id`) feeding the future melting pool, plus
+audit. Convert-to-product creates a normal JW- intake (cost = purchase
+value) and links both directions — full lineage from OG- number to shelf
+barcode.
 
 Counter sale posts in the invoice batch: DR per payment leg (1000 Cash /
 1010 Card-Bank-Other / 1200 Receivable with customer party) / CR 4000

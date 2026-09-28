@@ -88,3 +88,19 @@ Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 | GET | /sales/returns | sales:view | filterable by invoice |
 | GET | /sales/reports/summary | sales:view | ?period=today\|month\|all |
 | GET | /sales/reports/breakdown | sales:view | ?groupBy=category\|purity\|branch\|salesperson\|payment\|product |
+| POST | /oldgold/items | oldgold:create | intake → RECEIVED + OG number |
+| GET | /oldgold/items | oldgold:view | filters status, purity, branch, customer, date range |
+| GET | /oldgold/items/barcode/:code | oldgold:view | OG- scan lookup |
+| GET | /oldgold/items/:id | oldgold:view | full lineage + journal + gold + tests |
+| POST | /oldgold/items/:id/tests | oldgold:edit | disagreement needs oldgold:approve approver |
+| POST | /oldgold/items/:id/value | oldgold:edit | buy % + deductions + negotiated (reason on overrides) |
+| POST | /oldgold/items/:id/purchase | oldgold:edit | atomic 5-ledger batch; remainder → customer payable |
+| POST | /oldgold/items/:id/release | oldgold:edit | PURCHASED → AVAILABLE |
+| POST | /oldgold/items/:id/convert | oldgold:edit + products:create | creates JW- product, lineage both ways |
+| POST | /oldgold/items/:id/files | oldgold:edit | images ≤5MB / docs ≤10MB to R2 |
+| GET | /oldgold/items/:id/files/:file | oldgold:view | streams from R2 |
+| PATCH | /oldgold/items/:id/void | oldgold:cancel | pre-purchase only + reason |
+| GET | /oldgold/reports/summary | oldgold:view | ?period=today\|month\|all |
+| GET | /oldgold/reports/breakdown | oldgold:view | ?groupBy=purity\|customer\|branch |
+| GET | /oldgold/reports/pending | oldgold:view | PURCHASED/AVAILABLE unmelted |
+| GET | /oldgold/customers/:id/history | oldgold:view | items + totals |

@@ -46,6 +46,14 @@ Conventions: `id TEXT PK` (UUID), timestamps as INTEGER millis, FKs enforced.
 - Products now: `sku UNIQUE`, `subcategory/design/product_type/metal/stone` FKs, `gross_mg/stone_mg/net_mg/fine_gold_mg`, `making_cents`, `wastage_mg`, `cost_cents?`, `selling_price_cents?`, `location?`, `notes?`, `image_keys` JSON (R2), status in 11-value set (IN_STOCK, RESERVED, SOLD, RETURNED, IN_REPAIR, IN_MANUFACTURING, TRANSFER_PENDING, MELTING, MELTED, LOST, VOID).
 - `stock_movements(id, product_id FK, type, from_status, to_status, from_branch, to_branch, weight_mg, reason, created_at, created_by)` — append-only, indexed by (product, time) and (branch, time). Types: INTAKE, TRANSFER_OUT, TRANSFER_IN, RETURN, LOSS, VOID, SALE_OUT.
 
+## Old gold (migrations `0011_oldgold`, `0012_goldlink`)
+
+- `counters` += OG (sequential OG-000001).
+- `old_gold_items(id, number UNIQUE, customer_id FK, branch_id FK, item_type, description, gross_mg, stone_mg, net_mg, purity_id NULL, tested_permille NULL, karat NULL, fine_mg, rate_cents_per_g (board snapshot), buy_pct, purchase_rate_cents, stone/processing_deduction_cents, negotiated_cents NULL, purchase_value_cents NULL, paid_cents, status RECEIVED/TESTED/VALUED/PURCHASED/AVAILABLE/RESERVED_FOR_MELTING/MELTED/RESOLD/TRANSFERRED/VOID, converted_product_id NULL FK, staff_id, notes, image_keys/doc_keys JSON, created_at, created_by)`.
+- `gold_tests(id, item_id FK, method acid/touchstone/xrf/electronic/fire_assay, tested_permille, tester_id FK, result pass/fail/inconclusive, approved_by NULL FK, notes, created_at)`.
+- `old_gold_purchases(id, item_id UNIQUE FK, value_cents, paid_cents, method cash/bank, created_at, created_by)`.
+- `gold_movements` gained nullable `old_gold_id FK` (0012 rebuild; CHECK one of product/old-gold set) for IN gold rows.
+
 ## Sales (migration `0010_sales`)
 
 - `counters` += SINV, SRET.
