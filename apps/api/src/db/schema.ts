@@ -663,3 +663,14 @@ export const dayReopens = sqliteTable("day_reopens", {
   approvedAt: integer("approved_at").notNull(),
   createdAt: integer("created_at").notNull(),
 });
+
+export const monthSnapshots = sqliteTable("month_snapshots", {
+  id: text("id").primaryKey(),
+  branchId: text("branch_id"),
+  month: text("month").notNull(),
+  fromDate: text("from_date").notNull(),
+  toDate: text("to_date").notNull(),
+  reportJson: text("report_json").notNull(),
+  createdBy: text("created_by"),
+  createdAt: integer("created_at").notNull(),
+});
