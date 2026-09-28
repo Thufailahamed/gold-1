@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { BranchSwitcher } from "@/components/branch-switcher";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -8,7 +9,7 @@ import { Providers } from "@/components/providers";
 import { UserMenu } from "@/components/user-menu";
 import { ScanField } from "@/components/scan-field";
 import { Skeleton } from "@/components/ui";
-import { BellIcon, MenuIcon } from "@/components/icons";
+import { BellIcon, MenuIcon, ScanBarcodeIcon } from "@/components/icons";
 import { useSession } from "@/lib/auth";
 
 function Notifications() {
@@ -132,6 +133,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <ScanField compact />
               </div>
               <div className="flex-1 md:hidden" />
+              <Link
+                href="/scan"
+                aria-label="Scan a barcode"
+                className="flex size-9 items-center justify-center rounded-lg text-ink transition-colors hover:bg-ink/5 md:hidden"
+              >
+                <ScanBarcodeIcon size={17} />
+              </Link>
 
               <span className="hidden items-center gap-2 rounded-full border border-ink/10 bg-paper px-2.5 py-1 xl:inline-flex">
                 <span className="size-1.5 animate-pulse-soft rounded-full bg-emerald-600" aria-hidden />

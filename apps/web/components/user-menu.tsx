@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
+import { cn } from "@/lib/cn";
 import { api, type MeData } from "@/lib/api";
 import { logout } from "@/lib/auth";
 import { Modal, Pill, controlClass } from "@/components/ui";
@@ -115,45 +116,32 @@ export function UserMenu({ me }: { me: MeData }) {
         </div>
       ) : null}
       {pwOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
-          onClick={() => setPwOpen(false)}
-        >
-          <form
-            onSubmit={handleSubmit(onPassword)}
-            className="g-floating w-full max-w-sm animate-fade-in space-y-4 p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div>
-              <div className="g-kicker">Security</div>
-              <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
-                Change password
-              </h2>
-            </div>
+        <Modal title="Change password" kicker="Security" onClose={() => setPwOpen(false)} footer={false}>
+          <form onSubmit={handleSubmit(onPassword)} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-xs font-medium text-ink-3">Current password</label>
-              <input type="password" className={controlClass} {...register("currentPassword")} />
+              <input type="password" autoComplete="current-password" className={controlClass} {...register("currentPassword")} />
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-ink-3">
                 New password (min 8)
               </label>
-              <input type="password" className={controlClass} {...register("newPassword")} />
+              <input type="password" autoComplete="new-password" className={controlClass} {...register("newPassword")} />
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <button
                 type="button"
                 onClick={() => setPwOpen(false)}
-                className="g-btn g-btn-secondary h-9 px-3.5 text-sm"
+                className="g-btn g-btn-secondary h-10 px-4 text-sm"
               >
                 Cancel
               </button>
-              <button type="submit" className="g-btn g-btn-primary h-9 px-3.5 text-sm">
+              <button type="submit" className="g-btn g-btn-primary h-10 px-4 text-sm">
                 Save
               </button>
             </div>
           </form>
-        </div>
+        </Modal>
       ) : null}
     </div>
   );
