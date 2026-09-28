@@ -88,12 +88,13 @@ export async function summaryReport(db: D1Database, branchId: string): Promise<S
   const ledgerMg = await branchLedgerMg(db, branchId);
   const heldMg = await heldGoldMg(db, branchId);
   const gold = [{ branchId, passed: ledgerMg - heldMg === 0, differenceMg: ledgerMg - heldMg }];
+  const goldPassed = gold[0]?.passed ?? false;
   const { results: open } = await db.prepare("SELECT id, number FROM transfers WHERE (from_branch_id = ? OR to_branch_id = ?) AND status IN ('DISPATCHED','PARTIAL') ORDER BY created_at DESC LIMIT 50").bind(branchId, branchId).all<{ id: string; number: string }>();
   const transfers: Summary["transfers"] = [];
   for (const t of open ?? []) {
     const r = await reconcileTransfer(db, t.id);
     if (!r.passed) transfers.push({ transferId: t.id, number: t.number, warnings: r.warnings });
   }
-  const hasData = missing.rows.length + unexpected.rows.length + duplicates.rows.length + unreceived.rows.length + transfers.length > 0 || !gold[0].passed;
+  const hasData = missing.rows.length + unexpected.rows.length + duplicates.rows.length + unreceived.rows.length + transfers.length > 0 || !goldPassed;
   return { missing: missing.rows.length, unexpected: unexpected.rows.length, duplicates: duplicates.rows.length, unreceived: unreceived.rows.length, gold, transfers, hasData };
 }
