@@ -545,3 +545,60 @@ export const manufacturingOutputs = sqliteTable("manufacturing_outputs", {
   costCents: integer("cost_cents").notNull().default(0),
   location: text("location"),
 });
+
+export const bankAccounts = sqliteTable("bank_accounts", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  bankName: text("bank_name"),
+  accountNumber: text("account_number"),
+  accountCode: text("account_code").notNull(),
+  branchId: text("branch_id"),
+  openingBalanceCents: integer("opening_balance_cents").notNull().default(0),
+  openedOn: text("opened_on"),
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+export const cardSettlements = sqliteTable("card_settlements", {
+  id: text("id").primaryKey(),
+  number: text("number").notNull().unique(),
+  bankAccountId: text("bank_account_id").notNull(),
+  settledOn: text("settled_on").notNull(),
+  grossCents: integer("gross_cents").notNull(),
+  feeCents: integer("fee_cents").notNull().default(0),
+  netCents: integer("net_cents").notNull(),
+  acquirerRef: text("acquirer_ref"),
+  note: text("note"),
+  journalEntryId: text("journal_entry_id"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+export const cashTransfers = sqliteTable("cash_transfers", {
+  id: text("id").primaryKey(),
+  number: text("number").notNull().unique(),
+  fromBranchId: text("from_branch_id").notNull(),
+  toBranchId: text("to_branch_id").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  sentOn: text("sent_on").notNull(),
+  receivedOn: text("received_on"),
+  status: text("status").notNull().default("IN_TRANSIT"),
+  reason: text("reason").notNull(),
+  fromEntryId: text("from_entry_id"),
+  toEntryId: text("to_entry_id"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+export const bankReconciliations = sqliteTable("bank_reconciliations", {
+  id: text("id").primaryKey(),
+  bankAccountId: text("bank_account_id").notNull(),
+  statementDate: text("statement_date").notNull(),
+  statementBalanceCents: integer("statement_balance_cents").notNull(),
+  ledgerBalanceCents: integer("ledger_balance_cents").notNull(),
+  differenceCents: integer("difference_cents").notNull(),
+  note: text("note"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
