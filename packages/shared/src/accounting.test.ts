@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addDays,
+  agingBuckets,
   allocateGoldValue,
   allocateProportional,
   businessDate,
@@ -502,5 +503,20 @@ describe("compareCount", () => {
     const r = compareCount([{ productId: "p1", barcode: "JW-AAAAAA" }], []);
     expect(r.matchedCount).toBe(0);
     expect(r.missing).toEqual(["p1"]);
+  });
+});
+
+describe("agingBuckets", () => {
+  it("buckets outstanding documents by age", () => {
+    const r = agingBuckets("2026-09-28", [
+      { id: "a", date: "2026-09-20", outstandingCents: 1000 },
+      { id: "b", date: "2026-08-01", outstandingCents: 2000 },
+      { id: "c", date: "2026-06-01", outstandingCents: 3000 },
+      { id: "d", date: "2026-09-28", outstandingCents: 0 },
+    ]);
+    expect(r).toEqual({ "0-30": 1000, "31-60": 2000, "61-90": 0, "90+": 3000 });
+  });
+  it("treats future dates as current", () => {
+    expect(agingBuckets("2026-09-28", [{ id: "x", date: "2026-10-05", outstandingCents: 7 }])["0-30"]).toBe(7);
   });
 });

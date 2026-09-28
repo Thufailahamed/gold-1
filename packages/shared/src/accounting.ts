@@ -306,6 +306,21 @@ export function goldClose(openingMg: number, inMg: number, outMg: number): { clo
   return { closingMg: openingMg + inMg - outMg };
 }
 
+export function agingBuckets(asOf: string, docs: { id: string; date: string; outstandingCents: number }[]): { "0-30": number; "31-60": number; "61-90": number; "90+": number } {
+  if (!isBusinessDate(asOf)) throw Object.assign(new Error("Invalid as-of date"), { code: "VALIDATION" });
+  const buckets = { "0-30": 0, "31-60": 0, "61-90": 0, "90+": 0 };
+  const end = Date.parse(`${asOf}T00:00:00Z`);
+  for (const d of docs) {
+    if (d.outstandingCents <= 0) continue;
+    const age = isBusinessDate(d.date) ? Math.max(0, Math.floor((end - Date.parse(`${d.date}T00:00:00Z`)) / 86_400_000)) : 0;
+    if (age <= 30) buckets["0-30"] += d.outstandingCents;
+    else if (age <= 60) buckets["31-60"] += d.outstandingCents;
+    else if (age <= 90) buckets["61-90"] += d.outstandingCents;
+    else buckets["90+"] += d.outstandingCents;
+  }
+  return buckets;
+}
+
 export function compareCount(
   expected: { productId: string; barcode: string }[],
   scans: { barcode: string; productId: string | null }[]
