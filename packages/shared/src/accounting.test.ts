@@ -8,10 +8,13 @@ import {
   checkBalanced,
   closingCash,
   computePartyLedger,
+  expensePosting,
+  expenseThresholds,
   goldValueCents,
   inTransitTotal,
   isBusinessDate,
   meltingLossValue,
+  pendingApprovalTotal,
   settlementAmounts,
   type PartyLedgerLine,
 } from "./accounting";
@@ -287,5 +290,70 @@ describe("inTransitTotal", () => {
 
   it("never reports negative when the books over-receive", () => {
     expect(inTransitTotal(100_000, 120_000)).toBe(0);
+  });
+});
+
+describe("expenseThresholds", () => {
+  it("keeps the pair in a named order", () => {
+    expect(expenseThresholds(500_000, 1_000_000)).toEqual({
+      approvalCents: 500_000,
+      receiptCents: 1_000_000,
+    });
+  });
+
+  it("clamps a negative threshold to zero", () => {
+    expect(expenseThresholds(-1, 0)).toEqual({ approvalCents: 0, receiptCents: 0 });
+  });
+});
+
+describe("expensePosting", () => {
+  const t = { approvalCents: 500_000, receiptCents: 1_000_000 };
+
+  it("gates nothing below both thresholds", () => {
+    expect(expensePosting(499_999, t)).toEqual({
+      requiresReceipt: false,
+      requiresApproval: false,
+    });
+  });
+
+  it("does not gate an expense exactly AT a threshold", () => {
+    expect(expensePosting(500_000, t).requiresApproval).toBe(false);
+    expect(expensePosting(1_000_000, t).requiresReceipt).toBe(false);
+  });
+
+  it("requires a receipt above the receipt threshold", () => {
+    expect(expensePosting(1_000_001, t).requiresReceipt).toBe(true);
+  });
+
+  it("requires approval above the approval threshold", () => {
+    expect(expensePosting(500_001, t).requiresApproval).toBe(true);
+  });
+
+  it("gates both above both", () => {
+    expect(expensePosting(4_500_000, t)).toEqual({
+      requiresReceipt: true,
+      requiresApproval: true,
+    });
+  });
+
+  it("gates everything when the thresholds are zero", () => {
+    expect(expensePosting(1, { approvalCents: 0, receiptCents: 0 })).toEqual({
+      requiresReceipt: true,
+      requiresApproval: true,
+    });
+  });
+});
+
+describe("pendingApprovalTotal", () => {
+  it("is the awaiting-approval figure the closing screen shows", () => {
+    expect(pendingApprovalTotal(120_000, 45_000)).toBe(45_000);
+  });
+
+  it("is zero when nothing is pending", () => {
+    expect(pendingApprovalTotal(120_000, 0)).toBe(0);
+  });
+
+  it("never reports negative for a bad figure", () => {
+    expect(pendingApprovalTotal(0, -100)).toBe(0);
   });
 });

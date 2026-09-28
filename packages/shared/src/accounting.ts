@@ -171,3 +171,45 @@ export function settlementAmounts(
 export function inTransitTotal(dispatchedCents: number, receivedCents: number): number {
   return Math.max(dispatchedCents - receivedCents, 0);
 }
+
+export type ExpenseThresholds = { approvalCents: number; receiptCents: number };
+
+export function expenseThresholds(
+  approvalCents: number,
+  receiptCents: number
+): ExpenseThresholds {
+  return {
+    approvalCents: Math.max(0, approvalCents),
+    receiptCents: Math.max(0, receiptCents),
+  };
+}
+
+/**
+ * Both gates are strictly-greater-than, so an expense sitting exactly at a
+ * threshold is not gated. A threshold is a "watch anything above this" line,
+ * not "this exact amount needs a second pair of eyes" — the shop sets it to
+ * the largest routine spend and means it.
+ */
+export function expensePosting(
+  amountCents: number,
+  thresholds: ExpenseThresholds
+): { requiresReceipt: boolean; requiresApproval: boolean } {
+  return {
+    requiresReceipt: amountCents > thresholds.receiptCents,
+    requiresApproval: amountCents > thresholds.approvalCents,
+  };
+}
+
+/**
+ * What the daily closing must show alongside expected cash. An expense that
+ * has left the bank but is not yet approved is on neither side of the ledger,
+ * so without this figure the drawer reads short by exactly this much — which
+ * looks identical to a counting error.
+ *
+ * `postedCents` is accepted so the caller can pass the pair it already holds
+ * without unpacking it; only the pending figure is the answer.
+ */
+export function pendingApprovalTotal(postedCents: number, pendingCents: number): number {
+  void postedCents;
+  return Math.max(pendingCents, 0);
+}
