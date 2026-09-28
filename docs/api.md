@@ -74,6 +74,17 @@ Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 | POST | /cash/transfers/:id/receive | accounts:manage | {receivedOn?, note?} |
 | GET | /card-settlements | accounts:view | paginated; ?bankAccountId= |
 | POST | /card-settlements | accounts:manage | {bankAccountId, grossCents, feeCents?, settledOn?, acquirerRef?, note?}; DR bank net / CR 1020 gross / CR 6060 fee |
+| GET | /expense-categories | accounts:view | each with its account and lifetime spend |
+| POST | /expense-categories | accounts:manage | allocates the account code (6090-6199) and creates the ledger account |
+| PATCH | /expense-categories/:id/status | accounts:manage | refuses when the category has expenses |
+| GET | /expenses | accounts:view | ?from&to&branchId&categoryId&status&page&limit |
+| POST | /expenses | accounts:manage | posts immediately, or lands PENDING_APPROVAL above the approval threshold |
+| GET | /expenses/:id | accounts:view | with category, entry and approval trail |
+| POST | /expenses/:id/approve | accounts:manage | {reason?}; the approver must not be the requester; a receipt is required above the receipt threshold |
+| POST | /expenses/:id/reject | accounts:manage | {reason} required; the expense is kept, never deleted |
+| POST | /expenses/:id/receipt | accounts:manage | multipart, jpeg/png/webp, 5MB |
+| GET | /expenses/:id/receipt | accounts:view | streams the receipt |
+| GET | /expenses/reports/summary | accounts:view | by category; registered BEFORE /expenses/:id |
 | GET | /accounts | accounts:view | 24 accounts + balance_cents, entry_count, is_system, is_editable; optional ?branchId= |
 | POST | /accounts | accounts:manage | create account; code /\d{4}/, unique, is_system=0 |
 | PATCH | /accounts/:code | accounts:manage | rename/describe; refuses system accounts and any account with journal lines |

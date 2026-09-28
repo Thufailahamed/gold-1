@@ -116,6 +116,45 @@ corrections. There is no statement import and no auto-matching — a shop
 turning over LKR 30,000 a day reconciles by eye faster than it configures a
 parser.
 
+## Expenses
+
+`DR <category account> / CR <payment account>` — cash is `1000` at the
+spending branch, a bank payment is that bank's own account code.
+
+The cost lands on the branch that **incurred** it, not the branch whose cash
+paid it. A head-office invoice paid from the main bank is a cost of the branch
+that spent it, not a movement of that branch's cash. The entry's `branch_id` is
+the incurred branch; the credit leg is resolved independently.
+
+Each category owns its own ledger account — nine seeded against the accounts
+the ledger core created — so the P&L breaks out by category with no report
+having to split an account.
+
+| Above | Receipt | Approval | Ledger |
+|---|---|---|---|
+| the approval threshold | per the receipt threshold | **required** | posts only on approval |
+| both | **required** | — | — |
+
+Self-approval is refused in both directions. A rejection is never a delete.
+
+### An unapproved expense makes cash read high
+
+**This is the one to remember.** The money has physically left the bank, but
+the ledger has not recorded it until approval. Between the two, `1000`/`1010`
+read higher than the drawer holds, and a daily closing will report that as a
+cash difference that is not a counting error.
+
+`expenses_crossfoot` is unaffected — it compares *ledger* movement to *POSTED*
+expenses, so a pending expense is on neither side and the check stays true.
+That is deliberate: making the check fail would punish the shop for an expense
+it has not approved yet, and counting pending expenses would make the check
+pass and hide the discrepancy.
+
+**Spec 4 inherits a hard requirement: the closing screen must show expenses
+awaiting approval for the day alongside expected cash.** Without that line,
+every evening closing after a large unapproved purchase looks like a till
+shortage.
+
 ## Book cost chain
 
 Gold inventory is carried at **what the shop actually paid**, never at the day's
@@ -169,9 +208,9 @@ Gold direction is read from the ledger row: a `destination` of
 Summing every row instead would count a sale and a loss as stock still on the
 shelf.
 
-`GET /accounts/reconciliation` runs 17 checks: per-entry balance, trial balance,
-and cross-foots for sales, purchases, payments, party ledgers, card clearing,
-cash in transit, each gold movement type, and cumulative stock on hand. A failing check is a `200` with
+`GET /accounts/reconciliation` runs 18 checks: per-entry balance, trial balance, and cross-foots
+for sales, purchases, payments, party ledgers, card clearing, cash in
+transit, expenses, each gold movement type, and cumulative stock on hand. A failing check is a `200` with
 `passed: false` and the offending figures, not an error — the caller needs the
 whole report to show the operator what is out.
 

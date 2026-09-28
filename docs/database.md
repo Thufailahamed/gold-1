@@ -169,6 +169,42 @@ inventing a code outside the asset block.
 opposite transfer, per the append-only rule. `cash_transfers` therefore has no
 `VOID` status.
 
+## Expenses (migration `0019_expenses`)
+
+- `expense_categories(id PK, name, description?, account_code UNIQUE FK chart_of_accounts, is_active, created_at, created_by)` — **one account per category**.
+- `expenses(id PK, number UNIQUE, category_id, branch_id, incurred_on, amount_cents, vendor?, description, payment_account_code, bank_account_id?, status, receipt_key?, journal_entry_id?, requested_by?, approved_by?, approved_at?, rejection_reason?, created_at, created_by)`.
+- `status` is `PENDING_APPROVAL` | `POSTED` | `REJECTED`. There is no `VOID`: a rejected expense stays visible with its reason, per the append-only rule. There is no `DRAFT` either — the row and, when no approval is required, the journal entry land in one batch.
+- `payment_account_code` stores the **resolved** account (`1000` for cash, or the bank account's own code) rather than recomputing it, so the record still says where the money came from after a bank account is renamed.
+- Indexes on `expenses(branch_id, incurred_on)`, `(status, incurred_on)`, `(category_id, incurred_on)`.
+- Counter `EXP` added.
+
+### Seeded categories
+
+Nine categories bind the accounts the ledger core already created, so no
+account sits empty and unexplained: `exp-rent` 6000, `exp-utilities` 6010,
+`exp-salaries` 6020, `exp-repairs` 6030, `exp-transport` 6040,
+`exp-marketing` 6050, `exp-bankfees` 6060, `exp-office` 6070, `exp-other`
+6080.
+
+A new category takes the **lowest unused code in 6090-6199** and creates the
+ledger account in the same batch — the same rule bank accounts use for
+1011-1099. A category with journal history cannot be deactivated, because its
+account would stop adding up against the expenses already booked to it.
+
+### Thresholds
+
+Both gates are settings, not code, so a shop that wants two people on
+everything sets the approval threshold to `1`:
+
+| Setting key | Default | Meaning |
+|---|---|---|
+| `expense_approval_threshold_cents` | `500000` (LKR 5,000) | above this, approval is required before the entry posts |
+| `expense_receipt_required_cents` | `1000000` (LKR 10,000) | above this, a receipt must be attached before approval |
+
+Both gates are strictly-greater-than: an expense exactly *at* a threshold is
+not gated. A threshold is a "watch anything above this" line, and the shop
+sets it to its largest routine spend.
+
 ## Later-phase reservations (not yet created)
 
 - Gold ledger: gross/stone/net weight, purity, karat, fine-gold equiv, rate,
