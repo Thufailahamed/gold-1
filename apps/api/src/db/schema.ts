@@ -698,3 +698,24 @@ export const countScans = sqliteTable("count_scans", {
   scannedAt: integer("scanned_at").notNull(),
   createdAt: integer("created_at").notNull(),
 });
+
+export const stockTransfers = sqliteTable("transfers", {
+  id: text("id").primaryKey(),
+  number: text("number").notNull().unique(),
+  fromBranchId: text("from_branch_id").notNull(),
+  toBranchId: text("to_branch_id").notNull(),
+  status: text("status").notNull().default("REQUESTED"),
+  reason: text("reason"),
+  requestedBy: text("requested_by"),
+  approvedBy: text("approved_by"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const transferLines = sqliteTable("transfer_lines", {
+  id: text("id").primaryKey(),
+  transferId: text("transfer_id").notNull(),
+  productId: text("product_id").notNull(),
+  barcode: text("barcode").notNull(),
+  status: text("status").notNull().default("PENDING"),
+  createdAt: integer("created_at").notNull(),
+});
