@@ -1,0 +1,408 @@
+export type CheckScope = "day" | "cumulative";
+
+export type CheckResult = {
+  id: string;
+  label: string;
+  scope: CheckScope;
+  expected: number;
+  actual: number;
+  difference: number;
+  pass: boolean;
+  detail: string[];
+};
+
+export type ReconcileReport = {
+  date: string;
+  passed: boolean;
+  checks: CheckResult[];
+};
+
+/** Cents. A one-cent residue is a rounding artefact, not a discrepancy. */
+export function compareMoney(
+  id: string,
+  label: string,
+  expected: number,
+  actual: number,
+  scope: CheckScope,
+  detail: string[] = []
+): CheckResult {
+  const difference = actual - expected;
+  return { id, label, scope, expected, actual, difference, pass: Math.abs(difference) <= 1, detail };
+}
+
+/** Fine milligrams. Exact: a missing milligram is real gold, not rounding. */
+export function compareWeight(
+  id: string,
+  label: string,
+  ledgerMg: number,
+  documentMg: number,
+  detail: string[] = []
+): CheckResult {
+  const difference = ledgerMg - documentMg;
+  return {
+    id,
+    label,
+    scope: "day",
+    expected: documentMg,
+    actual: ledgerMg,
+    difference,
+    pass: difference === 0,
+    detail,
+  };
+}
+
+function n(v: number | null | undefined): number {
+  return v ?? 0;
+}
+
+function branchSql(branchId: string | undefined, col: string): { sql: string; vals: unknown[] } {
+  return branchId ? { sql: ` AND ${col} = ?`, vals: [branchId] } : { sql: "", vals: [] };
+}
+
+/**
+ * Every fine milligram the shop physically holds: catalogue product on the
+ * shelf, old gold that has been bought into inventory, melt lots not yet
+ * consumed, and gold sitting in an unfinished manufacturing order.
+ */
+export async function heldGoldMg(db: D1Database, branchId?: string): Promise<number> {
+  const bp = branchSql(branchId, "branch_id");
+  const products = await db
+    .prepare(
+      `SELECT COALESCE(SUM(fine_gold_mg), 0) AS fine_mg FROM products
+       WHERE status NOT IN ('SOLD','RETURNED','VOID','LOST','MELTED')${bp.sql}`
+    )
+    .bind(...bp.vals)
+    .first<{ fine_mg: number }>();
+  const oldGold = await db
+    .prepare(
+      `SELECT COALESCE(SUM(fine_mg), 0) AS fine_mg FROM old_gold_items
+       WHERE status IN ('PURCHASED','AVAILABLE','RESERVED_FOR_MELTING')${bp.sql}`
+    )
+    .bind(...bp.vals)
+    .first<{ fine_mg: number }>();
+  const lots = await db
+    .prepare(
+      `SELECT COALESCE(SUM(o.fine_mg), 0) AS total,
+              COALESCE(SUM(COALESCE(a.fine_mg, 0)), 0) AS allocated
+       FROM melting_outputs o
+       JOIN melting_batches b ON b.id = o.batch_id AND b.status <> 'VOID'
+       LEFT JOIN (
+         SELECT m.lot_batch_id, m.lot_number, SUM(m.fine_mg) AS fine_mg
+         FROM manufacturing_materials m
+         JOIN manufacturing_orders mo ON mo.id = m.order_id AND mo.status <> 'VOID'
+         GROUP BY m.lot_batch_id, m.lot_number
+       ) a ON a.lot_batch_id = o.batch_id AND a.lot_number = o.lot_number${bp.sql}`
+    )
+    .bind(...bp.vals)
+    .first<{ total: number; allocated: number }>();
+  const wip = await db
+    .prepare(
+      `SELECT COALESCE(SUM(m.fine_mg), 0) AS fine_mg FROM manufacturing_materials m
+       JOIN manufacturing_orders mo ON mo.id = m.order_id AND mo.status <> 'VOID'${bp.sql}`
+    )
+    .bind(...bp.vals)
+    .first<{ fine_mg: number }>();
+  return n(products?.fine_mg) + n(oldGold?.fine_mg) + (n(lots?.total) - n(lots?.allocated)) + n(wip?.fine_mg);
+}
+
+/** Local business date for an epoch-millis column, for day-scoped gold checks. */
+const LOCAL_DAY = (col: string) => `date(${col} / 1000, 'unixepoch', '+330 minutes')`;
+
+export async function reconcile(
+  db: D1Database,
+  opts: { date: string; branchId?: string }
+): Promise<ReconcileReport> {
+  const checks: CheckResult[] = [];
+  const day = opts.date;
+  const b = branchSql(opts.branchId, "e.branch_id");
+  const bp = branchSql(opts.branchId, "branch_id");
+
+  // 1. Every entry balances on its own — catches a corrupt backfill.
+  const { results: bad } = await db
+    .prepare(
+      `SELECT e.entry_no, SUM(l.debit_cents) AS dr, SUM(l.credit_cents) AS cr
+       FROM journal_entries e JOIN journal_lines l ON l.entry_id = e.id
+       WHERE e.entry_date <= ?${b.sql}
+       GROUP BY e.id, e.entry_no HAVING dr <> cr LIMIT 20`
+    )
+    .bind(day, ...b.vals)
+    .all<{ entry_no: string; dr: number; cr: number }>();
+  checks.push(
+    compareMoney(
+      "entry_balance",
+      "Every journal entry balances",
+      0,
+      (bad ?? []).length,
+      "cumulative",
+      (bad ?? []).map((r) => `${r.entry_no}: DR ${r.dr} vs CR ${r.cr}`)
+    )
+  );
+
+  // 2. Cumulative trial balance nets to zero.
+  const tb = await db
+    .prepare(
+      `SELECT COALESCE(SUM(l.debit_cents), 0) - COALESCE(SUM(l.credit_cents), 0) AS diff
+       FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+       WHERE e.entry_date <= ?${b.sql}`
+    )
+    .bind(day, ...b.vals)
+    .first<{ diff: number }>();
+  checks.push(compareMoney("trial_balance", "Trial balance nets to zero", 0, n(tb?.diff), "cumulative"));
+
+  // 3. Sales: net movement on 4000 equals invoice totals less return value.
+  //    sales_returns has no total column — refund_cents and credit_cents are
+  //    mutually exclusive (one is always zero), so the return's value is their
+  //    sum. Two scalar sub-selects, not a JOIN: a second return against the
+  //    same invoice would otherwise double the invoice total.
+  const salesJournal = await db
+    .prepare(
+      `SELECT COALESCE(SUM(l.credit_cents - l.debit_cents), 0) AS net
+       FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+       WHERE l.account_code = '4000' AND e.entry_date = ?${b.sql}`
+    )
+    .bind(day, ...b.vals)
+    .first<{ net: number }>();
+  const siB = branchSql(opts.branchId, "si.branch_id");
+  const salesDocs = await db
+    .prepare(
+      `SELECT
+         COALESCE((SELECT SUM(si.total_cents) FROM sales_invoices si
+                   WHERE si.status <> 'VOID' AND ${LOCAL_DAY("si.created_at")} = ?${siB.sql}), 0)
+       - COALESCE((SELECT SUM(sr.refund_cents + sr.credit_cents) FROM sales_returns sr
+                   JOIN sales_invoices si2 ON si2.id = sr.invoice_id
+                   WHERE sr.status = 'COMPLETE' AND ${LOCAL_DAY("sr.created_at")} = ?${siB.sql}), 0)
+         AS net`
+    )
+    .bind(day, ...siB.vals, day, ...siB.vals)
+    .first<{ net: number }>();
+  checks.push(
+    compareMoney(
+      "sales_crossfoot",
+      "Sales journal matches sales documents",
+      n(salesDocs?.net),
+      n(salesJournal?.net),
+      "day"
+    )
+  );
+
+  // 4. Purchases: 1100 debits from purchase documents equal invoice totals.
+  const purchJournal = await db
+    .prepare(
+      `SELECT COALESCE(SUM(l.debit_cents - l.credit_cents), 0) AS net
+       FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+       WHERE l.account_code = '1100' AND e.source_module = 'purchases' AND e.entry_date = ?${b.sql}`
+    )
+    .bind(day, ...b.vals)
+    .first<{ net: number }>();
+  const piB = branchSql(opts.branchId, "pi.branch_id");
+  const purchDocs = await db
+    .prepare(
+      `SELECT COALESCE(SUM(total_cents), 0) AS net FROM purchase_invoices pi
+       WHERE pi.status <> 'VOID' AND ${LOCAL_DAY("pi.created_at")} = ?${piB.sql}`
+    )
+    .bind(day, ...piB.vals)
+    .first<{ net: number }>();
+  checks.push(
+    compareMoney(
+      "purchases_crossfoot",
+      "Purchases journal matches purchase documents",
+      n(purchDocs?.net),
+      n(purchJournal?.net),
+      "day"
+    )
+  );
+
+  // 5. Payment-driven cash movement equals the payment records.
+  //
+  //    Scoped by ref_entity on purpose. Specs 2-4 add their own cash sources
+  //    (card settlements, expenses, bank payments, transfers), each with its
+  //    own ref_entity, and this check must not start failing when they land.
+  //    A sale's cash leg lives inside its 'sale_invoice' entry, so that ref is
+  //    included; manufacturing and melting entries are excluded because their
+  //    cash legs are cost, not payment.
+  //
+  //    A credit sale inserts a sales_payments row with method='credit' but
+  //    debits 1200 and never a cash account, so it is excluded from both sides.
+  const payJournal = await db
+    .prepare(
+      `SELECT COALESCE(SUM(l.debit_cents - l.credit_cents), 0) AS net
+       FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+       WHERE l.account_code IN ('1000','1010','1020')
+         AND e.ref_entity IN ('sale_invoice','sale_return','purchase_payment','old_gold_purchase')
+         AND e.entry_date = ?${b.sql}`
+    )
+    .bind(day, ...b.vals)
+    .first<{ net: number }>();
+  const salesPay = await db
+    .prepare(
+      `SELECT COALESCE(SUM(sp.amount_cents), 0) AS net FROM sales_payments sp
+       JOIN sales_invoices si ON si.id = sp.invoice_id
+       WHERE sp.method <> 'credit' AND ${LOCAL_DAY("sp.created_at")} = ?${siB.sql}`
+    )
+    .bind(day, ...siB.vals)
+    .first<{ net: number }>();
+  const refunds = await db
+    .prepare(
+      `SELECT COALESCE(SUM(sr.refund_cents), 0) AS net FROM sales_returns sr
+       JOIN sales_invoices si3 ON si3.id = sr.invoice_id
+       WHERE sr.status = 'COMPLETE' AND ${LOCAL_DAY("sr.created_at")} = ?${siB.sql}`
+    )
+    .bind(day, ...siB.vals)
+    .first<{ net: number }>();
+  const purchPay = await db
+    .prepare(
+      `SELECT COALESCE(SUM(pp.amount_cents), 0) AS net FROM purchase_payments pp
+       JOIN purchase_invoices pi ON pi.id = pp.invoice_id
+       WHERE ${LOCAL_DAY("pp.created_at")} = ?${piB.sql}`
+    )
+    .bind(day, ...piB.vals)
+    .first<{ net: number }>();
+  const ogB = branchSql(opts.branchId, "og.branch_id");
+  const oldGoldPaid = await db
+    .prepare(
+      `SELECT COALESCE(SUM(og.paid_cents), 0) AS net FROM old_gold_purchases og
+       WHERE ${LOCAL_DAY("og.created_at")} = ?${ogB.sql}`
+    )
+    .bind(day, ...ogB.vals)
+    .first<{ net: number }>();
+  checks.push(
+    compareMoney(
+      "payments_crossfoot",
+      "Payment-driven cash movement matches the payment records",
+      n(salesPay?.net) - n(refunds?.net) + n(purchPay?.net) + n(oldGoldPaid?.net),
+      n(payJournal?.net),
+      "day"
+    )
+  );
+
+  // 6. Customer ledgers agree with the receivables control account.
+  const { results: customerRows } = await db
+    .prepare(
+      `SELECT l.party_id, COALESCE(SUM(l.debit_cents - l.credit_cents), 0) AS signed
+       FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+       WHERE l.account_code = '1200' AND l.party_type = 'customer' AND e.entry_date <= ?${b.sql}
+       GROUP BY l.party_id HAVING signed < 0`
+    )
+    .bind(day, ...b.vals)
+    .all<{ party_id: string; signed: number }>();
+  checks.push(
+    compareMoney(
+      "party_ledgers",
+      "No customer ledger is in credit on the receivables control account",
+      0,
+      (customerRows ?? []).length,
+      "cumulative",
+      (customerRows ?? []).map((r) => `${r.party_id}: control shows ${r.signed}`)
+    )
+  );
+
+  // 7. Gold ledger weights match the documents that produced them, for the
+  //    day. Scoped to documents *posted* that day: gold rows are written at
+  //    approval and finish, not at allocation, so scoping to the creating row
+  //    would fail every melt and every manufactured order.
+  const glb = branchSql(opts.branchId, "l.branch_id");
+  const { results: goldRows } = await db
+    .prepare(
+      `SELECT l.type, COALESCE(SUM(l.fine_mg), 0) AS fine_mg FROM gold_ledger l
+       WHERE l.type IN ('PURCHASE','OLD_GOLD_PURCHASE','SALE','MELTING_INPUT','MELTING_OUTPUT',
+                        'MANUFACTURING_INPUT','MANUFACTURING_OUTPUT','LOSS')
+         AND ${LOCAL_DAY("l.occurred_at")} = ?${glb.sql}
+       GROUP BY l.type`
+    )
+    .bind(day, ...glb.vals)
+    .all<{ type: string; fine_mg: number }>();
+  const ledgerMg = new Map((goldRows ?? []).map((r) => [r.type, r.fine_mg]));
+
+  const docQueries: [string, string][] = [
+    [
+      "PURCHASE",
+      `SELECT COALESCE(SUM(ii.net_mg * pu.permille / 1000), 0) AS fine_mg
+       FROM purchase_invoice_items ii
+       JOIN purities pu ON pu.id = ii.purity_id
+       JOIN purchase_invoices pi ON pi.id = ii.invoice_id
+       WHERE pi.status <> 'VOID' AND ${LOCAL_DAY("pi.created_at")} = ?${piB.sql}`,
+    ],
+    [
+      "OLD_GOLD_PURCHASE",
+      `SELECT COALESCE(SUM(fine_mg), 0) AS fine_mg FROM old_gold_items
+       WHERE status = 'PURCHASED' AND ${LOCAL_DAY("created_at")} = ?${bp.sql}`,
+    ],
+    [
+      "SALE",
+      `SELECT COALESCE(SUM(p.fine_gold_mg), 0) AS fine_mg FROM sales_items si
+       JOIN products p ON p.id = si.product_id
+       JOIN sales_invoices s2 ON s2.id = si.invoice_id
+       WHERE s2.status <> 'VOID' AND ${LOCAL_DAY("s2.created_at")} = ?${siB.sql}`,
+    ],
+    [
+      "MELTING_INPUT",
+      `SELECT COALESCE(SUM(i.fine_mg), 0) AS fine_mg FROM melting_inputs i
+       JOIN melting_batches b2 ON b2.id = i.batch_id
+       WHERE b2.status = 'APPROVED' AND ${LOCAL_DAY("b2.created_at")} = ?${bp.sql}`,
+    ],
+    [
+      "MELTING_OUTPUT",
+      `SELECT COALESCE(SUM(o.fine_mg), 0) AS fine_mg FROM melting_outputs o
+       JOIN melting_batches b2 ON b2.id = o.batch_id
+       WHERE b2.status = 'APPROVED' AND ${LOCAL_DAY("b2.created_at")} = ?${bp.sql}`,
+    ],
+    [
+      "MANUFACTURING_INPUT",
+      `SELECT COALESCE(SUM(m.fine_mg), 0) AS fine_mg FROM manufacturing_materials m
+       JOIN manufacturing_orders mo ON mo.id = m.order_id
+       WHERE mo.status = 'COMPLETE' AND ${LOCAL_DAY("mo.created_at")} = ?${bp.sql}`,
+    ],
+    [
+      "MANUFACTURING_OUTPUT",
+      `SELECT COALESCE(SUM(m2.net_mg * pu.permille / 1000), 0) AS fine_mg FROM manufacturing_outputs m2
+       JOIN manufacturing_orders mo ON mo.id = m2.order_id
+       JOIN purities pu ON pu.id = m2.purity_id
+       WHERE mo.status = 'COMPLETE' AND ${LOCAL_DAY("mo.created_at")} = ?${bp.sql}`,
+    ],
+    [
+      "LOSS",
+      `SELECT
+         COALESCE((SELECT SUM(loss_mg) FROM melting_batches b3
+                   WHERE b3.status = 'APPROVED' AND ${LOCAL_DAY("b3.created_at")} = ?), 0)
+       + COALESCE((SELECT SUM(loss_mg) FROM manufacturing_orders mo2
+                   WHERE mo2.status = 'COMPLETE' AND mo2.loss_mg > 0
+                     AND ${LOCAL_DAY("mo2.created_at")} = ?), 0) AS fine_mg`,
+    ],
+  ];
+  for (const [type, sql] of docQueries) {
+    const br = sql.includes(piB.sql) ? piB : sql.includes(siB.sql) ? siB : bp;
+    const row = await db
+      .prepare(sql)
+      .bind(...(type === "LOSS" ? [day, day] : [day]), ...br.vals)
+      .first<{ fine_mg: number }>();
+    checks.push(
+      compareWeight(
+        `gold_${type.toLowerCase()}`,
+        `Gold ledger ${type} matches its documents`,
+        ledgerMg.get(type) ?? 0,
+        n(row?.fine_mg)
+      )
+    );
+  }
+
+  // 8. Cumulative gold weight equals everything physically held. Only *booked*
+  //    old gold counts: an item in RECEIVED, TESTED or VALUED is in the shop
+  //    but has no journal and no ledger row, because the shop has not bought
+  //    it yet. Counting it would make this check fail permanently.
+  const total = await db
+    .prepare(
+      `SELECT COALESCE(SUM(fine_mg), 0) AS fine_mg FROM gold_ledger WHERE 1 = 1${bp.sql}`
+    )
+    .bind(...bp.vals)
+    .first<{ fine_mg: number }>();
+  checks.push(
+    compareWeight(
+      "gold_stock_consistency",
+      "Gold ledger weight equals stock on hand",
+      n(total?.fine_mg),
+      await heldGoldMg(db, opts.branchId)
+    )
+  );
+
+  return { date: day, passed: checks.every((c) => c.pass), checks };
+}
