@@ -18,7 +18,7 @@ import {
   controlClass,
   heroBtnPrimary,
 } from "@/components/ui";
-import { XIcon } from "@/components/icons";
+import { BookOpenIcon, XIcon } from "@/components/icons";
 
 type Account = { code: string; name: string; type: string; balance_cents: number };
 
@@ -100,7 +100,7 @@ export default function AccountsPage() {
           className={controlClass}
         />
       </div>
-      <TableCard>
+      <TableCard title="Accounts" icon={<BookOpenIcon size={17} />} actions={<span className="g-metric text-[11px] font-medium uppercase tracking-[0.14em] text-ink-4">{String(rows.length).padStart(2, "0")} on file</span>}>
         {chart.isLoading ? (
           <TableSkeleton rows={8} cols={4} />
         ) : chart.isError ? (

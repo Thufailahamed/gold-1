@@ -387,3 +387,72 @@ export const accountStatusSchema = z.object({
 });
 
 export type CreateAccountInput = z.infer<typeof createAccountSchema>;
+
+const BUSINESS_DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const CENTS = z.number().int();
+
+export const createBankAccountSchema = z.object({
+  name: z.string().min(1).max(100),
+  bankName: z.string().max(100).optional(),
+  accountNumber: z.string().max(50).optional(),
+  branchId: z.string().min(1).optional(),
+});
+
+export const updateBankAccountSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  bankName: z.string().max(100).optional(),
+  accountNumber: z.string().max(50).optional(),
+  isActive: z.union([z.literal(0), z.literal(1)]).optional(),
+  reason: z.string().min(1).max(500),
+});
+
+export const openingBalanceSchema = z.object({
+  amountCents: CENTS.positive(),
+  reason: z.string().min(1).max(500),
+  entryDate: BUSINESS_DATE.optional(),
+});
+
+export const cashMoveSchema = z.object({
+  branchId: z.string().min(1),
+  bankAccountId: z.string().min(1),
+  amountCents: CENTS.positive(),
+  note: z.string().max(500).optional(),
+  entryDate: BUSINESS_DATE.optional(),
+});
+
+export const transferDispatchSchema = z.object({
+  fromBranchId: z.string().min(1),
+  toBranchId: z.string().min(1),
+  amountCents: CENTS.positive(),
+  sentOn: BUSINESS_DATE.optional(),
+  reason: z.string().min(1).max(500),
+});
+
+export const transferReceiveSchema = z.object({
+  receivedOn: BUSINESS_DATE.optional(),
+  note: z.string().max(500).optional(),
+});
+
+export const cardSettlementSchema = z.object({
+  bankAccountId: z.string().min(1),
+  grossCents: CENTS.positive(),
+  feeCents: CENTS.min(0).optional().default(0),
+  settledOn: BUSINESS_DATE.optional(),
+  acquirerRef: z.string().max(100).optional(),
+  note: z.string().max(500).optional(),
+});
+
+export const reconcileStatementSchema = z.object({
+  statementDate: BUSINESS_DATE,
+  statementBalanceCents: CENTS,
+  note: z.string().max(500).optional(),
+});
+
+export type CreateBankAccountInput = z.infer<typeof createBankAccountSchema>;
+export type UpdateBankAccountInput = z.infer<typeof updateBankAccountSchema>;
+export type OpeningBalanceInput = z.infer<typeof openingBalanceSchema>;
+export type CashMoveInput = z.infer<typeof cashMoveSchema>;
+export type TransferDispatchInput = z.infer<typeof transferDispatchSchema>;
+export type TransferReceiveInput = z.infer<typeof transferReceiveSchema>;
+export type CardSettlementInput = z.infer<typeof cardSettlementSchema>;
+export type ReconcileStatementInput = z.infer<typeof reconcileStatementSchema>;

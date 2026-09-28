@@ -19,6 +19,7 @@ import {
   controlClass,
   heroBtnPrimary,
 } from "@/components/ui";
+import { CreditCardIcon } from "@/components/icons";
 
 type Invoice = {
   id: string;
@@ -140,7 +141,12 @@ export default function InvoicesPage() {
           ))}
         </select>
       </div>
-      <TableCard footer={<Pager page={page} onChange={setPage} pageSize={20} count={rows.length} total={total} unit="invoices" />}>
+      <TableCard
+        title="Invoices"
+        icon={<CreditCardIcon size={17} />}
+        actions={<span className="g-metric text-[11px] font-medium uppercase tracking-[0.14em] text-ink-4">{String(total).padStart(2, "0")} on file</span>}
+        footer={<Pager page={page} onChange={setPage} pageSize={20} count={rows.length} total={total} unit="invoices" />}
+      >
         {list.isLoading ? (
           <TableSkeleton rows={5} cols={5} />
         ) : list.isError ? (
