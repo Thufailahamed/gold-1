@@ -121,15 +121,31 @@ async function assertAccountsActive(db: D1Database, lines: JournalLine[]): Promi
  *
  * Reserving outside the caller's batch means a business write that later
  * fails leaves a gap in the sequence. A gap is correct; a collision is not.
+ *
+ * The uniqueness re-check is belt and braces for a counter that has drifted
+ * behind the data — after a restore, a hand-edited row, or a failed reset.
+ * Without it a drifted counter makes *every* subsequent posting fail with an
+ * opaque unique-constraint error, because the very next number is taken.
  */
 async function reserveEntryNo(db: D1Database): Promise<string> {
-  const row = await db
-    .prepare("UPDATE counters SET next = next + 1 WHERE name = 'JE' RETURNING next - 1 AS allocated")
-    .bind()
-    .first<{ allocated: number }>();
-  if (!row || row.allocated === null)
-    throw Object.assign(new Error("Counter JE missing"), { code: "INTERNAL" });
-  return nextEntryNo(row.allocated);
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const row = await db
+      .prepare("UPDATE counters SET next = next + 1 WHERE name = 'JE' RETURNING next - 1 AS allocated")
+      .bind()
+      .first<{ allocated: number }>();
+    if (!row || row.allocated === null)
+      throw Object.assign(new Error("Counter JE missing"), { code: "INTERNAL" });
+    const no = nextEntryNo(row.allocated);
+    const taken = await db
+      .prepare("SELECT 1 AS x FROM journal_entries WHERE entry_no = ?")
+      .bind(no)
+      .first();
+    if (!taken) return no;
+  }
+  throw Object.assign(
+    new Error("Entry number counter is out of step with the journal; repair the JE counter"),
+    { code: "INTERNAL" }
+  );
 }
 
 export async function buildEntryStmts(

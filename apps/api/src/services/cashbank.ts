@@ -229,19 +229,33 @@ export async function openBankAccount(
   return { entryId: built.entryId, entryNo: built.entryNo };
 }
 
-/** Allocate a document number atomically, outside the caller's batch. */
+/**
+ * Allocate a document number atomically, outside the caller's batch, and skip
+ * one that is already taken. The skip is belt and braces for a counter that
+ * has drifted behind the data; without it a drifted counter makes every
+ * subsequent document fail on the unique index.
+ */
 async function nextNumber(
   db: D1Database,
   stmts: D1PreparedStatement[],
   name: string,
-  prefix: string
+  prefix: string,
+  table: "card_settlements" | "cash_transfers"
 ): Promise<string> {
-  const row = await db
-    .prepare("UPDATE counters SET next = next + 1 WHERE name = ? RETURNING next - 1 AS allocated")
-    .bind(name)
-    .first<{ allocated: number }>();
-  if (!row) fail("INTERNAL", `Counter ${name} missing`);
-  return `${prefix}-${String(row.allocated).padStart(6, "0")}`;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const row = await db
+      .prepare("UPDATE counters SET next = next + 1 WHERE name = ? RETURNING next - 1 AS allocated")
+      .bind(name)
+      .first<{ allocated: number }>();
+    if (!row) fail("INTERNAL", `Counter ${name} missing`);
+    const no = `${prefix}-${String(row.allocated).padStart(6, "0")}`;
+    const taken = await db
+      .prepare(`SELECT 1 AS x FROM ${table} WHERE number = ?`)
+      .bind(no)
+      .first();
+    if (!taken) return no;
+  }
+  return fail("INTERNAL", `Counter ${name} is out of step; repair it`);
 }
 
 async function requireBranch(db: D1Database, id: string, label = "Branch"): Promise<void> {
@@ -357,7 +371,7 @@ export async function dispatchTransfer(
   await requireBranch(db, input.toBranchId, "To branch");
   const id = crypto.randomUUID();
   const stmts: D1PreparedStatement[] = [];
-  const number = await nextNumber(db, stmts, "XFER", "XFER");
+  const number = await nextNumber(db, stmts, "XFER", "XFER", "cash_transfers");
   const sentOn = input.sentOn ?? (await businessDateFor(db, Date.now()));
   const built = await buildEntryStmts(
     db,
@@ -492,7 +506,7 @@ export async function settleCardBatch(
   const bank = await requireActiveBank(db, input.bankAccountId);
   const id = crypto.randomUUID();
   const stmts: D1PreparedStatement[] = [];
-  const number = await nextNumber(db, stmts, "SETL", "SETL");
+  const number = await nextNumber(db, stmts, "SETL", "SETL", "card_settlements");
   const settledOn = input.settledOn ?? (await businessDateFor(db, Date.now()));
   // 1020 falls by the FULL gross, the bank rises by only the net, and the
   // difference the acquirer withheld is booked to 6060 rather than lost.
