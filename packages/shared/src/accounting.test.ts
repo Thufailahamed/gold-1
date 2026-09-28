@@ -4,10 +4,14 @@ import {
   allocateGoldValue,
   allocateProportional,
   businessDate,
+  cashBreakdownTotal,
   cashDifference,
   checkBalanced,
+  closingArithmetic,
+  closingDifference,
   closingCash,
   computePartyLedger,
+  type CashLine,
   expensePosting,
   expenseThresholds,
   goldValueCents,
@@ -355,5 +359,78 @@ describe("pendingApprovalTotal", () => {
 
   it("never reports negative for a bad figure", () => {
     expect(pendingApprovalTotal(0, -100)).toBe(0);
+  });
+});
+
+describe("closingArithmetic", () => {
+  it("is opening plus in less out", () => {
+    expect(closingArithmetic(100_000, 250_000, 120_000)).toEqual({ expectedCents: 230_000 });
+  });
+
+  it("is just the opening on a quiet day", () => {
+    expect(closingArithmetic(50_000, 0, 0)).toEqual({ expectedCents: 50_000 });
+  });
+});
+
+describe("closingDifference", () => {
+  it("is zero and needs no reason when the count matches", () => {
+    expect(closingDifference(230_000, 230_000)).toEqual({
+      differenceCents: 0,
+      reasonRequired: false,
+      valid: true,
+    });
+  });
+
+  it("requires a reason when short", () => {
+    const r = closingDifference(230_000, 225_000);
+    expect(r.differenceCents).toBe(-5_000);
+    expect(r.reasonRequired).toBe(true);
+    expect(r.valid).toBe(false);
+  });
+
+  it("is valid once a reason is given", () => {
+    expect(closingDifference(230_000, 225_000, "mis-counted a note").valid).toBe(true);
+  });
+
+  it("requires a reason when over as well as when short", () => {
+    expect(closingDifference(230_000, 235_000).reasonRequired).toBe(true);
+  });
+
+  it("treats a blank reason as no reason", () => {
+    expect(closingDifference(230_000, 225_000, "   ").valid).toBe(false);
+  });
+});
+
+describe("cashBreakdownTotal", () => {
+  const line = (refEntity: string, direction: "in" | "out", cents: number): CashLine => ({
+    refEntity,
+    direction,
+    cents,
+    label: refEntity,
+  });
+
+  it("sums each direction separately", () => {
+    const t = cashBreakdownTotal([
+      line("sale_invoice", "in", 150_000),
+      line("cash_withdrawal", "in", 50_000),
+      line("expense", "out", 20_000),
+    ]);
+    expect(t.totalIn).toBe(200_000);
+    expect(t.totalOut).toBe(20_000);
+    expect(t.unclassified).toBe(0);
+  });
+
+  it("leaves unclassified at zero when every line is a known ref", () => {
+    expect(cashBreakdownTotal([line("purchase_payment", "out", 99)]).unclassified).toBe(0);
+  });
+
+  it("surfaces an unknown ref instead of absorbing it", () => {
+    const t = cashBreakdownTotal([line("some_new_flow", "in", 7_000)]);
+    expect(t.unclassified).toBe(7_000);
+    expect(t.totalIn).toBe(0);
+  });
+
+  it("treats an empty day as fully accounted", () => {
+    expect(cashBreakdownTotal([])).toEqual({ totalIn: 0, totalOut: 0, unclassified: 0 });
   });
 });

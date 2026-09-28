@@ -213,3 +213,66 @@ export function pendingApprovalTotal(postedCents: number, pendingCents: number):
   void postedCents;
   return Math.max(pendingCents, 0);
 }
+
+export function closingArithmetic(
+  openingCents: number,
+  cashInCents: number,
+  cashOutCents: number
+): { expectedCents: number } {
+  return { expectedCents: openingCents + cashInCents - cashOutCents };
+}
+
+export function closingDifference(
+  expectedCents: number,
+  actualCents: number,
+  reason?: string
+): { differenceCents: number; reasonRequired: boolean; valid: boolean } {
+  const differenceCents = actualCents - expectedCents;
+  const reasonRequired = differenceCents !== 0;
+  return { differenceCents, reasonRequired, valid: !reasonRequired || !!reason?.trim() };
+}
+
+export type CashLine = {
+  refEntity: string;
+  label: string;
+  direction: "in" | "out";
+  cents: number;
+};
+
+/** Every cash movement the closing screen knows how to name. */
+export const KNOWN_CASH_REFS = [
+  "sale_invoice",
+  "cash_withdrawal",
+  "cash_transfer_in",
+  "purchase_payment",
+  "expense",
+  "cash_deposit",
+  "sale_return",
+  "cash_transfer_out",
+] as const;
+
+/**
+ * The guard that makes the breakdown believable: a movement the screen cannot
+ * name is reported as unclassified rather than quietly folded into a total. A
+ * new cash flow added later will show up here and block the close, instead of
+ * the screen reporting a wrong number the shop then reconciles against.
+ */
+export function cashBreakdownTotal(lines: CashLine[]): {
+  totalIn: number;
+  totalOut: number;
+  unclassified: number;
+} {
+  const known = new Set<string>(KNOWN_CASH_REFS);
+  let totalIn = 0;
+  let totalOut = 0;
+  let unclassified = 0;
+  for (const l of lines) {
+    if (!known.has(l.refEntity)) {
+      unclassified += l.cents;
+      continue;
+    }
+    if (l.direction === "in") totalIn += l.cents;
+    else totalOut += l.cents;
+  }
+  return { totalIn, totalOut, unclassified };
+}
