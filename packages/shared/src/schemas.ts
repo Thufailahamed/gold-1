@@ -54,6 +54,8 @@ export const createGoldRateSchema = z.object({
   purityId: z.string().min(1),
   ratePerGram: z.number().gt(0),
   effectiveFrom: z.number().int().positive(),
+  approvalId: z.string().min(1).optional(),
+  approvalEntityId: z.string().min(1).optional(),
 });
 
 export const createPartySchema = z.object({
@@ -275,6 +277,7 @@ export const valueOldGoldSchema = z.object({
   processingDeductionLkr: z.number().min(0).optional().default(0),
   negotiatedLkr: z.number().gt(0).optional(),
   reason: z.string().max(500).optional(),
+  approvalId: z.string().min(1).optional(),
 });
 
 export const purchaseOldGoldSchema = z.object({
@@ -309,6 +312,7 @@ export const meltRecordSchema = z.object({
 export const approveMeltSchema = z.object({
   reason: z.string().min(1).max(500),
   approvedBy: z.string().min(1).optional(),
+  approvalId: z.string().min(1).optional(),
 });
 
 export const adjustGoldSchema = z.object({
@@ -318,6 +322,8 @@ export const adjustGoldSchema = z.object({
   permille: z.number().int().gt(0).lte(1000),
   reason: z.string().min(1).max(500),
   approvedBy: z.string().min(1).optional(),
+  approvalId: z.string().min(1).optional(),
+  approvalEntityId: z.string().min(1).optional(),
 });
 
 export type CreateMeltInput = z.infer<typeof createMeltSchema>;
@@ -359,6 +365,7 @@ export const produceMfgSchema = z.object({
   lossMg: z.number().int().min(0).optional().default(0),
   lossReason: z.string().max(500).optional(),
   approvedBy: z.string().min(1).optional(),
+  approvalId: z.string().min(1).optional(),
 });
 
 export const qcMfgSchema = z.object({

@@ -2,9 +2,9 @@ import { fineGoldMg, gToMg, meltingLossValue } from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
 import { postGoldStmts } from "./gold";
-import { getSetting } from "./settings";
 import { businessDateFor } from "./busdate";
 import { buildEntryStmts } from "./journal";
+import { consumeApproval, pendingApproval, recordInlineApproval, requestApproval } from "./approvals";
 
 async function nextMelt(db: D1Database, stmts: D1PreparedStatement[]): Promise<string> {
   const row = await db
@@ -189,19 +189,57 @@ export async function recordMelt(
 export async function approveBatch(
   db: D1Database,
   batchId: string,
-  input: { reason: string; approvedBy?: string },
+  input: { reason: string; approvedBy?: string; approvalId?: string },
   actorId: string
 ): Promise<{ lossMg: number; recoveryMg: number }> {
   const batch = await loadBatch(db, batchId);
   if (batch.status !== "MELTED")
     throw Object.assign(new Error("Only melted batches can be approved"), { code: "CONFLICT" });
-  const s = await getSetting(db, "melt_loss_approve_pct");
-  const threshold = typeof s?.value === "number" ? s.value : 2;
-  const pct = batch.input_fine_mg > 0 ? (batch.loss_mg / batch.input_fine_mg) * 100 : 0;
-  if (pct > threshold) {
-    if (!input.approvedBy)
-      throw Object.assign(new Error(`Loss exceeds ${threshold}% approval threshold`), { code: "FORBIDDEN" });
+  // Melt differences go through the unified engine. NOTE: the legacy
+  // `melt_loss_approve_pct` setting is superseded by
+  // `approval_threshold_MELT_DIFFERENCE` (same unit, loss %; aligned to the
+  // legacy 2 default by migration 0028). Metric is loss pct rounded to 2dp.
+  const pct = batch.input_fine_mg > 0 ? Math.round((batch.loss_mg / batch.input_fine_mg) * 100 * 100) / 100 : 0;
+  if (input.approvalId) {
+    await consumeApproval(
+      db,
+      { action: "MELT_DIFFERENCE", id: input.approvalId, entity: "melting_batch", entityId: batchId, metric: pct },
+      actorId
+    );
+  } else if (pct > 0) {
+    const req = await requestApproval(
+      db,
+      {
+        action: "MELT_DIFFERENCE",
+        entity: "melting_batch",
+        entityId: batchId,
+        oldValue: { inputFineMg: batch.input_fine_mg },
+        newValue: { lossMg: batch.loss_mg, lossPct: pct },
+        metric: pct,
+        reason: input.reason,
+        branchId: batch.branch_id,
+      },
+      actorId
+    );
+    if (req.status === "PENDING") pendingApproval(req, "MELT_DIFFERENCE");
+  }
+  if (pct > 0 && input.approvedBy && !input.approvalId) {
     await requireGoldApprover(db, input.approvedBy, actorId);
+    await recordInlineApproval(
+      db,
+      {
+        action: "MELT_DIFFERENCE",
+        entity: "melting_batch",
+        entityId: batchId,
+        oldValue: { inputFineMg: batch.input_fine_mg },
+        newValue: { lossMg: batch.loss_mg, lossPct: pct },
+        metric: pct,
+        reason: input.reason,
+        branchId: batch.branch_id,
+        approverId: input.approvedBy,
+      },
+      actorId
+    );
   }
   // The book cost of each input is what the shop actually paid the customer
   // for that old gold. melting_inputs.old_gold_id is NOT NULL UNIQUE, so old

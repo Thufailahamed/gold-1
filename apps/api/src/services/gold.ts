@@ -4,7 +4,7 @@ import { businessDateFor } from "./busdate";
 import { buildEntryStmts } from "./journal";
 import { currentGoldRatesCents } from "./rates";
 import type { PageOpts } from "./catalog";
-import { getSetting } from "./settings";
+import { consumeApproval, pendingApproval, recordInlineApproval, requestApproval } from "./approvals";
 
 export const GOLD_TYPES = [
   "PURCHASE",
@@ -424,7 +424,7 @@ async function requireGoldApprover(db: D1Database, approverId: string, actorId: 
 
 export async function recordAdjustment(
   db: D1Database,
-  input: { type: "ADJUSTMENT" | "LOSS" | "RECOVERY"; branchId: string; weightMg: number; permille: number; reason: string; approvedBy?: string },
+  input: { type: "ADJUSTMENT" | "LOSS" | "RECOVERY"; branchId: string; weightMg: number; permille: number; reason: string; approvedBy?: string; approvalId?: string; approvalEntityId?: string },
   actorId: string
 ): Promise<{ id: string; refNo: string; valueCents: number }> {
   const branch = await db
@@ -432,12 +432,51 @@ export async function recordAdjustment(
     .bind(input.branchId)
     .first();
   if (!branch) throw Object.assign(new Error("Branch not found"), { code: "NOT_FOUND" });
-  const s = await getSetting(db, "gold_adjust_approve_mg");
-  const threshold = typeof s?.value === "number" ? s.value : 1000;
-  if (input.weightMg >= threshold) {
-    if (!input.approvedBy)
-      throw Object.assign(new Error("Adjustment exceeds approval threshold"), { code: "FORBIDDEN" });
-    await requireGoldApprover(db, input.approvedBy, actorId);
+  // Gold adjustments go through the unified engine. NOTE: the legacy
+  // `gold_adjust_approve_mg` setting is superseded by
+  // `approval_threshold_GOLD_STOCK_ADJUST` (same unit, mg; aligned to the
+  // legacy 1000 default by migration 0028).
+  const entityId = input.approvalEntityId ?? crypto.randomUUID();
+  if (input.approvalId) {
+    await consumeApproval(
+      db,
+      { action: "GOLD_STOCK_ADJUST", id: input.approvalId, entity: "gold_adjustment", entityId, metric: input.weightMg },
+      actorId
+    );
+  } else {
+    const req = await requestApproval(
+      db,
+      {
+        action: "GOLD_STOCK_ADJUST",
+        entity: "gold_adjustment",
+        entityId,
+        oldValue: {},
+        newValue: { type: input.type, weightMg: input.weightMg, permille: input.permille },
+        metric: input.weightMg,
+        reason: input.reason,
+        branchId: input.branchId,
+      },
+      actorId
+    );
+    if (req.status === "PENDING") pendingApproval(req, "GOLD_STOCK_ADJUST");
+    if (input.approvedBy) {
+      await requireGoldApprover(db, input.approvedBy, actorId);
+      await recordInlineApproval(
+        db,
+        {
+          action: "GOLD_STOCK_ADJUST",
+          entity: "gold_adjustment",
+          entityId,
+          oldValue: {},
+          newValue: { type: input.type, weightMg: input.weightMg, permille: input.permille },
+          metric: input.weightMg,
+          reason: input.reason,
+          branchId: input.branchId,
+          approverId: input.approvedBy,
+        },
+        actorId
+      );
+    }
   }
   // An adjustment carries a weight but no money, so the value has to be
   // derived. A guessed loss is worse than no loss: if there is no effective

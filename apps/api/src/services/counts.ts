@@ -4,6 +4,7 @@ import { postGoldStmts } from "./gold";
 import { buildEntryStmts } from "./journal";
 import { businessDateFor } from "./busdate";
 import { currentGoldRatesCents } from "./rates";
+import { recordInlineApproval } from "./approvals";
 
 export type CountScope = "FULL" | "CATEGORY" | "BRANCH" | "LOCATION";
 
@@ -130,5 +131,25 @@ export async function approveCount(db: D1Database, countId: string, input: { rea
     db.prepare("UPDATE stock_counts SET status = 'COMPLETE', result_json = ?, closed_by = ? WHERE id = ?").bind(JSON.stringify({ ...cmp, posted }), actorId, countId),
     buildAuditStmt(db, { userId: actorId, action: "count.approve", entity: "stock_count", entityId: countId, reason: input.reason }),
   ]);
+  // Count approval already mandates a second approver (gold:manage); record it
+  // in the unified Center — but only when something actually posted. A clean
+  // count adjusts nothing and earns no approval row.
+  if (posted > 0) {
+    await recordInlineApproval(
+      db,
+      {
+        action: "INVENTORY_ADJUST",
+        entity: "stock_count",
+        entityId: countId,
+        oldValue: { missing: cmp.missing.length },
+        newValue: { posted },
+        metric: posted,
+        reason: input.reason,
+        branchId: count.branch_id,
+        approverId: input.approvedBy,
+      },
+      actorId
+    );
+  }
   return { posted };
 }

@@ -142,7 +142,7 @@ export const melting = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       const data = await approveBatch(
         c.env.DB,
         c.req.param("id"),
-        { reason: parsed.data.reason, approvedBy: parsed.data.approvedBy },
+        { reason: parsed.data.reason, approvedBy: parsed.data.approvedBy, approvalId: parsed.data.approvalId },
         c.get("userId")
       );
       return c.json({ success: true, data }, 200);

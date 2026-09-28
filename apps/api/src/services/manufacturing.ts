@@ -11,9 +11,9 @@ import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
 import { postGoldStmts } from "./gold";
 import { buildCreateProductStmts } from "./products";
-import { getSetting } from "./settings";
 import { businessDateFor } from "./busdate";
 import { buildEntryStmts } from "./journal";
+import { consumeApproval, pendingApproval, recordInlineApproval, requestApproval } from "./approvals";
 
 async function nextMO(db: D1Database, stmts: D1PreparedStatement[]): Promise<string> {
   const row = await db
@@ -209,15 +209,51 @@ export async function produce(
     );
   if (input.lossMg > 0 && !input.lossReason)
     throw Object.assign(new Error("Loss reason required"), { code: "VALIDATION" });
-  const pct = allocated > 0 ? (input.lossMg / allocated) * 100 : 0;
-  if (pct > 0) {
-    const s = await getSetting(db, "mfg_loss_approve_pct");
-    const threshold = typeof s?.value === "number" ? s.value : 3;
-    if (pct > threshold) {
-      if (!input.approvedBy)
-        throw Object.assign(new Error(`Loss exceeds ${threshold}% approval threshold`), { code: "FORBIDDEN" });
-      await requireMfgApprover(db, input.approvedBy, actorId);
-    }
+  // Manufacturing differences go through the unified engine. NOTE: the legacy
+  // `mfg_loss_approve_pct` setting is superseded by
+  // `approval_threshold_MFG_DIFFERENCE` (same unit, loss %; aligned to the
+  // legacy 3 default by migration 0028). Metric is loss pct rounded to 2dp.
+  const pct = allocated > 0 ? Math.round((input.lossMg / allocated) * 100 * 100) / 100 : 0;
+  if (input.approvalId) {
+    await consumeApproval(
+      db,
+      { action: "MFG_DIFFERENCE", id: input.approvalId, entity: "manufacturing_order", entityId: orderId, metric: pct },
+      actorId
+    );
+  } else if (pct > 0) {
+    const req = await requestApproval(
+      db,
+      {
+        action: "MFG_DIFFERENCE",
+        entity: "manufacturing_order",
+        entityId: orderId,
+        oldValue: { allocatedFineMg: allocated },
+        newValue: { lossMg: input.lossMg, lossPct: pct },
+        metric: pct,
+        reason: input.lossReason ?? "manufacturing loss",
+        branchId: order.branch_id,
+      },
+      actorId
+    );
+    if (req.status === "PENDING") pendingApproval(req, "MFG_DIFFERENCE");
+  }
+  if (pct > 0 && input.approvedBy && !input.approvalId) {
+    await requireMfgApprover(db, input.approvedBy, actorId);
+    await recordInlineApproval(
+      db,
+      {
+        action: "MFG_DIFFERENCE",
+        entity: "manufacturing_order",
+        entityId: orderId,
+        oldValue: { allocatedFineMg: allocated },
+        newValue: { lossMg: input.lossMg, lossPct: pct },
+        metric: pct,
+        reason: input.lossReason ?? "manufacturing loss",
+        branchId: order.branch_id,
+        approverId: input.approvedBy,
+      },
+      actorId
+    );
   }
   const stmts: D1PreparedStatement[] = [];
   for (const s of specs) {

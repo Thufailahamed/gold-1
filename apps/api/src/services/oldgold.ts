@@ -12,6 +12,7 @@ import { businessDateFor } from "./busdate";
 import { buildCreateProductStmts } from "./products";
 import { currentGoldRatesCents } from "./rates";
 import { getSetting } from "./settings";
+import { consumeApproval, pendingApproval, requestApproval } from "./approvals";
 
 export function valuateOldGold(args: {
   netMg: number;
@@ -239,6 +240,34 @@ export async function valuateItem(
   if (input.negotiatedLkr !== undefined) reasonRequired = true;
   if (reasonRequired && !input.reason)
     throw Object.assign(new Error("Reason required for overrides"), { code: "VALIDATION" });
+  // Valuation overrides (custom buy % or negotiated total) go through the
+  // unified engine. Standard valuations skip it entirely. Metric is 1 — any
+  // override requires approval unless disabled; terms bind via the item id.
+  if (reasonRequired) {
+    if (input.approvalId) {
+      await consumeApproval(
+        db,
+        { action: "OLDGOLD_VALUATION", id: input.approvalId, entity: "old_gold", entityId: itemId, metric: 1 },
+        actorId
+      );
+    } else {
+      const req = await requestApproval(
+        db,
+        {
+          action: "OLDGOLD_VALUATION",
+          entity: "old_gold",
+          entityId: itemId,
+          oldValue: {},
+          newValue: { buyPct, negotiatedLkr: input.negotiatedLkr ?? null },
+          metric: 1,
+          reason: input.reason as string,
+          branchId: item.branch_id,
+        },
+        actorId
+      );
+      if (req.status === "PENDING") pendingApproval(req, "OLDGOLD_VALUATION");
+    }
+  }
 
   const stoneDed = lkrToCents(input.stoneDeductionLkr);
   const procDed = lkrToCents(input.processingDeductionLkr);

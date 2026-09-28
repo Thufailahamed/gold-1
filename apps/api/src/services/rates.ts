@@ -2,6 +2,7 @@ import type { CreateGoldRateInput } from "@goldos/shared";
 import { centsToLkr, lkrToCents } from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
+import { consumeApproval, pendingApproval, requestApproval } from "./approvals";
 
 export type GoldRateRow = {
   id: string;
@@ -46,6 +47,42 @@ export async function createGoldRate(
   const id = crypto.randomUUID();
   const now = Date.now();
   const rateCents = lkrToCents(input.ratePerGram);
+  // Rate changes go through the unified engine (no inline fast path on this
+  // route). Metric is the absolute change pct vs the current rate, 2dp;
+  // a first rate for a purity always counts as a change (metric 100).
+  // entityId is issued here so the 202 binds the retry to these exact terms.
+  const current = await db
+    .prepare("SELECT rate_cents_per_g FROM gold_rates WHERE purity_id = ? ORDER BY effective_from DESC LIMIT 1")
+    .bind(input.purityId)
+    .first<{ rate_cents_per_g: number }>();
+  const metric =
+    current && current.rate_cents_per_g > 0
+      ? Math.round((Math.abs(rateCents - current.rate_cents_per_g) / current.rate_cents_per_g) * 100 * 100) / 100
+      : 100;
+  const entityId = input.approvalEntityId ?? crypto.randomUUID();
+  if (input.approvalId) {
+    await consumeApproval(
+      db,
+      { action: "GOLD_RATE_CHANGE", id: input.approvalId, entity: "gold_rate", entityId, metric },
+      actorId
+    );
+  } else if (metric > 0) {
+    const req = await requestApproval(
+      db,
+      {
+        action: "GOLD_RATE_CHANGE",
+        entity: "gold_rate",
+        entityId,
+        oldValue: { rateCentsPerG: current?.rate_cents_per_g ?? null },
+        newValue: { purityId: input.purityId, rateCentsPerG: rateCents, effectiveFrom: input.effectiveFrom },
+        metric,
+        reason: `rate ${current?.rate_cents_per_g ?? "unset"} → ${rateCents}c/g`,
+        branchId: undefined,
+      },
+      actorId
+    );
+    if (req.status === "PENDING") pendingApproval(req, "GOLD_RATE_CHANGE");
+  }
   await db.batch([
     db
       .prepare(

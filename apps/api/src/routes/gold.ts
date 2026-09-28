@@ -69,6 +69,8 @@ export const gold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
           permille: parsed.data.permille,
           reason: parsed.data.reason,
           approvedBy: parsed.data.approvedBy,
+          approvalId: parsed.data.approvalId,
+          approvalEntityId: parsed.data.approvalEntityId,
         },
         c.get("userId")
       );
