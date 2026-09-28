@@ -13,6 +13,7 @@ import { buildCreateProductStmts } from "./products";
 import { currentGoldRatesCents } from "./rates";
 import { getSetting } from "./settings";
 import { consumeApproval, pendingApproval, requestApproval } from "./approvals";
+import { postGoldStmts } from "./gold";
 
 export function valuateOldGold(args: {
   netMg: number;
@@ -322,6 +323,13 @@ export async function purchaseItem(
     throw Object.assign(new Error("Only valued items can be purchased"), { code: "CONFLICT" });
   if (item.purchase_value_cents === null)
     throw Object.assign(new Error("Item has no valuation"), { code: "VALIDATION" });
+  // The live gold ledger (not just legacy gold_movements below) must record
+  // every purchased gram, or gold_stock_consistency and the OLD_GOLD_PURCHASE
+  // cross-foot fail by exactly this weight until the item melts.
+  if (item.tested_permille === null || item.tested_permille <= 0 || item.tested_permille > 1000)
+    throw Object.assign(new Error("Item has no tested purity"), { code: "VALIDATION" });
+  if (item.net_mg <= 0)
+    throw Object.assign(new Error("Item has no net weight"), { code: "VALIDATION" });
   const paidCents = lkrToCents(opts.paidLkr);
   if (paidCents > item.purchase_value_cents)
     throw Object.assign(new Error("Payment exceeds value"), { code: "VALIDATION" });
@@ -363,6 +371,24 @@ export async function purchaseItem(
     db
       .prepare("INSERT INTO gold_movements (id, product_id, old_gold_id, direction, fine_mg, purity_permille, ref_entity, ref_id, branch_id, created_at, created_by) VALUES (?, NULL, ?, 'IN', ?, ?, 'old_gold_purchase', ?, ?, ?, ?)")
       .bind(crypto.randomUUID(), itemId, item.fine_mg, item.tested_permille ?? 0, purchaseId, item.branch_id, now, actorId),
+    ...(await postGoldStmts(
+      db,
+      [
+        {
+          branchId: item.branch_id,
+          source: `customer:${item.customer_id}`,
+          destination: `branch:${item.branch_id}`,
+          type: "OLD_GOLD_PURCHASE",
+          weightMg: item.net_mg,
+          permille: item.tested_permille,
+          refEntity: "old_gold_purchase",
+          refId: purchaseId,
+          oldGoldId: itemId,
+          notes: `Old gold ${item.number}`,
+        },
+      ],
+      { actorId, auditAction: "oldgold.purchase.gold", auditEntity: "old_gold", auditEntityId: itemId, branchId: item.branch_id }
+    )),
     ...journal.stmts,
     // AFTER the journal statements. The link is a foreign key, and D1 runs a
     // batch in order, so setting it on the INSERT above would reference an

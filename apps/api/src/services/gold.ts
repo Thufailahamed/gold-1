@@ -9,6 +9,7 @@ import { consumeApproval, pendingApproval, recordInlineApproval, requestApproval
 export const GOLD_TYPES = [
   "PURCHASE",
   "OLD_GOLD_PURCHASE",
+  "OPENING",
   "SALE",
   "MELTING_INPUT",
   "MELTING_OUTPUT",

@@ -9,8 +9,29 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     credentials: "include",
   });
   const body = (await res.json()) as ApiResponse<T>;
-  if (!body.success) throw new Error(body.error.message);
+  if (!body.success) {
+    // HTTP 202 PENDING carries the approval id + bound terms for retry.
+    // A plain Error would discard them and make the retry flow uncompletable.
+    if (body.error.code === "PENDING")
+      throw new PendingApprovalError(body.error.message, body.error);
+    throw new Error(body.error.message);
+  }
   return body.data;
+}
+
+export class PendingApprovalError extends Error {
+  readonly approvalId?: string;
+  readonly entity?: string;
+  readonly entityId?: string;
+  readonly metric?: number;
+  constructor(message: string, err: { approvalId?: string; entity?: string; entityId?: string; metric?: number }) {
+    super(message);
+    this.name = "PendingApprovalError";
+    this.approvalId = err.approvalId;
+    this.entity = err.entity;
+    this.entityId = err.entityId;
+    this.metric = err.metric;
+  }
 }
 
 export type MeData = {

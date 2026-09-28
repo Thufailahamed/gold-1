@@ -267,10 +267,14 @@ export async function approveBatch(
       .prepare("SELECT tested_permille FROM old_gold_items WHERE id = ?")
       .bind(i.old_gold_id)
       .first<{ tested_permille: number | null }>();
+    // Source MUST be the branch: gold_stock_consistency reads a branch source
+    // as gold leaving branch stock. The old-gold linkage rides on old_gold_id,
+    // not on the source string — a non-branch source silently breaks the
+    // check by exactly the input weight on every melt.
     stmts.push(
       db
         .prepare("INSERT INTO gold_ledger (id, occurred_at, branch_id, source, destination, type, weight_mg, permille, fine_mg, ref_entity, ref_id, product_id, old_gold_id, user_id, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, 'MELTING_INPUT', ?, ?, ?, 'melting_batch', ?, NULL, ?, ?, ?, ?, ?)")
-        .bind(crypto.randomUUID(), Date.now(), batch.branch_id, `old-gold:${i.old_gold_id}`, `melting:${batchId}`, i.net_mg, tested?.tested_permille ?? 0, i.fine_mg, batchId, i.old_gold_id, actorId, input.reason, Date.now(), actorId)
+        .bind(crypto.randomUUID(), Date.now(), batch.branch_id, `branch:${batch.branch_id}`, `melting:${batchId}`, i.net_mg, tested?.tested_permille ?? 0, i.fine_mg, batchId, i.old_gold_id, actorId, input.reason, Date.now(), actorId)
     );
     stmts.push(db.prepare("UPDATE old_gold_items SET status = 'MELTED' WHERE id = ?").bind(i.old_gold_id));
   }
@@ -314,10 +318,15 @@ export async function approveBatch(
     stmts.push(...lossEntry.stmts);
   }
   if (batch.loss_mg > 0) {
+    // Source MUST be the branch, same convention as MELTING_INPUT above:
+    // lost gold left branch stock, and the directional sum only sees branch
+    // sources as outflows. (Manufacturing LOSS rows intentionally keep their
+    // order source — that flow balances through lot-remainder mechanics, and
+    // its loss never enters held stock on either side.)
     stmts.push(
       db
         .prepare("INSERT INTO gold_ledger (id, occurred_at, branch_id, source, destination, type, weight_mg, permille, fine_mg, ref_entity, ref_id, product_id, old_gold_id, user_id, notes, created_at, created_by) VALUES (?, ?, ?, ?, 'loss', 'LOSS', ?, ?, ?, 'melting_batch', ?, NULL, NULL, ?, ?, ?, ?)")
-        .bind(crypto.randomUUID(), Date.now(), batch.branch_id, `melting:${batchId}`, batch.loss_mg, outputs.permille, batch.loss_mg, batchId, actorId, input.reason, Date.now(), actorId)
+        .bind(crypto.randomUUID(), Date.now(), batch.branch_id, `branch:${batch.branch_id}`, batch.loss_mg, outputs.permille, batch.loss_mg, batchId, actorId, input.reason, Date.now(), actorId)
     );
   }
   if (batch.recovery_mg > 0) {

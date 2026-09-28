@@ -11,6 +11,7 @@ import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
 import { currentGoldRatesCents } from "./rates";
 import { consumeApproval, pendingApproval, requestApproval } from "./approvals";
+import { postGoldStmts } from "./gold";
 
 export type ProductRow = {
   id: string;
@@ -213,7 +214,37 @@ export async function createProduct(
 ): Promise<ProductRow> {
   const now = Date.now();
   const built = await buildCreateProductStmts(db, input, actorId, input.branchId, now);
-  await db.batch(built.stmts);
+  // Direct intake has no purchase/manufacturing posting behind it, so without
+  // this row the metal sits in held stock with no ledger inflow and
+  // gold_stock_consistency fails by exactly its weight. Type OPENING is
+  // deliberately excluded from the day-scoped PURCHASE cross-foot (that query
+  // matches invoice documents only). No journal is posted here: money never
+  // moved. A full financial opening-balance flow is a separate, larger piece
+  // of work — see the system audit.
+  const purity = await db
+    .prepare("SELECT permille FROM purities WHERE id = ?")
+    .bind(input.purityId)
+    .first<{ permille: number }>();
+  if (!purity) throw Object.assign(new Error("Purity not found"), { code: "NOT_FOUND" });
+  const goldStmts = await postGoldStmts(
+    db,
+    [
+      {
+        branchId: input.branchId,
+        source: "opening",
+        destination: `branch:${input.branchId}`,
+        type: "OPENING",
+        weightMg: built.netMg,
+        permille: purity.permille,
+        refEntity: "product_intake",
+        refId: built.id,
+        productId: built.id,
+        notes: `Direct intake ${built.barcode}`,
+      },
+    ],
+    { actorId, auditAction: "product.intake.gold", auditEntity: "product", auditEntityId: built.id, branchId: input.branchId }
+  );
+  await db.batch([...built.stmts, ...goldStmts]);
   const created = await db.prepare(`${WITH_NAMES} WHERE p.id = ?`).bind(built.id).first<RawRow>();
   if (!created) throw new Error("Product insert failed");
   return parseRow(created);

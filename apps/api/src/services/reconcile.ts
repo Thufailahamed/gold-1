@@ -335,23 +335,34 @@ export async function reconcile(
   );
 
   // 6. Customer ledgers agree with the receivables control account.
+  //
+  // A net-credit customer balance is legitimate when the system itself
+  // posted it: an old-gold remainder (shop owes the leftover) or a store
+  // credit from a return. Those post under ref_entity old_gold_purchase and
+  // sale_return respectively. Only credit UNEXPLAINED by those postings
+  // fails — e.g. overpayments or mis-tagged lines — otherwise every
+  // remainder purchase would permanently block day-close.
   const { results: customerRows } = await db
     .prepare(
-      `SELECT l.party_id, COALESCE(SUM(l.debit_cents - l.credit_cents), 0) AS signed
+      `SELECT l.party_id,
+              COALESCE(SUM(l.debit_cents - l.credit_cents), 0) AS signed,
+              COALESCE(SUM(l.debit_cents - l.credit_cents), 0)
+                - COALESCE(SUM(CASE WHEN e.ref_entity IN ('old_gold_purchase', 'sale_return')
+                  THEN l.debit_cents - l.credit_cents ELSE 0 END), 0) AS unexplained
        FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
        WHERE l.account_code = '1200' AND l.party_type = 'customer' AND e.entry_date <= ?${b.sql}
-       GROUP BY l.party_id HAVING signed < 0`
+       GROUP BY l.party_id HAVING signed < 0 AND unexplained < 0`
     )
     .bind(day, ...b.vals)
-    .all<{ party_id: string; signed: number }>();
+    .all<{ party_id: string; signed: number; unexplained: number }>();
   checks.push(
     compareMoney(
       "party_ledgers",
-      "No customer ledger is in credit on the receivables control account",
+      "No unexplained customer credit on the receivables control account",
       0,
       (customerRows ?? []).length,
       "cumulative",
-      (customerRows ?? []).map((r) => `${r.party_id}: control shows ${r.signed}`)
+      (customerRows ?? []).map((r) => `${r.party_id}: control shows ${r.signed}, unexplained ${r.unexplained}`)
     )
   );
 
@@ -392,9 +403,12 @@ export async function reconcile(
       piB,
     ],
     [
+      // Purchase-event date, not current status: an item bought today and
+      // melted tomorrow must still cross-foot against today's ledger row.
       "OLD_GOLD_PURCHASE",
-      `SELECT COALESCE(SUM(fine_mg), 0) AS fine_mg FROM old_gold_items og
-       WHERE og.status = 'PURCHASED' AND ${LOCAL_DAY("og.created_at")} = ?${ogB.sql}`,
+      `SELECT COALESCE(SUM(og.fine_mg), 0) AS fine_mg FROM old_gold_items og
+       JOIN old_gold_purchases op ON op.item_id = og.id
+       WHERE ${LOCAL_DAY("op.created_at")} = ?${ogB.sql}`,
       ogB,
     ],
     [

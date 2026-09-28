@@ -78,6 +78,7 @@ export const BARCODE_RE = /^(PRD|JW)-[A-Z0-9]{6}$/;
 export const createProductSchema = z.object({
   name: z.string().min(1).max(100),
   categoryId: z.string().min(1),
+  branchId: z.string().min(1),
   subcategoryId: z.string().min(1).optional(),
   designId: z.string().min(1).optional(),
   productTypeId: z.string().min(1).optional(),

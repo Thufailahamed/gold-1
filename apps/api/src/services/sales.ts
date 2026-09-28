@@ -143,6 +143,11 @@ export async function receiveSale(
       throw Object.assign(new Error(`Product not available: ${it.productId}`), { code: "VALIDATION" });
     if (p.branch_id !== input.branchId)
       throw Object.assign(new Error(`Product not in branch: ${it.productId}`), { code: "VALIDATION" });
+    // Unknown book cost means COGS would post zero and silently overstate the
+    // margin. Cost the product first (PATCH /products/:id); an explicit zero
+    // cost is an assertion the shop stands behind, an unknown one is not.
+    if (p.cost_cents === null)
+      throw Object.assign(new Error(`Product has no book cost: ${it.productId}`), { code: "VALIDATION" });
     await assertCountLock(db, p.id);
     let priceCents: number;
     if (it.priceLkr !== undefined) {
