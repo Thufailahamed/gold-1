@@ -434,3 +434,13 @@ describe("cashBreakdownTotal", () => {
     expect(cashBreakdownTotal([])).toEqual({ totalIn: 0, totalOut: 0, unclassified: 0 });
   });
 });
+
+describe("cashBreakdownTotal knows every flow that moves cash", () => {
+  it("classifies an old-gold purchase paid in cash as an outflow", () => {
+    const t = cashBreakdownTotal([
+      { refEntity: "old_gold_purchase", label: "Old gold purchases", direction: "out", cents: 20_000_000 },
+    ]);
+    expect(t.unclassified).toBe(0);
+    expect(t.totalOut).toBe(20_000_000);
+  });
+});

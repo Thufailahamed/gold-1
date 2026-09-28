@@ -89,6 +89,9 @@ export async function heldGoldMg(db: D1Database, branchId?: string): Promise<num
      WHERE status IN ('PURCHASED','AVAILABLE','RESERVED_FOR_MELTING')${bp.sql}`,
     bp.vals
   );
+  // The branch filter goes in the WHERE, on the BATCH. Putting it on the
+  // LEFT JOIN's ON clause filters which allocation rows match, not which lots
+  // are counted — so every branch counted every lot in the shop.
   const lots = await firstRow<{ total: number; allocated: number }>(
     db,
       `SELECT COALESCE(SUM(o.fine_mg), 0) AS total,
@@ -100,7 +103,8 @@ export async function heldGoldMg(db: D1Database, branchId?: string): Promise<num
          FROM manufacturing_materials m
          JOIN manufacturing_orders mo ON mo.id = m.order_id AND mo.status <> 'VOID'
          GROUP BY m.lot_batch_id, m.lot_number
-       ) a ON a.lot_batch_id = o.batch_id AND a.lot_number = o.lot_number${bp.sql}`,
+       ) a ON a.lot_batch_id = o.batch_id AND a.lot_number = o.lot_number
+       WHERE 1 = 1${bp.sql}`,
     bp.vals
   );
   const wip = await firstRow<{ fine_mg: number }>(
@@ -362,6 +366,8 @@ export async function reconcile(
     .bind(day, ...glb.vals)
     .all<{ type: string; fine_mg: number }>();
   const ledgerMg = new Map((goldRows ?? []).map((r) => [r.type, r.fine_mg]));
+  const lb3 = branchSql(opts.branchId, "b3.branch_id");
+  const lmo2 = branchSql(opts.branchId, "mo2.branch_id");
 
   const docQueries: [string, string, { sql: string; vals: unknown[] }][] = [
     [
@@ -422,14 +428,19 @@ export async function reconcile(
     // with itself and always pass, which is worse than not checking. Its
     // weight is carried by gold_stock_consistency instead, where a loss that
     // does not reduce stock on hand shows up.
+    // LOSS needs the branch on BOTH sub-selects — melting_batches and
+    // manufacturing_orders each carry their own — so it cannot share a single
+    // branch fragment. Leaving it unfiltered compares a shop-wide figure
+    // against a branch-scoped one, and every branch but the one that melted
+    // something reports a loss it never had.
     [
       "LOSS",
       `SELECT
          COALESCE((SELECT SUM(loss_mg) FROM melting_batches b3
-                   WHERE b3.status = 'APPROVED' AND ${LOCAL_DAY("b3.created_at")} = ?), 0)
+                   WHERE b3.status = 'APPROVED' AND ${LOCAL_DAY("b3.created_at")} = ?${lb3.sql}), 0)
        + COALESCE((SELECT SUM(loss_mg) FROM manufacturing_orders mo2
                    WHERE mo2.status = 'COMPLETE' AND mo2.loss_mg > 0
-                     AND ${LOCAL_DAY("mo2.created_at")} = ?), 0) AS fine_mg`,
+                     AND ${LOCAL_DAY("mo2.created_at")} = ?${lmo2.sql}), 0) AS fine_mg`,
       { sql: "", vals: [] },
     ],
   ];
@@ -438,11 +449,11 @@ export async function reconcile(
   // the empty string, so a substring test matches the first entry and every
   // later query silently gets the wrong one.
   for (const [type, sql, br] of docQueries) {
-    const row = await firstRow<{ fine_mg: number }>(
-      db,
-      sql,
-      type === "LOSS" ? [day, day, ...br.vals] : [day, ...br.vals]
-    );
+    const vals =
+      type === "LOSS"
+        ? [day, ...lb3.vals, day, ...lmo2.vals]
+        : [day, ...br.vals];
+    const row = await firstRow<{ fine_mg: number }>(db, sql, vals);
     checks.push(
       compareWeight(
         `gold_${type.toLowerCase()}`,
@@ -500,8 +511,12 @@ export async function reconcile(
      WHERE l.account_code = '1020' AND e.ref_entity = 'card_settlement' AND e.entry_date = ?${b.sql}`,
     [day, ...b.vals]
   );
+  // bank_account_id, NOT id: the sub-select yields bank-account ids and
+  // card_settlements.id is the settlement's own. Comparing them silently
+  // matches nothing, and only when a branch is supplied — so the shop-wide
+  // run passed and the branch run reported zero settlements.
   const csCond = opts.branchId
-    ? " AND id IN (SELECT id FROM bank_accounts WHERE branch_id = ?)"
+    ? " AND bank_account_id IN (SELECT id FROM bank_accounts WHERE branch_id = ?)"
     : "";
   const clearDocs = await firstRow<{ gross: number }>(
     db,
@@ -560,6 +575,11 @@ export async function reconcile(
   // only the destination over-counted every transfer by its full weight — the
   // branch-scoped run passed while the shop-wide run overstated by exactly the
   // amount that had moved.
+  // Deliberately NOT filtered by branch_id. A TRANSFER row carries the
+  // DESTINATION's branch_id, so a row filter drops it out of the sending
+  // branch entirely and that branch never sees its own gold leave. The
+  // direction CASE below already scopes by branch, and a transfer
+  // legitimately belongs to both.
   const tgt = opts.branchId ?? null;
   const total = await firstRow<{ fine_mg: number }>(
     db,
@@ -571,8 +591,8 @@ export async function reconcile(
          (CASE WHEN destination LIKE 'branch:%' AND (? IS NULL OR destination = 'branch:' || ?) THEN fine_mg ELSE 0 END)
        - (CASE WHEN source      LIKE 'branch:%' AND (? IS NULL OR source      = 'branch:' || ?) THEN fine_mg ELSE 0 END)
      ), 0) AS fine_mg
-     FROM gold_ledger WHERE 1 = 1${bp.sql}`,
-    [tgt, tgt, tgt, tgt, ...bp.vals]
+     FROM gold_ledger WHERE 1 = 1`,
+    [tgt, tgt, tgt, tgt]
   );
   checks.push(
     compareWeight(

@@ -21,6 +21,10 @@ const CASH_LABELS: Record<string, string> = {
   cash_deposit: "Deposits",
   sale_return: "Refunds",
   cash_transfer_out: "Transfers out",
+  // Old gold bought for cash leaves the drawer the same way a supplier
+  // payment does. Found by the unclassified guard, which is the only reason
+  // that guard exists.
+  old_gold_purchase: "Old gold purchases",
 };
 
 const GOLD_LINES: { key: GoldKey; label: string; types: string[] }[] = [
