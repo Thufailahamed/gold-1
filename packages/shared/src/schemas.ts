@@ -320,3 +320,49 @@ export const adjustGoldSchema = z.object({
 
 export type CreateMeltInput = z.infer<typeof createMeltSchema>;
 export type ApproveMeltInput = z.infer<typeof approveMeltSchema>;
+
+export const createMfgOrderSchema = z.object({
+  type: z.enum(["CUSTOMER", "INTERNAL"]),
+  customerId: z.string().min(1).optional(),
+  branchId: z.string().min(1),
+  design: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  dueAt: z.number().int().positive().optional(),
+});
+
+export const addMfgMaterialsSchema = z.object({
+  lots: z.array(z.object({
+    lotBatchId: z.string().min(1),
+    lotNumber: z.string().min(1),
+    fineMg: z.number().int().gt(0),
+  })).min(1).max(20),
+});
+
+const mfgOutputSchema = z.object({
+  categoryId: z.string().min(1),
+  metalTypeId: z.string().min(1),
+  purityId: z.string().min(1),
+  name: z.string().min(1).max(100),
+  grossG: z.number().gt(0).max(100000),
+  stoneG: z.number().min(0).max(100000).optional().default(0),
+  makingLkr: z.number().min(0).optional().default(0),
+  location: z.string().max(100).optional(),
+});
+
+export const produceMfgSchema = z.object({
+  outputs: z.array(mfgOutputSchema).min(1).max(20),
+  labourLkr: z.number().min(0).optional().default(0),
+  makingLkr: z.number().min(0).optional().default(0),
+  stoneCostLkr: z.number().min(0).optional().default(0),
+  lossMg: z.number().int().min(0).optional().default(0),
+  lossReason: z.string().max(500).optional(),
+  approvedBy: z.string().min(1).optional(),
+});
+
+export const qcMfgSchema = z.object({
+  pass: z.boolean(),
+  reason: z.string().max(500).optional(),
+});
+
+export type CreateMfgOrderInput = z.infer<typeof createMfgOrderSchema>;
+export type ProduceMfgInput = z.infer<typeof produceMfgSchema>;
