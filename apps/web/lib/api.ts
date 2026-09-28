@@ -18,3 +18,24 @@ export type MeData = {
   permissions: string[];
   branchIds: string[];
 };
+
+/**
+ * Multipart upload. `api` above always sets Content-Type: application/json,
+ * which makes a FormData body serialise to "[object FormData]" and the upload
+ * silently fails — the browser must set the multipart boundary itself.
+ */
+export async function formApi<T>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    body: form,
+    credentials: "include",
+  });
+  const body = (await res.json()) as ApiResponse<T>;
+  if (!body.success) throw new Error(body.error.message);
+  return body.data;
+}
+
+/** An <img> src for an authenticated API route, e.g. a receipt. */
+export function assetUrl(path: string): string {
+  return `${BASE}${path}`;
+}

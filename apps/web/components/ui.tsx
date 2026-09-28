@@ -408,7 +408,7 @@ export function statusTone(status: string | null | undefined): PillTone {
     return "danger";
   if (/(pend|review|await|hold|queue|draft|warn|processing|progress|open|retry|partial|unverified|flag|repair|manufacturing|reserved)/.test(s))
     return "warning";
-  if (/(success|succeed|complete|deliver|paid|approv|verif|active|resolv|settled|healthy|ok|enabled|live|accept|confirm|sent|published|clear|in_stock|sold)/.test(s))
+  if (/(success|succeed|complete|deliver|paid|approv|verif|active|resolv|settled|healthy|ok|enabled|live|accept|confirm|sent|published|clear|in_stock|sold|post)/.test(s))
     return "success";
   if (/(transit|ship|prepar|dispatch|scheduled|refund|return|transfer)/.test(s)) return "info";
   return "neutral";

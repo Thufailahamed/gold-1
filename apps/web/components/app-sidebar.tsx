@@ -22,6 +22,7 @@ import {
   SettingsIcon,
   HistoryIcon,
   ScaleIcon,
+  BanknoteIcon,
   TrendingUpIcon,
   LogOutIcon,
   XIcon,
@@ -129,6 +130,7 @@ const SECTIONS: NavSection[] = [
       { href: "/settings", label: "Settings", icon: SettingsIcon, perm: "settings:view" },
       { href: "/audit", label: "Audit", icon: HistoryIcon, perm: "audit:view" },
       { href: "/accounts", label: "Accounts", icon: ScaleIcon, perm: "accounts:view" },
+      { href: "/expenses", label: "Expenses", icon: BanknoteIcon, perm: "accounts:view" },
     ],
   },
 ];
