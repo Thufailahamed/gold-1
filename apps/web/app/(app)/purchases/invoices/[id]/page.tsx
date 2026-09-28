@@ -46,7 +46,13 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const qc = useQueryClient();
   const [payOpen, setPayOpen] = useState(false);
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState("cash");
+  const [bankAccountId, setBankAccountId] = useState("");
+  const banks = useQuery({
+    queryKey: ["bank-accounts"],
+    queryFn: () => api<{ id: string; name: string; account_code: string; is_active: number }[]>(
+      "/api/v1/bank-accounts"
+    ),
+  });
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
   const canEdit = hasPermission(me.data?.permissions ?? [], "purchases:edit");
   const canCancel = hasPermission(me.data?.permissions ?? [], "purchases:cancel");
@@ -60,7 +66,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     mutationFn: () =>
       api(`/api/v1/purchases/invoices/${id}/payments`, {
         method: "POST",
-        body: JSON.stringify({ amountLkr: Number(amount), method }),
+        body: JSON.stringify({ amountLkr: Number(amount), bankAccountId }),
       }),
     onSuccess: () => {
       toast.success("Payment recorded");
@@ -216,18 +222,34 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           onClose={() => setPayOpen(false)}
           onSubmit={() => pay.mutate()}
           pending={pay.isPending}
-          submitDisabled={!amount}
           submitLabel="Record"
+          submitDisabled={!amount || !bankAccountId}
         >
           <p className="text-sm text-ink-3">Outstanding: <span className="num-tabular font-medium text-ink">{fmt(outstanding)} LKR</span></p>
           <label className="block text-sm text-ink-2">Amount LKR
             <input type="number" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`num-tabular ${controlClass}`} />
           </label>
-          <label className="block text-sm text-ink-2">Method
-            <select value={method} onChange={(e) => setMethod(e.target.value)} className={controlClass}>
-              <option value="cash">Cash</option>
-              <option value="bank">Bank</option>
-            </select>
+          <label className="block text-sm text-ink-2">Pay from
+            {(banks.data ?? []).filter((b) => b.is_active).length === 0 ? (
+              <p className="mt-1 text-xs text-ink-4">
+                No bank account registered yet. Add one under Accounts first.
+              </p>
+            ) : (
+              <select
+                value={bankAccountId}
+                onChange={(e) => setBankAccountId(e.target.value)}
+                className={controlClass}
+              >
+                <option value="">Choose an account…</option>
+                {(banks.data ?? [])
+                  .filter((b) => b.is_active)
+                  .map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.account_code})
+                    </option>
+                  ))}
+              </select>
+            )}
           </label>
         </Modal>
       ) : null}

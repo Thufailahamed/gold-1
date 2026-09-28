@@ -205,7 +205,7 @@ export const purchases = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         c.env.DB,
         c.req.param("id"),
         lkrToCents(parsed.data.amountLkr),
-        parsed.data.method,
+        parsed.data.bankAccountId,
         c.get("userId")
       );
       return c.json({ success: true, data }, 201);

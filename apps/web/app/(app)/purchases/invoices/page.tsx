@@ -66,7 +66,13 @@ export default function InvoicesPage() {
   const [supplierId, setSupplierId] = useState("");
   const [charges, setCharges] = useState("");
   const [paid, setPaid] = useState("");
-  const [method, setMethod] = useState("cash");
+  const [bankAccountId, setBankAccountId] = useState("");
+  const banks = useQuery({
+    queryKey: ["bank-accounts"],
+    queryFn: () => api<{ id: string; name: string; account_code: string; is_active: number }[]>(
+      "/api/v1/bank-accounts"
+    ),
+  });
   const [items, setItems] = useState<ItemDraft[]>([]);
   const create = useMutation({
     mutationFn: () =>
@@ -77,7 +83,7 @@ export default function InvoicesPage() {
           branchId: branchDefault(),
           chargesLkr: charges === "" ? 0 : Number(charges),
           paidLkr: paid === "" ? 0 : Number(paid),
-          paidMethod: paid === "" ? undefined : method,
+          paidBankAccountId: paid === "" ? undefined : bankAccountId,
           items: items.map((it) => ({
             categoryId: it.categoryId,
             metalTypeId: it.metalTypeId,
@@ -209,10 +215,20 @@ export default function InvoicesPage() {
             <label className="block text-sm text-ink-2">Paid LKR
               <input type="number" step="any" value={paid} onChange={(e) => setPaid(e.target.value)} className={`num-tabular ${controlClass}`} />
             </label>
-            <label className="block text-sm text-ink-2">Method
-              <select value={method} onChange={(e) => setMethod(e.target.value)} className={controlClass}>
-                <option value="cash">Cash</option>
-                <option value="bank">Bank</option>
+            <label className="block text-sm text-ink-2">Pay from
+              <select
+                value={bankAccountId}
+                onChange={(e) => setBankAccountId(e.target.value)}
+                className={controlClass}
+              >
+                <option value="">Choose an account…</option>
+                {(banks.data ?? [])
+                  .filter((b) => b.is_active)
+                  .map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.account_code})
+                    </option>
+                  ))}
               </select>
             </label>
           </div>

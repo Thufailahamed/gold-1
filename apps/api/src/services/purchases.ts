@@ -10,6 +10,7 @@ import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
 import { buildEntryStmts, reverseEntry } from "./journal";
 import { businessDateFor } from "./busdate";
+import { getBankAccount } from "./cashbank";
 import { buildCreateProductStmts, buildVoidProductStmts } from "./products";
 
 /** @deprecated Use `allocateProportional` from @goldos/shared directly. */
@@ -59,7 +60,7 @@ async function receiveBatch(
     items: IntakeItem[];
     chargesCents: number;
     paidCents: number;
-    paidMethod?: "cash" | "bank";
+    paidBankAccountId?: string;
     actorId: string;
     now: number;
   }
@@ -78,8 +79,8 @@ async function receiveBatch(
   const total = subtotal + opts.chargesCents;
   if (opts.paidCents > total)
     throw Object.assign(new Error("Payment exceeds total"), { code: "VALIDATION" });
-  if (opts.paidCents > 0 && !opts.paidMethod)
-    throw Object.assign(new Error("Payment method required"), { code: "VALIDATION" });
+  if (opts.paidCents > 0 && !opts.paidBankAccountId)
+    throw Object.assign(new Error("Bank account required to pay on receipt"), { code: "VALIDATION" });
 
   const stmts: D1PreparedStatement[] = [];
   const number = await nextNumber(db, stmts, "PINV", "PINV");
@@ -224,13 +225,18 @@ async function receiveBatch(
   );
   if (opts.paidCents > 0) {
     const payId = crypto.randomUUID();
-    const cash = opts.paidMethod === "cash" ? "1000" : "1010";
+    // Payment leaves a NAMED bank account, not a hard-coded 1000 or 1010, so a
+    // shop with two banks knows which one paid and can reconcile it.
+    const payBank = await getBankAccount(db, opts.paidBankAccountId!);
+    if (!payBank.is_active)
+      throw Object.assign(new Error("Bank account is inactive"), { code: "CONFLICT" });
+    const cash = payBank.account_code;
     stmts.push(
       db
         .prepare(
           "INSERT INTO purchase_payments (id, invoice_id, amount_cents, method, ref_entity, ref_id, created_at, created_by) VALUES (?, ?, ?, ?, 'purchase_payment', ?, ?, ?)"
         )
-        .bind(payId, invoiceId, opts.paidCents, opts.paidMethod, payId, opts.now, opts.actorId)
+        .bind(payId, invoiceId, opts.paidCents, payBank.account_code, payId, opts.now, opts.actorId)
     );
     const payJournal = await buildEntryStmts(
       db,
@@ -366,7 +372,7 @@ export async function cancelOrder(
 export async function receiveOrder(
   db: D1Database,
   orderId: string,
-  opts: { chargesLkr?: number; paidLkr?: number; paidMethod?: "cash" | "bank" },
+  opts: { chargesLkr?: number; paidLkr?: number; paidBankAccountId?: string },
   actorId: string
 ): Promise<{ invoiceId: string; number: string }> {
   const order = await db
@@ -416,7 +422,7 @@ export async function receiveOrder(
     })),
     chargesCents: lkrToCents(opts.chargesLkr ?? 0),
     paidCents: lkrToCents(opts.paidLkr ?? 0),
-    paidMethod: opts.paidMethod,
+    paidBankAccountId: opts.paidBankAccountId,
     actorId,
     now,
   });
@@ -471,7 +477,7 @@ export async function createInvoiceDirect(
     })),
     chargesCents: lkrToCents(input.chargesLkr),
     paidCents: lkrToCents(input.paidLkr),
-    paidMethod: input.paidMethod,
+    paidBankAccountId: input.paidBankAccountId,
     actorId,
     now: Date.now(),
   });
@@ -481,7 +487,7 @@ export async function payInvoice(
   db: D1Database,
   invoiceId: string,
   amountCents: number,
-  method: "cash" | "bank",
+  bankAccountId: string,
   actorId: string
 ): Promise<{ paidCents: number; status: string }> {
   const inv = await db
@@ -504,7 +510,10 @@ export async function payInvoice(
     throw Object.assign(new Error("Payment exceeds outstanding"), { code: "VALIDATION" });
   const now = Date.now();
   const payId = crypto.randomUUID();
-  const cash = method === "cash" ? "1000" : "1010";
+  const payBank = await getBankAccount(db, bankAccountId);
+  if (!payBank.is_active)
+    throw Object.assign(new Error("Bank account is inactive"), { code: "CONFLICT" });
+  const cash = payBank.account_code;
   const paid = inv.paid_cents + amountCents;
   const status = paid === 0 ? "UNPAID" : paid === inv.total_cents ? "PAID" : "PARTIAL";
   const journal = await buildEntryStmts(
@@ -532,7 +541,7 @@ export async function payInvoice(
       .prepare(
         "INSERT INTO purchase_payments (id, invoice_id, amount_cents, method, ref_entity, ref_id, created_at, created_by) VALUES (?, ?, ?, ?, 'purchase_payment', ?, ?, ?)"
       )
-      .bind(payId, invoiceId, amountCents, method, payId, now, actorId),
+      .bind(payId, invoiceId, amountCents, payBank.account_code, payId, now, actorId),
     db
       .prepare("UPDATE purchase_invoices SET paid_cents = ?, status = ? WHERE id = ?")
       .bind(paid, status, invoiceId),

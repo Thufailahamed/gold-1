@@ -198,13 +198,13 @@ export const createInvoiceSchema = z.object({
   branchId: z.string().min(1),
   chargesLkr: z.number().min(0).optional().default(0),
   paidLkr: z.number().min(0).optional().default(0),
-  paidMethod: z.enum(["cash", "bank"]).optional(),
+  paidBankAccountId: z.string().min(1).optional(),
   items: z.array(purchaseItemSchema).min(1),
 });
 
 export const payInvoiceSchema = z.object({
   amountLkr: z.number().gt(0),
-  method: z.enum(["cash", "bank"]),
+  bankAccountId: z.string().min(1),
 });
 
 export const voidInvoiceSchema = z.object({ reason: z.string().min(1).max(500) });
