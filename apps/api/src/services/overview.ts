@@ -51,7 +51,7 @@ export async function branchOverview(db: D1Database, branchId: string, opts: { y
     asOf,
     month: monthly.meta.month,
     jewellery: { pieces: jew?.pieces ?? 0, netMg: jew?.netMg ?? 0, fineMg: jew?.fineMg ?? 0, costCents: jew?.costCents ?? 0, hasData: (jew?.pieces ?? 0) > 0 },
-    gold: { ...stages, fineMg: stages.total, hasData: stages.total !== 0 },
+    gold: { products: stages.products, oldGold: stages.oldGold, lots: stages.lots, wip: stages.wip, recovered: stages.recovered, fineMg: stages.total, hasData: stages.total !== 0 },
     cash: { drawer, cardClearing, hasData: drawer !== 0 || cardClearing !== 0 },
     banks,
     staff,
