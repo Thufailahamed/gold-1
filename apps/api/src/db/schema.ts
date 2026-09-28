@@ -361,7 +361,8 @@ export const salesReturnItems = sqliteTable("sales_return_items", {
 
 export const goldMovements = sqliteTable("gold_movements", {
   id: text("id").primaryKey(),
-  productId: text("product_id").notNull(),
+  productId: text("product_id"),
+  oldGoldId: text("old_gold_id"),
   direction: text("direction").notNull(),
   fineMg: integer("fine_mg").notNull(),
   purityPermille: integer("purity_permille").notNull(),
