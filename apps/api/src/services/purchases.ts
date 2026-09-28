@@ -1,5 +1,6 @@
 import {
   allocateProportional,
+  fineGoldMg,
   gToMg,
   lkrToCents,
   type CreateInvoiceInput,
@@ -161,6 +162,38 @@ async function receiveBatch(
           "INSERT INTO purchase_invoice_items (id, invoice_id, product_id, gross_mg, net_mg, purity_id, cost_cents, making_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(r.id, invoiceId, r.productId, r.grossMg, r.netMg, r.purityId, r.costCents, r.makingCents)
+    );
+    // A catalogue purchase has to reach the gold ledger as well as the
+    // inventory table. Without this the ledger has no PURCHASE rows at all,
+    // so gold_stock_consistency can never close and gold_purchase always
+    // fails against the invoice items it is supposed to match.
+    const purity = await db
+      .prepare("SELECT permille FROM purities WHERE id = ?")
+      .bind(r.purityId)
+      .first<{ permille: number }>();
+    if (!purity) throw Object.assign(new Error("Purity not found"), { code: "NOT_FOUND" });
+    const fineMg = fineGoldMg(r.netMg, purity.permille);
+    stmts.push(
+      db
+        .prepare(
+          "INSERT INTO gold_ledger (id, occurred_at, branch_id, source, destination, type, weight_mg, permille, fine_mg, ref_entity, ref_id, product_id, old_gold_id, user_id, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, 'PURCHASE', ?, ?, ?, 'purchase_invoice', ?, ?, NULL, NULL, ?, ?, ?)"
+        )
+        .bind(
+          crypto.randomUUID(),
+          opts.now,
+          opts.branchId,
+          `purchase:${number}`,
+          `branch:${opts.branchId}`,
+          r.netMg,
+          purity.permille,
+          fineMg,
+          invoiceId,
+          r.productId,
+          opts.actorId,
+          `Purchase ${number}`,
+          opts.now,
+          opts.actorId
+        )
     );
   }
   const journal = await buildEntryStmts(
