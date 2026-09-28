@@ -285,3 +285,38 @@ export const voidOldGoldSchema = z.object({ reason: z.string().min(1).max(500) }
 export type CreateOldGoldInput = z.infer<typeof createOldGoldSchema>;
 export type TestOldGoldInput = z.infer<typeof testOldGoldSchema>;
 export type ValueOldGoldInput = z.infer<typeof valueOldGoldSchema>;
+
+export const GOLD_TYPES = ["PURCHASE", "OLD_GOLD_PURCHASE", "SALE", "MELTING_INPUT", "MELTING_OUTPUT", "MANUFACTURING_INPUT", "MANUFACTURING_OUTPUT", "TRANSFER", "RETURN", "ADJUSTMENT", "LOSS", "RECOVERY"] as const;
+
+export const createMeltSchema = z.object({
+  branchId: z.string().min(1),
+  notes: z.string().max(2000).optional(),
+});
+
+export const addMeltItemsSchema = z.object({
+  oldGoldIds: z.array(z.string().min(1)).min(1).max(50),
+});
+
+export const meltRecordSchema = z.object({
+  outputWeightG: z.number().gt(0).max(100000),
+  assayPermille: z.number().int().gt(0).lte(1000),
+  wasteG: z.number().min(0).max(100000).optional().default(0),
+  outputType: z.enum(["grain", "bar"]).optional().default("grain"),
+});
+
+export const approveMeltSchema = z.object({
+  reason: z.string().min(1).max(500),
+  approvedBy: z.string().min(1).optional(),
+});
+
+export const adjustGoldSchema = z.object({
+  type: z.enum(["ADJUSTMENT", "LOSS", "RECOVERY"]),
+  branchId: z.string().min(1),
+  weightG: z.number().gt(0).max(100000),
+  permille: z.number().int().gt(0).lte(1000),
+  reason: z.string().min(1).max(500),
+  approvedBy: z.string().min(1).optional(),
+});
+
+export type CreateMeltInput = z.infer<typeof createMeltSchema>;
+export type ApproveMeltInput = z.infer<typeof approveMeltSchema>;

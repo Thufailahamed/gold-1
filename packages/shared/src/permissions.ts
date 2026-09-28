@@ -46,6 +46,8 @@ export const PERMISSIONS = {
   OLDGOLD_CANCEL: "oldgold:cancel",
   OLDGOLD_EXPORT: "oldgold:export",
   OLDGOLD_APPROVE: "oldgold:approve",
+  GOLD_VIEW: "gold:view",
+  GOLD_MANAGE: "gold:manage",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -77,8 +79,9 @@ export const DEFAULT_ROLES: Record<string, string[]> = {
     "sales:export",
     "oldgold:view",
     "oldgold:export",
+    "gold:view",
   ],
-  cashier: ["users:view", "branches:view", "masters:view", "products:view", "accounts:view", "purchases:view", "sales:view", "sales:create", "oldgold:view", "oldgold:create"],
+  cashier: ["users:view", "branches:view", "masters:view", "products:view", "accounts:view", "purchases:view", "sales:view", "sales:create", "oldgold:view", "oldgold:create", "gold:view"],
   salesperson: ["branches:view", "masters:view", "products:view", "purchases:view", "sales:view", "sales:create", "oldgold:view"],
   inventory_officer: [
     "branches:view",
@@ -109,6 +112,8 @@ export const DEFAULT_ROLES: Record<string, string[]> = {
     "oldgold:view",
     "oldgold:create",
     "oldgold:edit",
+    "gold:view",
+    "gold:manage",
   ],
   manufacturing_staff: ["products:view"],
 };
