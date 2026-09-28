@@ -143,10 +143,12 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
   const slug = opts.branchId ? `branch:${opts.branchId}` : null;
   async function goldSum(dirCol: "source" | "destination", f: string, t: string, before: boolean): Promise<number> {
     const cmp = before ? `<?` : `>=? AND date(occurred_at/1000,'unixepoch','+330 minutes')<=?`;
+    // Placeholder order is the slug first (when present), then the dates —
+    // the bind array must follow the same order.
     const like = slug
       ? (dirCol === "destination" ? `${dirCol}=?` : `${dirCol}=?`)
       : (dirCol === "destination" ? `${dirCol} LIKE 'branch:%'` : `${dirCol} LIKE 'branch:%'`);
-    const vals: unknown[] = before ? (slug ? [f, slug] : [f]) : slug ? [f, t, slug] : [f, t];
+    const vals: unknown[] = before ? (slug ? [slug, f] : [f]) : slug ? [slug, f, t] : [f, t];
     const row = await db.prepare(
       `SELECT COALESCE(SUM(fine_mg),0) AS n FROM gold_ledger WHERE ${like} AND date(occurred_at/1000,'unixepoch','+330 minutes')${cmp}`
     ).bind(...vals).first<{ n: number }>();
@@ -169,10 +171,14 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
   const cashAccts = ["'1000'", "'1020'", "'1030'", ...bankCodes.map((c) => `'${c}'`)].join(",");
   const cashBranch = opts.branchId ? " AND e.branch_id=?" : "";
   const cashBv: unknown[] = opts.branchId ? [opts.branchId] : [];
+  // Cash truth counts every entry including reversals (an entry and its
+  // mirror net to zero — counting one side only would phantom-inflate the
+  // drawer). This matches accountBalance and the day-close cash query, which
+  // carry no status filter either.
   const openingCents = await sumCents(db,
-    `SELECT COALESCE(SUM(l.debit_cents-l.credit_cents),0) AS n FROM journal_lines l JOIN journal_entries e ON e.id=l.entry_id WHERE l.account_code IN (${cashAccts}) AND e.entry_date<? AND e.status='POSTED'${cashBranch}`, [from, ...cashBv]);
+    `SELECT COALESCE(SUM(l.debit_cents-l.credit_cents),0) AS n FROM journal_lines l JOIN journal_entries e ON e.id=l.entry_id WHERE l.account_code IN (${cashAccts}) AND e.entry_date<?${cashBranch}`, [from, ...cashBv]);
   const flowRow = await db.prepare(
-    `SELECT COALESCE(SUM(l.debit_cents),0) AS dr, COALESCE(SUM(l.credit_cents),0) AS cr FROM journal_lines l JOIN journal_entries e ON e.id=l.entry_id WHERE l.account_code IN (${cashAccts}) AND e.entry_date>=? AND e.entry_date<=? AND e.status='POSTED'${cashBranch}`
+    `SELECT COALESCE(SUM(l.debit_cents),0) AS dr, COALESCE(SUM(l.credit_cents),0) AS cr FROM journal_lines l JOIN journal_entries e ON e.id=l.entry_id WHERE l.account_code IN (${cashAccts}) AND e.entry_date>=? AND e.entry_date<=?${cashBranch}`
   ).bind(from, to, ...cashBv).first<{ dr: number; cr: number }>();
   const inflowsCents = flowRow?.dr ?? 0;
   const outflowsCents = flowRow?.cr ?? 0;
@@ -183,7 +189,7 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
   // zero and must not block the snapshot forever — same rule as the day-close
   // gate. Any real unnamed movement still blocks.
   const { results: unRows } = await db.prepare(
-    `SELECT e.ref_entity AS ref, COALESCE(SUM(l.debit_cents),0) AS dr, COALESCE(SUM(l.credit_cents),0) AS cr FROM journal_lines l JOIN journal_entries e ON e.id=l.entry_id WHERE l.account_code IN (${cashAccts}) AND e.entry_date>=? AND e.entry_date<=? AND e.status='POSTED'${cashBranch} AND (e.ref_entity IS NULL OR e.ref_entity NOT IN (${placeholders})) GROUP BY e.ref_entity`
+    `SELECT e.ref_entity AS ref, COALESCE(SUM(l.debit_cents),0) AS dr, COALESCE(SUM(l.credit_cents),0) AS cr FROM journal_lines l JOIN journal_entries e ON e.id=l.entry_id WHERE l.account_code IN (${cashAccts}) AND e.entry_date>=? AND e.entry_date<=?${cashBranch} AND (e.ref_entity IS NULL OR e.ref_entity NOT IN (${placeholders})) GROUP BY e.ref_entity`
   ).bind(from, to, ...cashBv, ...knownCash).all<{ ref: string | null; dr: number; cr: number }>();
   const byRef = new Map<string, { dr: number; cr: number }>();
   for (const r of unRows ?? []) {

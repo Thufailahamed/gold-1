@@ -318,15 +318,15 @@ export async function approveBatch(
     stmts.push(...lossEntry.stmts);
   }
   if (batch.loss_mg > 0) {
-    // Source MUST be the branch, same convention as MELTING_INPUT above:
-    // lost gold left branch stock, and the directional sum only sees branch
-    // sources as outflows. (Manufacturing LOSS rows intentionally keep their
-    // order source — that flow balances through lot-remainder mechanics, and
-    // its loss never enters held stock on either side.)
+    // Source stays melting:<batch> (NOT the branch): the loss never sits in
+    // held stock on either side — the item already left held as MELTED and
+    // the lot carries only the remainder — so a branch-sourced LOSS would
+    // subtract it a second time and break gold_stock_consistency by exactly
+    // the loss weight (verified live). Same shape as manufacturing LOSS.
     stmts.push(
       db
         .prepare("INSERT INTO gold_ledger (id, occurred_at, branch_id, source, destination, type, weight_mg, permille, fine_mg, ref_entity, ref_id, product_id, old_gold_id, user_id, notes, created_at, created_by) VALUES (?, ?, ?, ?, 'loss', 'LOSS', ?, ?, ?, 'melting_batch', ?, NULL, NULL, ?, ?, ?, ?)")
-        .bind(crypto.randomUUID(), Date.now(), batch.branch_id, `branch:${batch.branch_id}`, batch.loss_mg, outputs.permille, batch.loss_mg, batchId, actorId, input.reason, Date.now(), actorId)
+        .bind(crypto.randomUUID(), Date.now(), batch.branch_id, `melting:${batchId}`, batch.loss_mg, outputs.permille, batch.loss_mg, batchId, actorId, input.reason, Date.now(), actorId)
     );
   }
   if (batch.recovery_mg > 0) {

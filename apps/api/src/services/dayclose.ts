@@ -27,6 +27,7 @@ const CASH_LABELS: Record<string, string> = {
   old_gold_purchase: "Old gold purchases",
   repair: "Repair collections",
   custom_advance: "Customer advances",
+  opening_balance: "Opening balances",
 };
 
 const GOLD_LINES: { key: GoldKey; label: string; types: string[] }[] = [
@@ -341,45 +342,69 @@ export async function closeDay(
 
   const existing = await db
     .prepare(
-      "SELECT id FROM day_closings WHERE branch_id = ? AND close_date = ? AND status = 'CLOSED'"
+      "SELECT id, status, actual_cents, difference_cents FROM day_closings WHERE branch_id = ? AND close_date = ?"
     )
     .bind(input.branchId, input.date)
-    .first();
-  if (existing) fail("CONFLICT", "This day is already closed");
+    .first<{ id: string; status: string; actual_cents: number; difference_cents: number }>();
+  if (existing?.status === "CLOSED") fail("CONFLICT", "This day is already closed");
 
-  const id = crypto.randomUUID();
+  const id = existing?.id ?? crypto.randomUUID();
   const now = Date.now();
   const frozen: ClosingReport = {
     ...report,
     closing: { ...report.closing, differenceCents, reasonRequired: differenceCents !== 0 },
   };
+  // A reopened day closes by UPDATING its row, never by inserting a second
+  // one (the unique index would 500). The prior snapshot survives in the
+  // audit trail's prev_json, and the reopen trail in day_reopens is untouched.
+  const write = existing
+    ? db
+        .prepare(
+          "UPDATE day_closings SET opening_cents = ?, cash_in_cents = ?, cash_out_cents = ?, expected_cents = ?, actual_cents = ?, difference_cents = ?, difference_reason = ?, report_json = ?, checks_passed = ?, status = 'CLOSED', closed_by = ?, closed_at = ? WHERE id = ? AND status = 'REOPENED'"
+        )
+        .bind(
+          report.openingCents,
+          report.cashIn.totalCents,
+          report.cashOut.totalCents,
+          expectedCents,
+          input.actualCents,
+          differenceCents,
+          input.differenceReason ?? null,
+          JSON.stringify(frozen),
+          report.checks.passed ? 1 : 0,
+          actorId,
+          now,
+          id
+        )
+    : db
+        .prepare(
+          "INSERT INTO day_closings (id, branch_id, close_date, opening_cents, cash_in_cents, cash_out_cents, expected_cents, actual_cents, difference_cents, difference_reason, report_json, checks_passed, status, closed_by, closed_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'CLOSED', ?, ?, ?)"
+        )
+        .bind(
+          id,
+          input.branchId,
+          input.date,
+          report.openingCents,
+          report.cashIn.totalCents,
+          report.cashOut.totalCents,
+          expectedCents,
+          input.actualCents,
+          differenceCents,
+          input.differenceReason ?? null,
+          JSON.stringify(frozen),
+          report.checks.passed ? 1 : 0,
+          actorId,
+          now,
+          now
+        );
   await db.batch([
-    db
-      .prepare(
-        "INSERT INTO day_closings (id, branch_id, close_date, opening_cents, cash_in_cents, cash_out_cents, expected_cents, actual_cents, difference_cents, difference_reason, report_json, checks_passed, status, closed_by, closed_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'CLOSED', ?, ?, ?)"
-      )
-      .bind(
-        id,
-        input.branchId,
-        input.date,
-        report.openingCents,
-        report.cashIn.totalCents,
-        report.cashOut.totalCents,
-        expectedCents,
-        input.actualCents,
-        differenceCents,
-        input.differenceReason ?? null,
-        JSON.stringify(frozen),
-        report.checks.passed ? 1 : 0,
-        actorId,
-        now,
-        now
-      ),
+    write,
     buildAuditStmt(db, {
       userId: actorId,
-      action: "dayclose.close",
+      action: existing ? "dayclose.reclose" : "dayclose.close",
       entity: "day_closing",
       entityId: id,
+      prev: existing ? { status: "REOPENED", actualCents: existing.actual_cents, differenceCents: existing.difference_cents } : undefined,
       next: {
         branchId: input.branchId,
         date: input.date,
