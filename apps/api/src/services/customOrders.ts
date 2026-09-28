@@ -3,6 +3,7 @@ import { buildAuditStmt } from "../middleware/audit";
 import { buildEntryStmts } from "./journal";
 import { businessDateFor } from "./busdate";
 import { createOrder } from "./manufacturing";
+import { receiveSale } from "./sales";
 
 export type CustomStatus = "QUOTE" | "ADVANCED" | "IN_PRODUCTION" | "QC_PASSED" | "READY" | "DELIVERED" | "CANCELLED";
 
@@ -148,6 +149,51 @@ export async function getCustomOrder(db: D1Database, id: string) {
   const order = await loadOrder(db, id);
   const { results: gold } = await db.prepare("SELECT kind, ref_id, fine_mg FROM custom_order_gold WHERE order_id = ?").bind(id).all();
   return { order, gold: gold ?? [] };
+}
+
+export async function deliverOrder(db: D1Database, id: string, input: { payments: { method: "cash" | "card" | "bank" | "credit" | "other"; amountLkr: number }[] }, actorId: string): Promise<{ invoiceId: string }> {
+  const order = await loadOrder(db, id);
+  if (order.status !== "READY") throw Object.assign(new Error("Order not ready"), { code: "CONFLICT" });
+  if (!order.manufacturing_order_id) throw Object.assign(new Error("No linked production"), { code: "CONFLICT" });
+  const { results: finished } = await db.prepare("SELECT product_id FROM manufacturing_outputs WHERE order_id = ? AND product_id IS NOT NULL").bind(order.manufacturing_order_id).all<{ product_id: string }>();
+  if (!finished?.length) throw Object.assign(new Error("No finished piece"), { code: "CONFLICT" });
+  const now = Date.now();
+  // The advance already moved as real money (DR cash / CR 2200). The sale must
+  // still total the full quote, so the applied advance rides along as an
+  // auto credit leg: it DRs 1200, which nets against the apply entry's CR
+  // 1200 below. Caller legs must sum to exactly quote − advances.
+  const applyCents = Math.min(order.advance_cents, order.quote_cents);
+  const balanceCents = order.quote_cents - applyCents;
+  let callerPaid = 0;
+  for (const p of input.payments) {
+    if (!(p.amountLkr > 0)) throw Object.assign(new Error("Payment amounts must be positive"), { code: "VALIDATION" });
+    callerPaid += lkrToCents(p.amountLkr);
+  }
+  if (callerPaid !== balanceCents) throw Object.assign(new Error(`Balance payments must sum to the unpaid ${balanceCents}c`), { code: "VALIDATION" });
+  const salePayments = [...input.payments];
+  if (applyCents > 0) salePayments.push({ method: "credit", amountLkr: applyCents / 100 });
+  const quoteLkr = order.quote_cents / 100;
+  const perPiece = quoteLkr / finished.length;
+  const sale = await receiveSale(db, { branchId: order.branch_id, customerId: order.customer_id, items: finished.map((f) => ({ productId: f.product_id, priceLkr: perPiece, discountLkr: 0 })), payments: salePayments }, actorId);
+  const stmts: D1PreparedStatement[] = [];
+  if (applyCents > 0) {
+    const apply = await buildEntryStmts(db, { lines: [{ account: "2200", debitCents: applyCents, creditCents: 0, partyType: "customer", partyId: order.customer_id }, { account: "1200", debitCents: 0, creditCents: applyCents, partyType: "customer", partyId: order.customer_id }], refEntity: "custom_advance_apply", refId: id, memo: `Advance applied ${order.number}`, branchId: order.branch_id, actorId, auditAction: "cord.apply", auditEntity: "custom_order", auditEntityId: id, sourceModule: "sales" }, { entryDate: await businessDateFor(db, now) });
+    stmts.push(...apply.stmts);
+  }
+  stmts.push(
+    db.prepare("UPDATE custom_orders SET status = 'DELIVERED', sale_id = ? WHERE id = ? AND status = 'READY'").bind(sale.invoiceId, id),
+    buildAuditStmt(db, { userId: actorId, action: "cord.deliver", entity: "custom_order", entityId: id, next: { saleId: sale.invoiceId } })
+  );
+  await db.batch(stmts);
+  return { invoiceId: sale.invoiceId };
+}
+
+export async function orderLineage(db: D1Database, id: string) {
+  const order = await loadOrder(db, id);
+  const { results: gold } = await db.prepare("SELECT kind, ref_id FROM custom_order_gold WHERE order_id = ?").bind(id).all<{ kind: string; ref_id: string }>();
+  const mo = order.manufacturing_order_id ? await db.prepare("SELECT id, number, status FROM manufacturing_orders WHERE id = ?").bind(order.manufacturing_order_id).first() : null;
+  const sale = order.sale_id ? await db.prepare("SELECT id, number, total_cents FROM sales_invoices WHERE id = ?").bind(order.sale_id).first() : null;
+  return { order: { id: order.id, number: order.number, status: order.status }, gold: gold ?? [], manufacturing: mo, sale };
 }
 
 export async function listCustomOrders(db: D1Database, opts: { page: number; limit: number; branchId?: string; customerId?: string; status?: string }) {

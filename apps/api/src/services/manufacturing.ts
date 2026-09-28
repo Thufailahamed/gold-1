@@ -116,10 +116,27 @@ export async function addMaterials(
   const order = await loadOrder(db, orderId);
   if (order.status !== "DRAFT")
     throw Object.assign(new Error("Materials can only be added to draft orders"), { code: "CONFLICT" });
+  // A manufacturing order linked to a live custom order may only consume
+  // earmarked gold. This check lives here — not in the custom-orders service —
+  // so direct calls to the mfg endpoint are guarded too.
+  const linked = await db.prepare("SELECT id FROM custom_orders WHERE manufacturing_order_id = ? AND status NOT IN ('CANCELLED','DELIVERED')").bind(orderId).first<{ id: string }>();
+  let earmarkedLots: Set<string> | null = null;
+  let earmarkedBatches: Set<string> | null = null;
+  if (linked) {
+    const { results: marks } = await db.prepare("SELECT ref_id FROM custom_order_gold WHERE order_id = ? AND kind = 'SHOP_LOT'").bind(linked.id).all<{ ref_id: string }>();
+    earmarkedLots = new Set((marks ?? []).map((m) => m.ref_id));
+    const { results: ogMarks } = await db.prepare("SELECT ref_id FROM custom_order_gold WHERE order_id = ? AND kind = 'CUSTOMER_OLDGOLD'").bind(linked.id).all<{ ref_id: string }>();
+    if ((ogMarks ?? []).length) {
+      const { results: batches } = await db.prepare(`SELECT DISTINCT batch_id FROM melting_inputs WHERE old_gold_id IN (${(ogMarks ?? []).map(() => "?").join(",")})`).bind(...(ogMarks ?? []).map((m) => m.ref_id)).all<{ batch_id: string }>();
+      earmarkedBatches = new Set((batches ?? []).map((b) => b.batch_id));
+    } else earmarkedBatches = new Set();
+  }
   const stmts: D1PreparedStatement[] = [];
   for (const lot of lots) {
     if (lot.fineMg <= 0)
       throw Object.assign(new Error("Allocation must be positive"), { code: "VALIDATION" });
+    if (earmarkedLots && !earmarkedLots.has(`${lot.lotBatchId}::${lot.lotNumber}`) && !earmarkedBatches!.has(lot.lotBatchId))
+      throw Object.assign(new Error(`Lot not earmarked for this custom order: ${lot.lotNumber}`), { code: "CONFLICT" });
     const found = await db
       .prepare("SELECT o.fine_mg, b.branch_id, b.status FROM melting_outputs o JOIN melting_batches b ON b.id = o.batch_id WHERE o.batch_id = ? AND o.lot_number = ?")
       .bind(lot.lotBatchId, lot.lotNumber)
