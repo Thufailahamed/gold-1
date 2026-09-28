@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { centsToLkr, mgToG } from "@goldos/shared";
 import { api } from "@/lib/api";
+import { LineageChain, type LineageNode, type LineageEdge } from "@/components/lineage-chain";
 import {
   Page,
   Hero,
@@ -301,6 +302,10 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         </div>
       </Panel>
 
+      <Panel title="Gold lineage" description="Backwards and forwards through every transformation">
+        <LineageSection refEntity="product" refId={id} />
+      </Panel>
+
       {editing ? (
         <EditDialog
           id={id}
@@ -413,4 +418,17 @@ function EditDialog({ id, onClose }: { id: string; onClose: () => void }) {
       </div>
     </div>
   );
+}
+
+function LineageSection({ refEntity, refId }: { refEntity: string; refId: string }) {
+  const lineage = useQuery({
+    queryKey: ["lineage", refEntity, refId],
+    queryFn: () =>
+      api<{ nodes: LineageNode[]; edges: LineageEdge[] }>(
+        `/api/v1/gold/lineage?refEntity=${refEntity}&refId=${refId}`
+      ),
+  });
+  if (lineage.isLoading) return <p className="text-sm text-ink-4">Loading lineage…</p>;
+  if (lineage.isError || !lineage.data) return <p className="text-sm text-ink-4">Lineage unavailable.</p>;
+  return <LineageChain nodes={lineage.data.nodes} edges={lineage.data.edges} />;
 }

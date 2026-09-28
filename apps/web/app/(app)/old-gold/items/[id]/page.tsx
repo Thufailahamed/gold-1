@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { LineageChain, type LineageNode, type LineageEdge } from "@/components/lineage-chain";
 
 type Detail = {
   item: {
@@ -147,8 +148,28 @@ export default function OldGoldDetailPage({ params }: { params: Promise<{ id: st
       {dialog === "purchase" ? <PurchaseDialog maxLkr={item.purchase_value_cents !== null ? item.purchase_value_cents / 100 : 0} onSubmit={(b) => act("/purchase", b, "Purchased")} onClose={() => setDialog(null)} /> : null}
       {dialog === "convert" ? <ConvertDialog onSubmit={(b) => act("/convert", b, "Converted")} onClose={() => setDialog(null)} /> : null}
       {dialog === "void" ? <VoidDialog onSubmit={(r) => voidIt(r)} onClose={() => setDialog(null)} /> : null}
+
+      <div className="rounded-xl border border-stone-200 bg-white p-4">
+        <h2 className="font-medium">Gold lineage</h2>
+        <div className="mt-2">
+          <OldGoldLineage id={id} />
+        </div>
+      </div>
     </div>
   );
+}
+
+function OldGoldLineage({ id }: { id: string }) {
+  const lineage = useQuery({
+    queryKey: ["og-lineage", id],
+    queryFn: () =>
+      api<{ nodes: LineageNode[]; edges: LineageEdge[] }>(
+        `/api/v1/gold/lineage?refEntity=old_gold&refId=${id}`
+      ),
+  });
+  if (lineage.isLoading) return <p className="text-sm text-stone-400">Loading lineage…</p>;
+  if (lineage.isError || !lineage.data) return <p className="text-sm text-stone-400">Lineage unavailable.</p>;
+  return <LineageChain nodes={lineage.data.nodes} edges={lineage.data.edges} />;
 }
 
 function ActionButton({ label, onClick }: { label: string; onClick: () => void }) {

@@ -88,6 +88,15 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: "Gold",
+    tag: "Vault",
+    items: [
+      { href: "/gold/ledger", label: "Ledger", icon: HistoryIcon, perm: "gold:view" },
+      { href: "/gold/melting", label: "Melting", icon: GemIcon, perm: "gold:view" },
+      { href: "/gold/stock", label: "Stock", icon: CoinsIcon, perm: "gold:view" },
+    ],
+  },
+  {
     title: "Old Gold",
     tag: "Counter",
     items: [
