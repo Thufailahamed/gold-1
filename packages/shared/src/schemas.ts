@@ -584,3 +584,29 @@ export const deliverCustomSchema = z.object({
   payments: z.array(z.object({ method: z.enum(["cash", "card", "bank", "credit", "other"]), amountLkr: z.number().gt(0) })).max(10),
 });
 export type CreateCustomOrderInput = z.infer<typeof createCustomOrderSchema>;
+
+export const approvalActionSchema = z.enum([
+  "SALES_DISCOUNT",
+  "PRICE_OVERRIDE",
+  "GOLD_RATE_CHANGE",
+  "GOLD_STOCK_ADJUST",
+  "INVENTORY_ADJUST",
+  "OLDGOLD_VALUATION",
+  "MELT_DIFFERENCE",
+  "MFG_DIFFERENCE",
+  "SALES_CANCEL",
+  "PURCHASE_CANCEL",
+  "SALES_RETURN",
+  "FIN_ADJUST",
+]);
+export const requestApprovalSchema = z.object({
+  action: approvalActionSchema,
+  entity: z.string().min(1).max(100),
+  entityId: z.string().min(1),
+  oldValue: z.record(z.unknown()).optional().default({}),
+  newValue: z.record(z.unknown()).optional().default({}),
+  metric: z.number(),
+  reason: z.string().min(1).max(500),
+  branchId: z.string().min(1).optional(),
+});
+export const decideApprovalSchema = z.object({ reason: z.string().max(500).optional() });

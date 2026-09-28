@@ -4,6 +4,7 @@ import { errorHandler } from "./middleware/error";
 import { cors } from "./middleware/cors";
 import { accounts } from "./routes/accounts";
 import { audit } from "./routes/audit";
+import { approvals } from "./routes/approvals";
 import { auth } from "./routes/auth";
 import { branches } from "./routes/branches";
 import { bankAccounts, cash, settlements } from "./routes/cashbank";
@@ -68,5 +69,6 @@ app.route("/api/v1/discrepancies", discrepancies);
 app.route("/api/v1/branch-overview", overview);
 app.route("/api/v1/repairs", repairRoutes);
 app.route("/api/v1/custom-orders", customOrderRoutes);
+app.route("/api/v1/approvals", approvals);
 
 export default app;
