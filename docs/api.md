@@ -117,3 +117,13 @@ Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 | POST | /melting/batches/:id/melt | gold:manage | output + assay → difference |
 | POST | /melting/batches/:id/approve | gold:manage | reason always; threshold approval; posts ledger |
 | PATCH | /melting/batches/:id/void | gold:manage | DRAFT only + reason |
+| POST | /manufacturing/orders | mfg:create | CUSTOMER needs customerId |
+| GET | /manufacturing/orders | mfg:view | filters status, type, branch, customer |
+| GET | /manufacturing/orders/:id | mfg:view | materials + outputs + ledger |
+| POST | /manufacturing/orders/:id/materials | mfg:edit | refined lots, remaining enforced |
+| POST | /manufacturing/orders/:id/produce | mfg:edit | exact balance + loss approval |
+| POST | /manufacturing/orders/:id/qc | mfg:edit | pass or fail + reason |
+| POST | /manufacturing/orders/:id/finish | mfg:edit | creates JW- products + ledger |
+| PATCH | /manufacturing/orders/:id/void | mfg:edit | DRAFT/ALLOCATED only + reason |
+| GET | /manufacturing/reports/summary | mfg:view | ?period=today\|month\|all |
+| GET | /manufacturing/reports/wip | mfg:view | open orders with allocated fine |

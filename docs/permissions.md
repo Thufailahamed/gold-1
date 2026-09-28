@@ -60,6 +60,10 @@ reverse/export/manage. `reverse` is reserved for future transaction modules
 | oldgold:approve | ✓ | ✓ | — | — | — | — | — | — |
 | gold:view | ✓ | ✓ | ✓ | ✓ | — | — | ✓ | — |
 | gold:manage | ✓ | ✓ | — | — | — | — | ✓ | — |
+| mfg:view | ✓ | ✓ | ✓ | — | — | ✓ | ✓ | ✓ |
+| mfg:create | ✓ | ✓ | — | — | — | — | — | ✓ |
+| mfg:edit | ✓ | ✓ | — | — | — | — | — | ✓ |
+| mfg:approve | ✓ | ✓ | — | — | — | — | — | — |
 
 Rules: sessions expire (12h idle / 7d absolute); inactive users are rejected;
 activation changes need a reason and are audited; users cannot change their

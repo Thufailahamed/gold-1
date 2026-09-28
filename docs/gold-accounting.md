@@ -66,6 +66,15 @@ CR 5000) plus gold IN rows. Original sales are never modified.
 Gold ledger tables (melting/recovery/manufacturing flows) still arrive
 with their phases.
 
+## Manufacturing postings (live)
+
+Finish posts in one batch: MANUFACTURING_INPUT per allocated lot
+(melting-lot → order, lot weight + allocated fine), MANUFACTURING_OUTPUT
+per finished product (order → branch, net weight + fine), LOSS if > 0.
+Finished cost = allocated-fine share of gold at board rate on finish day +
+labour/making/stones share. Lineage: lot → MO → JW- products walks both
+directions via `GET /gold/lineage`.
+
 ## Purchase postings (live)
 
 Receive/direct invoice posts in the invoice batch: DR 1100 Gold Inventory /

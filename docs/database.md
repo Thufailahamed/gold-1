@@ -54,6 +54,13 @@ Conventions: `id TEXT PK` (UUID), timestamps as INTEGER millis, FKs enforced.
 - `old_gold_purchases(id, item_id UNIQUE FK, value_cents, paid_cents, method cash/bank, created_at, created_by)`.
 - `gold_movements` gained nullable `old_gold_id FK` (0012 rebuild; CHECK one of product/old-gold set) for IN gold rows.
 
+## Manufacturing (migration `0014_manufacturing`)
+
+- `counters` += MO (MO-000001).
+- `manufacturing_orders(id, number UNIQUE, type CUSTOMER/INTERNAL, customer_id NULL FK, branch_id FK, design, description, due_at NULL, status DRAFT/ALLOCATED/IN_PRODUCTION/QC_PASSED/QC_FAILED/COMPLETE/VOID, labour/making/stone_cost cents, loss_mg, loss_reason, created_at, created_by)`.
+- `manufacturing_materials(id, order_id FK, lot_batch_id FK, lot_number, fine_mg)` — indexed (lot_batch, lot_number) for remaining checks.
+- `manufacturing_outputs(id, order_id FK, product_id NULL FK (set at finish), category/metal/purity refs, name, gross/stone/net mg, making_cents, cost_cents, location)`.
+
 ## Gold ledger + melting (migration `0013_goldledger`)
 
 - `gold_ledger(id, occurred_at, branch_id, source, destination, type [12 types], weight_mg, permille, fine_mg, ref_entity, ref_id, product_id NULL, old_gold_id NULL, user_id, notes, created_at, created_by)` — append-only, indexed (branch,time), (ref), (product), (old_gold). Backfilled from gold_movements (sale_invoice→SALE, sale_return→RETURN, old_gold_purchase→OLD_GOLD_PURCHASE; unknown counterparties as explicit `unknown` strings).
