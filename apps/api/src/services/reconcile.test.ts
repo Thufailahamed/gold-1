@@ -50,3 +50,18 @@ describe("in-transit comparison", () => {
     ).toBe(false);
   });
 });
+
+describe("expense cross-foot", () => {
+  it("passes when the payment movement matches posted expenses", () => {
+    const r = compareMoney("expenses_crossfoot", "Expenses", 450_000, 450_000, "day");
+    expect(r.pass).toBe(true);
+  });
+
+  it("stays true when a pending expense has been paid but not yet booked", () => {
+    // The journal has not seen it and neither side counts it, so the check
+    // passes while the day's cash reads high. That is deliberate: making it
+    // fail would punish the shop for an expense it has not approved yet, and
+    // counting it would hide the discrepancy the closing screen must show.
+    expect(compareMoney("expenses_crossfoot", "Expenses", 0, 0, "day").pass).toBe(true);
+  });
+});

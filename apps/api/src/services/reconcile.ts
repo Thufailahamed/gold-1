@@ -431,6 +431,43 @@ export async function reconcile(
     );
   }
 
+  // expenses_crossfoot: money that left a payment account for an expense equals
+  // the POSTED expenses for the day. A pending expense is on NEITHER side — the
+  // ledger has not seen it and neither does the document filter — so the check
+  // stays true while the day's CASH reads high. That gap is what spec 4's
+  // "awaiting approval" line exists to explain. Do not "fix" it here by
+  // counting pending expenses: that would make the check pass and hide the
+  // discrepancy the closing screen is supposed to show.
+  //
+  // Day-scoped and NOT branch-filtered, like trial_balance. The check is about
+  // the payment account, and a head-office cost paid from the main bank belongs
+  // to one branch while the money left another — filtering the two sides
+  // differently would report a discrepancy for a correct posting.
+  const expJournal = await firstRow<{ net: number }>(
+    db,
+    `SELECT COALESCE(SUM(l.credit_cents - l.debit_cents), 0) AS net
+     FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+     WHERE (l.account_code IN ('1000','1020')
+            OR l.account_code IN (SELECT account_code FROM bank_accounts WHERE is_active = 1))
+       AND e.ref_entity = 'expense' AND e.entry_date = ?`,
+    [day]
+  );
+  const expDocs = await firstRow<{ total: number }>(
+    db,
+    `SELECT COALESCE(SUM(amount_cents), 0) AS total FROM expenses
+     WHERE status = 'POSTED' AND incurred_on = ?`,
+    [day]
+  );
+  checks.push(
+    compareMoney(
+      "expenses_crossfoot",
+      "Expense payments match the posted expenses",
+      n(expDocs?.total),
+      n(expJournal?.net),
+      "day"
+    )
+  );
+
   // card_clearing: 1020's movement for the day is the settlements recorded for
   // that day. Scoped by ref_entity so it picks up the settlements spec 2 adds
   // without disturbing payments_crossfoot.
