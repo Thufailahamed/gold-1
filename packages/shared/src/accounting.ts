@@ -303,3 +303,31 @@ export function cashflowClose(openingCents: number, inflowsCents: number, outflo
 export function goldClose(openingMg: number, inMg: number, outMg: number): { closingMg: number } {
   return { closingMg: openingMg + inMg - outMg };
 }
+
+export function compareCount(
+  expected: { productId: string; barcode: string }[],
+  scans: { barcode: string; productId: string | null }[]
+): { matched: string[]; missing: string[]; unexpected: string[]; duplicates: string[]; matchedCount: number } {
+  const ids = new Set(expected.map((e) => e.productId));
+  const byBarcode = new Map(expected.map((e) => [e.barcode.toUpperCase(), e.productId]));
+  const seen = new Set<string>();
+  const matched: string[] = [];
+  const duplicates: string[] = [];
+  const unexpected: string[] = [];
+  for (const s of scans) {
+    const code = s.barcode.toUpperCase();
+    const pid = s.productId ?? byBarcode.get(code) ?? null;
+    if (!pid || !ids.has(pid)) {
+      if (!unexpected.includes(code)) unexpected.push(code);
+      continue;
+    }
+    if (seen.has(pid)) {
+      if (!duplicates.includes(pid)) duplicates.push(pid);
+      continue;
+    }
+    seen.add(pid);
+    matched.push(pid);
+  }
+  const missing = expected.map((e) => e.productId).filter((id) => !seen.has(id));
+  return { matched, missing, unexpected, duplicates, matchedCount: matched.length };
+}

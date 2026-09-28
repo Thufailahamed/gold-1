@@ -11,6 +11,7 @@ import {
   closingArithmetic,
   closingDifference,
   closingCash,
+  compareCount,
   computePartyLedger,
   type CashLine,
   expensePosting,
@@ -462,5 +463,24 @@ describe("monthly core helpers", () => {
   it("closes cash and gold", () => {
     expect(cashflowClose(5000, 3000, 1000).closingCents).toBe(7000);
     expect(goldClose(1000, 500, 300).closingMg).toBe(1200);
+  });
+});
+
+describe("compareCount", () => {
+  it("splits matched, missing, unexpected and duplicates", () => {
+    const r = compareCount(
+      [{ productId: "p1", barcode: "JW-AAAAAA" }, { productId: "p2", barcode: "JW-BBBBBB" }],
+      [{ barcode: "jw-aaaaaa", productId: "p1" }, { barcode: "JW-AAAAAA", productId: "p1" }, { barcode: "XX-000000", productId: null }]
+    );
+    expect(r.matched).toEqual(["p1"]);
+    expect(r.missing).toEqual(["p2"]);
+    expect(r.unexpected).toEqual(["XX-000000"]);
+    expect(r.duplicates).toEqual(["p1"]);
+    expect(r.matchedCount).toBe(1);
+  });
+  it("treats an empty count as fully unaccounted, not matched", () => {
+    const r = compareCount([{ productId: "p1", barcode: "JW-AAAAAA" }], []);
+    expect(r.matchedCount).toBe(0);
+    expect(r.missing).toEqual(["p1"]);
   });
 });
