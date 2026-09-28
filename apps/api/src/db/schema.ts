@@ -371,3 +371,57 @@ export const goldMovements = sqliteTable("gold_movements", {
   createdAt: integer("created_at").notNull(),
   createdBy: text("created_by"),
 });
+
+export const oldGoldItems = sqliteTable("old_gold_items", {
+  id: text("id").primaryKey(),
+  number: text("number").notNull().unique(),
+  customerId: text("customer_id").notNull(),
+  branchId: text("branch_id").notNull(),
+  itemType: text("item_type").notNull(),
+  description: text("description").notNull(),
+  grossMg: integer("gross_mg").notNull(),
+  stoneMg: integer("stone_mg").notNull().default(0),
+  netMg: integer("net_mg").notNull(),
+  purityId: text("purity_id"),
+  testedPermille: integer("tested_permille"),
+  karat: text("karat"),
+  fineMg: integer("fine_mg").notNull().default(0),
+  rateCentsPerG: integer("rate_cents_per_g"),
+  buyPct: real("buy_pct"),
+  purchaseRateCents: integer("purchase_rate_cents"),
+  stoneDeductionCents: integer("stone_deduction_cents").notNull().default(0),
+  processingDeductionCents: integer("processing_deduction_cents").notNull().default(0),
+  negotiatedCents: integer("negotiated_cents"),
+  purchaseValueCents: integer("purchase_value_cents"),
+  paidCents: integer("paid_cents").notNull().default(0),
+  status: text("status").notNull().default("RECEIVED"),
+  convertedProductId: text("converted_product_id"),
+  staffId: text("staff_id"),
+  notes: text("notes"),
+  imageKeys: text("image_keys").notNull().default("[]"),
+  docKeys: text("doc_keys").notNull().default("[]"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+export const goldTests = sqliteTable("gold_tests", {
+  id: text("id").primaryKey(),
+  itemId: text("item_id").notNull(),
+  method: text("method").notNull(),
+  testedPermille: integer("tested_permille").notNull(),
+  testerId: text("tester_id").notNull(),
+  result: text("result").notNull(),
+  approvedBy: text("approved_by"),
+  notes: text("notes"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const oldGoldPurchases = sqliteTable("old_gold_purchases", {
+  id: text("id").primaryKey(),
+  itemId: text("item_id").notNull().unique(),
+  valueCents: integer("value_cents").notNull(),
+  paidCents: integer("paid_cents").notNull(),
+  method: text("method").notNull(),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
