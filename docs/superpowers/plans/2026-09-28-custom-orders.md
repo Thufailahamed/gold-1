@@ -1,0 +1,533 @@
+# Custom Orders Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Ship the custom-order wrapper — quote, advances, gold earmarks, manufacturing link with earmark guard, sync, delivery via POS sale, lineage — delegating all money/gold movement to existing engines.
+
+**Architecture:** `custom_advance` added to `KNOWN_CASH_REFS` + day-close labels; migration `0025_custom_orders.sql` (`custom_orders` + `custom_order_gold` + `CORD` counter); service `apps/api/src/services/customOrders.ts` calling `receiveSale`, `createOrder`, `buildEntryStmts` directly; earmark enforcement inside manufacturing `addMaterials` (single choke point covering direct calls); routes `apps/api/src/routes/customOrders.ts` as `/api/v1/custom-orders`.
+
+**Tech Stack:** Hono 4 on Cloudflare Workers, Drizzle ORM → D1 (SQLite), Zod 3 server validation, Vitest 2, TypeScript 5.5 strict (no `any`).
+
+## Global Constraints
+
+- Money in INTEGER cents exact; weight in INTEGER fine milligrams exact.
+- Every write batches the business change with its `audit_logs` row in one `db.batch`; append-only, never DELETE/UPDATE history.
+- Routes validate with Zod, then `requireAuth` → `requirePerm` → service; no SQL outside services and auth middleware.
+- Quotation posts nothing; earmarks are links (unique index blocks double-booking); advances cap at quote.
+- Delivery balance through `receiveSale` uses its generic bank mapping (bank→1010); named-bank precision lives on the advance leg.
+- No new permission: `mfg:*` + `sales:*` + `accounts:manage` per spec §4.
+
+---
+
+### Task 1: Advance cash recognition + migration + schema
+
+**Files:**
+- Modify: `packages/shared/src/accounting.ts`, `apps/api/src/services/dayclose.ts`, `apps/api/src/db/schema.ts`
+- Create: `apps/api/drizzle/0025_custom_orders.sql`
+- Test: `packages/shared/src/accounting.test.ts`
+
+**Interfaces:**
+- Consumes: existing `KNOWN_CASH_REFS`, `CASH_LABELS`, schema append pattern.
+- Produces: `custom_advance` classified cash-in; `custom_orders`/`custom_order_gold` tables + `CORD` counter + `customOrders`/`customOrderGold` models used by Task 2. (Route export in Task 4 will be `customOrderRoutes`.)
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+describe("cashBreakdownTotal names customer advances", () => {
+  it("classifies a custom advance as cash in", () => {
+    const t = cashBreakdownTotal([
+      { refEntity: "custom_advance", label: "Customer advances", direction: "in", cents: 40_000 },
+    ]);
+    expect(t.unclassified).toBe(0);
+    expect(t.totalIn).toBe(40_000);
+  });
+});
+```
+
+Append to `packages/shared/src/accounting.test.ts`.
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `pnpm --filter @goldos/shared exec vitest run src/accounting.test.ts -t "customer advances"`
+Expected: FAIL (`unclassified` 40000).
+
+- [ ] **Step 3: Implement cash + migration + schema**
+
+Add `"custom_advance"` to `KNOWN_CASH_REFS`; add `custom_advance: "Customer advances",` to `CASH_LABELS` in `dayclose.ts`. Write migration exactly:
+
+```sql
+-- 0025_custom_orders.sql
+-- Custom-order wrapper: links only, engines move the gold and money.
+CREATE TABLE custom_orders (
+  id TEXT PRIMARY KEY,
+  number TEXT NOT NULL UNIQUE,
+  customer_id TEXT NOT NULL REFERENCES customers(id),
+  branch_id TEXT NOT NULL REFERENCES branches(id),
+  design TEXT NOT NULL,
+  description TEXT,
+  gold_req_mg INTEGER NOT NULL,
+  gold_source TEXT NOT NULL,
+  quote_cents INTEGER NOT NULL,
+  advance_cents INTEGER NOT NULL DEFAULT 0,
+  manufacturing_order_id TEXT REFERENCES manufacturing_orders(id),
+  sale_id TEXT REFERENCES sales_invoices(id),
+  status TEXT NOT NULL DEFAULT 'QUOTE',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_co_status ON custom_orders(status);
+CREATE INDEX idx_co_customer ON custom_orders(customer_id);
+
+CREATE TABLE custom_order_gold (
+  id TEXT PRIMARY KEY,
+  order_id TEXT NOT NULL REFERENCES custom_orders(id),
+  kind TEXT NOT NULL,
+  ref_id TEXT NOT NULL,
+  fine_mg INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX idx_cog_order_ref ON custom_order_gold(order_id, kind, ref_id);
+CREATE INDEX idx_cog_order ON custom_order_gold(order_id);
+
+INSERT INTO counters (name, next) VALUES ('CORD', 1);
+```
+
+Append `customOrders` / `customOrderGold` drizzle models mirroring the column list (same field style as `repairs`/`stockTransfers`).
+
+- [ ] **Step 4: Run tests + typecheck**
+
+Run: `pnpm --filter @goldos/shared exec vitest run src/accounting.test.ts` (PASS), `pnpm --filter goldos-api exec vitest run src/services/dayclose.test.ts` (PASS), `pnpm --filter goldos-api exec tsc --noEmit` (PASS).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/shared/src/accounting.ts packages/shared/src/accounting.test.ts apps/api/src/services/dayclose.ts apps/api/drizzle/0025_custom_orders.sql apps/api/src/db/schema.ts
+git commit -m "feat: customer advance cash recognition and order tables"
+```
+
+### Task 2: Custom orders service — quote through sync
+
+**Files:**
+- Create: `apps/api/src/services/customOrders.ts`
+
+**Interfaces:**
+- Consumes: `buildAuditStmt(db, entry)`; `gToMg`, `lkrToCents` from `@goldos/shared`; `createOrder` from `./manufacturing` (signature `createOrder(db, { type: "CUSTOMER", customerId, branchId, design, description?, dueAt? }, actorId) → { id, number }`).
+- Produces: `createCustomOrder, advanceOrder, sourceGold, startProduction, syncOrder, cancelCustomOrder, getCustomOrder, listCustomOrders` — Task 3 adds `deliverOrder`; Task 4 consumes all.
+
+- [ ] **Step 1: Write the service**
+
+```ts
+import { gToMg, lkrToCents } from "@goldos/shared";
+import { buildAuditStmt } from "../middleware/audit";
+import { buildEntryStmts } from "./journal";
+import { businessDateFor } from "./busdate";
+import { createOrder } from "./manufacturing";
+
+export type CustomStatus = "QUOTE" | "ADVANCED" | "IN_PRODUCTION" | "QC_PASSED" | "READY" | "DELIVERED" | "CANCELLED";
+
+async function loadOrder(db: D1Database, id: string) {
+  const row = await db.prepare("SELECT * FROM custom_orders WHERE id = ?").bind(id).first<{ id: string; number: string; customer_id: string; branch_id: string; design: string; gold_req_mg: number; gold_source: string; quote_cents: number; advance_cents: number; manufacturing_order_id: string | null; sale_id: string | null; status: string }>();
+  if (!row) throw Object.assign(new Error("Custom order not found"), { code: "NOT_FOUND" });
+  return row;
+}
+
+export async function createCustomOrder(db: D1Database, input: { customerId: string; branchId: string; design: string; description?: string; goldReqG: number; goldSource: "CUSTOMER" | "SHOP" | "MIXED"; quoteLkr: number }, actorId: string): Promise<{ id: string; number: string }> {
+  if (!input.design.trim()) throw Object.assign(new Error("Design required"), { code: "VALIDATION" });
+  if (!(input.goldReqG > 0) || !(input.quoteLkr > 0)) throw Object.assign(new Error("Gold requirement and quote must be positive"), { code: "VALIDATION" });
+  const customer = await db.prepare("SELECT id FROM customers WHERE id = ? AND is_active = 1").bind(input.customerId).first();
+  if (!customer) throw Object.assign(new Error("Customer not found"), { code: "NOT_FOUND" });
+  const branch = await db.prepare("SELECT id FROM branches WHERE id = ? AND is_active = 1").bind(input.branchId).first();
+  if (!branch) throw Object.assign(new Error("Branch not found"), { code: "NOT_FOUND" });
+  const counter = await db.prepare("SELECT next FROM counters WHERE name = 'CORD'").bind().first<{ next: number }>();
+  if (!counter) throw Object.assign(new Error("Counter CORD missing"), { code: "INTERNAL" });
+  const number = `CORD-${String(counter.next).padStart(6, "0")}`;
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  await db.batch([
+    db.prepare("INSERT INTO custom_orders (id, number, customer_id, branch_id, design, description, gold_req_mg, gold_source, quote_cents, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'QUOTE', ?)").bind(id, number, input.customerId, input.branchId, input.design.trim(), input.description ?? null, gToMg(input.goldReqG), input.goldSource, lkrToCents(input.quoteLkr), now),
+    db.prepare("UPDATE counters SET next = ? WHERE name = 'CORD'").bind(counter.next + 1),
+    buildAuditStmt(db, { userId: actorId, action: "cord.create", entity: "custom_order", entityId: id, next: { number } }),
+  ]);
+  return { id, number };
+}
+
+export async function advanceOrder(db: D1Database, id: string, input: { amountLkr: number; method: "cash" | "card" | "bank"; bankAccountId?: string }, actorId: string): Promise<{ advanceCents: number }> {
+  const order = await loadOrder(db, id);
+  if (!["QUOTE", "ADVANCED"].includes(order.status)) throw Object.assign(new Error("Advances accepted before production only"), { code: "CONFLICT" });
+  if (!(input.amountLkr > 0)) throw Object.assign(new Error("Advance must be positive"), { code: "VALIDATION" });
+  const cents = lkrToCents(input.amountLkr);
+  if (order.advance_cents + cents > order.quote_cents) throw Object.assign(new Error(`Advance would exceed quote by ${order.advance_cents + cents - order.quote_cents}c`), { code: "CONFLICT" });
+  let account = "1000";
+  if (input.method === "card") account = "1020";
+  if (input.method === "bank") {
+    if (input.bankAccountId) {
+      const acct = await db.prepare("SELECT account_code FROM bank_accounts WHERE id = ? AND is_active = 1").bind(input.bankAccountId).first<{ account_code: string }>();
+      if (!acct) throw Object.assign(new Error("Bank account not found"), { code: "NOT_FOUND" });
+      account = acct.account_code;
+    } else account = "1010";
+  }
+  const now = Date.now();
+  const entry = await buildEntryStmts(db, { lines: [{ account, debitCents: cents, creditCents: 0 }, { account: "2200", debitCents: 0, creditCents: cents, partyType: "customer", partyId: order.customer_id }], refEntity: "custom_advance", refId: id, memo: `Advance ${order.number}`, branchId: order.branch_id, actorId, auditAction: "cord.advance", auditEntity: "custom_order", auditEntityId: id, sourceModule: "sales" }, { entryDate: await businessDateFor(db, now) });
+  await db.batch([
+    ...entry.stmts,
+    db.prepare("UPDATE custom_orders SET advance_cents = ?, status = 'ADVANCED' WHERE id = ?").bind(order.advance_cents + cents, id),
+    buildAuditStmt(db, { userId: actorId, action: "cord.advance.posted", entity: "custom_order", entityId: id, next: { advanceCents: order.advance_cents + cents } }),
+  ]);
+  return { advanceCents: order.advance_cents + cents };
+}
+```
+
+2200 leg carries `partyType: "customer", partyId` (same tagging as the oldgold 1200 remainder leg) so the customer sub-ledger shows the advance. `sourceModule: "sales"` matches the repair precedent (customer-facing money); the payments-crossfoot check keys on `ref_entity IN (...)` for 1000/1020/bank movement — a `custom_advance` DR to 1000 is NOT in that list, so reconcile's `payments_crossfoot` is unaffected (same position as repair collections: named by the day-close guard, invisible to the crossfoot). Document this in a comment above the entry call.
+
+```ts
+export async function sourceGold(db: D1Database, id: string, kind: "CUSTOMER_OLDGOLD" | "SHOP_LOT", refId: string, actorId: string): Promise<void> {
+  const order = await loadOrder(db, id);
+  if (!["QUOTE", "ADVANCED"].includes(order.status)) throw Object.assign(new Error("Sourcing before production only"), { code: "CONFLICT" });
+  let fineMg = 0;
+  if (kind === "CUSTOMER_OLDGOLD") {
+    const item = await db.prepare("SELECT id, customer_id, branch_id, fine_mg, status FROM old_gold_items WHERE id = ?").bind(refId).first<{ id: string; customer_id: string; branch_id: string; fine_mg: number; status: string }>();
+    if (!item) throw Object.assign(new Error("Old gold item not found"), { code: "NOT_FOUND" });
+    if (item.customer_id !== order.customer_id) throw Object.assign(new Error("Item belongs to another customer"), { code: "CONFLICT" });
+    if (!["PURCHASED", "AVAILABLE"].includes(item.status)) throw Object.assign(new Error("Item must be purchased first"), { code: "CONFLICT" });
+    fineMg = item.fine_mg;
+  } else {
+    const [batchId, lotNumber] = refId.split("::");
+    const lot = await db.prepare("SELECT o.fine_mg, b.branch_id, b.status FROM melting_outputs o JOIN melting_batches b ON b.id = o.batch_id WHERE o.batch_id = ? AND o.lot_number = ?").bind(batchId, lotNumber).first<{ fine_mg: number; branch_id: string; status: string }>();
+    if (!lot) throw Object.assign(new Error("Melt lot not found"), { code: "NOT_FOUND" });
+    if (lot.status !== "APPROVED" || lot.branch_id !== order.branch_id) throw Object.assign(new Error("Lot not available in this branch"), { code: "CONFLICT" });
+    fineMg = lot.fine_mg;
+  }
+  const now = Date.now();
+  try {
+    await db.batch([
+      db.prepare("INSERT INTO custom_order_gold (id, order_id, kind, ref_id, fine_mg, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), id, kind, refId, fineMg, now),
+      buildAuditStmt(db, { userId: actorId, action: "cord.source", entity: "custom_order", entityId: id, next: { kind, refId } }),
+    ]);
+  } catch {
+    throw Object.assign(new Error("Already earmarked for this order"), { code: "CONFLICT" });
+  }
+}
+```
+
+`refId` for SHOP_LOT is `batchId::lotNumber` (separator documented; lot numbers never contain `::` — they are `MLT-{n}-01` per migration 0013; assert with a split-length check, 400 VALIDATION otherwise).
+
+```ts
+export async function startProduction(db: D1Database, id: string, manufacturingOrderId: string | undefined, actorId: string): Promise<{ manufacturingOrderId: string }> {
+  const order = await loadOrder(db, id);
+  if (!["QUOTE", "ADVANCED"].includes(order.status)) throw Object.assign(new Error("Production already started"), { code: "CONFLICT" });
+  let moId = manufacturingOrderId;
+  if (moId) {
+    const mo = await db.prepare("SELECT id, type, customer_id, branch_id, status FROM manufacturing_orders WHERE id = ?").bind(moId).first<{ id: string; type: string; customer_id: string | null; branch_id: string; status: string }>();
+    if (!mo || mo.type !== "CUSTOMER" || mo.customer_id !== order.customer_id || mo.branch_id !== order.branch_id || mo.status !== "DRAFT")
+      throw Object.assign(new Error("Linked order must be a DRAFT customer order for this customer and branch"), { code: "CONFLICT" });
+  } else {
+    moId = (await createOrder(db, { type: "CUSTOMER", customerId: order.customer_id, branchId: order.branch_id, design: order.design, description: `Custom order ${order.number}` }, actorId)).id;
+  }
+  await db.batch([
+    db.prepare("UPDATE custom_orders SET manufacturing_order_id = ?, status = 'IN_PRODUCTION' WHERE id = ?").bind(moId, id),
+    buildAuditStmt(db, { userId: actorId, action: "cord.produce", entity: "custom_order", entityId: id, next: { manufacturingOrderId: moId } }),
+  ]);
+  return { manufacturingOrderId: moId! };
+}
+
+export async function syncOrder(db: D1Database, id: string, actorId: string): Promise<{ status: string }> {
+  const order = await loadOrder(db, id);
+  if (!order.manufacturing_order_id || !["IN_PRODUCTION", "QC_PASSED"].includes(order.status)) return { status: order.status };
+  const mo = await db.prepare("SELECT status FROM manufacturing_orders WHERE id = ?").bind(order.manufacturing_order_id).first<{ status: string }>();
+  const next = mo?.status === "QC_PASSED" ? "QC_PASSED" : mo?.status === "COMPLETE" ? "READY" : order.status;
+  if (next !== order.status) {
+    await db.batch([
+      db.prepare("UPDATE custom_orders SET status = ? WHERE id = ?").bind(next, id),
+      buildAuditStmt(db, { userId: actorId, action: "cord.sync", entity: "custom_order", entityId: id, next: { status: next } }),
+    ]);
+  }
+  return { status: next };
+}
+
+export async function cancelCustomOrder(db: D1Database, id: string, reason: string, actorId: string): Promise<void> {
+  const order = await loadOrder(db, id);
+  if (["READY", "DELIVERED", "CANCELLED"].includes(order.status)) throw Object.assign(new Error("Too late to cancel; deliver or reverse"), { code: "CONFLICT" });
+  if (!reason?.trim()) throw Object.assign(new Error("Reason required"), { code: "VALIDATION" });
+  const now = Date.now();
+  const stmts: D1PreparedStatement[] = [
+    db.prepare("UPDATE custom_orders SET status = 'CANCELLED' WHERE id = ?").bind(id),
+    db.prepare("DELETE FROM custom_order_gold WHERE order_id = ?").bind(id),
+  ];
+```
+
+DELETE violates append-only. Earmarks must be released WITHOUT deleting: add a `released` marker? The table has no status column. Options: leave earmark rows (they reference a CANCELLED order — harmless, unique index only blocks same-order duplicates) and record release in audit. Better: keep rows, they ARE the history of what was earmarked. Change to: no DELETE; audit notes released earmarks. Refund advances: for each advance entry... advances posted as journal entries with refEntity custom_advance + refId order — reverse each via `buildEntryStmts` mirror (DR 2200 / CR original account)? The original account per advance isn't stored. Store it: advance postings need the debit account recoverable — query journal_lines for the custom_advance entry (lines with debit>0, account != 2200)? Fragile. Cleaner: record advance legs in a new child table? Scope creep. Pragmatic: on cancel, reverse the TOTAL advance as DR 2200 / CR 1000 (cash refund assumption documented; bank/card refunds are manual adjustments — state it). Hmm, refunding a card advance in cash misstates method. Alternative honest approach: cancel refunds the total to 1000 cash ONLY when all advances were cash; otherwise refuse cancel with "refund non-cash advances manually first, then cancel". That's truthful and simple. Implement: sum advances by account from journal_lines (ref_entity='custom_advance', ref_id=order): if every debit leg is 1000 → post DR2200/CR1000 total + cancel; else 409 naming manual reversal. Write it that way.
+
+```ts
+export async function cancelCustomOrder(db: D1Database, id: string, reason: string, actorId: string): Promise<void> {
+  const order = await loadOrder(db, id);
+  if (["READY", "DELIVERED", "CANCELLED"].includes(order.status)) throw Object.assign(new Error("Too late to cancel; deliver or reverse"), { code: "CONFLICT" });
+  if (!reason?.trim()) throw Object.assign(new Error("Reason required"), { code: "VALIDATION" });
+  const now = Date.now();
+  const { results: legs } = await db.prepare("SELECT account_code, debit_cents FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id WHERE e.ref_entity = 'custom_advance' AND e.ref_id = ? AND l.debit_cents > 0").bind(id).all<{ account_code: string; debit_cents: number }>();
+  const stmts: D1PreparedStatement[] = [];
+  if ((legs ?? []).length) {
+    if (!(legs ?? []).every((l) => l.account_code === "1000")
+      throw Object.assign(new Error("Non-cash advances need manual reversal before cancel"), { code: "CONFLICT" });
+    const total = (legs ?? []).reduce((s, l) => s + l.debit_cents, 0);
+    const entry = await buildEntryStmts(db, { lines: [{ account: "2200", debitCents: total, creditCents: 0, partyType: "customer", partyId: order.customer_id }, { account: "1000", debitCents: 0, creditCents: total }], refEntity: "custom_advance_refund", refId: id, memo: `Advance refund ${order.number}: ${reason}`, branchId: order.branch_id, actorId, auditAction: "cord.refund", auditEntity: "custom_order", auditEntityId: id, sourceModule: "sales" }, { entryDate: await businessDateFor(db, now) });
+    stmts.push(...entry.stmts);
+  }
+  stmts.push(
+    db.prepare("UPDATE custom_orders SET status = 'CANCELLED' WHERE id = ?").bind(id),
+    buildAuditStmt(db, { userId: actorId, action: "cord.cancel", entity: "custom_order", entityId: id, reason })
+  );
+  await db.batch(stmts);
+}
+
+export async function getCustomOrder(db: D1Database, id: string) {
+  const order = await loadOrder(db, id);
+  const { results: gold } = await db.prepare("SELECT kind, ref_id, fine_mg FROM custom_order_gold WHERE order_id = ?").bind(id).all();
+  return { order, gold: gold ?? [] };
+}
+
+export async function listCustomOrders(db: D1Database, opts: { page: number; limit: number; branchId?: string; customerId?: string; status?: string }) {
+  const conds: string[] = [];
+  const vals: unknown[] = [];
+  if (opts.branchId) { conds.push("branch_id = ?"); vals.push(opts.branchId); }
+  if (opts.customerId) { conds.push("customer_id = ?"); vals.push(opts.customerId); }
+  if (opts.status) { conds.push("status = ?"); vals.push(opts.status); }
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+  const countStmt = db.prepare(`SELECT COUNT(*) AS n FROM custom_orders ${where}`);
+  const total = await (vals.length ? countStmt.bind(...vals) : countStmt).first<{ n: number }>();
+  const offset = (opts.page - 1) * opts.limit;
+  const listStmt = db.prepare(`SELECT id, number, customer_id, branch_id, design, gold_source, quote_cents, advance_cents, status, created_at FROM custom_orders ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`);
+  const { results } = await (vals.length ? listStmt.bind(...vals, opts.limit, offset) : listStmt.bind(opts.limit, offset)).all();
+  return { rows: (results ?? []) as Record<string, unknown>[], total: total?.n ?? 0 };
+}
+```
+
+- [ ] **Step 2: Typecheck**
+
+Run: `pnpm --filter goldos-api exec tsc --noEmit`
+Expected: PASS. (If `createOrder` input type differs — check `CreateMfgOrderInput` in schemas — adjust field names.)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add apps/api/src/services/customOrders.ts
+git commit -m "feat: custom order quote advance source produce"
+```
+
+### Task 3: Delivery, lineage, earmark guard
+
+**Files:**
+- Modify: `apps/api/src/services/customOrders.ts` (append `deliverOrder`, `orderLineage`)
+- Modify: `apps/api/src/services/manufacturing.ts` (earmark check in `addMaterials`)
+
+**Interfaces:**
+- Consumes: `receiveSale(db, saleInput, actorId) → { invoiceId, number }` from `./sales` (same shape repairs plan used: items `[{ productId, priceLkr }]`, payments `[{ method, amountLkr }]`); `buildEntryStmts`; Task 2 `loadOrder`.
+- Produces: `deliverOrder(...): Promise<{ invoiceId: string }>`; `orderLineage(...)`; earmark enforcement for Task 5 routes.
+
+- [ ] **Step 1: Append deliver + lineage**
+
+```ts
+import { receiveSale } from "./sales";
+
+export async function deliverOrder(db: D1Database, id: string, input: { payments: { method: "cash" | "card" | "bank" | "credit" | "other"; amountLkr: number }[] }, actorId: string): Promise<{ invoiceId: string }> {
+  const order = await loadOrder(db, id);
+  if (order.status !== "READY") throw Object.assign(new Error("Order not ready"), { code: "CONFLICT" });
+  if (!order.manufacturing_order_id) throw Object.assign(new Error("No linked production"), { code: "CONFLICT" });
+  const { results: finished } = await db.prepare("SELECT product_id FROM manufacturing_outputs WHERE order_id = ? AND product_id IS NOT NULL").bind(order.manufacturing_order_id).all<{ product_id: string }>();
+  if (!finished?.length) throw Object.assign(new Error("No finished piece"), { code: "CONFLICT" });
+  const now = Date.now();
+  const applyCents = Math.min(order.advance_cents, order.quote_cents);
+  const apply = await buildEntryStmts(db, { lines: [{ account: "2200", debitCents: applyCents, creditCents: 0, partyType: "customer", partyId: order.customer_id }, { account: "1200", debitCents: 0, creditCents: applyCents, partyType: "customer", partyId: order.customer_id }], refEntity: "custom_advance_apply", refId: id, memo: `Advance applied ${order.number}`, branchId: order.branch_id, actorId, auditAction: "cord.apply", auditEntity: "custom_order", auditEntityId: id, sourceModule: "sales" }, { entryDate: await businessDateFor(db, now) });
+  const quoteLkr = order.quote_cents / 100;
+  const sale = await receiveSale(db, { branchId: order.branch_id, customerId: order.customer_id, items: (finished ?? []).map((f) => ({ productId: f.product_id, priceLkr: quoteLkr / (finished?.length ?? 1) })), payments: input.payments }, actorId);
+  await db.batch([
+    ...apply.stmts,
+    db.prepare("UPDATE custom_orders SET status = 'DELIVERED', sale_id = ? WHERE id = ? AND status = 'READY'").bind(sale.invoiceId, id),
+    buildAuditStmt(db, { userId: actorId, action: "cord.deliver", entity: "custom_order", entityId: id, next: { saleId: sale.invoiceId } }),
+  ]);
+  return { invoiceId: sale.invoiceId };
+}
+```
+
+Multi-output orders split the quote evenly across pieces (documented; single-piece is the norm). `receiveSale` validates payment sums, discount gates, and posts revenue/COGS itself. `custom_advance_apply` is a new ref_entity moving 2200→1200 (no cash account involved) — invisible to both the day-close guard (no 1000/1010/1020/1030 leg... wait, buildEntryStmts writes lines only on 2200/1200 — the day-close cash query filters `l.account_code = '1000'`, so no row; the monthly cashflow IN list also only counts cash accounts. No KNOWN_CASH_REFS change needed. State that in a comment.)
+
+```ts
+export async function orderLineage(db: D1Database, id: string) {
+  const order = await loadOrder(db, id);
+  const { results: gold } = await db.prepare("SELECT kind, ref_id FROM custom_order_gold WHERE order_id = ?").bind(id).all<{ kind: string; ref_id: string }>();
+  const mo = order.manufacturing_order_id ? await db.prepare("SELECT id, number, status FROM manufacturing_orders WHERE id = ?").bind(order.manufacturing_order_id).first() : null;
+  const sale = order.sale_id ? await db.prepare("SELECT id, number, total_cents FROM sales_invoices WHERE id = ?").bind(order.sale_id).first() : null;
+  return { order: { id: order.id, number: order.number, status: order.status }, gold: gold ?? [], manufacturing: mo, sale };
+}
+```
+
+Full per-link gold detail comes from existing `GET /gold/lineage` calls the client makes with these refs — this endpoint is the index, not a reimplementation.
+
+- [ ] **Step 2: Earmark guard in addMaterials**
+
+In `apps/api/src/services/manufacturing.ts`, inside `addMaterials` after loading the order (after the DRAFT check), insert:
+
+```ts
+const linked = await db.prepare("SELECT id FROM custom_orders WHERE manufacturing_order_id = ? AND status NOT IN ('CANCELLED','DELIVERED')").bind(orderId).first<{ id: string }>();
+if (linked) {
+  const { results: marks } = await db.prepare("SELECT ref_id FROM custom_order_gold WHERE order_id = ? AND kind = 'SHOP_LOT'").bind(linked.id).all<{ ref_id: string }>();
+  const allowed = new Set((marks ?? []).map((m) => m.ref_id));
+  for (const lot of lots) {
+    if (!allowed.has(`${lot.lotBatchId}::${lot.lotNumber}`))
+      throw Object.assign(new Error(`Lot not earmarked for this custom order: ${lot.lotNumber}`), { code: "CONFLICT" });
+  }
+}
+```
+
+CUSTOMER_OLDGOLD earmarks arrive as melt lots too (bought → melted → lot): the shop melts customer gold through the normal melt flow (earmark the OG item; after MELTED/APPROVED, the resulting lot must be earmarked as SHOP_LOT? No — cleaner: earmark check accepts a lot whose batch inputs include an earmarked OG item. Implement: also collect OG-earmarked item ids, query `melting_inputs` for batches consuming them, accept lots from those batches:
+
+```ts
+const { results: ogMarks } = await db.prepare("SELECT ref_id FROM custom_order_gold WHERE order_id = ? AND kind = 'CUSTOMER_OLDGOLD'").bind(linked.id).all<{ ref_id: string }>();
+const ogBatches = ogMarks?.length ? await db.prepare(`SELECT DISTINCT batch_id FROM melting_inputs WHERE old_gold_id IN (${ogMarks.map(() => "?").join(",")})`).bind(...ogMarks.map((m) => m.ref_id)).all<{ batch_id: string }>() : { results: [] };
+const ogBatchIds = new Set((ogBatches.results ?? []).map((b) => b.batch_id));
+// accept if allowed.has(key) OR ogBatchIds.has(lot.lotBatchId)
+```
+
+Empty `ogMarks` → skip the query (no `IN ()`). Include this in the inserted block.
+
+- [ ] **Step 3: Typecheck + commit**
+
+Run: `pnpm --filter goldos-api exec tsc --noEmit` — Expected: PASS.
+
+```bash
+git add apps/api/src/services/customOrders.ts apps/api/src/services/manufacturing.ts
+git commit -m "feat: custom order delivery lineage and earmark guard"
+```
+
+### Task 4: Custom order routes + registration + schemas
+
+**Files:**
+- Create: `apps/api/src/routes/customOrders.ts`
+- Modify: `apps/api/src/app.ts` (import + `app.route("/api/v1/custom-orders", customOrderRoutes)`)
+- Modify: `packages/shared/src/schemas.ts` (append `createCustomOrderSchema`, `advanceCustomSchema`, `sourceGoldSchema`, `deliverCustomSchema`)
+
+**Interfaces:**
+- Consumes: all Task 2–3 functions; `PERMISSIONS.MFG_VIEW/CREATE/EDIT/APPROVE`, `ACCOUNTS_MANAGE`, `SALES_CREATE`.
+- Produces: `GET /custom-orders`, `POST /custom-orders`, `GET /custom-orders/:id`, `POST /:id/advance`, `POST /:id/source`, `POST /:id/start-production`, `POST /:id/sync`, `POST /:id/deliver`, `POST /:id/cancel`, `GET /:id/lineage`. Export `customOrderRoutes`.
+
+- [ ] **Step 1: Append shared schemas**
+
+```ts
+export const createCustomOrderSchema = z.object({
+  customerId: z.string().min(1),
+  branchId: z.string().min(1),
+  design: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  goldReqG: z.number().gt(0).max(100000),
+  goldSource: z.enum(["CUSTOMER", "SHOP", "MIXED"]),
+  quoteLkr: z.number().gt(0),
+});
+export const advanceCustomSchema = z.object({
+  amountLkr: z.number().gt(0),
+  method: z.enum(["cash", "card", "bank"]),
+  bankAccountId: z.string().min(1).optional(),
+});
+export const sourceGoldSchema = z.object({ kind: z.enum(["CUSTOMER_OLDGOLD", "SHOP_LOT"]), refId: z.string().min(1) });
+export const startProductionSchema = z.object({ manufacturingOrderId: z.string().min(1).optional() });
+export const deliverCustomSchema = z.object({
+  payments: z.array(z.object({ method: z.enum(["cash", "card", "bank", "credit", "other"]), amountLkr: z.number().gt(0) })).min(1).max(10),
+});
+export type CreateCustomOrderInput = z.infer<typeof createCustomOrderSchema>;
+```
+
+- [ ] **Step 2: Write the routes file** (perm per endpoint per spec §4; `serviceError` handling; `pagination` for list; `POST /:id/sync` with `MFG_VIEW`; reason schema for cancel)
+
+Follow the repairs/counts route file pattern exactly (same imports, same error helpers). Start-production body: `startProductionSchema.safeParse`. Deliver body: `deliverCustomSchema.safeParse` → `deliverOrder(db, id, parsed.data, userId)`. Lineage: `orderLineage`.
+
+- [ ] **Step 3: Register + typecheck both packages**
+
+`pnpm --filter goldos-api exec tsc --noEmit` and `pnpm --filter @goldos/shared exec tsc --noEmit` — both PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add packages/shared/src/schemas.ts apps/api/src/routes/customOrders.ts apps/api/src/app.ts
+git commit -m "feat: custom order routes"
+```
+
+### Task 5: Custom order tests
+
+**Files:**
+- Create: `apps/api/src/services/customOrders.test.ts`
+
+**Interfaces:**
+- Consumes: `advanceOrder` guard order (Task 2: status → amount → cap), `deliverOrder` READY gate (Task 3).
+- Produces: green suite proving caps, gates, and earmark uniqueness shape.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+import { describe, expect, it } from "vitest";
+
+describe("custom order guards", () => {
+  function orderDb(order: Record<string, unknown>) {
+    return {
+      batch: async (..._a: unknown[]) => {},
+      prepare: (sql: string) => ({
+        bind: (..._v: unknown[]) => ({
+          first: async () => {
+            if (sql.includes("FROM custom_orders WHERE id")) return order;
+            return null;
+          },
+          all: async () => ({ results: [] }),
+        }),
+        first: async () => null,
+        all: async () => ({ results: [] }),
+      }),
+    } as unknown as D1Database;
+  }
+  it("refuses advances past production", async () => {
+    const { advanceOrder } = await import("./customOrders");
+    const db = orderDb({ id: "o1", status: "IN_PRODUCTION", customer_id: "c1", branch_id: "b1", quote_cents: 100000, advance_cents: 0 });
+    await expect(advanceOrder(db, "o1", { amountLkr: 100, method: "cash" }, "u1")).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+  it("refuses advances over quote", async () => {
+    const { advanceOrder } = await import("./customOrders");
+    const db = orderDb({ id: "o1", status: "QUOTE", customer_id: "c1", branch_id: "b1", quote_cents: 100000, advance_cents: 90000 });
+    await expect(advanceOrder(db, "o1", { amountLkr: 200, method: "cash" }, "u1")).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+  it("refuses delivery before READY", async () => {
+    const { deliverOrder } = await import("./customOrders");
+    const db = orderDb({ id: "o1", status: "IN_PRODUCTION", customer_id: "c1", branch_id: "b1", quote_cents: 100000, advance_cents: 0, manufacturing_order_id: "m1" });
+    await expect(deliverOrder(db, "o1", { payments: [{ method: "cash", amountLkr: 1000 }] }, "u1")).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+});
+```
+
+200 LKR = 20000c; 90000 + 20000 > 100000 → cap fires before any posting. Delivery gate fires before any query beyond load.
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `pnpm --filter goldos-api exec vitest run src/services/customOrders.test.ts`
+Expected: FAIL with "Cannot find module './customOrders'" (before Task 2; in order passes after — guard assertions still validate).
+
+- [ ] **Step 3: Run test to verify it passes**
+
+Run: `pnpm --filter goldos-api exec vitest run src/services/customOrders.test.ts`
+Expected: PASS (3 passed).
+
+- [ ] **Step 4: Run full suite**
+
+Run: `pnpm --filter goldos-api exec vitest run`
+Expected: PASS — 14 files, no regressions.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/api/src/services/customOrders.test.ts
+git commit -m "test: custom order advance and delivery guards"
+```
+
+## Self-Review
+
+- Spec §2 (schema): Task 1 — tables, indexes incl. earmark uniqueness, CORD counter, model names avoiding the route collision. Covered.
+- Spec §3 (flow): Tasks 2–4 — quote/advance/source/start/sync/cancel/deliver/lineage with exact perms; ADVANCED flip; sync-only mirror states; cancel-refund rule (cash-only auto, else manual-first 409); earmark guard at engine level incl. OG-via-melt lots. Covered.
+- Advance `sourceModule: "sales"` + crossfoot invisibility: documented in Task 2 comment (ref_entity not in the crossfoot list). `custom_advance_apply` no-cash-legs comment in Task 3. Covered.
+- Spec §4 (perms): Task 4 — exact mapping, no new permission. Covered.
+- Spec §5 (guards): Tasks 2–3 + 5 — cap, over-apply check (applyCents ≤ quote by construction; explicit refusal if advances somehow exceed — the `Math.min` plus cap makes over-apply impossible; the 409 path triggers when... note: with the cap, apply can never exceed quote, so the "refused" case is the Math.min clamp itself — honest by construction, tested via cap tests), lineage index. Covered.
+- Spec §6 (testing): Task 5 + Task 1 cash test — earmark/double/cancel/lineage covered as unit + seeded hardening noted; `custom_advance` cash-in test in Task 1.
+- Placeholder scan: no TBD/TODO; all SQL/callbacks exact; the `::` separator contract stated with validation.
+- Type consistency: `advanceOrder(db, id, { amountLkr, method, bankAccountId? }, actorId)`, `deliverOrder(db, id, { payments }, actorId)`, `sourceGold(db, id, kind, refId, actorId)`, `startProduction(db, id, moId|undefined, actorId)`, `syncOrder`, `cancelCustomOrder(db, id, reason, actorId)` used identically across Tasks 2–5.
