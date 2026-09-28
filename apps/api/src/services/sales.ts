@@ -4,7 +4,8 @@ import type { PageOpts } from "./catalog";
 import { priceFor } from "./products";
 import { buildMoveStmts } from "./inventory";
 import { getSetting } from "./settings";
-import { postJournalStmts } from "./journal";
+import { buildEntryStmts } from "./journal";
+import { businessDateFor } from "./busdate";
 
 export function discountPct(discountCents: number, subtotalCents: number): number {
   if (subtotalCents <= 0) throw new Error("subtotal must be positive");
@@ -67,10 +68,18 @@ async function requireApprover(
 
 const PAY_ACCOUNT: Record<string, string> = {
   cash: "1000",
-  card: "1010",
+  card: "1020",
   bank: "1010",
   other: "1010",
   credit: "1200",
+};
+
+/** Where a refund leaves from. A card refund clears 1020, not bank. */
+const REFUND_ACCOUNT: Record<string, string> = {
+  cash: "1000",
+  card: "1020",
+  bank: "1010",
+  other: "1010",
 };
 
 export async function receiveSale(
@@ -215,30 +224,41 @@ export async function receiveSale(
         .bind(crypto.randomUUID(), l.productId, l.fineMg, l.permille, invoiceId, input.branchId, now, actorId)
     );
   }
-  const journal = await postJournalStmts(db, {
-    refEntity: "sale_invoice",
-    refId: invoiceId,
-    lines: [
-      ...input.payments.map((p) => ({
-        account: PAY_ACCOUNT[p.method]!,
-        debitCents: lkrToCents(p.amountLkr),
-        creditCents: 0,
-        ...(p.method === "credit" && customer
-          ? { partyType: "customer" as const, partyId: customer.id }
-          : {}),
-      })),
-      { account: "4000", debitCents: 0, creditCents: total },
-      { account: "5000", debitCents: costTotal, creditCents: 0 },
-      { account: "1100", debitCents: 0, creditCents: costTotal },
-    ],
-    memo: `Sale ${number}`,
-    branchId: input.branchId,
-    actorId,
-    auditAction: "sale.complete",
-    auditEntity: "sale_invoice",
-    auditEntityId: invoiceId,
-  });
-  stmts.push(...journal);
+  const journal = await buildEntryStmts(
+    db,
+    {
+      refEntity: "sale_invoice",
+      refId: invoiceId,
+      refNo: number,
+      lines: [
+        ...input.payments.map((p) => ({
+          account: PAY_ACCOUNT[p.method]!,
+          debitCents: lkrToCents(p.amountLkr),
+          creditCents: 0,
+          ...(p.method === "credit" && customer
+            ? { partyType: "customer" as const, partyId: customer.id }
+            : {}),
+        })),
+        { account: "4000", debitCents: 0, creditCents: total },
+        { account: "5000", debitCents: costTotal, creditCents: 0 },
+        { account: "1100", debitCents: 0, creditCents: costTotal },
+      ],
+      memo: `Sale ${number}`,
+      branchId: input.branchId,
+      actorId,
+      auditAction: "sale.complete",
+      auditEntity: "sale_invoice",
+      auditEntityId: invoiceId,
+      sourceModule: "sales",
+    },
+    { entryDate: await businessDateFor(db, now) }
+  );
+  stmts.push(...journal.stmts);
+  stmts.push(
+    db
+      .prepare("UPDATE sales_invoices SET journal_entry_id = ? WHERE id = ?")
+      .bind(journal.entryId, invoiceId)
+  );
   for (const p of input.payments) {
     const payId = crypto.randomUUID();
     stmts.push(
@@ -351,7 +371,7 @@ export async function createReturn(
         const share = Math.floor((refundTotal * p.amount_cents) / invTotal);
         if (share > 0)
           refundLegs.push({
-            account: p.method === "cash" ? "1000" : "1010",
+            account: REFUND_ACCOUNT[p.method] ?? "1010",
             debitCents: 0,
             creditCents: share,
           });
@@ -365,28 +385,39 @@ export async function createReturn(
       refundLegs.push({ account: "1000", debitCents: 0, creditCents: refundTotal });
     }
   } else {
-    const cash = method === "cash" ? "1000" : "1010";
+    const cash = REFUND_ACCOUNT[method] ?? "1010";
     refundLegs = [
       { account: "4000", debitCents: refundTotal, creditCents: 0 },
       { account: cash, debitCents: 0, creditCents: refundTotal },
     ];
   }
-  const reversal = await postJournalStmts(db, {
-    lines: [
-      ...refundLegs,
-      { account: "1100", debitCents: costTotal, creditCents: 0 },
-      { account: "5000", debitCents: 0, creditCents: costTotal },
-    ],
-    refEntity: "sale_return",
-    refId: returnId,
-    memo: `Return ${number}`,
-    branchId: inv.branch_id,
-    actorId,
-    auditAction: "sale.return",
-    auditEntity: "sale_return",
-    auditEntityId: returnId,
-  });
-  stmts.push(...reversal);
+  const reversal = await buildEntryStmts(
+    db,
+    {
+      lines: [
+        ...refundLegs,
+        { account: "1100", debitCents: costTotal, creditCents: 0 },
+        { account: "5000", debitCents: 0, creditCents: costTotal },
+      ],
+      refEntity: "sale_return",
+      refId: returnId,
+      refNo: number,
+      memo: `Return ${number}`,
+      branchId: inv.branch_id,
+      actorId,
+      auditAction: "sale.return",
+      auditEntity: "sale_return",
+      auditEntityId: returnId,
+      sourceModule: "sales",
+    },
+    { entryDate: await businessDateFor(db, now) }
+  );
+  stmts.push(...reversal.stmts);
+  stmts.push(
+    db
+      .prepare("UPDATE sales_returns SET journal_entry_id = ? WHERE id = ?")
+      .bind(reversal.entryId, returnId)
+  );
   await db.batch(stmts);
   return { returnId, number };
 }

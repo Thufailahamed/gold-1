@@ -484,23 +484,6 @@ export async function partyLedger(
   return { totals: computePartyLedger(kind, lines), lines };
 }
 
-/**
- * @deprecated Every caller must state its own `sourceModule` and `refNo` so
- * reports can attribute an entry. Removed once Task 8 has migrated the last
- * call site. Do not add new callers.
- */
-export async function postJournalStmts(
-  db: D1Database,
-  post: Omit<JournalPost, "sourceModule">
-): Promise<D1PreparedStatement[]> {
-  const built = await buildEntryStmts(db, {
-    ...post,
-    sourceModule: "manual",
-    entryDate: new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10),
-  });
-  return built.stmts;
-}
-
 export type AccountType = "ASSET" | "LIABILITY" | "EQUITY" | "REVENUE" | "EXPENSE";
 
 export type AccountRow = {
