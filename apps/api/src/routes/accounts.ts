@@ -9,6 +9,7 @@ import {
 import type { Env } from "../db/client";
 import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
+import { reconcile } from "../services/reconcile";
 import { businessDateFor } from "../services/busdate";
 import {
   accountStatement,
@@ -69,6 +70,21 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     const date = c.req.query("date") ?? (await businessDateFor(c.env.DB, Date.now()));
     const rows = await trialBalance(c.env.DB, { date, branchId: c.req.query("branchId") ?? undefined });
     return c.json({ success: true, data: { date, rows } }, 200);
+  })
+  .get("/reconciliation", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    try {
+      const date = c.req.query("date") ?? (await businessDateFor(c.env.DB, Date.now()));
+      const data = await reconcile(c.env.DB, {
+        date,
+        branchId: c.req.query("branchId") ?? undefined,
+      });
+      // A failing check is a 200 with passed:false, not an error. The caller
+      // needs the whole report to show the operator what is out, and the
+      // daily-closing spec decides whether that is fatal.
+      return c.json({ success: true, data }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
   })
   .get("/:code/statement", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     const to = c.req.query("to") ?? (await businessDateFor(c.env.DB, Date.now()));
