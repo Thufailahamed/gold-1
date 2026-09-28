@@ -145,7 +145,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           </>
         }
       />
-      <TableCard title="Items" description={`${items.length} received`}>
+      <TableCard title="Items" icon={<FileTextIcon size={17} />} description={`${items.length} received`}>
         {items.length === 0 ? (
           <EmptyBlock title="No items" description="This invoice has no line items." />
         ) : (

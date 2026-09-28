@@ -207,7 +207,12 @@ export default function PosPage() {
         </Callout>
       ) : null}
 
-      <TableCard title="Cart" description={`${cart.length} item${cart.length === 1 ? "" : "s"} scanned`}>
+      <TableCard
+        title="Cart"
+        icon={<ScanBarcodeIcon size={17} />}
+        description={`${cart.length} item${cart.length === 1 ? "" : "s"} scanned`}
+        actions={<span className="g-metric text-[11px] font-medium uppercase tracking-[0.14em] text-ink-4">{fmt(total)} LKR due</span>}
+      >
         {cart.length === 0 ? (
           <EmptyBlock title="Cart is empty" description="Scan the first piece to start the sale." />
         ) : (

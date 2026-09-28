@@ -13,7 +13,7 @@ import {
   Tabs,
   heroBtnGhost,
 } from "@/components/ui";
-import { FileDownIcon } from "@/components/icons";
+import { FileDownIcon, TrendingUpIcon } from "@/components/icons";
 
 type Summary = { invoices: number; value_cents: number; paid_cents: number; outstanding_cents: number; gold_mg: number };
 type Row = { key: string; invoices: number; value_cents: number; gold_mg: number };
@@ -94,7 +94,7 @@ export default function ReportsPage() {
           </button>
         ))}
       </div>
-      <TableCard title={`By ${groupBy}`} description={`${(breakdown.data ?? []).length} groups`}>
+      <TableCard title={`By ${groupBy}`} icon={<TrendingUpIcon size={17} />} description={`${(breakdown.data ?? []).length} groups`}>
         {breakdown.isLoading ? (
           <TableSkeleton rows={5} cols={4} />
         ) : (breakdown.data ?? []).length === 0 ? (
