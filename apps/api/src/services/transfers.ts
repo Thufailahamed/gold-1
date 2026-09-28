@@ -1,5 +1,6 @@
 import { buildAuditStmt } from "../middleware/audit";
 import { assertCountLock } from "./counts";
+import { postGoldStmts, type GoldEntry } from "./gold";
 
 export type TransferLineState = "PENDING" | "IN_TRANSIT" | "RECEIVED" | "RECALLED";
 
@@ -66,5 +67,100 @@ export async function approveTransfer(db: D1Database, id: string, approverId: st
   await db.batch([
     db.prepare("UPDATE transfers SET status = 'APPROVED', approved_by = ? WHERE id = ? AND status = 'REQUESTED'").bind(approverId, id),
     buildAuditStmt(db, { userId: actorId, action: "transfer.approve", entity: "transfer", entityId: id, next: { approvedBy: approverId } }),
+  ]);
+}
+
+export async function dispatchTransfer(db: D1Database, id: string, actorId: string): Promise<void> {
+  const doc = await loadTransfer(db, id);
+  if (doc.status !== "APPROVED") throw Object.assign(new Error("Transfer not approved"), { code: "CONFLICT" });
+  const now = Date.now();
+  const stmts: D1PreparedStatement[] = [];
+  const goldEntries: GoldEntry[] = [];
+  for (const line of doc.lines) {
+    if (line.status !== "PENDING") throw Object.assign(new Error(`Line not pending: ${line.barcode}`), { code: "CONFLICT" });
+    const p = await db.prepare("SELECT id, status, branch_id, net_mg, fine_gold_mg, purity_id FROM products WHERE id = ?").bind(line.productId).first<{ id: string; status: string; branch_id: string; net_mg: number; fine_gold_mg: number; purity_id: string }>();
+    if (!p || p.status !== "IN_STOCK" || p.branch_id !== doc.fromBranchId)
+      throw Object.assign(new Error(`Product not available at sender: ${line.barcode}`), { code: "CONFLICT" });
+    await assertCountLock(db, line.productId);
+    const purity = await db.prepare("SELECT permille FROM purities WHERE id = ?").bind(p.purity_id).first<{ permille: number }>();
+    if (!purity) throw Object.assign(new Error("Purity not found"), { code: "VALIDATION" });
+    stmts.push(
+      db.prepare("UPDATE products SET status = 'TRANSFER_PENDING' WHERE id = ? AND status = 'IN_STOCK'").bind(line.productId),
+      db.prepare("INSERT INTO stock_movements (id, product_id, type, from_status, to_status, from_branch, to_branch, weight_mg, reason, created_at, created_by) VALUES (?, ?, 'TRANSFER_OUT', 'IN_STOCK', 'TRANSFER_PENDING', ?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), line.productId, doc.fromBranchId, doc.toBranchId, p.net_mg, `Transfer ${doc.number}`, now, actorId),
+      db.prepare("UPDATE transfer_lines SET status = 'IN_TRANSIT' WHERE id = ?").bind(line.id)
+    );
+    goldEntries.push({ branchId: doc.toBranchId, source: `branch:${doc.fromBranchId}`, destination: `branch:${doc.toBranchId}`, type: "TRANSFER", weightMg: p.net_mg, permille: purity.permille, refEntity: "transfer_line", refId: line.id, productId: line.productId, notes: `Transfer ${doc.number}` });
+  }
+  const goldStmts = await postGoldStmts(db, goldEntries, { actorId, auditAction: "transfer.dispatch", auditEntity: "transfer", auditEntityId: id, branchId: doc.toBranchId });
+  stmts.push(...goldStmts);
+  stmts.push(
+    db.prepare("UPDATE transfers SET status = 'DISPATCHED' WHERE id = ?").bind(id),
+    buildAuditStmt(db, { userId: actorId, action: "transfer.dispatch", entity: "transfer", entityId: id, next: { lines: doc.lines.length } })
+  );
+  await db.batch(stmts);
+}
+
+export async function receiveLines(db: D1Database, id: string, barcodes: string[], actorId: string): Promise<{ received: string[]; skipped: string[] }> {
+  const doc = await loadTransfer(db, id);
+  if (!["DISPATCHED", "PARTIAL"].includes(doc.status)) throw Object.assign(new Error("Transfer not dispatched"), { code: "CONFLICT" });
+  const byCode = new Map(doc.lines.map((l) => [l.barcode.toUpperCase(), l]));
+  const received: string[] = [];
+  const skipped: string[] = [];
+  const now = Date.now();
+  const stmts: D1PreparedStatement[] = [];
+  for (const raw of barcodes) {
+    const line = byCode.get(raw.toUpperCase());
+    if (!line) throw Object.assign(new Error(`Unknown barcode for this transfer: ${raw}`), { code: "VALIDATION" });
+    if (line.status === "RECEIVED") { skipped.push(line.barcode); continue; }
+    if (line.status !== "IN_TRANSIT") throw Object.assign(new Error(`Line not in transit: ${line.barcode}`), { code: "CONFLICT" });
+    const p = await db.prepare("SELECT net_mg FROM products WHERE id = ?").bind(line.productId).first<{ net_mg: number }>();
+    stmts.push(
+      db.prepare("UPDATE products SET status = 'IN_STOCK', branch_id = ? WHERE id = ?").bind(doc.toBranchId, line.productId),
+      db.prepare("INSERT INTO stock_movements (id, product_id, type, from_status, to_status, from_branch, to_branch, weight_mg, reason, created_at, created_by) VALUES (?, ?, 'TRANSFER_IN', 'TRANSFER_PENDING', 'IN_STOCK', ?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), line.productId, doc.fromBranchId, doc.toBranchId, p?.net_mg ?? 0, `Transfer ${doc.number} received`, now, actorId),
+      db.prepare("UPDATE transfer_lines SET status = 'RECEIVED' WHERE id = ?").bind(line.id)
+    );
+    line.status = "RECEIVED";
+    received.push(line.barcode);
+  }
+  const next = deriveStatus(doc.lines);
+  stmts.push(
+    db.prepare("UPDATE transfers SET status = ? WHERE id = ?").bind(next, id),
+    buildAuditStmt(db, { userId: actorId, action: "transfer.receive", entity: "transfer", entityId: id, next: { received } })
+  );
+  await db.batch(stmts);
+  return { received, skipped };
+}
+
+export async function recallLines(db: D1Database, id: string, productIds: string[], actorId: string): Promise<void> {
+  const doc = await loadTransfer(db, id);
+  if (!["DISPATCHED", "PARTIAL"].includes(doc.status)) throw Object.assign(new Error("Transfer not dispatched"), { code: "CONFLICT" });
+  const byId = new Map(doc.lines.map((l) => [l.productId, l]));
+  const now = Date.now();
+  const stmts: D1PreparedStatement[] = [];
+  for (const pid of productIds) {
+    const line = byId.get(pid);
+    if (!line || line.status !== "IN_TRANSIT") throw Object.assign(new Error(`Line not recallable: ${pid}`), { code: "CONFLICT" });
+    const p = await db.prepare("SELECT net_mg FROM products WHERE id = ?").bind(pid).first<{ net_mg: number }>();
+    stmts.push(
+      db.prepare("UPDATE products SET status = 'IN_STOCK' WHERE id = ?").bind(pid),
+      db.prepare("INSERT INTO stock_movements (id, product_id, type, from_status, to_status, from_branch, to_branch, weight_mg, reason, created_at, created_by) VALUES (?, ?, 'TRANSFER_IN', 'TRANSFER_PENDING', 'IN_STOCK', ?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), pid, doc.fromBranchId, doc.fromBranchId, p?.net_mg ?? 0, `Transfer ${doc.number} recalled`, now, actorId),
+      db.prepare("UPDATE transfer_lines SET status = 'RECALLED' WHERE id = ?").bind(line.id)
+    );
+    line.status = "RECALLED";
+  }
+  const next = deriveStatus(doc.lines);
+  stmts.push(
+    db.prepare("UPDATE transfers SET status = ? WHERE id = ?").bind(next, id),
+    buildAuditStmt(db, { userId: actorId, action: "transfer.recall", entity: "transfer", entityId: id })
+  );
+  await db.batch(stmts);
+}
+
+export async function cancelTransfer(db: D1Database, id: string, reason: string, actorId: string): Promise<void> {
+  const doc = await loadTransfer(db, id);
+  if (!["REQUESTED", "APPROVED"].includes(doc.status)) throw Object.assign(new Error("Only undispatched transfers can be cancelled; recall lines instead"), { code: "CONFLICT" });
+  await db.batch([
+    db.prepare("UPDATE transfers SET status = 'CANCELLED' WHERE id = ?").bind(id),
+    buildAuditStmt(db, { userId: actorId, action: "transfer.cancel", entity: "transfer", entityId: id, reason }),
   ]);
 }
