@@ -37,3 +37,16 @@ describe("compareWeight", () => {
     expect(r.difference).toBe(1);
   });
 });
+
+describe("in-transit comparison", () => {
+  it("passes when the entries net to the outstanding transfers", () => {
+    const r = compareMoney("cash_in_transit", "In transit", 100_000, 100_000, "cumulative");
+    expect(r.pass).toBe(true);
+  });
+
+  it("fails when a receipt is missing from the ledger", () => {
+    expect(
+      compareMoney("cash_in_transit", "In transit", 100_000, 100_000 + 40_000, "cumulative").pass
+    ).toBe(false);
+  });
+});

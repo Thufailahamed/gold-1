@@ -1,3 +1,5 @@
+import { inTransitTotal } from "@goldos/shared";
+
 export type CheckScope = "day" | "cumulative";
 
 export type CheckResult = {
@@ -239,7 +241,8 @@ export async function reconcile(
     .prepare(
       `SELECT COALESCE(SUM(l.debit_cents - l.credit_cents), 0) AS net
        FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
-       WHERE l.account_code IN ('1000','1010','1020')
+       WHERE (l.account_code IN ('1000','1020')
+              OR l.account_code IN (SELECT account_code FROM bank_accounts WHERE is_active = 1))
          AND e.ref_entity IN ('sale_invoice','sale_return','purchase_payment','old_gold_purchase')
          AND e.entry_date = ?${b.sql}`
     )
@@ -406,6 +409,67 @@ export async function reconcile(
       )
     );
   }
+
+  // card_clearing: 1020's movement for the day is the settlements recorded for
+  // that day. Scoped by ref_entity so it picks up the settlements spec 2 adds
+  // without disturbing payments_crossfoot.
+  const clearJournal = await firstRow<{ net: number }>(
+    db,
+    `SELECT COALESCE(SUM(l.credit_cents - l.debit_cents), 0) AS net
+     FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+     WHERE l.account_code = '1020' AND e.ref_entity = 'card_settlement' AND e.entry_date = ?${b.sql}`,
+    [day, ...b.vals]
+  );
+  const csCond = opts.branchId
+    ? " AND id IN (SELECT id FROM bank_accounts WHERE branch_id = ?)"
+    : "";
+  const clearDocs = await firstRow<{ gross: number }>(
+    db,
+    `SELECT COALESCE(SUM(gross_cents), 0) AS gross FROM card_settlements
+     WHERE ${LOCAL_DAY("created_at")} = ?${csCond}`,
+    opts.branchId ? [day, opts.branchId] : [day]
+  );
+  checks.push(
+    compareMoney(
+      "card_clearing",
+      "Card clearing matches the day's settlements",
+      n(clearDocs?.gross),
+      n(clearJournal?.net),
+      "day"
+    )
+  );
+
+  // cash_in_transit: what the transfers table says is still on the road must
+  // equal what the two entry types say is still on the road. Cumulative, not
+  // a single day's figure — a transfer dispatched yesterday and received today
+  // nets correctly only against a running total.
+  const transitDocs = await firstRow<{ outstanding: number }>(
+    db,
+    `SELECT COALESCE(SUM(CASE WHEN status = 'COMPLETE' THEN 0 ELSE amount_cents END), 0) AS outstanding
+     FROM cash_transfers WHERE sent_on <= ?`,
+    [day]
+  );
+  const transitJournal = await firstRow<{ net: number }>(
+    db,
+    `SELECT COALESCE(SUM(l.debit_cents - l.credit_cents), 0) AS net
+     FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+     WHERE l.account_code = '1000' AND e.ref_entity IN ('cash_transfer_out','cash_transfer_in')
+       AND e.entry_date <= ?${b.sql}`,
+    [day, ...b.vals]
+  );
+  checks.push(
+    compareMoney(
+      "cash_in_transit",
+      "Cash in transit agrees between the transfers and the ledger",
+      inTransitTotal(n(transitDocs?.outstanding), 0),
+      // An in-transit transfer only has its OUT entry, which CREDITS 1000, so
+      // the ledger net is the negative of what the transfers table calls
+      // outstanding. Comparing the two without negating would show a
+      // discrepancy of twice the amount in transit.
+      -n(transitJournal?.net),
+      "cumulative"
+    )
+  );
 
   // 8. Cumulative gold weight equals everything physically held. Only *booked*
   //    old gold counts: an item in RECEIVED, TESTED or VALUED is in the shop
