@@ -54,6 +54,11 @@ Conventions: `id TEXT PK` (UUID), timestamps as INTEGER millis, FKs enforced.
 - `old_gold_purchases(id, item_id UNIQUE FK, value_cents, paid_cents, method cash/bank, created_at, created_by)`.
 - `gold_movements` gained nullable `old_gold_id FK` (0012 rebuild; CHECK one of product/old-gold set) for IN gold rows.
 
+## Gold ledger + melting (migration `0013_goldledger`)
+
+- `gold_ledger(id, occurred_at, branch_id, source, destination, type [12 types], weight_mg, permille, fine_mg, ref_entity, ref_id, product_id NULL, old_gold_id NULL, user_id, notes, created_at, created_by)` — append-only, indexed (branch,time), (ref), (product), (old_gold). Backfilled from gold_movements (sale_invoice→SALE, sale_return→RETURN, old_gold_purchase→OLD_GOLD_PURCHASE; unknown counterparties as explicit `unknown` strings).
+- `melting_batches(id, number MELT-000001 UNIQUE via counters, branch_id, status DRAFT/LOCKED/MELTED/APPROVED/VOID, input/output/waste/loss/recovery fine mg, difference_reason, approved_by, notes, created_at, created_by)`, `melting_inputs(id, batch_id FK, old_gold_id FK UNIQUE, gross/net/fine snapshots)`, `melting_outputs(id, batch_id FK, lot_number MLT-{n}-01 UNIQUE, weight_mg, permille, fine_mg, output_type grain/bar)`.
+
 ## Sales (migration `0010_sales`)
 
 - `counters` += SINV, SRET.

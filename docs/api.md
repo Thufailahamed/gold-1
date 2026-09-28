@@ -104,3 +104,16 @@ Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 | GET | /oldgold/reports/breakdown | oldgold:view | ?groupBy=purity\|customer\|branch |
 | GET | /oldgold/reports/pending | oldgold:view | PURCHASED/AVAILABLE unmelted |
 | GET | /oldgold/customers/:id/history | oldgold:view | items + totals |
+| GET | /gold/ledger | gold:view | filters type, branch, ref, product, oldgold, date |
+| GET | /gold/lineage | gold:view | ?refEntity=&refId= both directions |
+| GET | /gold/stock | gold:view | ?groupBy=purity\|branch\|stage |
+| POST | /gold/ledger/adjustments | gold:manage | ADJUSTMENT/LOSS/RECOVERY + reason, threshold approval |
+| POST | /melting/batches | gold:manage | branch → DRAFT MELT number |
+| GET | /melting/batches | gold:view | filters status, branch |
+| GET | /melting/batches/:id | gold:view | inputs + outputs + ledger rows |
+| GET | /melting/batches/:id/label | gold:view | Code128 SVG, image/svg+xml |
+| POST | /melting/batches/:id/items | gold:manage | AVAILABLE OG- ids → RESERVED |
+| POST | /melting/batches/:id/lock | gold:manage | DRAFT → LOCKED |
+| POST | /melting/batches/:id/melt | gold:manage | output + assay → difference |
+| POST | /melting/batches/:id/approve | gold:manage | reason always; threshold approval; posts ledger |
+| PATCH | /melting/batches/:id/void | gold:manage | DRAFT only + reason |

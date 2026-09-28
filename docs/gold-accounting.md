@@ -33,6 +33,17 @@ Party balances are derived: customer = opening + DR − CR on 1200;
 supplier = opening + CR − DR on 2000. Manual corrections go through
 `POST /accounts/adjustments` (reason required, accounts:manage).
 
+## Gold ledger + melting (live)
+
+`gold_ledger` is the unified record: every entry carries occurred_at,
+branch, source → destination, one of 12 types, weight, permille, fine,
+ref, optional product/old-gold links, user, and notes. Backfilled from
+`gold_movements` (SALE/RETURN/OLD_GOLD_PURCHASE); `gold_movements` keeps
+dual-writing until cutover. Melting approval posts MELTING_INPUT per item
+(old-gold → batch), MELTING_OUTPUT per lot (batch → branch), plus LOSS or
+RECOVERY rows — differences are never silent. `GET /gold/lineage` walks
+old gold → batch → lots → products → sales in both directions.
+
 ## Old-gold postings (live)
 
 Counter purchase posts in the purchase batch: DR 1100 Gold Inventory (full
