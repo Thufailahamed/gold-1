@@ -94,6 +94,8 @@ CREATE INDEX idx_je_date   ON journal_entries(entry_date, branch_id);
 CREATE INDEX idx_je_ref    ON journal_entries(ref_entity, ref_id);
 CREATE INDEX idx_je_module ON journal_entries(source_module, entry_date);
 CREATE INDEX idx_je_status ON journal_entries(status);
+CREATE INDEX idx_je_reverses ON journal_entries(reverses_entry_id);
+INSERT INTO counters (name, next) VALUES ('JE', 1);
 
 CREATE INDEX idx_jl_entry   ON journal_lines(entry_id, line_no);
 CREATE INDEX idx_jl_account ON journal_lines(account_code);
@@ -183,6 +185,7 @@ the decision that every category owns an account.
 ```sql
 ALTER TABLE melting_batches  ADD COLUMN input_cost_cents INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE melting_outputs  ADD COLUMN cost_cents      INTEGER NOT NULL DEFAULT 0;
+INSERT INTO counters (name, next) VALUES ('GADJ', 1);
 ```
 
 No new column on `manufacturing_materials`. Allocation cost is computed at
@@ -191,7 +194,25 @@ No new column on `manufacturing_materials`. Allocation cost is computed at
 passed to it sum to the lot's full `fine_mg`, which is what makes
 `allocateProportional` return the allocated share rather than the whole lot.
 
-### 2.5 Retired columns
+### 2.5 Document → entry links
+
+```sql
+ALTER TABLE sales_invoices     ADD COLUMN journal_entry_id TEXT REFERENCES journal_entries(id);
+ALTER TABLE sales_returns      ADD COLUMN journal_entry_id TEXT REFERENCES journal_entries(id);
+ALTER TABLE purchase_invoices  ADD COLUMN journal_entry_id TEXT REFERENCES journal_entries(id);
+ALTER TABLE old_gold_purchases ADD COLUMN journal_entry_id TEXT REFERENCES journal_entries(id);
+```
+
+`voidInvoice` must reverse the *specific* entry its invoice created, not an
+entry it guesses at by `(ref_entity, ref_id)` and timestamp. Note that the
+void's own posting already shares `ref_entity = 'purchase_invoice'` and
+`ref_id = invoiceId` with the receive (purchases.ts:523) — the two are only
+distinguishable by `created_at`. Storing the link removes the guesswork and
+gives spec 4's audit trail a direct "which entries does this document own"
+answer. `buildEntryStmts` returns the header id so the caller can write it in
+the same batch.
+
+### 2.6 Retired columns
 
 `customers.opening_balance_cents` and `suppliers.opening_balance_cents` are
 dropped after backfill (see 3.3). This ripples and must be done as one change:
@@ -317,10 +338,24 @@ closing cash permanently out.
 
 ### 3.6 Gold adjustments
 
-`recordGoldAdjustment` (gold.ts:423) gains money alongside the gold row:
-`LOSS` → `DR 5300 / CR 1100`; `ADJUSTMENT` and `RECOVERY` → `DR 1100 / CR
-5300`. 5300 therefore always shows **net** gold variance rather than mixing
-shrinkage and surplus.
+`recordGoldAdjustment` (gold.ts:423) gains money alongside the gold row. An
+adjustment carries a weight but no money, so the value must be derived:
+`valueCents = round(fine_mg / 1000 × rate_cents_per_g)` from
+`currentGoldRatesCents` for the adjustment's purity. **If no effective rate
+exists for that purity, the adjustment is rejected with `VALIDATION`** —
+valuing shrinkage without a rate would be a guess, and a guessed loss is worse
+than no loss.
+
+```
+LOSS                            → DR 5300 / CR 1100  (valueCents)
+ADJUSTMENT  (surplus found)     → DR 1100 / CR 5300  (valueCents)
+RECOVERY                        → DR 1100 / CR 5300  (valueCents)
+```
+
+5300 therefore always shows **net** gold variance rather than mixing
+shrinkage and surplus. The adjustment gains a `GADJ` counter and a
+`ref_no` (`GADJ-000001`) so the daily closing can list individual
+adjustments.
 
 ### 3.7 Book-cost chain
 
@@ -556,5 +591,6 @@ reclassifying historical card sales.
   designed here.
 - Unambiguous: card account (1020), the accrual default for manufacturing
   labour (2200), the treatment of historical card sales (left on 1010), the
-  melting loss formula's zero case, and the exclusion of `ADJUSTMENT` /
-  `RECOVERY` from check 7 are all pinned.
+  melting loss formula's zero case, the exclusion of `ADJUSTMENT` /
+  `RECOVERY` from check 7, the rejection of an unrated gold adjustment, and
+  the `journal_entry_id` link that makes reversal exact are all pinned.
