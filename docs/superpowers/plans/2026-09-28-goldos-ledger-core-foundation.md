@@ -44,7 +44,7 @@ at 53. Every new endpoint in this plan is gated by one of the two.
 - `packages/shared/src/accounting.test.ts` — its unit tests
 - `apps/api/drizzle/0015_ledger_core.sql` — rename, header table, indexes, chart, counters, document links
 - `apps/api/drizzle/0016_ledger_backfill.sql` — data migration into the new shape
-- `apps/api/drizzle/0017_drop_opening_balance.sql` — retire the magic columns
+- `apps/api/drizzle/0017_retired_columns.sql` — retire the magic columns
 - `apps/api/src/services/busdate.ts` — reads the tz setting, wraps `businessDate`
 - `apps/api/src/services/journal.test.ts` — reversal arithmetic
 
@@ -719,15 +719,26 @@ Create `apps/api/drizzle/0016_ledger_backfill.sql`:
 -- Groups the pre-0015 flat journal rows into real entries, converts party
 -- opening balances into entries against 3100, and links documents to their
 -- entry. Idempotent: every step is guarded, so a re-run is a no-op.
+--
+-- D1's SQLite has no HASH() function, so a group is identified by the MIN of
+-- its own line ids. Those ids are crypto.randomUUID() values — unique, stable
+-- across runs, and already in the table — which makes MIN(l.id) a deterministic
+-- group key with no hashing needed.
 
--- A header per (ref_entity, ref_id, created_at, branch_id). The id is derived
--- from the grouping key so a re-run collides on the PRIMARY KEY rather than
--- duplicating. HASH is a stable SQLite function, unlike randomblob().
+-- A header per (ref_entity, ref_id, created_at, branch_id). created_at is part
+-- of the key because a purchase void posts with the SAME ref_entity and
+-- ref_id as the receive it reverses; only the timestamp separates them.
+--
+-- entry_no is numbered with ROW_NUMBER over the grouped set, ordered by the
+-- group's own first line. COUNT(*) would be the number of LINES in the group,
+-- not its ordinal, so every two-line group would collide on the UNIQUE index.
+-- The 'JE-B' prefix marks these as backfilled so they cannot be confused with
+-- a live JE-000001 sequence, which starts fresh in 0015.
 INSERT INTO journal_entries (id, entry_no, entry_date, memo, ref_entity, ref_id,
                              ref_no, source_module, status, branch_id, created_at, created_by)
 SELECT
-  'je-' || lower(hex(HASH(l.ref_entity, '|', l.ref_id, '|', l.created_at, '|', COALESCE(l.branch_id, '-')))),
-  'JE-B' || substr('000000' || CAST(COUNT(*) AS TEXT), -6, 6),
+  'je-' || MIN(l.id),
+  'JE-B' || substr('000000' || CAST(ROW_NUMBER() OVER (ORDER BY l.created_at, MIN(l.id)) AS TEXT), -6, 6),
   date(CAST(l.created_at / 1000 AS INTEGER), 'unixepoch', '+330 minutes'),
   l.memo,
   l.ref_entity,
@@ -749,31 +760,41 @@ FROM journal_lines l
 WHERE l.entry_id IS NULL
 GROUP BY l.ref_entity, l.ref_id, l.created_at, l.branch_id;
 
--- SQLite's rowid is not guaranteed to survive a table rename, so the id is
--- recomputed from the same grouping key rather than joined on.
-UPDATE journal_lines
-SET entry_id = 'je-' || lower(hex(HASH(ref_entity, '|', ref_id, '|', created_at, '|', COALESCE(branch_id, '-'))))
-WHERE entry_id IS NULL;
+-- SQLite's rowid is not guaranteed to survive a table rename, so each line
+-- re-derives its group by the same key rather than joining on a rowid.
+UPDATE journal_lines AS l
+SET entry_id = 'je-' || (
+  SELECT MIN(x.id) FROM journal_lines x
+  WHERE x.ref_entity = l.ref_entity AND x.ref_id = l.ref_id
+    AND x.created_at = l.created_at AND x.branch_id IS l.branch_id
+)
+WHERE l.entry_id IS NULL;
 
--- line_no must be deterministic, so order by the line's own content.
-UPDATE journal_lines
+-- line_no must be deterministic, so order by the line's own content rather than
+-- by insertion order. Row-value comparison keeps this to a single statement.
+UPDATE journal_lines AS l
 SET line_no = (
   SELECT COUNT(*) FROM journal_lines x
-  WHERE x.entry_id = journal_lines.entry_id
+  WHERE x.entry_id = l.entry_id
     AND (x.account_code, x.debit_cents, x.credit_cents, COALESCE(x.party_id, '-'))
-      < (journal_lines.account_code, journal_lines.debit_cents, journal_lines.credit_cents, COALESCE(journal_lines.party_id, '-'))
-);
+      < (l.account_code, l.debit_cents, l.credit_cents, COALESCE(l.party_id, '-'))
+)
+WHERE l.entry_id IS NOT NULL;
 
--- Party opening balances become real entries against 3100, dated the day
--- before the party's first journal line so they sort ahead of it. A customer
--- who starts owing us is DR 1200 / CR 3100; a supplier we start owing is
--- DR 3100 / CR 2000. The customers column is positive-means-owes-us and the
--- suppliers column is positive-means-we-owe, so the supplier branch negates.
+-- Party opening balances become real entries against 3100.
+--
+-- Both columns are stored positive-means-"this party owes us more": a positive
+-- customers.opening_balance_cents means the customer owes us, and a positive
+-- suppliers.opening_balance_cents means we owe the supplier. Negating the
+-- supplier figure puts both on one scale, so `amount > 0` always means "this
+-- party's balance goes up", which is a DEBIT on their own control account.
+-- This reproduces the retired formulas exactly:
+--   customer: opening + ΣDR − ΣCR   |   supplier: opening + ΣCR − ΣDR
 INSERT INTO journal_entries (id, entry_no, entry_date, memo, ref_entity, ref_id,
                              ref_no, source_module, status, branch_id, created_at, created_by)
 SELECT
   'je-open-' || p.kind || '-' || p.id,
-  'JE-OPEN-' || substr(upper(hex(RANDOMBLOB(4))), 1, 8),
+  'JE-OPEN-' || substr(upper(hex(randomblob(4))), 1, 8),
   date(CAST(p.created_at / 1000 AS INTEGER), 'unixepoch', '+330 minutes'),
   'Opening balance migrated from party record',
   'opening_balance',
@@ -793,44 +814,36 @@ FROM (
   FROM suppliers WHERE opening_balance_cents <> 0
 ) p;
 
+-- Debit side: on the party's own control account, carrying the party tag so it
+-- appears in their sub-ledger. Positive amount takes the debit, negative the credit.
 INSERT INTO journal_lines (id, entry_id, line_no, account_code, debit_cents, credit_cents, party_type, party_id, memo)
 SELECT
-  'jl-open-' || p.kind || '-' || p.id || '-' || n.n,
+  'jl-open-' || p.kind || '-' || p.id || '-d',
   'je-open-' || p.kind || '-' || p.id,
-  n.n,
-  n.account_code,
-  p.amount,
-  0,
-  p.kind,
+  CASE WHEN p.amount > 0 THEN 1 ELSE 2 END,
+  CASE WHEN p.amount > 0 THEN '1200' ELSE '2000' END,
+  CASE WHEN p.amount > 0 THEN p.amount ELSE 0 END,
+  CASE WHEN p.amount > 0 THEN 0 ELSE -p.amount END,
+  CASE WHEN p.amount > 0 THEN 'customer' ELSE 'supplier' END,
   p.id,
   'Opening balance migrated from party record'
 FROM (
   SELECT 'customer' AS kind, id, opening_balance_cents AS amount FROM customers WHERE opening_balance_cents <> 0
   UNION ALL
   SELECT 'supplier', id, -opening_balance_cents FROM suppliers WHERE opening_balance_cents <> 0
-) p
-JOIN (
-  SELECT 'customer' AS kind, 1 AS n, '1200' AS account_code, 1 AS take_debit
-  UNION ALL
-  SELECT 'customer', 2, '3100', 0
-  UNION ALL
-  SELECT 'supplier', 1, '2000', 1
-  UNION ALL
-  SELECT 'supplier', 2, '3100', 0
-) n ON n.kind = p.kind
-WHERE (p.amount > 0 AND n.take_debit = 1) OR (p.amount < 0 AND n.take_debit = 0)
-ORDER BY p.kind, p.id, n.n;
+) p;
 
--- The credit side is the same amount on the other account, so the pair nets to
--- zero by construction rather than by a second CASE.
+-- Credit side: the same amount on 3100, so the pair nets to zero by
+-- construction rather than by a second CASE. party_type stays NULL so the
+-- party sub-ledger only ever holds their own control account.
 INSERT INTO journal_lines (id, entry_id, line_no, account_code, debit_cents, credit_cents, party_type, party_id, memo)
 SELECT
-  'jl-open-' || p.kind || '-' || p.id || '-' || (CASE WHEN n.take_debit = 1 THEN 2 ELSE 1 END),
+  'jl-open-' || p.kind || '-' || p.id || '-c',
   'je-open-' || p.kind || '-' || p.id,
-  CASE WHEN n.take_debit = 1 THEN 2 ELSE 1 END,
-  CASE WHEN n.take_debit = 1 THEN '3100' ELSE CASE p.kind WHEN 'customer' THEN '1200' ELSE '2000' END END,
-  0,
-  ABS(p.amount),
+  CASE WHEN p.amount > 0 THEN 2 ELSE 1 END,
+  '3100',
+  CASE WHEN p.amount > 0 THEN 0 ELSE -p.amount END,
+  CASE WHEN p.amount > 0 THEN p.amount ELSE 0 END,
   NULL,
   p.id,
   'Opening balance migrated from party record'
@@ -838,12 +851,7 @@ FROM (
   SELECT 'customer' AS kind, id, opening_balance_cents AS amount FROM customers WHERE opening_balance_cents <> 0
   UNION ALL
   SELECT 'supplier', id, -opening_balance_cents FROM suppliers WHERE opening_balance_cents <> 0
-) p
-JOIN (
-  SELECT 'customer' AS kind, 1 AS take_debit
-  UNION ALL
-  SELECT 'supplier', 1
-) n ON n.kind = p.kind;
+) p;
 
 -- Link each posting-bearing document to the header that recorded it. A purchase
 -- void shares ref_entity and ref_id with the receive, so the EARLIEST entry for
@@ -1513,7 +1521,7 @@ git commit -m "feat: journal header+lines service with reversal"
 - Modify: `apps/api/src/routes/parties.ts` (the `/:id/ledger` handler)
 - Modify: `apps/web/app/(app)/customers/page.tsx:22`
 - Modify: `apps/web/app/(app)/suppliers/page.tsx`
-- Create: `apps/api/drizzle/0017_drop_opening_balance.sql`
+- Create: `apps/api/drizzle/0017_retired_columns.sql`
 
 **Interfaces:**
 - Consumes: `partyLedger(db, kind, partyId, opts)` and `computePartyLedger` (Tasks 1 and 4); the backfill from Task 3.
@@ -1582,18 +1590,31 @@ In `apps/web/app/(app)/customers/page.tsx`, delete line 22:
 
 Apply the same deletion to `apps/web/app/(app)/suppliers/page.tsx`.
 
-- [ ] **Step 6: Drop the column**
+- [ ] **Step 6: Apply the retired-column migration**
 
-Create `apps/api/drizzle/0017_drop_opening_balance.sql`:
+`apps/api/drizzle/0017_retired_columns.sql` was written during Task 3 and must
+exist before this task. It does three things, in this order:
 
-```sql
--- 0017_drop_opening_balance.sql
--- Opening balances are now journal entries against 3100 (see 0016). The
--- column was a second source of truth for a number the ledger already held,
--- and the two could disagree.
-ALTER TABLE customers DROP COLUMN opening_balance_cents;
-ALTER TABLE suppliers DROP COLUMN opening_balance_cents;
-```
+1. Drops `idx_journal_account`, `idx_journal_party`, `idx_journal_ref` — 0008's
+   indexes, which `ALTER TABLE … RENAME TO` carried onto `journal_lines` in
+   0015 and which would otherwise duplicate the new `idx_jl_*` indexes. The
+   drops come **first** because SQLite refuses to drop a column an index
+   references.
+2. Drops `ref_entity`, `ref_id`, `branch_id`, `created_at` and `created_by` from
+   `journal_lines`. All five are header-only now, and `ref_entity`/`ref_id` are
+   `NOT NULL`, so the backfill could not insert a line without them until they
+   went. This is why 0017 runs after 0016 rather than in 0015.
+3. Drops `customers.opening_balance_cents` and `suppliers.opening_balance_cents`.
+
+Confirm the file exists and, if this is a fresh database, apply it:
+
+Run: `cd apps/api && npx wrangler d1 execute goldos --local --file=drizzle/0017_retired_columns.sql`
+Expected: executed, no errors. Then confirm the columns are gone:
+
+Run: `cd apps/api && npx wrangler d1 execute goldos --local --command "SELECT (SELECT COUNT(*) FROM pragma_table_info('journal_lines') WHERE name IN ('ref_entity','ref_id','branch_id','created_at','created_by')) AS vestigial, (SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name LIKE 'idx_journal_%') AS stale_idx;"`
+Expected: `vestigial` = 0, `stale_idx` = 0.
+
+Then remove `openingBalance` from the web forms, per Step 5.
 
 - [ ] **Step 7: Verify**
 
@@ -1603,7 +1624,7 @@ Expected: all PASS, no typecheck output.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add packages/shared/src/schemas.ts packages/shared/src/ledgers.test.ts apps/api/src/services/parties.ts apps/api/src/routes/parties.ts apps/api/drizzle/0017_drop_opening_balance.sql "apps/web/app/(app)/customers/page.tsx" "apps/web/app/(app)/suppliers/page.tsx"
+git add packages/shared/src/schemas.ts packages/shared/src/ledgers.test.ts apps/api/src/services/parties.ts apps/api/src/routes/parties.ts apps/api/drizzle/0017_retired_columns.sql "apps/web/app/(app)/customers/page.tsx" "apps/web/app/(app)/suppliers/page.tsx"
 git commit -m "feat: opening balances are journal entries, drop the party columns"
 ```
 
