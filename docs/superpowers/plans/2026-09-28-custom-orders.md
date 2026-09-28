@@ -190,7 +190,9 @@ export async function sourceGold(db: D1Database, id: string, kind: "CUSTOMER_OLD
     if (!["PURCHASED", "AVAILABLE"].includes(item.status)) throw Object.assign(new Error("Item must be purchased first"), { code: "CONFLICT" });
     fineMg = item.fine_mg;
   } else {
-    const [batchId, lotNumber] = refId.split("::");
+    const parts = refId.split("::");
+    if (parts.length !== 2 || !parts[0] || !parts[1]) throw Object.assign(new Error("Shop lot ref must be batchId::lotNumber"), { code: "VALIDATION" });
+    const [batchId, lotNumber] = parts as [string, string];
     const lot = await db.prepare("SELECT o.fine_mg, b.branch_id, b.status FROM melting_outputs o JOIN melting_batches b ON b.id = o.batch_id WHERE o.batch_id = ? AND o.lot_number = ?").bind(batchId, lotNumber).first<{ fine_mg: number; branch_id: string; status: string }>();
     if (!lot) throw Object.assign(new Error("Melt lot not found"), { code: "NOT_FOUND" });
     if (lot.status !== "APPROVED" || lot.branch_id !== order.branch_id) throw Object.assign(new Error("Lot not available in this branch"), { code: "CONFLICT" });
@@ -334,20 +336,38 @@ export async function deliverOrder(db: D1Database, id: string, input: { payments
   const { results: finished } = await db.prepare("SELECT product_id FROM manufacturing_outputs WHERE order_id = ? AND product_id IS NOT NULL").bind(order.manufacturing_order_id).all<{ product_id: string }>();
   if (!finished?.length) throw Object.assign(new Error("No finished piece"), { code: "CONFLICT" });
   const now = Date.now();
+  // The advance already moved as real money (DR cash / CR 2200). The sale must
+  // still total the full quote, so the applied advance rides along as an
+  // auto credit leg: it DRs 1200, which nets against the apply entry's CR
+  // 1200 below. Caller legs must sum to exactly quote − advances.
   const applyCents = Math.min(order.advance_cents, order.quote_cents);
-  const apply = await buildEntryStmts(db, { lines: [{ account: "2200", debitCents: applyCents, creditCents: 0, partyType: "customer", partyId: order.customer_id }, { account: "1200", debitCents: 0, creditCents: applyCents, partyType: "customer", partyId: order.customer_id }], refEntity: "custom_advance_apply", refId: id, memo: `Advance applied ${order.number}`, branchId: order.branch_id, actorId, auditAction: "cord.apply", auditEntity: "custom_order", auditEntityId: id, sourceModule: "sales" }, { entryDate: await businessDateFor(db, now) });
+  const balanceCents = order.quote_cents - applyCents;
+  let callerPaid = 0;
+  for (const p of input.payments) {
+    if (!(p.amountLkr > 0)) throw Object.assign(new Error("Payment amounts must be positive"), { code: "VALIDATION" });
+    callerPaid += lkrToCents(p.amountLkr);
+  }
+  if (callerPaid !== balanceCents) throw Object.assign(new Error(`Balance payments must sum to the unpaid ${balanceCents}c`), { code: "VALIDATION" });
+  const salePayments = [...input.payments];
+  if (applyCents > 0) salePayments.push({ method: "credit", amountLkr: applyCents / 100 });
   const quoteLkr = order.quote_cents / 100;
-  const sale = await receiveSale(db, { branchId: order.branch_id, customerId: order.customer_id, items: (finished ?? []).map((f) => ({ productId: f.product_id, priceLkr: quoteLkr / (finished?.length ?? 1) })), payments: input.payments }, actorId);
-  await db.batch([
-    ...apply.stmts,
+  const perPiece = quoteLkr / finished.length;
+  const sale = await receiveSale(db, { branchId: order.branch_id, customerId: order.customer_id, items: finished.map((f) => ({ productId: f.product_id, priceLkr: perPiece })), payments: salePayments }, actorId);
+  const stmts: D1PreparedStatement[] = [];
+  if (applyCents > 0) {
+    const apply = await buildEntryStmts(db, { lines: [{ account: "2200", debitCents: applyCents, creditCents: 0, partyType: "customer", partyId: order.customer_id }, { account: "1200", debitCents: 0, creditCents: applyCents, partyType: "customer", partyId: order.customer_id }], refEntity: "custom_advance_apply", refId: id, memo: `Advance applied ${order.number}`, branchId: order.branch_id, actorId, auditAction: "cord.apply", auditEntity: "custom_order", auditEntityId: id, sourceModule: "sales" }, { entryDate: await businessDateFor(db, now) });
+    stmts.push(...apply.stmts);
+  }
+  stmts.push(
     db.prepare("UPDATE custom_orders SET status = 'DELIVERED', sale_id = ? WHERE id = ? AND status = 'READY'").bind(sale.invoiceId, id),
-    buildAuditStmt(db, { userId: actorId, action: "cord.deliver", entity: "custom_order", entityId: id, next: { saleId: sale.invoiceId } }),
-  ]);
+    buildAuditStmt(db, { userId: actorId, action: "cord.deliver", entity: "custom_order", entityId: id, next: { saleId: sale.invoiceId } })
+  );
+  await db.batch(stmts);
   return { invoiceId: sale.invoiceId };
 }
 ```
 
-Multi-output orders split the quote evenly across pieces (documented; single-piece is the norm). `receiveSale` validates payment sums, discount gates, and posts revenue/COGS itself. `custom_advance_apply` is a new ref_entity moving 2200→1200 (no cash account involved) — invisible to both the day-close guard (no 1000/1010/1020/1030 leg... wait, buildEntryStmts writes lines only on 2200/1200 — the day-close cash query filters `l.account_code = '1000'`, so no row; the monthly cashflow IN list also only counts cash accounts. No KNOWN_CASH_REFS change needed. State that in a comment.)
+Multi-output orders split the quote evenly across pieces (documented; single-piece is the norm). `receiveSale` validates payment sums, discount gates, and posts revenue/COGS itself. When nothing was advanced, no apply entry posts and delivery is a plain sale. A fully prepaid order (balance 0) delivers with caller payments `[]` plus the auto credit leg. `custom_advance_apply` moves only 2200→1200 (no cash account involved) — invisible to both the day-close guard (which keys on 1000/1010/1020/1030 legs) and the payments crossfoot (keyed on payment ref_entities). No KNOWN_CASH_REFS change needed. The sale posts in its own batch before the apply batch (receiveSale's shape requires it); both pass the same closed-day lock, so a closed day fails both consistently.
 
 ```ts
 export async function orderLineage(db: D1Database, id: string) {
@@ -428,7 +448,7 @@ export const advanceCustomSchema = z.object({
 export const sourceGoldSchema = z.object({ kind: z.enum(["CUSTOMER_OLDGOLD", "SHOP_LOT"]), refId: z.string().min(1) });
 export const startProductionSchema = z.object({ manufacturingOrderId: z.string().min(1).optional() });
 export const deliverCustomSchema = z.object({
-  payments: z.array(z.object({ method: z.enum(["cash", "card", "bank", "credit", "other"]), amountLkr: z.number().gt(0) })).min(1).max(10),
+  payments: z.array(z.object({ method: z.enum(["cash", "card", "bank", "credit", "other"]), amountLkr: z.number().gt(0) })).max(10),
 });
 export type CreateCustomOrderInput = z.infer<typeof createCustomOrderSchema>;
 ```
@@ -527,7 +547,7 @@ git commit -m "test: custom order advance and delivery guards"
 - Spec §3 (flow): Tasks 2–4 — quote/advance/source/start/sync/cancel/deliver/lineage with exact perms; ADVANCED flip; sync-only mirror states; cancel-refund rule (cash-only auto, else manual-first 409); earmark guard at engine level incl. OG-via-melt lots. Covered.
 - Advance `sourceModule: "sales"` + crossfoot invisibility: documented in Task 2 comment (ref_entity not in the crossfoot list). `custom_advance_apply` no-cash-legs comment in Task 3. Covered.
 - Spec §4 (perms): Task 4 — exact mapping, no new permission. Covered.
-- Spec §5 (guards): Tasks 2–3 + 5 — cap, over-apply check (applyCents ≤ quote by construction; explicit refusal if advances somehow exceed — the `Math.min` plus cap makes over-apply impossible; the 409 path triggers when... note: with the cap, apply can never exceed quote, so the "refused" case is the Math.min clamp itself — honest by construction, tested via cap tests), lineage index. Covered.
+- Spec §5 (guards): Tasks 2–3 + 5 — cap, caller-sum-equals-balance rule (over/under-payment → 409 naming the exact cents), auto credit leg composition, lineage index. Covered.
 - Spec §6 (testing): Task 5 + Task 1 cash test — earmark/double/cancel/lineage covered as unit + seeded hardening noted; `custom_advance` cash-in test in Task 1.
 - Placeholder scan: no TBD/TODO; all SQL/callbacks exact; the `::` separator contract stated with validation.
 - Type consistency: `advanceOrder(db, id, { amountLkr, method, bankAccountId? }, actorId)`, `deliverOrder(db, id, { payments }, actorId)`, `sourceGold(db, id, kind, refId, actorId)`, `startProduction(db, id, moId|undefined, actorId)`, `syncOrder`, `cancelCustomOrder(db, id, reason, actorId)` used identically across Tasks 2–5.
