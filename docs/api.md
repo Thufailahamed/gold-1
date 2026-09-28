@@ -62,8 +62,17 @@ Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 | POST | /inventory/movements | products:edit | IN_STOCK→TRANSFER_PENDING/RETURNED/LOST/VOID; locked → 409 |
 | GET | /inventory/movements | products:view | filterable by productId, branchId, type |
 | GET | /inventory/stock?groupBy= | products:view | branch/purity/product totals (mg + value at current rates) |
-| GET | /accounts | accounts:view | chart with balances; optional ?branchId= |
-| POST | /accounts/adjustments | accounts:manage | balanced two-leg entry + reason; amounts in cents |
+| GET | /accounts | accounts:view | 24 accounts + balance_cents, entry_count, is_system, is_editable; optional ?branchId= |
+| POST | /accounts | accounts:manage | create account; code /\d{4}/, unique, is_system=0 |
+| PATCH | /accounts/:code | accounts:manage | rename/describe; refuses system accounts and any account with journal lines |
+| PATCH | /accounts/:code/status | accounts:manage | deactivate/reactivate; same refusals |
+| POST | /accounts/adjustments | accounts:manage | balanced two-leg entry + reason; cents; optional ?entryDate=; returns id, entryId, entryNo |
+| GET | /accounts/journal | accounts:view | ?from&to&branchId&accountCode&sourceModule&refEntity&page&limit |
+| GET | /accounts/journal/:id | accounts:view | one entry with ordered lines |
+| POST | /accounts/journal/reverse | accounts:manage | {entryId, reason, entryDate?}; mirror + reverses_entry_id, original becomes REVERSED |
+| GET | /accounts/trial-balance | accounts:view | ?date&branchId; as of a date |
+| GET | /accounts/reconciliation | accounts:view | ?date&branchId; 15 cross-foot checks, passed + per-check expected/actual/difference/detail. A failing check is a 200 with passed:false, not an error |
+| GET | /accounts/:code/statement | accounts:view | ?from&to&branchId; running balance from an opening |
 | GET | /customers/:id | masters:view | profile incl. code + notes |
 | GET | /customers/:id/ledger | masters:view | opening + journal lines + balance |
 | GET | /suppliers/:id | masters:view | profile incl. code + notes |

@@ -79,11 +79,74 @@ Conventions: `id TEXT PK` (UUID), timestamps as INTEGER millis, FKs enforced.
 - `purchase_orders(id, number UNIQUE PO-XXXX, supplier_id FK, branch_id FK, status DRAFT/SENT/RECEIVED/CANCELLED, notes, created_at, created_by)` + `purchase_order_items(id, order_id FK, category_id, purity_id, gross_mg, net_mg, est_cost_cents, notes)` — drafts, no postings.
 - `purchase_invoices(id, number UNIQUE PINV-XXXX, order_id NULL FK, supplier_id FK, branch_id FK, subtotal_cents, charges_cents, total_cents, paid_cents, status UNPAID/PARTIAL/PAID/VOID, created_at, created_by)` + `purchase_invoice_items(id, invoice_id FK, product_id FK, gross_mg, net_mg, purity_id FK, cost_cents incl. charge share, making_cents)` + `purchase_payments(id, invoice_id FK, amount_cents, method cash/bank, ref, created_at, created_by)`.
 
-## Accounting foundation (migration `0008_ledger`)
+## Financial ledger (migrations `0008_ledger`, `0015_ledger_core`, `0016_ledger_backfill`, `0017_retired_columns`)
 
-- `chart_of_accounts(code PK, name, type ASSET/LIABILITY/EQUITY/REVENUE/EXPENSE, is_active, branch_id NULL)` — seeded 11 accounts (1000 Cash, 1010 Bank, 1100 Gold Inventory, 1200 Receivables, 2000 Payables, 2100 Tax, 3000 Equity, 3100 Opening, 4000 Revenue, 5000 COGS, 6000 Expenses).
-- `journal_entries(id, account_code FK, debit_cents, credit_cents, party_type?, party_id?, ref_entity, ref_id, memo?, branch_id?, created_at, created_by)` — append-only, indexed by (account, time), (party, time), (ref).
-- Parties gain `code` (CUS-/SUP-XXXXXX, backfilled) and `notes`.
+`0008_ledger` seeded the chart and a flat journal. `0015` split the journal into
+a header and its lines; `0016` backfilled the existing rows into entries and
+migrated party opening balances; `0017` dropped what the new shape made
+redundant.
+
+### Chart of accounts
+
+- `chart_of_accounts(code PK, name, type ASSET/LIABILITY/EQUITY/REVENUE/EXPENSE, is_active, is_system, description?, branch_id NULL)` — 24 accounts.
+- `is_system = 1` marks an account the ledger posts into. System accounts reject
+  edits, and so does any account with at least one journal line: renaming an
+  account that has history would rewrite the meaning of that history.
+- 1000 Cash · 1010 Bank · 1020 Card Clearing · 1100 Gold Inventory · 1200 Customer Receivables · 2000 Supplier Payables · 2100 Tax Payable · 2200 Other Payables · 3000 Owner's Equity · 3100 Opening Balances · 4000 Sales Revenue · 5000 Cost of Goods Sold · 5100 Gold Melting Loss · 5200 Gold Manufacturing Loss · 5300 Gold Adjustment Loss · 6000 Rent & Rates · 6010 Utilities · 6020 Salaries & Wages · 6030 Repairs & Maintenance · 6040 Transport & Delivery · 6050 Marketing & Advertising · 6060 Bank & Card Charges · 6070 Office & Consumables · 6080 Other Expenses.
+- The chart is deliberately **flat** — no parent accounts, no group rollups.
+  Reports group by `type`.
+- Spec 3's expense categories each own an account here and point at it.
+
+### Journal
+
+- `journal_entries(id PK, entry_no UNIQUE, entry_date, memo?, ref_entity?, ref_id?, ref_no?, source_module, status POSTED|REVERSED, reverses_entry_id?, branch_id?, created_at, created_by)` — the header. Indexed by (entry_date, branch), (ref_entity, ref_id), (source_module, entry_date), status, reverses_entry_id.
+- `journal_lines(id PK, entry_id, line_no, account_code FK, debit_cents, credit_cents, party_type?, party_id?, memo?)` — indexed by (entry_id, line_no), account, and (party_type, party_id).
+- `entry_date` is **TEXT** `'YYYY-MM-DD'` in the shop's local day, not epoch
+  millis. Cloudflare Workers run UTC and the shop is at UTC+5:30, so a
+  `setHours(0,0,0,0)` day boundary is wrong for five hours every evening. The
+  offset lives in `settings.business_tz_offset_minutes` (default 330), not in
+  code. `entry_date` defaults to today and may be overridden — backdating is
+  allowed, and spec 4 blocks it for a day that is already closed.
+- `status` is `POSTED` or `REVERSED`. There is no `DRAFT`: an entry is always
+  posted in the same atomic batch as the document that caused it.
+- `source_module` is one of `sales, purchases, oldgold, expenses, bank, cash, closing, manual, manufacturing, melting, gold`.
+- `entry_no` is `JE-000001`, allocated by a single atomic
+  `UPDATE counters SET next = next + 1 … RETURNING`, reserved *outside* the
+  caller's batch. A read-then-write split hands out the same number twice when
+  one call posts two entries — a purchase paid on receipt posts a receive and
+  a payment — and the second insert then dies on the unique index. Reserving
+  outside the batch means a failed write leaves a gap, which is correct; a
+  collision is not.
+- Corrections are **reversals, never edits or deletes**: a mirror entry with
+  debit and credit swapped, `reverses_entry_id` set, and the original flipped to
+  `REVERSED`. A void reverses the entry its own document recorded, linked by
+  `journal_entry_id` — not a mirror guessed from `ref_entity`/`ref_id`, which a
+  purchase void shares with the receive it reverses.
+
+### Party opening balances
+
+`customers.opening_balance_cents` and `suppliers.opening_balance_cents` are
+**retired** (`0017`). An opening balance is now an entry dated the day before
+the party's first transaction, against 3100: a customer who starts owing us is
+`DR 1200 / CR 3100`, a supplier we start owing is `DR 3100 / CR 2000`. The 3100
+leg is left untagged so a sub-ledger only ever holds its own control account.
+
+### Document → entry links
+
+`sales_invoices`, `sales_returns`, `purchase_invoices` and `old_gold_purchases`
+each gained `journal_entry_id`, written in the same batch as the entry so the
+link cannot exist without the entry it points at.
+
+### Book cost chain
+
+`melting_batches` gained `input_cost_cents` and `melting_outputs` gained
+`cost_cents`, so a melt lot carries what the shop actually paid rather than the
+day's board rate. See `gold-accounting.md`.
+
+### Counters
+
+`JE` and `GADJ` were added alongside the existing `PO, PINV, SINV, SRET, OG,
+MELT, MO`.
 
 ## Later-phase reservations (not yet created)
 
@@ -92,3 +155,6 @@ Conventions: `id TEXT PK` (UUID), timestamps as INTEGER millis, FKs enforced.
 - Financial ledger: revenue, COGS, cash, bank, receivables, payables, payments,
   refunds, adjustments. Every sale/purchase auto-posts entries in the same batch.
 - All business tables carry `branch_id`; inventory/cash are branch-scoped.
+- The 30+ journal `entry_no` values that the pre-0015 rows were backfilled
+  under use a `JE-B` prefix so they cannot be confused with the live `JE-`
+  sequence, which starts fresh.

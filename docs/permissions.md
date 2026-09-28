@@ -69,3 +69,13 @@ Rules: sessions expire (12h idle / 7d absolute); inactive users are rejected;
 activation changes need a reason and are audited; users cannot change their
 own role or activation; role changes require users:approve; password resets
 use single-use 15-minute tokens issued by users:edit holders.
+
+## Ledger core (migrations `0015`-`0017`)
+
+No permission was added. The count stays at **53** across 8 roles.
+
+`accounts:manage` now covers chart-of-accounts CRUD and journal reversal in
+addition to manual adjustments. It is granted to owner, manager and accountant.
+`accounts:view` additionally covers the journal list, trial balance, account
+statement and the reconciliation report, and is granted to cashier too — the
+cashier can read the accounts but cannot change them.
