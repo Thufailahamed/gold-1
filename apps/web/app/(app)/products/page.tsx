@@ -19,9 +19,10 @@ import {
   Pager,
   StatusPill,
   EmptyBlock,
+  Modal,
   controlClass,
 } from "@/components/ui";
-import { ArrowRightIcon, GemIcon, PlusIcon, SearchIcon, XIcon } from "@/components/icons";
+import { ArrowRightIcon, GemIcon, PlusIcon, SearchIcon } from "@/components/icons";
 
 type Product = {
   id: string;
@@ -345,31 +346,8 @@ export default function ProductsPage() {
       </TableCard>
 
       {dialog ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
-          onClick={() => setDialog(false)}
-        >
-          <form
-            onSubmit={handleSubmit((v) => create.mutate(v))}
-            className="g-floating max-h-[90vh] w-full max-w-lg animate-fade-in space-y-4 overflow-y-auto p-6 scrollbar-thin"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="g-kicker">Catalog</div>
-                <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
-                  New product
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setDialog(false)}
-                aria-label="Close"
-                className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
-              >
-                <XIcon size={16} />
-              </button>
-            </div>
+        <Modal title="New product" kicker="Catalog" onClose={() => setDialog(false)} footer={false} wide>
+          <form onSubmit={handleSubmit((v) => create.mutate(v))} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-xs font-medium text-ink-3">
                 Name <span className="ml-0.5 text-gold-dark">*</span>
@@ -514,7 +492,7 @@ export default function ProductsPage() {
               </button>
             </div>
           </form>
-        </div>
+        </Modal>
       ) : null}
     </Page>
   );

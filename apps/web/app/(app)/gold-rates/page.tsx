@@ -17,9 +17,10 @@ import {
   TableSkeleton,
   EmptyBlock,
   Callout,
+  Modal,
   controlClass,
 } from "@/components/ui";
-import { ArrowRightIcon, CoinsIcon, TrendingUpIcon, XIcon } from "@/components/icons";
+import { ArrowRightIcon, CoinsIcon, TrendingUpIcon } from "@/components/icons";
 
 type Rate = {
   id: string;
@@ -162,31 +163,8 @@ export default function GoldRatesPage() {
       </TableCard>
 
       {dialog ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
-          onClick={() => setDialog(false)}
-        >
-          <form
-            onSubmit={handleSubmit((v) => create.mutate(v))}
-            className="g-floating w-full max-w-md animate-fade-in space-y-4 p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="g-kicker">Board rate</div>
-                <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
-                  Publish rate
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setDialog(false)}
-                aria-label="Close"
-                className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
-              >
-                <XIcon size={16} />
-              </button>
-            </div>
+        <Modal title="Publish rate" kicker="Board rate" onClose={() => setDialog(false)} footer={false}>
+          <form onSubmit={handleSubmit((v) => create.mutate(v))} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-xs font-medium text-ink-3">Purity</label>
               <select className={controlClass} {...register("purityId")}>
@@ -233,7 +211,7 @@ export default function GoldRatesPage() {
               </button>
             </div>
           </form>
-        </div>
+        </Modal>
       ) : null}
     </Page>
   );

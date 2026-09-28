@@ -17,10 +17,11 @@ import {
   TableCard,
   EmptyBlock,
   Callout,
+  Modal,
   Skeleton,
   controlClass,
 } from "@/components/ui";
-import { EditIcon, GemIcon, PrinterIcon, RefreshCwIcon, XIcon } from "@/components/icons";
+import { EditIcon, GemIcon, PrinterIcon, RefreshCwIcon } from "@/components/icons";
 
 type Detail = {
   product: {
@@ -353,30 +354,14 @@ function EditDialog({ id, onClose }: { id: string; onClose: () => void }) {
 
   const cls = controlClass;
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
-      onClick={onClose}
+    <Modal
+      title={<>Edit product <span className="text-ink-4">(weights locked)</span></>}
+      kicker="Edit"
+      onClose={onClose}
+      onSubmit={save}
+      pending={pending}
+      submitLabel="Save"
     >
-      <div
-        className="g-floating w-full max-w-md animate-fade-in space-y-4 p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="g-kicker">Edit</div>
-            <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
-              Edit product <span className="text-ink-4">(weights locked)</span>
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
-          >
-            <XIcon size={16} />
-          </button>
-        </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-ink-3">Making LKR</label>
@@ -403,20 +388,7 @@ function EditDialog({ id, onClose }: { id: string; onClose: () => void }) {
           <label className="mb-1.5 block text-xs font-medium text-ink-3">Notes</label>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} className={cls} />
         </div>
-        <div className="flex justify-end gap-2 pt-1">
-          <button onClick={onClose} className="g-btn g-btn-secondary h-10 px-4 text-sm">
-            Cancel
-          </button>
-          <button
-            onClick={save}
-            disabled={pending}
-            className="g-btn g-btn-primary h-10 px-4 text-sm"
-          >
-            Save
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

@@ -20,6 +20,7 @@ import {
   EmptyBlock,
   Pill,
   DetailList,
+  Modal,
   Skeleton,
   controlClass,
 } from "@/components/ui";
@@ -220,31 +221,8 @@ export default function UsersPage() {
       </TableCard>
 
       {dialog ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
-          onClick={() => setDialog(false)}
-        >
-          <form
-            onSubmit={handleSubmit((v) => create.mutate(v))}
-            className="g-floating max-h-[90vh] w-full max-w-md animate-fade-in space-y-4 overflow-y-auto p-6 scrollbar-thin"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="g-kicker">Organisation</div>
-                <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
-                  New user
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setDialog(false)}
-                aria-label="Close"
-                className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
-              >
-                <XIcon size={16} />
-              </button>
-            </div>
+        <Modal title="New user" kicker="Organisation" onClose={() => setDialog(false)} footer={false}>
+          <form onSubmit={handleSubmit((v) => create.mutate(v))} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-xs font-medium text-ink-3">Name</label>
               <input className={controlClass} {...register("name")} />
@@ -297,7 +275,7 @@ export default function UsersPage() {
               </button>
             </div>
           </form>
-        </div>
+        </Modal>
       ) : null}
       {editId ? (
         <EditDialog
@@ -350,30 +328,8 @@ function EditDialog({ id, canApprove, onClose }: { id: string; canApprove: boole
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="g-floating w-full max-w-md animate-fade-in space-y-4 p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="g-kicker">Organisation</div>
-            <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
-              Edit user
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
-          >
-            <XIcon size={16} />
-          </button>
-        </div>
+    <Modal title="Edit user" kicker="Organisation" onClose={onClose} footer={false}>
+      <div className="space-y-4">
         {detail.isLoading ? (
           <Skeleton className="h-24" />
         ) : (
@@ -431,7 +387,7 @@ function EditDialog({ id, canApprove, onClose }: { id: string; canApprove: boole
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 

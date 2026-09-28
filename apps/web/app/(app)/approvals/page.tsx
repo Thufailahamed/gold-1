@@ -4,8 +4,28 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { hasPermission } from "@goldos/shared";
 import { api, downloadCsv, type MeData } from "@/lib/api";
-import { Page, Hero, Panel, Pill, EmptyBlock, controlClass, heroBtnGhost } from "@/components/ui";
-import { FileDownIcon } from "@/components/icons";
+import {
+  Callout,
+  EmptyBlock,
+  Hero,
+  Page,
+  Panel,
+  Pill,
+  Skeleton,
+  StatusPill,
+  Tabs,
+  Toolbar,
+  controlClass,
+  heroBtnGhost,
+} from "@/components/ui";
+import {
+  AlertCircleIcon,
+  CheckCircleIcon,
+  FileDownIcon,
+  HistoryIcon,
+  ShieldIcon,
+  XIcon,
+} from "@/components/icons";
 
 type ApprovalRow = {
   id: string;
@@ -24,7 +44,6 @@ type ApprovalRow = {
   createdAt: number;
 };
 
-const STATUSES = ["PENDING", "APPROVED", "REJECTED", "EXPIRED"] as const;
 const ACTIONS = [
   "SALES_DISCOUNT",
   "PRICE_OVERRIDE",
@@ -100,6 +119,7 @@ export default function ApprovalsPage() {
         stats={[
           { label: "Showing", value: list.isLoading ? "—" : rows.length },
           { label: "Total", value: list.data?.total ?? "—" },
+          { label: "Status", value: status.charAt(0) + status.slice(1).toLowerCase() },
         ]}
         actions={
           canExport ? (
@@ -111,17 +131,31 @@ export default function ApprovalsPage() {
             </button>
           ) : undefined
         }
+        note="Four-eyes control — the approver can never be the requester"
       />
-      <div className="no-print flex flex-wrap items-center gap-2">
-        {STATUSES.map((s) => (
-          <button key={s} onClick={() => setStatus(s)} className={`g-btn h-9 px-3.5 text-xs ${status === s ? "g-btn-primary" : "g-btn-secondary"}`}>
-            {s.charAt(0) + s.slice(1).toLowerCase()}
-          </button>
-        ))}
+      <Tabs
+        ariaLabel="Approval status"
+        value={status}
+        onChange={setStatus}
+        items={[
+          { key: "PENDING", label: "Pending", icon: <HistoryIcon size={14} /> },
+          { key: "APPROVED", label: "Approved", icon: <CheckCircleIcon size={14} /> },
+          { key: "REJECTED", label: "Rejected", icon: <XIcon size={14} /> },
+          { key: "EXPIRED", label: "Expired", icon: <AlertCircleIcon size={14} /> },
+        ]}
+      />
+      <Toolbar
+        className="no-print"
+        actions={
+          <Pill tone="neutral" dot>
+            {rows.length} shown
+          </Pill>
+        }
+      >
         <select value={action} onChange={(e) => setAction(e.target.value)} className={controlClass} aria-label="Action">
           <option value="">All actions</option>
           {ACTIONS.map((a) => (
-            <option key={a} value={a}>{a}</option>
+            <option key={a} value={a}>{a.replaceAll("_", " ")}</option>
           ))}
         </select>
         <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={controlClass} aria-label="Branch">
@@ -130,12 +164,20 @@ export default function ApprovalsPage() {
             <option key={b.id} value={b.id}>{b.name}</option>
           ))}
         </select>
-      </div>
-      {error ? <Pill tone="danger">{error}</Pill> : null}
+      </Toolbar>
+      {error ? <Callout tone="danger" title="Could not decide">{error}</Callout> : null}
       {list.isLoading ? (
-        <EmptyBlock title="Loading" description="Fetching approval requests." />
+        <div className="space-y-4">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))}
+        </div>
       ) : rows.length === 0 ? (
-        <EmptyBlock title={`No ${status.toLowerCase()} requests`} description="Nothing in this view for the selected filters." />
+        <EmptyBlock
+          icon={<ShieldIcon size={22} />}
+          title={`No ${status.toLowerCase()} requests`}
+          description="Nothing in this view for the selected filters."
+        />
       ) : (
         rows.map((r) => {
           const oldV = parseJson(r.oldValue);
@@ -143,25 +185,38 @@ export default function ApprovalsPage() {
           const keys = [...new Set([...Object.keys(oldV), ...Object.keys(newV)])];
           const open = openId === r.id;
           return (
-            <Panel key={r.id} title={`${r.action} · ${r.entity}`} description={`${r.entityId} — requested ${fmtTs(r.createdAt)}`}>
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <Pill tone={r.status === "PENDING" ? "warning" : r.status === "APPROVED" ? "success" : "ghost"}>{r.status}</Pill>
-                <span className="text-ink-4">Requester {r.requesterId}</span>
-                <span className="text-ink-4">Approver {r.approverId ?? "—"}</span>
-                <span className="text-ink-4">Expires {fmtTs(r.expiresAt)}</span>
-                {r.decidedAt ? <span className="text-ink-4">Decided {fmtTs(r.decidedAt)}</span> : null}
-                <button onClick={() => setOpenId(open ? null : r.id)} className="g-btn ml-auto h-8 px-3 text-xs">
+            <Panel
+              key={r.id}
+              icon={<ShieldIcon size={17} />}
+              title={`${r.action.replaceAll("_", " ")} · ${r.entity}`}
+              description={`${r.entityId} — requested ${fmtTs(r.createdAt)}`}
+              actions={<StatusPill status={r.status} />}
+            >
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
+                <span className="text-ink-4">Requester <span className="font-medium text-ink-2">{r.requesterId}</span></span>
+                <span className="text-ink-4">Approver <span className="font-medium text-ink-2">{r.approverId ?? "—"}</span></span>
+                <span className="text-ink-4">Expires <span className="g-metric text-ink-2">{fmtTs(r.expiresAt)}</span></span>
+                {r.decidedAt ? <span className="text-ink-4">Decided <span className="g-metric text-ink-2">{fmtTs(r.decidedAt)}</span></span> : null}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button onClick={() => setOpenId(open ? null : r.id)} className="g-btn g-btn-secondary h-8 px-3 text-xs">
                   {open ? "Hide changes" : "Show changes"}
                 </button>
                 {r.status === "PENDING" ? (
                   <>
-                    <button onClick={() => decide(r.id, true)} className="g-btn h-8 px-3 text-xs">Approve</button>
-                    <button onClick={() => setRejectId(r.id)} className="g-btn h-8 px-3 text-xs">Reject</button>
+                    <button onClick={() => decide(r.id, true)} className="g-btn g-btn-primary h-8 px-3 text-xs">
+                      <CheckCircleIcon size={12} /> Approve
+                    </button>
+                    <button onClick={() => setRejectId(r.id)} className="g-btn h-8 px-3 text-xs text-rose-700 shadow-[inset_0_0_0_1px_rgba(190,18,60,0.3)] transition-colors hover:bg-rose-50">
+                      <XIcon size={12} /> Reject
+                    </button>
                   </>
                 ) : null}
               </div>
-              <div className="mt-2 text-sm text-ink-3">Reason: {r.reason}</div>
-              {r.status === "EXPIRED" ? <div className="mt-1 text-sm text-ink-4">Expired — re-request to proceed.</div> : null}
+              <div className="mt-3 rounded-lg bg-bone/70 px-3 py-2 text-sm text-ink-3">
+                <span className="font-medium text-ink-4">Reason · </span>{r.reason}
+              </div>
+              {r.status === "EXPIRED" ? <div className="mt-2 text-sm text-ink-4">Expired — re-request to proceed.</div> : null}
               {open ? (
                 <table className="g-table mt-3">
                   <thead>
@@ -179,15 +234,21 @@ export default function ApprovalsPage() {
                 </table>
               ) : null}
               {rejectId === r.id ? (
-                <div className="mt-3 flex flex-wrap items-center gap-2">
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-rose-50/60 p-3">
                   <input
                     value={rejectReason}
                     onChange={(e) => setRejectReason(e.target.value)}
                     placeholder="Rejection reason (required)"
                     className={controlClass}
                   />
-                  <button onClick={() => decide(r.id, false)} className="g-btn h-8 px-3 text-xs">Confirm reject</button>
-                  <button onClick={() => { setRejectId(null); setRejectReason(""); }} className="g-btn h-8 px-3 text-xs">Cancel</button>
+                  <button
+                    onClick={() => decide(r.id, false)}
+                    disabled={!rejectReason.trim()}
+                    className="g-btn h-9 bg-rose-700 px-3.5 text-xs text-paper transition-colors hover:bg-rose-800 disabled:opacity-50"
+                  >
+                    Confirm reject
+                  </button>
+                  <button onClick={() => { setRejectId(null); setRejectReason(""); }} className="g-btn g-btn-secondary h-9 px-3.5 text-xs">Cancel</button>
                 </div>
               ) : null}
             </Panel>

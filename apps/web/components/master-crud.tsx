@@ -17,9 +17,10 @@ import {
   Pager,
   StatusPill,
   EmptyBlock,
+  Modal,
   controlClass,
 } from "@/components/ui";
-import { ArrowRightIcon, PlusIcon, SearchIcon, XIcon } from "./icons";
+import { ArrowRightIcon, PlusIcon, SearchIcon } from "./icons";
 
 export type CrudField = {
   name: string;
@@ -245,31 +246,8 @@ export function MasterCrud({
       </TableCard>
 
       {dialog ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
-          onClick={() => setDialog(false)}
-        >
-          <form
-            onSubmit={handleSubmit((v) => create.mutate(v))}
-            className="g-floating w-full max-w-md animate-fade-in space-y-4 p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="g-kicker">Create</div>
-                <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
-                  New {title}
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setDialog(false)}
-                aria-label="Close"
-                className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
-              >
-                <XIcon size={16} />
-              </button>
-            </div>
+        <Modal title={`New ${title}`} kicker="Create" onClose={() => setDialog(false)} footer={false}>
+          <form onSubmit={handleSubmit((v) => create.mutate(v))} className="space-y-4">
             {fields.map((f) => (
               <div key={f.name}>
                 <label className="mb-1.5 block text-xs font-medium text-ink-3">
@@ -304,7 +282,7 @@ export function MasterCrud({
               </button>
             </div>
           </form>
-        </div>
+        </Modal>
       ) : null}
     </Page>
   );

@@ -18,9 +18,10 @@ import {
   Pager,
   StatusPill,
   EmptyBlock,
+  Modal,
   controlClass,
 } from "@/components/ui";
-import { ArrowRightIcon, PlusIcon, SearchIcon, XIcon } from "@/components/icons";
+import { ArrowRightIcon, PlusIcon, SearchIcon } from "@/components/icons";
 
 type Branch = { id: string; name: string; code: string; address: string | null; is_active: number };
 
@@ -190,31 +191,8 @@ export default function BranchesPage() {
       </TableCard>
 
       {dialog ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
-          onClick={() => setDialog(false)}
-        >
-          <form
-            onSubmit={handleSubmit((v) => create.mutate(v))}
-            className="g-floating w-full max-w-md animate-fade-in space-y-4 p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="g-kicker">Organisation</div>
-                <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
-                  New branch
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setDialog(false)}
-                aria-label="Close"
-                className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
-              >
-                <XIcon size={16} />
-              </button>
-            </div>
+        <Modal title="New branch" kicker="Organisation" onClose={() => setDialog(false)} footer={false}>
+          <form onSubmit={handleSubmit((v) => create.mutate(v))} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-xs font-medium text-ink-3">Name</label>
               <input className={controlClass} {...register("name")} />
@@ -240,7 +218,7 @@ export default function BranchesPage() {
               </button>
             </div>
           </form>
-        </div>
+        </Modal>
       ) : null}
       {settingsId ? <BranchSettings id={settingsId} onClose={() => setSettingsId(null)} /> : null}
     </Page>
@@ -270,30 +248,8 @@ function BranchSettings({ id, onClose }: { id: string; onClose: () => void }) {
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="g-floating w-full max-w-md animate-fade-in space-y-4 p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="g-kicker">Branch settings</div>
-            <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">
-              Overrides
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
-          >
-            <XIcon size={16} />
-          </button>
-        </div>
+    <Modal title="Overrides" kicker="Branch settings" onClose={onClose} footer={false}>
+      <div className="space-y-4">
         <p className="text-xs text-ink-4">
           Keys are stored as <span className="font-mono">branch.{id.slice(0, 8)}…</span>
         </p>
@@ -324,6 +280,6 @@ function BranchSettings({ id, onClose }: { id: string; onClose: () => void }) {
           </ul>
         ) : null}
       </div>
-    </div>
+    </Modal>
   );
 }
