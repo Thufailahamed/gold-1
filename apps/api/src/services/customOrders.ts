@@ -124,10 +124,16 @@ export async function syncOrder(db: D1Database, id: string, actorId: string): Pr
   return { status: next };
 }
 
-export async function cancelCustomOrder(db: D1Database, id: string, reason: string, actorId: string): Promise<void> {
+export async function cancelCustomOrder(db: D1Database, id: string, input: { reason: string; approvedBy?: string }, actorId: string): Promise<void> {
   const order = await loadOrder(db, id);
   if (["READY", "DELIVERED", "CANCELLED"].includes(order.status)) throw Object.assign(new Error("Too late to cancel; deliver or reverse"), { code: "CONFLICT" });
-  if (!reason?.trim()) throw Object.assign(new Error("Reason required"), { code: "VALIDATION" });
+  if (!input.reason?.trim()) throw Object.assign(new Error("Reason required"), { code: "VALIDATION" });
+  if (["IN_PRODUCTION", "QC_PASSED"].includes(order.status)) {
+    if (!input.approvedBy || input.approvedBy === actorId) throw Object.assign(new Error("Post-production cancel needs a second approver"), { code: "FORBIDDEN" });
+    const perms = await db.prepare(`SELECT p.name AS name FROM user_roles ur JOIN role_permissions rp ON rp.role_id = ur.role_id JOIN permissions p ON p.id = rp.permission_id WHERE ur.user_id = ?`).bind(input.approvedBy).all<{ name: string }>();
+    if (!(perms.results ?? []).some((r) => r.name === "mfg:approve"))
+      throw Object.assign(new Error("Cancel approval requires mfg:approve"), { code: "FORBIDDEN" });
+  }
   const now = Date.now();
   const { results: legs } = await db.prepare("SELECT account_code, debit_cents FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id WHERE e.ref_entity = 'custom_advance' AND e.ref_id = ? AND l.debit_cents > 0").bind(id).all<{ account_code: string; debit_cents: number }>();
   const stmts: D1PreparedStatement[] = [];
@@ -135,12 +141,12 @@ export async function cancelCustomOrder(db: D1Database, id: string, reason: stri
     if (!(legs ?? []).every((l) => l.account_code === "1000"))
       throw Object.assign(new Error("Non-cash advances need manual reversal before cancel"), { code: "CONFLICT" });
     const total = (legs ?? []).reduce((s, l) => s + l.debit_cents, 0);
-    const entry = await buildEntryStmts(db, { lines: [{ account: "2200", debitCents: total, creditCents: 0, partyType: "customer", partyId: order.customer_id }, { account: "1000", debitCents: 0, creditCents: total }], refEntity: "custom_advance_refund", refId: id, memo: `Advance refund ${order.number}: ${reason}`, branchId: order.branch_id, actorId, auditAction: "cord.refund", auditEntity: "custom_order", auditEntityId: id, sourceModule: "sales" }, { entryDate: await businessDateFor(db, now) });
+    const entry = await buildEntryStmts(db, { lines: [{ account: "2200", debitCents: total, creditCents: 0, partyType: "customer", partyId: order.customer_id }, { account: "1000", debitCents: 0, creditCents: total }], refEntity: "custom_advance_refund", refId: id, memo: `Advance refund ${order.number}: ${input.reason}`, branchId: order.branch_id, actorId, auditAction: "cord.refund", auditEntity: "custom_order", auditEntityId: id, sourceModule: "sales" }, { entryDate: await businessDateFor(db, now) });
     stmts.push(...entry.stmts);
   }
   stmts.push(
     db.prepare("UPDATE custom_orders SET status = 'CANCELLED' WHERE id = ?").bind(id),
-    buildAuditStmt(db, { userId: actorId, action: "cord.cancel", entity: "custom_order", entityId: id, reason })
+    buildAuditStmt(db, { userId: actorId, action: "cord.cancel", entity: "custom_order", entityId: id, reason: input.reason })
   );
   await db.batch(stmts);
 }

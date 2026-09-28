@@ -553,3 +553,24 @@ export const collectRepairSchema = z.object({
 });
 export type CreateRepairInput = z.infer<typeof createRepairSchema>;
 export type CollectRepairInput = z.infer<typeof collectRepairSchema>;
+
+export const createCustomOrderSchema = z.object({
+  customerId: z.string().min(1),
+  branchId: z.string().min(1),
+  design: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  goldReqG: z.number().gt(0).max(100000),
+  goldSource: z.enum(["CUSTOMER", "SHOP", "MIXED"]),
+  quoteLkr: z.number().gt(0),
+});
+export const advanceCustomSchema = z.object({
+  amountLkr: z.number().gt(0),
+  method: z.enum(["cash", "card", "bank"]),
+  bankAccountId: z.string().min(1).optional(),
+});
+export const sourceGoldSchema = z.object({ kind: z.enum(["CUSTOMER_OLDGOLD", "SHOP_LOT"]), refId: z.string().min(1) });
+export const startProductionSchema = z.object({ manufacturingOrderId: z.string().min(1).optional() });
+export const deliverCustomSchema = z.object({
+  payments: z.array(z.object({ method: z.enum(["cash", "card", "bank", "credit", "other"]), amountLkr: z.number().gt(0) })).max(10),
+});
+export type CreateCustomOrderInput = z.infer<typeof createCustomOrderSchema>;
