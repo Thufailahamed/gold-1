@@ -40,6 +40,12 @@ export const PERMISSIONS = {
   SALES_CANCEL: "sales:cancel",
   SALES_EXPORT: "sales:export",
   SALES_APPROVE: "sales:approve",
+  OLDGOLD_VIEW: "oldgold:view",
+  OLDGOLD_CREATE: "oldgold:create",
+  OLDGOLD_EDIT: "oldgold:edit",
+  OLDGOLD_CANCEL: "oldgold:cancel",
+  OLDGOLD_EXPORT: "oldgold:export",
+  OLDGOLD_APPROVE: "oldgold:approve",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -69,9 +75,11 @@ export const DEFAULT_ROLES: Record<string, string[]> = {
     "purchases:export",
     "sales:view",
     "sales:export",
+    "oldgold:view",
+    "oldgold:export",
   ],
-  cashier: ["users:view", "branches:view", "masters:view", "products:view", "accounts:view", "purchases:view", "sales:view", "sales:create"],
-  salesperson: ["branches:view", "masters:view", "products:view", "purchases:view", "sales:view", "sales:create"],
+  cashier: ["users:view", "branches:view", "masters:view", "products:view", "accounts:view", "purchases:view", "sales:view", "sales:create", "oldgold:view", "oldgold:create"],
+  salesperson: ["branches:view", "masters:view", "products:view", "purchases:view", "sales:view", "sales:create", "oldgold:view"],
   inventory_officer: [
     "branches:view",
     "masters:view",
@@ -88,6 +96,7 @@ export const DEFAULT_ROLES: Record<string, string[]> = {
     "purchases:create",
     "purchases:edit",
     "sales:view",
+    "oldgold:view",
   ],
   gold_officer: [
     "branches:view",
@@ -97,6 +106,9 @@ export const DEFAULT_ROLES: Record<string, string[]> = {
     "products:view",
     "purchases:view",
     "sales:view",
+    "oldgold:view",
+    "oldgold:create",
+    "oldgold:edit",
   ],
   manufacturing_staff: ["products:view"],
 };

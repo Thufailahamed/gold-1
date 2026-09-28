@@ -245,3 +245,43 @@ export const createReturnSchema = z.object({
 
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 export type CreateReturnInput = z.infer<typeof createReturnSchema>;
+
+export const TEST_METHODS = ["acid", "touchstone", "xrf", "electronic", "fire_assay"] as const;
+export const OLDGOLD_STATUSES = ["RECEIVED", "TESTED", "VALUED", "PURCHASED", "AVAILABLE", "RESERVED_FOR_MELTING", "MELTED", "RESOLD", "TRANSFERRED", "VOID"] as const;
+
+export const createOldGoldSchema = z.object({
+  customerId: z.string().min(1),
+  branchId: z.string().min(1),
+  itemType: z.string().min(1).max(50),
+  description: z.string().min(1).max(500),
+  grossG: z.number().gt(0).max(100000),
+  stoneG: z.number().min(0).max(100000).optional().default(0),
+  notes: z.string().max(2000).optional(),
+});
+
+export const testOldGoldSchema = z.object({
+  method: z.enum(TEST_METHODS),
+  permille: z.number().int().gt(0).lte(1000),
+  result: z.enum(["pass", "fail", "inconclusive"]),
+  notes: z.string().max(2000).optional(),
+  approvedBy: z.string().min(1).optional(),
+});
+
+export const valueOldGoldSchema = z.object({
+  buyPct: z.number().gt(0).lte(100).optional(),
+  stoneDeductionLkr: z.number().min(0).optional().default(0),
+  processingDeductionLkr: z.number().min(0).optional().default(0),
+  negotiatedLkr: z.number().gt(0).optional(),
+  reason: z.string().max(500).optional(),
+});
+
+export const purchaseOldGoldSchema = z.object({
+  paidLkr: z.number().min(0),
+  method: z.enum(["cash", "bank"]),
+});
+
+export const voidOldGoldSchema = z.object({ reason: z.string().min(1).max(500) });
+
+export type CreateOldGoldInput = z.infer<typeof createOldGoldSchema>;
+export type TestOldGoldInput = z.infer<typeof testOldGoldSchema>;
+export type ValueOldGoldInput = z.infer<typeof valueOldGoldSchema>;
