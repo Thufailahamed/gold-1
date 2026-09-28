@@ -6,6 +6,7 @@ import {
   businessDate,
   cashBreakdownTotal,
   cashDifference,
+  cashflowClose,
   checkBalanced,
   closingArithmetic,
   closingDifference,
@@ -14,10 +15,13 @@ import {
   type CashLine,
   expensePosting,
   expenseThresholds,
+  goldClose,
   goldValueCents,
   inTransitTotal,
   isBusinessDate,
   meltingLossValue,
+  monthBounds,
+  monthlyPnl,
   pendingApprovalTotal,
   settlementAmounts,
   type PartyLedgerLine,
@@ -442,5 +446,21 @@ describe("cashBreakdownTotal knows every flow that moves cash", () => {
     ]);
     expect(t.unclassified).toBe(0);
     expect(t.totalOut).toBe(20_000_000);
+  });
+});
+
+describe("monthly core helpers", () => {
+  it("bounds February leap year", () => {
+    expect(monthBounds(2024, 2)).toEqual({ from: "2024-02-01", to: "2024-02-29", label: "2024-02" });
+  });
+  it("bounds January", () => {
+    expect(monthBounds(2026, 1)).toEqual({ from: "2026-01-01", to: "2026-01-31", label: "2026-01" });
+  });
+  it("computes ledger-only pnl", () => {
+    expect(monthlyPnl({ revenueCents: 100000, cogsCents: 60000, opexCents: 10000, meltLossCents: 500, mfgLossCents: 300, adjNetCents: 200 }).grossProfitCents).toBe(40000);
+  });
+  it("closes cash and gold", () => {
+    expect(cashflowClose(5000, 3000, 1000).closingCents).toBe(7000);
+    expect(goldClose(1000, 500, 300).closingMg).toBe(1200);
   });
 });

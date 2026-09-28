@@ -277,3 +277,29 @@ export function cashBreakdownTotal(lines: CashLine[]): {
   }
   return { totalIn, totalOut, unclassified };
 }
+
+export function monthBounds(year: number, month: number): { from: string; to: string; label: string } {
+  if (!Number.isInteger(year) || year < 1970 || year > 2100) throw Object.assign(new Error("Invalid year"), { code: "VALIDATION" });
+  if (!Number.isInteger(month) || month < 1 || month > 12) throw Object.assign(new Error("Invalid month"), { code: "VALIDATION" });
+  const mm = String(month).padStart(2, "0");
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const label = `${year}-${mm}`;
+  const from = `${label}-01`;
+  const to = `${label}-${String(last).padStart(2, "0")}`;
+  if (!isBusinessDate(from) || !isBusinessDate(to)) throw Object.assign(new Error("Invalid month window"), { code: "VALIDATION" });
+  return { from, to, label };
+}
+
+export function monthlyPnl(input: { revenueCents: number; cogsCents: number; opexCents: number; meltLossCents: number; mfgLossCents: number; adjNetCents: number }): { grossProfitCents: number; netProfitCents: number } {
+  const grossProfitCents = input.revenueCents - input.cogsCents;
+  const netProfitCents = grossProfitCents - input.opexCents - input.meltLossCents - input.mfgLossCents - input.adjNetCents;
+  return { grossProfitCents, netProfitCents };
+}
+
+export function cashflowClose(openingCents: number, inflowsCents: number, outflowsCents: number): { closingCents: number } {
+  return { closingCents: openingCents + inflowsCents - outflowsCents };
+}
+
+export function goldClose(openingMg: number, inMg: number, outMg: number): { closingMg: number } {
+  return { closingMg: openingMg + inMg - outMg };
+}
