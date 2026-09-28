@@ -8,6 +8,7 @@ import {
 import type { Env } from "../db/client";
 import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
+import { businessDateFor } from "../services/busdate";
 import {
   createReturn,
   getSale,
@@ -20,20 +21,18 @@ import {
 } from "../services/sales";
 import { pagination, serviceError } from "./http";
 
-function dayBounds(period: string): { from: number; to: number } {
+/**
+ * Report windows must agree with journal_entries.entry_date, which is
+ * shop-local. Computing a day boundary with setHours(0,0,0,0) uses the
+ * Worker's UTC clock, which is wrong for a shop east of Greenwich: between
+ * 19:00 and 24:00 Colombo time the UTC day is already tomorrow.
+ */
+async function dayBounds(db: D1Database, period: string): Promise<{ from: number; to: number }> {
   const now = Date.now();
-  if (period === "today") {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return { from: d.getTime(), to: now };
-  }
-  if (period === "month") {
-    const d = new Date();
-    d.setDate(1);
-    d.setHours(0, 0, 0, 0);
-    return { from: d.getTime(), to: now };
-  }
-  return { from: 0, to: now };
+  const today = await businessDateFor(db, now);
+  const fromDate =
+    period === "today" ? today : period === "month" ? `${today.slice(0, 7)}-01` : "1970-01-01";
+  return { from: Date.parse(`${fromDate}T00:00:00Z`), to: now };
 }
 
 const linkSchema = z.object({ saleId: z.string().min(1) });
@@ -77,7 +76,7 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     return c.json({ success: true, data }, 200);
   })
   .get("/reports/summary", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
-    const { from, to } = dayBounds(c.req.query("period") ?? "all");
+    const { from, to } = await dayBounds(c.env.DB, c.req.query("period") ?? "all");
     const data = await salesSummary(c.env.DB, {
       from,
       to,
@@ -94,7 +93,7 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         { success: false, error: { code: "VALIDATION", message: "Invalid groupBy" } },
         400
       );
-    const { from, to } = dayBounds(c.req.query("period") ?? "all");
+    const { from, to } = await dayBounds(c.env.DB, c.req.query("period") ?? "all");
     const data = await salesBreakdown(c.env.DB, {
       from,
       to,
