@@ -450,6 +450,16 @@ describe("cashBreakdownTotal knows every flow that moves cash", () => {
   });
 });
 
+describe("cashBreakdownTotal names repair collections", () => {
+  it("classifies a repair collection as cash in", () => {
+    const t = cashBreakdownTotal([
+      { refEntity: "repair", label: "Repair collections", direction: "in", cents: 15_000 },
+    ]);
+    expect(t.unclassified).toBe(0);
+    expect(t.totalIn).toBe(15_000);
+  });
+});
+
 describe("monthly core helpers", () => {
   it("bounds February leap year", () => {
     expect(monthBounds(2024, 2)).toEqual({ from: "2024-02-01", to: "2024-02-29", label: "2024-02" });

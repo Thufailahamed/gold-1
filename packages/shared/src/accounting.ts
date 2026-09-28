@@ -250,6 +250,7 @@ export const KNOWN_CASH_REFS = [
   "sale_return",
   "cash_transfer_out",
   "old_gold_purchase",
+  "repair",
 ] as const;
 
 /**

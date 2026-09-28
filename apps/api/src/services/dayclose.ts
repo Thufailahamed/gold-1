@@ -25,6 +25,7 @@ const CASH_LABELS: Record<string, string> = {
   // payment does. Found by the unclassified guard, which is the only reason
   // that guard exists.
   old_gold_purchase: "Old gold purchases",
+  repair: "Repair collections",
 };
 
 const GOLD_LINES: { key: GoldKey; label: string; types: string[] }[] = [
