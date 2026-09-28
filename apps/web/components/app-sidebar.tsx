@@ -125,6 +125,14 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: "Reports",
+    tag: "Ledger",
+    items: [
+      { href: "/reports/monthly", label: "Monthly", icon: HistoryIcon, perm: "accounts:view" },
+      { href: "/analytics", label: "Analytics", icon: TrendingUpIcon, perm: "branches:manage" },
+    ],
+  },
+  {
     title: "System",
     tag: "Admin",
     items: [

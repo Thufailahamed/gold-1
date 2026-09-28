@@ -39,3 +39,16 @@ export async function formApi<T>(path: string, form: FormData): Promise<T> {
 export function assetUrl(path: string): string {
   return `${BASE}${path}`;
 }
+
+/** Authenticated text download (server CSV). Throws with the API message on error. */
+export async function downloadCsv(path: string, filename: string): Promise<void> {
+  const res = await fetch(`${BASE}${path}`, { credentials: "include" });
+  if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+  const text = await res.text();
+  const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
