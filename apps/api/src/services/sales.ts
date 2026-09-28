@@ -3,6 +3,7 @@ import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
 import { priceFor } from "./products";
 import { buildMoveStmts } from "./inventory";
+import { assertCountLock } from "./counts";
 import { getSetting } from "./settings";
 import { buildEntryStmts } from "./journal";
 import { businessDateFor } from "./busdate";
@@ -141,6 +142,7 @@ export async function receiveSale(
       throw Object.assign(new Error(`Product not available: ${it.productId}`), { code: "VALIDATION" });
     if (p.branch_id !== input.branchId)
       throw Object.assign(new Error(`Product not in branch: ${it.productId}`), { code: "VALIDATION" });
+    await assertCountLock(db, p.id);
     let priceCents: number;
     if (it.priceLkr !== undefined) {
       priceCents = lkrToCents(it.priceLkr);

@@ -514,3 +514,12 @@ export const monthlyQuerySchema = z.object({
 });
 export type MonthlyQueryInput = z.infer<typeof monthlyQuerySchema>;
 export const monthlySnapshotSchema = monthlyQuerySchema.extend({ note: z.string().max(500).optional() });
+
+export const startCountSchema = z.object({
+  branchId: z.string().min(1),
+  scope: z.enum(["FULL", "CATEGORY", "BRANCH", "LOCATION"]),
+  scopeRef: z.string().min(1).optional(),
+});
+export const scanSchema = z.object({ barcode: z.string().min(1).max(32) });
+export const approveCountSchema = z.object({ reason: z.string().min(1).max(500), approvedBy: z.string().min(1) });
+export type StartCountInput = z.infer<typeof startCountSchema>;

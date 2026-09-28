@@ -1,6 +1,7 @@
 import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
 import { currentGoldRatesCents } from "./rates";
+import { assertCountLock } from "./counts";
 
 export type MovementType =
   | "INTAKE"
@@ -77,6 +78,7 @@ export async function buildMoveStmts(
     .bind(productId)
     .first<{ id: string; status: string; branch_id: string; net_mg: number }>();
   if (!prev) throw Object.assign(new Error("Product not found"), { code: "NOT_FOUND" });
+  await assertCountLock(db, productId);
   checkTransition(prev.status, toStatus);
   if ((toStatus === "VOID" || toStatus === "LOST") && !opts.reason)
     throw Object.assign(new Error("Reason required for VOID/LOST"), { code: "VALIDATION" });
@@ -140,6 +142,7 @@ export async function recordMovement(
       permille: number;
     }>();
   if (!prev) throw Object.assign(new Error("Product not found"), { code: "NOT_FOUND" });
+  await assertCountLock(db, input.productId);
   checkTransition(prev.status, input.toStatus);
   if ((input.toStatus === "VOID" || input.toStatus === "LOST") && !input.reason)
     throw Object.assign(new Error("Reason required for VOID/LOST"), { code: "VALIDATION" });
