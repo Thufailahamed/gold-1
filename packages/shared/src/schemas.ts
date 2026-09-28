@@ -488,3 +488,18 @@ export const rejectExpenseSchema = z.object({
 
 export type CreateExpenseCategoryInput = z.infer<typeof createExpenseCategorySchema>;
 export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
+
+export const closeDaySchema = z.object({
+  branchId: z.string().min(1),
+  date: BUSINESS_DATE,
+  actualCents: CENTS,
+  differenceReason: z.string().max(500).optional(),
+});
+
+export const reopenDaySchema = z.object({
+  reason: z.string().min(1).max(500),
+  approvedBy: z.string().min(1),
+});
+
+export type CloseDayInput = z.infer<typeof closeDaySchema>;
+export type ReopenDayInput = z.infer<typeof reopenDaySchema>;

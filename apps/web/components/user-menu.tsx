@@ -7,8 +7,8 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { api, type MeData } from "@/lib/api";
 import { logout } from "@/lib/auth";
-import { controlClass } from "@/components/ui";
-import { ChevronDownIcon, LogOutIcon, ShieldIcon } from "./icons";
+import { Modal, Pill, controlClass } from "@/components/ui";
+import { CheckCircleIcon, ChevronDownIcon, LogOutIcon, ShieldIcon } from "./icons";
 
 const pwSchema = z.object({
   currentPassword: z.string().min(1),
@@ -58,21 +58,40 @@ export function UserMenu({ me }: { me: MeData }) {
       <button
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-2 transition-colors hover:bg-ink/5"
+        className={cn(
+          "flex items-center gap-2.5 rounded-lg py-1 pl-1 pr-2 transition-colors hover:bg-ink/5",
+          open && "bg-ink/5"
+        )}
       >
-        <span className="flex size-7 items-center justify-center rounded-md bg-ink font-mono text-[11px] font-bold text-gold">
+        <span className="flex size-8 items-center justify-center rounded-lg bg-ink font-mono text-[11px] font-bold text-gold shadow-pop">
           {initials}
         </span>
         <span className="hidden max-w-[9rem] truncate text-sm font-medium text-ink sm:block">
           {me.user.name || "Account"}
         </span>
-        <ChevronDownIcon size={14} className="hidden text-ink-4 sm:block" />
+        <ChevronDownIcon
+          size={14}
+          className={cn("hidden text-ink-4 transition-transform duration-200 sm:block", open && "rotate-180")}
+        />
       </button>
       {open ? (
-        <div className="g-floating absolute right-0 z-40 mt-2 w-60 animate-fade-in overflow-hidden">
-          <div className="border-b border-ink/[0.07] px-4 py-3">
-            <div className="truncate text-sm font-semibold text-ink">{me.user.name}</div>
-            <div className="mt-0.5 truncate font-mono text-[11px] text-ink-4">{me.user.email}</div>
+        <div className="g-floating absolute right-0 z-40 mt-2 w-72 animate-fade-in overflow-hidden">
+          <div className="flex items-center gap-3 border-b border-ink/[0.07] px-4 py-3.5">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-ink font-mono text-sm font-bold text-gold">
+              {initials}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold text-ink">{me.user.name}</div>
+              <div className="mt-0.5 truncate font-mono text-[11px] text-ink-4">{me.user.email}</div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-2 border-b border-ink/[0.07] px-4 py-2.5">
+            <Pill tone="success" dot icon={<CheckCircleIcon size={11} />}>
+              Session active
+            </Pill>
+            <span className="g-metric text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-5">
+              {String(me.permissions.length).padStart(2, "0")} perms
+            </span>
           </div>
           <div className="p-1.5">
             <button
