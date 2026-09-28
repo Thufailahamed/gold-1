@@ -88,6 +88,16 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: "Old Gold",
+    tag: "Counter",
+    items: [
+      { href: "/old-gold/intake", label: "Intake", icon: ScanBarcodeIcon, perm: "oldgold:create" },
+      { href: "/old-gold/testing", label: "Testing", icon: GemIcon, perm: "oldgold:edit" },
+      { href: "/old-gold/items", label: "Items", icon: ArchiveIcon, perm: "oldgold:view" },
+      { href: "/old-gold/reports", label: "Reports", icon: TrendingUpIcon, perm: "oldgold:view" },
+    ],
+  },
+  {
     title: "Organisation",
     tag: "Org",
     items: [
