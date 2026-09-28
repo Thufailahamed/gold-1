@@ -516,6 +516,14 @@ callers and tests are unaffected, and `melting.ts` / `manufacturing.ts` import
 `closingCash` and `cashDifference` are spec 4's, defined now so the arithmetic
 is written and tested once.
 
+`allocateProportional` **normalises** — its output always sums to `total`.
+`allocateGoldValue` deliberately does **not**: it returns
+`round(fine_mg_o / fineIn × vIn)` per output, so the outputs sum to strictly
+less than `vIn` and the shortfall *is* the manufacturing loss value. Using
+`allocateProportional` here would silently normalise the loss away and make
+`mfgLossValue` always zero. The two functions look interchangeable and are
+not.
+
 ## 7. Data flow example
 
 A melt of old gold bought for 400,000 (LKR 400,000) that yields 10,000 mg
