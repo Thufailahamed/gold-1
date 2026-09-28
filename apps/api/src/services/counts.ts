@@ -1,5 +1,9 @@
 import { compareCount } from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
+import { postGoldStmts } from "./gold";
+import { buildEntryStmts } from "./journal";
+import { businessDateFor } from "./busdate";
+import { currentGoldRatesCents } from "./rates";
 
 export type CountScope = "FULL" | "CATEGORY" | "BRANCH" | "LOCATION";
 
@@ -86,4 +90,45 @@ export async function cancelCount(db: D1Database, countId: string, reason: strin
     db.prepare("UPDATE stock_counts SET status = 'CANCELLED', result_json = ?, closed_by = ? WHERE id = ? AND status = 'OPEN'").bind(JSON.stringify(cmp), actorId, countId),
     buildAuditStmt(db, { userId: actorId, action: "count.cancel", entity: "stock_count", entityId: countId, reason }),
   ]);
+}
+
+export async function approveCount(db: D1Database, countId: string, input: { reason: string; approvedBy: string }, actorId: string): Promise<{ posted: number }> {
+  if (!input.reason?.trim()) throw Object.assign(new Error("Reason required"), { code: "VALIDATION" });
+  if (input.approvedBy === actorId) throw Object.assign(new Error("Approver cannot be yourself"), { code: "FORBIDDEN" });
+  const approver = await db.prepare(
+    `SELECT p.name AS name FROM user_roles ur JOIN role_permissions rp ON rp.role_id = ur.role_id JOIN permissions p ON p.id = rp.permission_id WHERE ur.user_id = ?`
+  ).bind(input.approvedBy).all<{ name: string }>();
+  if (!(approver.results ?? []).some((r) => r.name === "gold:manage"))
+    throw Object.assign(new Error("Approval requires gold:manage"), { code: "FORBIDDEN" });
+  const count = await db.prepare("SELECT id, branch_id, status FROM stock_counts WHERE id = ?").bind(countId).first<{ id: string; branch_id: string; status: string }>();
+  if (!count || count.status !== "OPEN") throw Object.assign(new Error("Count not open"), { code: "CONFLICT" });
+  const cmp = await compare(db, countId);
+  const rates = await currentGoldRatesCents(db);
+  const now = Date.now();
+  const entryDate = await businessDateFor(db, now);
+  let posted = 0;
+  for (const productId of cmp.missing) {
+    const prod = await db.prepare("SELECT id, status, branch_id, net_mg, fine_gold_mg, cost_cents, purity_id FROM products WHERE id = ?").bind(productId).first<{ id: string; status: string; branch_id: string; net_mg: number; fine_gold_mg: number; cost_cents: number | null; purity_id: string }>();
+    if (!prod || prod.status !== "IN_STOCK") continue;
+    if (!prod.cost_cents || prod.cost_cents <= 0) throw Object.assign(new Error(`No book cost for ${productId}; cannot post adjustment`), { code: "VALIDATION" });
+    if (!rates.some((r) => r.purity_id === prod.purity_id))
+      throw Object.assign(new Error("No gold rate for this purity; cannot value the adjustment"), { code: "VALIDATION" });
+    const purity = await db.prepare("SELECT permille FROM purities WHERE id = ?").bind(prod.purity_id).first<{ permille: number }>();
+    if (!purity) throw Object.assign(new Error("Purity not found"), { code: "VALIDATION" });
+    const moveId = crypto.randomUUID();
+    const goldStmts = await postGoldStmts(db, [{ branchId: count.branch_id, source: `branch:${count.branch_id}`, destination: "loss", type: "ADJUSTMENT", weightMg: prod.net_mg, permille: purity.permille, refEntity: "stock_count", refId: countId, productId, notes: input.reason }], { actorId, auditAction: "count.adjust", auditEntity: "stock_count", auditEntityId: countId, branchId: count.branch_id });
+    const entry = await buildEntryStmts(db, { lines: [{ account: "5300", debitCents: prod.cost_cents, creditCents: 0 }, { account: "1100", debitCents: 0, creditCents: prod.cost_cents }], refEntity: "stock_count", refId: countId, memo: `Stock count shortage: ${input.reason}`, branchId: count.branch_id, actorId, auditAction: "count.adjust.value", auditEntity: "stock_count", auditEntityId: countId, sourceModule: "gold" }, { entryDate });
+    await db.batch([
+      db.prepare("UPDATE products SET status = 'LOST' WHERE id = ? AND status = 'IN_STOCK'").bind(productId),
+      db.prepare("INSERT INTO stock_movements (id, product_id, type, from_status, to_status, from_branch, to_branch, weight_mg, reason, created_at, created_by) VALUES (?, ?, 'LOSS', 'IN_STOCK', 'LOST', ?, ?, ?, ?, ?, ?)").bind(moveId, productId, prod.branch_id, prod.branch_id, prod.net_mg, input.reason, now, actorId),
+      ...goldStmts,
+      ...entry.stmts,
+    ]);
+    posted += 1;
+  }
+  await db.batch([
+    db.prepare("UPDATE stock_counts SET status = 'COMPLETE', result_json = ?, closed_by = ? WHERE id = ?").bind(JSON.stringify({ ...cmp, posted }), actorId, countId),
+    buildAuditStmt(db, { userId: actorId, action: "count.approve", entity: "stock_count", entityId: countId, reason: input.reason }),
+  ]);
+  return { posted };
 }
