@@ -426,3 +426,59 @@ export const oldGoldPurchases = sqliteTable("old_gold_purchases", {
   createdAt: integer("created_at").notNull(),
   createdBy: text("created_by"),
 });
+
+export const goldLedger = sqliteTable("gold_ledger", {
+  id: text("id").primaryKey(),
+  occurredAt: integer("occurred_at").notNull(),
+  branchId: text("branch_id"),
+  source: text("source").notNull(),
+  destination: text("destination").notNull(),
+  type: text("type").notNull(),
+  weightMg: integer("weight_mg").notNull(),
+  permille: integer("permille").notNull(),
+  fineMg: integer("fine_mg").notNull(),
+  refEntity: text("ref_entity").notNull(),
+  refId: text("ref_id").notNull(),
+  productId: text("product_id"),
+  oldGoldId: text("old_gold_id"),
+  userId: text("user_id"),
+  notes: text("notes"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+export const meltingBatches = sqliteTable("melting_batches", {
+  id: text("id").primaryKey(),
+  number: text("number").notNull().unique(),
+  branchId: text("branch_id").notNull(),
+  status: text("status").notNull().default("DRAFT"),
+  inputFineMg: integer("input_fine_mg").notNull().default(0),
+  outputFineMg: integer("output_fine_mg").notNull().default(0),
+  wasteMg: integer("waste_mg").notNull().default(0),
+  lossMg: integer("loss_mg").notNull().default(0),
+  recoveryMg: integer("recovery_mg").notNull().default(0),
+  differenceReason: text("difference_reason"),
+  approvedBy: text("approved_by"),
+  notes: text("notes"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+export const meltingInputs = sqliteTable("melting_inputs", {
+  id: text("id").primaryKey(),
+  batchId: text("batch_id").notNull(),
+  oldGoldId: text("old_gold_id").notNull().unique(),
+  grossMg: integer("gross_mg").notNull(),
+  netMg: integer("net_mg").notNull(),
+  fineMg: integer("fine_mg").notNull(),
+});
+
+export const meltingOutputs = sqliteTable("melting_outputs", {
+  id: text("id").primaryKey(),
+  batchId: text("batch_id").notNull(),
+  lotNumber: text("lot_number").notNull().unique(),
+  weightMg: integer("weight_mg").notNull(),
+  permille: integer("permille").notNull(),
+  fineMg: integer("fine_mg").notNull(),
+  outputType: text("output_type").notNull().default("grain"),
+});
