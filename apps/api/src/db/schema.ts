@@ -772,3 +772,20 @@ export const customOrderGold = sqliteTable("custom_order_gold", {
   fineMg: integer("fine_mg").notNull(),
   createdAt: integer("created_at").notNull(),
 });
+
+export const approvals = sqliteTable("approvals", {
+  id: text("id").primaryKey(),
+  action: text("action").notNull(),
+  entity: text("entity").notNull(),
+  entityId: text("entity_id").notNull(),
+  requesterId: text("requester_id").notNull(),
+  approverId: text("approver_id"),
+  oldValueJson: text("old_value_json").notNull().default("{}"),
+  newValueJson: text("new_value_json").notNull().default("{}"),
+  reason: text("reason").notNull(),
+  branchId: text("branch_id"),
+  status: text("status").notNull().default("PENDING"),
+  expiresAt: integer("expires_at").notNull(),
+  decidedAt: integer("decided_at"),
+  createdAt: integer("created_at").notNull(),
+});

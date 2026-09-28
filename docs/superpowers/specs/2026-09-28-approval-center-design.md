@@ -19,7 +19,7 @@ User-confirmed decisions:
 
 ## 3. Configuration (all in `settings`)
 
-Per action: `approval_threshold_<action>` (above → async request; at-or-below → immediate execution with audit row), `approval_ttl_<action>_hours` (default via `approval_default_ttl_hours`, 48), `approval_perm_<action>` (deciding `:approve` permission; defaults to the domain approver, e.g. `sales:approve`). Threshold empty/zero disables the async path (immediate + audited) — rollout and emergency bypass are configuration, not code.
+Per action: `approval_threshold_<action>` (above → async request; at-or-below → immediate execution with audit row), `approval_ttl_<action>_hours` (default via `approval_default_ttl_hours`, 48), `approval_perm_<action>` (deciding `:approve` permission; defaults to the domain approver, e.g. `sales:approve`). A null/empty threshold disables the async path (immediate + audited); a zero threshold means any positive metric requires approval — always-require actions (cancellations, rate changes) use threshold zero with call-site metric 1 (or the measured pct). Rollout and emergency bypass are configuration, not code.
 
 ## 4. Lifecycle and execution
 
