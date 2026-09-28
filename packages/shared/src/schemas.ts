@@ -456,3 +456,35 @@ export type TransferDispatchInput = z.infer<typeof transferDispatchSchema>;
 export type TransferReceiveInput = z.infer<typeof transferReceiveSchema>;
 export type CardSettlementInput = z.infer<typeof cardSettlementSchema>;
 export type ReconcileStatementInput = z.infer<typeof reconcileStatementSchema>;
+
+export const createExpenseCategorySchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().max(500).optional(),
+});
+
+export const expenseStatusSchema = z.object({
+  isActive: z.union([z.literal(0), z.literal(1)]),
+  reason: z.string().min(1).max(500),
+});
+
+export const createExpenseSchema = z.object({
+  categoryId: z.string().min(1),
+  branchId: z.string().min(1),
+  amountLkr: z.number().gt(0),
+  description: z.string().min(1).max(500),
+  incurredOn: BUSINESS_DATE.optional(),
+  vendor: z.string().max(100).optional(),
+  paidFrom: z.enum(["cash", "bank"]),
+  bankAccountId: z.string().min(1).optional(),
+});
+
+export const approveExpenseSchema = z.object({
+  reason: z.string().max(500).optional(),
+});
+
+export const rejectExpenseSchema = z.object({
+  reason: z.string().min(1).max(500),
+});
+
+export type CreateExpenseCategoryInput = z.infer<typeof createExpenseCategorySchema>;
+export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
