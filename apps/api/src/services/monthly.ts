@@ -10,6 +10,18 @@ export type PartyAging = {
   hasData: boolean;
 };
 
+export type InventoryValuation = {
+  jewelleryCents: number;
+  goldCents: number;
+  byBranch: { key: string; cents: number }[];
+  byCategory: { key: string; cents: number }[];
+  byPurity: { key: string; cents: number }[];
+  uncostedPieces: number;
+  method: string;
+  basis: "book-cost";
+  hasData: boolean;
+};
+
 export type MonthlyReport = {
   meta: { from: string; to: string; month: string; branchId: string | null };
   sales: { totalCents: number; invoiceCount: number; grossCents: number; returnsCents: number; netCents: number; hasData: boolean };
@@ -20,9 +32,21 @@ export type MonthlyReport = {
   cashflow: { openingCents: number; inflowsCents: number; outflowsCents: number; closingCents: number; unclassifiedCents: number; hasData: boolean };
   receivables: PartyAging;
   payables: PartyAging;
+  inventory: InventoryValuation;
   estimates: { kind: "estimate"; label: string; note: string }[];
   warnings: string[];
 };
+
+async function firstOrNull<T>(db: D1Database, sql: string, vals: unknown[]): Promise<T | null> {
+  const stmt = db.prepare(sql);
+  return (vals.length ? await stmt.bind(...vals).first<T>() : await stmt.first<T>()) ?? null;
+}
+
+async function allRows<T>(db: D1Database, sql: string, vals: unknown[]): Promise<T[]> {
+  const stmt = db.prepare(sql);
+  const res = vals.length ? await stmt.bind(...vals).all<T>() : await stmt.all<T>();
+  return (res.results ?? []) as T[];
+}
 
 async function sumCents(db: D1Database, sql: string, vals: unknown[]): Promise<number> {
   const stmt = vals.length ? db.prepare(sql).bind(...vals) : db.prepare(sql);
@@ -158,6 +182,55 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
   ).bind(to, to, ...piBv).all<{ id: string; number: string; total_cents: number; d: string; paid: number }>();
   const payablesOut = (pinvs ?? []).map((r) => ({ id: r.id, number: r.number, date: r.d, totalCents: r.total_cents, outstandingCents: r.total_cents - r.paid })).filter((r) => r.outstandingCents > 0);
   const payablesAging = agingBuckets(to, payablesOut.map((r) => ({ id: r.id, date: r.date, outstandingCents: r.outstandingCents })));
+  // Book-cost valuation as of `to`. Jewellery: IN_STOCK-ish statuses (same set
+  // the gold consistency check counts). Lots: remaining-fine share of lot
+  // cost. Old gold: purchase value of bought-but-unmelted items. No rates.
+  const inStock = "'IN_STOCK','TRANSFER_PENDING','RESERVED','IN_REPAIR','IN_MANUFACTURING','RETURNED'";
+  const jB = opts.branchId ? " AND p.branch_id = ?" : "";
+  const jBv: unknown[] = opts.branchId ? [opts.branchId] : [];
+  const jewTot = await firstOrNull<{ cents: number; pieces: number; uncosted: number }>(db, `SELECT COALESCE(SUM(p.cost_cents),0) AS cents, COUNT(*) AS pieces, SUM(CASE WHEN p.cost_cents IS NULL THEN 1 ELSE 0 END) AS uncosted FROM products p WHERE p.status IN (${inStock})${jB}`, jBv);
+  const jewCat = await allRows<{ key: string; cents: number }>(db, `SELECT c.name AS key, COALESCE(SUM(p.cost_cents),0) AS cents FROM products p JOIN categories c ON c.id = p.category_id WHERE p.status IN (${inStock})${jB} GROUP BY c.name`, jBv);
+  const jewPur = await allRows<{ key: string; cents: number }>(db, `SELECT pu.karat AS key, COALESCE(SUM(p.cost_cents),0) AS cents FROM products p JOIN purities pu ON pu.id = p.purity_id WHERE p.status IN (${inStock})${jB} GROUP BY pu.karat`, jBv);
+  const brOnly = opts.branchId ? " AND p.branch_id = ?" : "";
+  const brOnlyv: unknown[] = opts.branchId ? [opts.branchId] : [];
+  const jewBr = await allRows<{ key: string; cents: number }>(db, `SELECT p.branch_id AS key, COALESCE(SUM(p.cost_cents),0) AS cents FROM products p WHERE p.status IN (${inStock})${brOnly} GROUP BY p.branch_id`, brOnlyv);
+  const ogB = opts.branchId ? " AND branch_id = ?" : "";
+  const ogBv: unknown[] = opts.branchId ? [opts.branchId] : [];
+  const ogTot = await firstOrNull<{ cents: number }>(db, `SELECT COALESCE(SUM(purchase_value_cents),0) AS cents FROM old_gold_items WHERE status IN ('PURCHASED','AVAILABLE','RESERVED_FOR_MELTING')${ogB}`, ogBv);
+  const ogPur = await allRows<{ key: string; cents: number }>(db,
+    `SELECT COALESCE(pu.karat, 'UNRESOLVED') AS key, COALESCE(SUM(og.purchase_value_cents),0) AS cents
+     FROM old_gold_items og LEFT JOIN purities pu ON pu.id = og.purity_id OR pu.permille = og.tested_permille
+     WHERE og.status IN ('PURCHASED','AVAILABLE','RESERVED_FOR_MELTING')${ogB} GROUP BY key`, ogBv);
+  const ogBr = await allRows<{ key: string; cents: number }>(db, `SELECT branch_id AS key, COALESCE(SUM(purchase_value_cents),0) AS cents FROM old_gold_items WHERE status IN ('PURCHASED','AVAILABLE','RESERVED_FOR_MELTING')${ogB} GROUP BY branch_id`, ogBv);
+  const lotB = opts.branchId ? " AND b.branch_id = ?" : "";
+  const lotBv: unknown[] = opts.branchId ? [opts.branchId] : [];
+  const lots = await allRows<{ id: string; batchId: string; lotNumber: string; fineMg: number; costCents: number; permille: number; branchId: string }>(db,
+    `SELECT o.id, o.batch_id AS batchId, o.lot_number AS lotNumber, o.fine_mg AS fineMg, o.cost_cents AS costCents, o.permille, b.branch_id AS branchId FROM melting_outputs o JOIN melting_batches b ON b.id = o.batch_id AND b.status <> 'VOID'${lotB}`, lotBv);
+  const allocs = await allRows<{ batchId: string; lotNo: string; used: number }>(db,
+    `SELECT m.lot_batch_id AS batchId, m.lot_number AS lotNo, COALESCE(SUM(m.fine_mg),0) AS used FROM manufacturing_materials m JOIN manufacturing_orders mo ON mo.id = m.order_id AND mo.status <> 'VOID' GROUP BY m.lot_batch_id, m.lot_number`, []);
+  const usedByLot = new Map(allocs.map((a) => [`${a.batchId}::${a.lotNo}`, a.used]));
+  const karats = new Map((await allRows<{ karat: string; permille: number }>(db, `SELECT karat, permille FROM purities`, [])).map((r) => [r.permille, r.karat]));
+  let lotsCents = 0;
+  const lotBr = new Map<string, number>();
+  const lotPur = new Map<string, number>();
+  for (const lot of lots) {
+    const remaining = lot.fineMg - (usedByLot.get(`${lot.batchId}::${lot.lotNumber}`) ?? 0);
+    if (remaining <= 0 || lot.fineMg <= 0) continue;
+    const value = Math.round((lot.costCents * remaining) / lot.fineMg);
+    lotsCents += value;
+    lotBr.set(lot.branchId, (lotBr.get(lot.branchId) ?? 0) + value);
+    const key = karats.get(lot.permille) ?? `${lot.permille}`;
+    lotPur.set(key, (lotPur.get(key) ?? 0) + value);
+  }
+  const mergeSum = (rows: { key: string; cents: number }[]) => {
+    const m = new Map<string, number>();
+    for (const r of rows) m.set(r.key, (m.get(r.key) ?? 0) + r.cents);
+    return m;
+  };
+  const byBranch = mergeSum([...jewBr, ...ogBr.map((r) => ({ key: r.key, cents: r.cents })), ...[...lotBr].map(([key, cents]) => ({ key, cents }))]);
+  const byPurity = mergeSum([...jewPur, ...ogPur, ...[...lotPur].map(([key, cents]) => ({ key, cents }))]);
+  const jewelleryCents = jewTot?.cents ?? 0;
+  const goldCents = (ogTot?.cents ?? 0) + lotsCents;
   return {
     meta: { from, to, month: label, branchId: opts.branchId ?? null },
     sales: { totalCents: grossCents, invoiceCount: grossRow?.c ?? 0, grossCents, returnsCents, netCents: revenueCents, hasData: (grossRow?.c ?? 0) > 0 },
@@ -168,6 +241,17 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
     cashflow: { openingCents, inflowsCents, outflowsCents, closingCents, unclassifiedCents, hasData: inflowsCents !== 0 || outflowsCents !== 0 || openingCents !== 0 },
     receivables: { lines: (custBal.results ?? []).map((r) => ({ partyId: r.partyId, name: custNames.get(r.partyId) ?? r.partyId, balanceCents: r.balance })), aging: receivablesAging, outstanding: receivablesOut, totalCents: (custBal.results ?? []).reduce((s, r) => s + r.balance, 0), hasData: receivablesOut.length > 0 },
     payables: { lines: (supBal.results ?? []).map((r) => ({ partyId: r.partyId, name: supNames.get(r.partyId) ?? r.partyId, balanceCents: r.balance })), aging: payablesAging, outstanding: payablesOut, totalCents: (supBal.results ?? []).reduce((s, r) => s + r.balance, 0), hasData: payablesOut.length > 0 },
+    inventory: {
+      jewelleryCents,
+      goldCents,
+      byBranch: [...byBranch].map(([key, cents]) => ({ key, cents })),
+      byCategory: jewCat,
+      byPurity: [...byPurity].map(([key, cents]) => ({ key, cents })),
+      uncostedPieces: jewTot?.uncosted ?? 0,
+      method: "book cost; lots pro-rata by remaining fine weight; byCategory jewellery-only",
+      basis: "book-cost",
+      hasData: jewelleryCents !== 0 || goldCents !== 0,
+    },
     estimates: [{ kind: "estimate", label: "Board-rate memo", note: "Weight x current rate is a memo only — not in profit or stock value" }],
     warnings,
   };
