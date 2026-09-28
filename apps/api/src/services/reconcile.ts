@@ -170,6 +170,14 @@ export async function reconcile(
     .bind(day, ...b.vals)
     .first<{ net: number }>();
   const siB = branchSql(opts.branchId, "si.branch_id");
+  // The returns sub-select aliases its invoice si2, so it needs its OWN branch
+  // filter. Reusing siB here asks for a column that does not exist and only
+  // fails when a branch is supplied — an unfiltered run would pass.
+  const si2B = branchSql(opts.branchId, "si2.branch_id");
+  const si3B = branchSql(opts.branchId, "si3.branch_id");
+  const s2B = branchSql(opts.branchId, "s2.branch_id");
+  const moB = branchSql(opts.branchId, "mo.branch_id");
+  const b2B = branchSql(opts.branchId, "b2.branch_id");
   // A document whose journal entry was reversed recognised no revenue, so it
   // must not count on the document side either — otherwise a reversal is a
   // permanent cross-foot failure. journal_entry_id is the link that makes
@@ -184,10 +192,10 @@ export async function reconcile(
                    WHERE si.status <> 'VOID' AND ${LOCAL_DAY("si.created_at")} = ?${siB.sql}${NOT_REVERSED("si", "journal_entry_id")}), 0)
        - COALESCE((SELECT SUM(sr.refund_cents + sr.credit_cents) FROM sales_returns sr
                    JOIN sales_invoices si2 ON si2.id = sr.invoice_id
-                   WHERE sr.status = 'COMPLETE' AND ${LOCAL_DAY("sr.created_at")} = ?${siB.sql}), 0)
+                   WHERE sr.status = 'COMPLETE' AND ${LOCAL_DAY("sr.created_at")} = ?${si2B.sql}), 0)
          AS net`
     )
-    .bind(day, ...siB.vals, day, ...siB.vals)
+    .bind(day, ...siB.vals, day, ...si2B.vals)
     .first<{ net: number }>();
   checks.push(
     compareMoney(
@@ -260,9 +268,9 @@ export async function reconcile(
     .prepare(
       `SELECT COALESCE(SUM(sr.refund_cents), 0) AS net FROM sales_returns sr
        JOIN sales_invoices si3 ON si3.id = sr.invoice_id
-       WHERE sr.status = 'COMPLETE' AND ${LOCAL_DAY("sr.created_at")} = ?${siB.sql}`
+       WHERE sr.status = 'COMPLETE' AND ${LOCAL_DAY("sr.created_at")} = ?${si3B.sql}`
     )
-    .bind(day, ...siB.vals)
+    .bind(day, ...si3B.vals)
     .first<{ net: number }>();
   const purchPay = await db
     .prepare(
@@ -272,13 +280,15 @@ export async function reconcile(
     )
     .bind(day, ...piB.vals)
     .first<{ net: number }>();
+  const oiB = branchSql(opts.branchId, "oi.branch_id");
   const ogB = branchSql(opts.branchId, "og.branch_id");
   const oldGoldPaid = await db
     .prepare(
       `SELECT COALESCE(SUM(og.paid_cents), 0) AS net FROM old_gold_purchases og
-       WHERE ${LOCAL_DAY("og.created_at")} = ?${ogB.sql}`
+       JOIN old_gold_items oi ON oi.id = og.item_id
+       WHERE ${LOCAL_DAY("og.created_at")} = ?${oiB.sql}`
     )
-    .bind(day, ...ogB.vals)
+    .bind(day, ...oiB.vals)
     .first<{ net: number }>();
   checks.push(
     compareMoney(
@@ -331,7 +341,7 @@ export async function reconcile(
     .all<{ type: string; fine_mg: number }>();
   const ledgerMg = new Map((goldRows ?? []).map((r) => [r.type, r.fine_mg]));
 
-  const docQueries: [string, string][] = [
+  const docQueries: [string, string, { sql: string; vals: unknown[] }][] = [
     [
       "PURCHASE",
       `SELECT COALESCE(SUM(ii.net_mg * pu.permille / 1000), 0) AS fine_mg
@@ -339,43 +349,50 @@ export async function reconcile(
        JOIN purities pu ON pu.id = ii.purity_id
        JOIN purchase_invoices pi ON pi.id = ii.invoice_id
        WHERE pi.status <> 'VOID' AND ${LOCAL_DAY("pi.created_at")} = ?${piB.sql}`,
+      piB,
     ],
     [
       "OLD_GOLD_PURCHASE",
-      `SELECT COALESCE(SUM(fine_mg), 0) AS fine_mg FROM old_gold_items
-       WHERE status = 'PURCHASED' AND ${LOCAL_DAY("created_at")} = ?${bp.sql}`,
+      `SELECT COALESCE(SUM(fine_mg), 0) AS fine_mg FROM old_gold_items og
+       WHERE og.status = 'PURCHASED' AND ${LOCAL_DAY("og.created_at")} = ?${ogB.sql}`,
+      ogB,
     ],
     [
       "SALE",
       `SELECT COALESCE(SUM(p.fine_gold_mg), 0) AS fine_mg FROM sales_items si
        JOIN products p ON p.id = si.product_id
        JOIN sales_invoices s2 ON s2.id = si.invoice_id
-       WHERE s2.status <> 'VOID' AND ${LOCAL_DAY("s2.created_at")} = ?${siB.sql}`,
+       WHERE s2.status <> 'VOID' AND ${LOCAL_DAY("s2.created_at")} = ?${s2B.sql}`,
+      s2B,
     ],
     [
       "MELTING_INPUT",
       `SELECT COALESCE(SUM(i.fine_mg), 0) AS fine_mg FROM melting_inputs i
        JOIN melting_batches b2 ON b2.id = i.batch_id
-       WHERE b2.status = 'APPROVED' AND ${LOCAL_DAY("b2.created_at")} = ?${bp.sql}`,
+       WHERE b2.status = 'APPROVED' AND ${LOCAL_DAY("b2.created_at")} = ?${b2B.sql}`,
+      b2B,
     ],
     [
       "MELTING_OUTPUT",
       `SELECT COALESCE(SUM(o.fine_mg), 0) AS fine_mg FROM melting_outputs o
        JOIN melting_batches b2 ON b2.id = o.batch_id
-       WHERE b2.status = 'APPROVED' AND ${LOCAL_DAY("b2.created_at")} = ?${bp.sql}`,
+       WHERE b2.status = 'APPROVED' AND ${LOCAL_DAY("b2.created_at")} = ?${b2B.sql}`,
+      b2B,
     ],
     [
       "MANUFACTURING_INPUT",
       `SELECT COALESCE(SUM(m.fine_mg), 0) AS fine_mg FROM manufacturing_materials m
        JOIN manufacturing_orders mo ON mo.id = m.order_id
-       WHERE mo.status = 'COMPLETE' AND ${LOCAL_DAY("mo.created_at")} = ?${bp.sql}`,
+       WHERE mo.status = 'COMPLETE' AND ${LOCAL_DAY("mo.created_at")} = ?${moB.sql}`,
+      moB,
     ],
     [
       "MANUFACTURING_OUTPUT",
       `SELECT COALESCE(SUM(m2.net_mg * pu.permille / 1000), 0) AS fine_mg FROM manufacturing_outputs m2
        JOIN manufacturing_orders mo ON mo.id = m2.order_id
        JOIN purities pu ON pu.id = m2.purity_id
-       WHERE mo.status = 'COMPLETE' AND ${LOCAL_DAY("mo.created_at")} = ?${bp.sql}`,
+       WHERE mo.status = 'COMPLETE' AND ${LOCAL_DAY("mo.created_at")} = ?${moB.sql}`,
+      moB,
     ],
     // LOSS covers melting and manufacturing only. A manual stock-count
     // adjustment is recorded *only* in the gold ledger — there is no
@@ -391,10 +408,14 @@ export async function reconcile(
        + COALESCE((SELECT SUM(loss_mg) FROM manufacturing_orders mo2
                    WHERE mo2.status = 'COMPLETE' AND mo2.loss_mg > 0
                      AND ${LOCAL_DAY("mo2.created_at")} = ?), 0) AS fine_mg`,
+      { sql: "", vals: [] },
     ],
   ];
-  for (const [type, sql] of docQueries) {
-    const br = sql.includes(piB.sql) ? piB : sql.includes(siB.sql) ? siB : bp;
+  // Each query carries its OWN branch filter. Picking it by inspecting the SQL
+  // for a known fragment looks tidy and is not: with no branch every filter is
+  // the empty string, so a substring test matches the first entry and every
+  // later query silently gets the wrong one.
+  for (const [type, sql, br] of docQueries) {
     const row = await firstRow<{ fine_mg: number }>(
       db,
       sql,
@@ -472,19 +493,27 @@ export async function reconcile(
   //    old gold counts: an item in RECEIVED, TESTED or VALUED is in the shop
   //    but has no journal and no ledger row, because the shop has not bought
   //    it yet. Counting it would make this check fail permanently.
-  // Gold is held when a row's destination is this branch, and leaves when its
-  // source is this branch. Summing every row instead would count a sale and a
-  // loss as stock still on the shelf, which is why a shop that has sold
-  // everything it bought looked like it was holding 39g of gold.
+  // Gold is held when a row's destination is the branch, and leaves when its
+  // source is the branch. Both sides are tested rather than an either/or,
+  // because a TRANSFER has a branch source AND a different branch destination:
+  // shop-wide it must net to zero (nothing left the business), but for the
+  // receiving branch it is a gain and for the sending branch a loss. Matching
+  // only the destination over-counted every transfer by its full weight — the
+  // branch-scoped run passed while the shop-wide run overstated by exactly the
+  // amount that had moved.
   const tgt = opts.branchId ?? null;
   const total = await firstRow<{ fine_mg: number }>(
     db,
-    `SELECT COALESCE(SUM(CASE
-        WHEN destination = 'branch:' || COALESCE(?, branch_id) THEN fine_mg
-        WHEN source      = 'branch:' || COALESCE(?, branch_id) THEN -fine_mg
-        ELSE 0 END), 0) AS fine_mg
+    // Two independent expressions SUBTRACTED, not one CASE with two WHENs: a
+    // CASE returns on its first match, so a transfer — which has a branch
+    // destination AND a branch source — would count the arrival and never
+    // reach the departure, and every transfer would add its weight twice.
+    `SELECT COALESCE(SUM(
+         (CASE WHEN destination LIKE 'branch:%' AND (? IS NULL OR destination = 'branch:' || ?) THEN fine_mg ELSE 0 END)
+       - (CASE WHEN source      LIKE 'branch:%' AND (? IS NULL OR source      = 'branch:' || ?) THEN fine_mg ELSE 0 END)
+     ), 0) AS fine_mg
      FROM gold_ledger WHERE 1 = 1${bp.sql}`,
-    [tgt, tgt, ...bp.vals]
+    [tgt, tgt, tgt, tgt, ...bp.vals]
   );
   checks.push(
     compareWeight(
