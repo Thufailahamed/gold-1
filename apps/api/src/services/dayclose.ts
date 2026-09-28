@@ -51,6 +51,7 @@ export type GoldSummary = Record<GoldKey, { label: string; mg: number }>;
 export type CashLineGroup = {
   totalCents: number;
   unclassifiedCents: number;
+  unclassifiedNetCents: number;
   lines: { label: string; refEntity: string; cents: number }[];
 };
 
@@ -116,6 +117,7 @@ async function cashGroups(
   const group = (direction: "in" | "out") => ({
     totalCents: direction === "in" ? totals.totalIn : totals.totalOut,
     unclassifiedCents: totals.unclassified,
+    unclassifiedNetCents: totals.unclassifiedNet,
     lines: lines
       .filter((l) => l.direction === direction)
       .map((l) => ({ label: l.label, refEntity: l.refEntity, cents: l.cents })),
@@ -321,11 +323,15 @@ export async function closeDay(
   if (!report.checks.passed)
     fail("CONFLICT", `Cannot close: ${report.checks.failing.join(", ")}`);
 
-  const unclassified = report.cashIn.unclassifiedCents;
+  // Gate on the NET unnamed movement per ref, not the gross: a manual error
+  // and its reversal net to zero economics and must not block the close
+  // forever (reversing reuses the original ref, so gross only ever grows).
+  // Any real unnamed movement still blocks; gross lines stay visible above.
+  const unclassified = report.cashIn.unclassifiedNetCents;
   if (unclassified > 0)
     fail(
       "CONFLICT",
-      `Cannot close: ${unclassified} cents of cash movement is not categorised, so the breakdown would be wrong`
+      `Cannot close: ${unclassified} net cents of cash movement is not categorised, so the breakdown would be wrong`
     );
 
   const { expectedCents } = report.closing;

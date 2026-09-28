@@ -259,25 +259,36 @@ export const KNOWN_CASH_REFS = [
  * name is reported as unclassified rather than quietly folded into a total. A
  * new cash flow added later will show up here and block the close, instead of
  * the screen reporting a wrong number the shop then reconciles against.
+ *
+ * Two figures: gross `unclassified` (every unnamed cent, for display) and
+ * `unclassifiedNet` (per-ref net outflow minus inflow, for gating). Netting
+ * is per ref_entity, never across refs. A manual error and its reversal net
+ * to zero and must not block the close forever — the economics are null and
+ * both lines stay visible — while any real unnamed movement still blocks.
  */
 export function cashBreakdownTotal(lines: CashLine[]): {
   totalIn: number;
   totalOut: number;
   unclassified: number;
+  unclassifiedNet: number;
 } {
   const known = new Set<string>(KNOWN_CASH_REFS);
   let totalIn = 0;
   let totalOut = 0;
   let unclassified = 0;
+  const netByRef = new Map<string, number>();
   for (const l of lines) {
     if (!known.has(l.refEntity)) {
       unclassified += l.cents;
+      netByRef.set(l.refEntity, (netByRef.get(l.refEntity) ?? 0) + (l.direction === "out" ? l.cents : -l.cents));
       continue;
     }
     if (l.direction === "in") totalIn += l.cents;
     else totalOut += l.cents;
   }
-  return { totalIn, totalOut, unclassified };
+  let unclassifiedNet = 0;
+  for (const net of netByRef.values()) unclassifiedNet += Math.abs(net);
+  return { totalIn, totalOut, unclassified, unclassifiedNet };
 }
 
 export function monthBounds(year: number, month: number): { from: string; to: string; label: string } {

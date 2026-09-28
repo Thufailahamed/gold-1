@@ -179,10 +179,20 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
   const { closingCents } = cashflowClose(openingCents, inflowsCents, outflowsCents);
   const knownCash = [...KNOWN_CASH_REFS, "card_settlement"] as string[];
   const placeholders = knownCash.map(() => "?").join(",");
-  const unRow = await db.prepare(
-    `SELECT COALESCE(SUM(l.debit_cents+l.credit_cents),0) AS n FROM journal_lines l JOIN journal_entries e ON e.id=l.entry_id WHERE l.account_code IN (${cashAccts}) AND e.entry_date>=? AND e.entry_date<=? AND e.status='POSTED'${cashBranch} AND (e.ref_entity IS NULL OR e.ref_entity NOT IN (${placeholders}))`
-  ).bind(from, to, ...cashBv, ...knownCash).first<{ n: number }>();
-  const unclassifiedCents = unRow?.n ?? 0;
+  // Net per unknown ref (never across refs): an error and its reversal net to
+  // zero and must not block the snapshot forever — same rule as the day-close
+  // gate. Any real unnamed movement still blocks.
+  const { results: unRows } = await db.prepare(
+    `SELECT e.ref_entity AS ref, COALESCE(SUM(l.debit_cents),0) AS dr, COALESCE(SUM(l.credit_cents),0) AS cr FROM journal_lines l JOIN journal_entries e ON e.id=l.entry_id WHERE l.account_code IN (${cashAccts}) AND e.entry_date>=? AND e.entry_date<=? AND e.status='POSTED'${cashBranch} AND (e.ref_entity IS NULL OR e.ref_entity NOT IN (${placeholders})) GROUP BY e.ref_entity`
+  ).bind(from, to, ...cashBv, ...knownCash).all<{ ref: string | null; dr: number; cr: number }>();
+  const byRef = new Map<string, { dr: number; cr: number }>();
+  for (const r of unRows ?? []) {
+    const key = r.ref ?? "";
+    // Cash inflows are debits, outflows are credits; net unnamed movement per ref.
+    byRef.set(key, { dr: (byRef.get(key)?.dr ?? 0) + r.dr, cr: (byRef.get(key)?.cr ?? 0) + r.cr });
+  }
+  let unclassifiedCents = 0;
+  for (const v of byRef.values()) unclassifiedCents += Math.abs(v.cr - v.dr);
   if (unclassifiedCents !== 0) warnings.push(`Unclassified cash ${unclassifiedCents}c blocks snapshot`);
   const bEq = opts.branchId ? " AND e.branch_id = ?" : "";
   const bEqv: unknown[] = opts.branchId ? [opts.branchId] : [];

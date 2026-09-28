@@ -437,7 +437,24 @@ describe("cashBreakdownTotal", () => {
   });
 
   it("treats an empty day as fully accounted", () => {
-    expect(cashBreakdownTotal([])).toEqual({ totalIn: 0, totalOut: 0, unclassified: 0 });
+    expect(cashBreakdownTotal([])).toEqual({ totalIn: 0, totalOut: 0, unclassified: 0, unclassifiedNet: 0 });
+  });
+
+  it("nets an error against its reversal for gating but keeps the gross", () => {
+    const t = cashBreakdownTotal([
+      line("adjustment", "out", 200),
+      line("adjustment", "in", 200),
+    ]);
+    expect(t.unclassified).toBe(400);
+    expect(t.unclassifiedNet).toBe(0);
+  });
+
+  it("nets per ref, never across refs", () => {
+    const t = cashBreakdownTotal([
+      line("adjustment", "out", 200),
+      line("mystery", "in", 200),
+    ]);
+    expect(t.unclassifiedNet).toBe(400);
   });
 });
 
