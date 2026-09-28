@@ -75,7 +75,7 @@ async function firstRow<T>(db: D1Database, sql: string, vals: unknown[]): Promis
  * shelf, old gold that has been bought into inventory, melt lots not yet
  * consumed, and gold sitting in an unfinished manufacturing order.
  */
-export async function heldGoldMg(db: D1Database, branchId?: string): Promise<number> {
+export async function heldGoldStages(db: D1Database, branchId?: string): Promise<{ products: number; oldGold: number; lots: number; wip: number; recovered: number; total: number }> {
   const bp = branchSql(branchId, "branch_id");
   const products = await firstRow<{ fine_mg: number }>(
     db,
@@ -123,13 +123,25 @@ export async function heldGoldMg(db: D1Database, branchId?: string): Promise<num
      WHERE type = 'RECOVERY' AND destination LIKE 'branch:%'${bp.sql}`,
     bp.vals
   );
-  return (
+  const lotsNet = n(lots?.total) - n(lots?.allocated);
+  const total =
     n(products?.fine_mg) +
     n(oldGold?.fine_mg) +
-    (n(lots?.total) - n(lots?.allocated)) +
+    lotsNet +
     n(wip?.fine_mg) +
-    n(recovered?.fine_mg)
-  );
+    n(recovered?.fine_mg);
+  return {
+    products: n(products?.fine_mg),
+    oldGold: n(oldGold?.fine_mg),
+    lots: lotsNet,
+    wip: n(wip?.fine_mg),
+    recovered: n(recovered?.fine_mg),
+    total,
+  };
+}
+
+export async function heldGoldMg(db: D1Database, branchId?: string): Promise<number> {
+  return (await heldGoldStages(db, branchId)).total;
 }
 
 /** Local business date for an epoch-millis column, for day-scoped gold checks. */
