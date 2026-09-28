@@ -7,7 +7,8 @@ import {
 } from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
-import { postJournalStmts } from "./journal";
+import { buildEntryStmts } from "./journal";
+import { businessDateFor } from "./busdate";
 import { buildCreateProductStmts } from "./products";
 import { currentGoldRatesCents } from "./rates";
 import { getSetting } from "./settings";
@@ -306,28 +307,34 @@ export async function purchaseItem(
   if (remainder > 0) {
     lines.push({ account: "1200", debitCents: 0, creditCents: remainder, partyType: "customer" as const, partyId: item.customer_id });
   }
-  const journal = await postJournalStmts(db, {
-    lines,
-    refEntity: "old_gold_purchase",
-    refId: purchaseId,
-    memo: `Old gold ${item.number}`,
-    branchId: item.branch_id,
-    actorId,
-    auditAction: "oldgold.purchase",
-    auditEntity: "old_gold",
-    auditEntityId: itemId,
-  });
+  const journal = await buildEntryStmts(
+    db,
+    {
+      lines,
+      refEntity: "old_gold_purchase",
+      refId: purchaseId,
+      refNo: item.number,
+      memo: `Old gold ${item.number}`,
+      branchId: item.branch_id,
+      actorId,
+      auditAction: "oldgold.purchase",
+      auditEntity: "old_gold",
+      auditEntityId: itemId,
+      sourceModule: "oldgold",
+    },
+    { entryDate: await businessDateFor(db, now) }
+  );
   await db.batch([
     db
-      .prepare("INSERT INTO old_gold_purchases (id, item_id, value_cents, paid_cents, method, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .bind(purchaseId, itemId, item.purchase_value_cents, paidCents, opts.method, now, actorId),
+      .prepare("INSERT INTO old_gold_purchases (id, item_id, value_cents, paid_cents, method, journal_entry_id, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(purchaseId, itemId, item.purchase_value_cents, paidCents, opts.method, journal.entryId, now, actorId),
     db
       .prepare("UPDATE old_gold_items SET paid_cents = ?, status = 'PURCHASED' WHERE id = ?")
       .bind(paidCents, itemId),
     db
       .prepare("INSERT INTO gold_movements (id, product_id, old_gold_id, direction, fine_mg, purity_permille, ref_entity, ref_id, branch_id, created_at, created_by) VALUES (?, NULL, ?, 'IN', ?, ?, 'old_gold_purchase', ?, ?, ?, ?)")
       .bind(crypto.randomUUID(), itemId, item.fine_mg, item.tested_permille ?? 0, purchaseId, item.branch_id, now, actorId),
-    ...journal,
+    ...journal.stmts,
   ]);
   return { purchaseId };
 }

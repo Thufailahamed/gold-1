@@ -7,7 +7,8 @@ import {
 } from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
-import { postJournalStmts } from "./journal";
+import { buildEntryStmts, reverseEntry } from "./journal";
+import { businessDateFor } from "./busdate";
 import { buildCreateProductStmts, buildVoidProductStmts } from "./products";
 
 /** @deprecated Use `allocateProportional` from @goldos/shared directly. */
@@ -162,21 +163,32 @@ async function receiveBatch(
         .bind(r.id, invoiceId, r.productId, r.grossMg, r.netMg, r.purityId, r.costCents, r.makingCents)
     );
   }
-  const journal = await postJournalStmts(db, {
-    lines: [
-      { account: "1100", debitCents: total, creditCents: 0, partyType: "supplier", partyId: opts.supplierId },
-      { account: "2000", debitCents: 0, creditCents: total, partyType: "supplier", partyId: opts.supplierId },
-    ],
-    refEntity: "purchase_invoice",
-    refId: invoiceId,
-    memo: `Purchase ${number}`,
-    branchId: opts.branchId,
-    actorId: opts.actorId,
-    auditAction: "purchase.receive",
-    auditEntity: "purchase_invoice",
-    auditEntityId: invoiceId,
-  });
-  stmts.push(...journal);
+  const journal = await buildEntryStmts(
+    db,
+    {
+      lines: [
+        { account: "1100", debitCents: total, creditCents: 0, partyType: "supplier", partyId: opts.supplierId },
+        { account: "2000", debitCents: 0, creditCents: total, partyType: "supplier", partyId: opts.supplierId },
+      ],
+      refEntity: "purchase_invoice",
+      refId: invoiceId,
+      refNo: number,
+      memo: `Purchase ${number}`,
+      branchId: opts.branchId,
+      actorId: opts.actorId,
+      auditAction: "purchase.receive",
+      auditEntity: "purchase_invoice",
+      auditEntityId: invoiceId,
+      sourceModule: "purchases",
+    },
+    { entryDate: await businessDateFor(db, opts.now) }
+  );
+  stmts.push(...journal.stmts);
+  stmts.push(
+    db
+      .prepare("UPDATE purchase_invoices SET journal_entry_id = ? WHERE id = ?")
+      .bind(journal.entryId, invoiceId)
+  );
   if (opts.paidCents > 0) {
     const payId = crypto.randomUUID();
     const cash = opts.paidMethod === "cash" ? "1000" : "1010";
@@ -187,21 +199,27 @@ async function receiveBatch(
         )
         .bind(payId, invoiceId, opts.paidCents, opts.paidMethod, payId, opts.now, opts.actorId)
     );
-    const payJournal = await postJournalStmts(db, {
-      lines: [
-        { account: "2000", debitCents: opts.paidCents, creditCents: 0, partyType: "supplier", partyId: opts.supplierId },
-        { account: cash, debitCents: 0, creditCents: opts.paidCents },
-      ],
-      refEntity: "purchase_payment",
-      refId: payId,
-      memo: `Payment for ${number}`,
-      branchId: opts.branchId,
-      actorId: opts.actorId,
-      auditAction: "purchase.pay",
-      auditEntity: "purchase_payment",
-      auditEntityId: payId,
-    });
-    stmts.push(...payJournal);
+    const payJournal = await buildEntryStmts(
+      db,
+      {
+        lines: [
+          { account: "2000", debitCents: opts.paidCents, creditCents: 0, partyType: "supplier", partyId: opts.supplierId },
+          { account: cash, debitCents: 0, creditCents: opts.paidCents },
+        ],
+        refEntity: "purchase_payment",
+        refId: payId,
+        refNo: `${number} / pay`,
+        memo: `Payment for ${number}`,
+        branchId: opts.branchId,
+        actorId: opts.actorId,
+        auditAction: "purchase.pay",
+        auditEntity: "purchase_payment",
+        auditEntityId: payId,
+        sourceModule: "purchases",
+      },
+      { entryDate: await businessDateFor(db, opts.now) }
+    );
+    stmts.push(...payJournal.stmts);
   }
   await db.batch(stmts);
   return { invoiceId, number };
@@ -456,20 +474,26 @@ export async function payInvoice(
   const cash = method === "cash" ? "1000" : "1010";
   const paid = inv.paid_cents + amountCents;
   const status = paid === 0 ? "UNPAID" : paid === inv.total_cents ? "PAID" : "PARTIAL";
-  const journal = await postJournalStmts(db, {
-    lines: [
-      { account: "2000", debitCents: amountCents, creditCents: 0, partyType: "supplier", partyId: inv.supplier_id },
-      { account: cash, debitCents: 0, creditCents: amountCents },
-    ],
-    refEntity: "purchase_payment",
-    refId: payId,
-    memo: `Payment for invoice ${inv.id}`,
-    branchId: inv.branch_id,
-    actorId,
-    auditAction: "purchase.pay",
-    auditEntity: "purchase_payment",
-    auditEntityId: payId,
-  });
+  const journal = await buildEntryStmts(
+    db,
+    {
+      lines: [
+        { account: "2000", debitCents: amountCents, creditCents: 0, partyType: "supplier", partyId: inv.supplier_id },
+        { account: cash, debitCents: 0, creditCents: amountCents },
+      ],
+      refEntity: "purchase_payment",
+      refId: payId,
+      refNo: `Payment for invoice ${inv.id}`,
+      memo: `Payment for invoice ${inv.id}`,
+      branchId: inv.branch_id,
+      actorId,
+      auditAction: "purchase.pay",
+      auditEntity: "purchase_payment",
+      auditEntityId: payId,
+      sourceModule: "purchases",
+    },
+    { entryDate: await businessDateFor(db, now) }
+  );
   await db.batch([
     db
       .prepare(
@@ -479,7 +503,7 @@ export async function payInvoice(
     db
       .prepare("UPDATE purchase_invoices SET paid_cents = ?, status = ? WHERE id = ?")
       .bind(paid, status, invoiceId),
-    ...journal,
+    ...journal.stmts,
   ]);
   return { paidCents: paid, status };
 }
@@ -492,7 +516,7 @@ export async function voidInvoice(
 ): Promise<void> {
   const inv = await db
     .prepare(
-      "SELECT id, supplier_id, branch_id, total_cents, status FROM purchase_invoices WHERE id = ?"
+      "SELECT id, supplier_id, branch_id, total_cents, paid_cents, status, journal_entry_id FROM purchase_invoices WHERE id = ?"
     )
     .bind(invoiceId)
     .first<{
@@ -500,11 +524,20 @@ export async function voidInvoice(
       supplier_id: string;
       branch_id: string;
       total_cents: number;
+      paid_cents: number;
       status: string;
+      journal_entry_id: string | null;
     }>();
   if (!inv) throw Object.assign(new Error("Invoice not found"), { code: "NOT_FOUND" });
   if (inv.status === "VOID")
     throw Object.assign(new Error("Invoice already void"), { code: "CONFLICT" });
+  // A void reverses the RECEIVE posting only. Any payment already taken stays
+  // posted and becomes a genuine payable to the supplier, so voiding an
+  // invoice with payments against it would silently drop money.
+  if (inv.paid_cents > 0)
+    throw Object.assign(new Error("Invoice has payments; reverse them before voiding"), {
+      code: "CONFLICT",
+    });
   const { results: items } = await db
     .prepare("SELECT product_id FROM purchase_invoice_items WHERE invoice_id = ?")
     .bind(invoiceId)
@@ -523,21 +556,24 @@ export async function voidInvoice(
     const built = await buildVoidProductStmts(db, it.product_id, actorId, `invoice void: ${reason}`, now);
     stmts.push(...built.stmts);
   }
-  const reversal = await postJournalStmts(db, {
-    lines: [
-      { account: "2000", debitCents: inv.total_cents, creditCents: 0, partyType: "supplier", partyId: inv.supplier_id },
-      { account: "1100", debitCents: 0, creditCents: inv.total_cents, partyType: "supplier", partyId: inv.supplier_id },
-    ],
-    refEntity: "purchase_invoice",
-    refId: invoiceId,
-    memo: `Void invoice ${inv.id}: ${reason}`,
-    branchId: inv.branch_id,
+  let entryId = inv.journal_entry_id;
+  if (!entryId) {
+    const earliest = await db
+      .prepare(
+        "SELECT id FROM journal_entries WHERE ref_entity = 'purchase_invoice' AND ref_id = ? ORDER BY created_at, id LIMIT 1"
+      )
+      .bind(invoiceId)
+      .first<{ id: string }>();
+    if (!earliest)
+      throw Object.assign(new Error("Invoice has no journal entry to reverse"), { code: "NOT_FOUND" });
+    entryId = earliest.id;
+  }
+  const reversal = await reverseEntry(db, entryId, {
+    reason,
+    entryDate: await businessDateFor(db, now),
     actorId,
-    auditAction: "purchase.void",
-    auditEntity: "purchase_invoice",
-    auditEntityId: invoiceId,
   });
-  stmts.push(...reversal);
+  stmts.push(...reversal.stmts);
   stmts.push(
     db.prepare("UPDATE purchase_invoices SET status = 'VOID' WHERE id = ?").bind(invoiceId)
   );
