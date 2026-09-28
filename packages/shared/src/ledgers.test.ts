@@ -14,8 +14,9 @@ describe("ledger perms", () => {
   it("owner holds all permissions", () => {
     for (const p of Object.values(PERMISSIONS)) expect(DEFAULT_ROLES["owner"]).toContain(p);
   });
-  it("party schema accepts notes", () => {
+  it("party schema no longer accepts an opening balance", () => {
     const v = createPartySchema.parse({ name: "X", branchId: "b1", notes: "prefers SMS" });
     expect(v.notes).toBe("prefers SMS");
+    expect((v as Record<string, unknown>).openingBalance).toBeUndefined();
   });
 });

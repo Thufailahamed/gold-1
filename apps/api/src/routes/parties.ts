@@ -106,10 +106,11 @@ function partyRouter(table: PartyTable) {
     })
     .get("/:id/ledger", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => {
       try {
-        const account = table === "customers" ? "1200" : "2000";
-        const partyType = table === "customers" ? "customer" : "supplier";
-        const data = await partyLedger(c.env.DB, account, partyType, c.req.param("id"));
-        return c.json({ success: true, data }, 200);
+        const kind = table === "customers" ? "customer" : "supplier";
+        const data = await partyLedger(c.env.DB, kind, c.req.param("id"), {
+          branchId: c.req.query("branchId") ?? undefined,
+        });
+        return c.json({ success: true, data: { ...data.totals, lines: data.lines } }, 200);
       } catch (err) {
         return serviceError(c, err);
       }

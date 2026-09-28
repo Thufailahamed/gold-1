@@ -62,7 +62,6 @@ export const createPartySchema = z.object({
   address: z.string().max(500).optional(),
   nic: z.string().max(20).optional(),
   creditLimit: z.number().min(0).optional().default(0),
-  openingBalance: z.number().optional().default(0),
   notes: z.string().max(2000).optional(),
   branchId: z.string().min(1),
 });

@@ -130,7 +130,6 @@ function partyColumns() {
     nic: text("nic").unique(),
     notes: text("notes"),
     creditLimitCents: integer("credit_limit_cents").notNull().default(0),
-    openingBalanceCents: integer("opening_balance_cents").notNull().default(0),
     isActive: integer("is_active").notNull().default(1),
     branchId: text("branch_id").notNull(),
     createdAt: integer("created_at").notNull(),

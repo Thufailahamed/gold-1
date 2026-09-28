@@ -19,7 +19,6 @@ const PARTY_FIELDS: CrudField[] = [
   { name: "nic", label: "NIC", type: "text" },
   { name: "notes", label: "Notes", type: "text" },
   { name: "creditLimit", label: "Credit limit (LKR)", type: "number" },
-  { name: "openingBalance", label: "Opening balance (LKR)", type: "number" },
   { name: "branchId", label: "Branch ID", type: "text", required: true },
 ];
 

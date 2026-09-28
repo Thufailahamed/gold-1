@@ -14,14 +14,13 @@ export type PartyRow = {
   nic: string | null;
   notes: string | null;
   credit_limit: number;
-  opening_balance: number;
   is_active: number;
   branch_id: string;
   created_at: number;
 };
 
 const PARTY_COLS =
-  "id, code, name, phone, address, nic, notes, credit_limit_cents, opening_balance_cents, is_active, branch_id, created_at";
+  "id, code, name, phone, address, nic, notes, credit_limit_cents, is_active, branch_id, created_at";
 
 type RawPartyRow = {
   id: string;
@@ -32,7 +31,6 @@ type RawPartyRow = {
   nic: string | null;
   notes: string | null;
   credit_limit_cents: number;
-  opening_balance_cents: number;
   is_active: number;
   branch_id: string;
   created_at: number;
@@ -42,7 +40,6 @@ function toPartyRow(r: RawPartyRow): PartyRow {
   return {
     ...r,
     credit_limit: centsToLkr(r.credit_limit_cents),
-    opening_balance: centsToLkr(r.opening_balance_cents),
   };
 }
 
@@ -87,7 +84,7 @@ export async function createParty(
   await db.batch([
     db
       .prepare(
-        `INSERT INTO ${table} (id, code, name, phone, address, nic, notes, credit_limit_cents, opening_balance_cents, is_active, branch_id, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
+        `INSERT INTO ${table} (id, code, name, phone, address, nic, notes, credit_limit_cents, is_active, branch_id, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
       )
       .bind(
         id,
@@ -98,7 +95,6 @@ export async function createParty(
         input.nic ?? null,
         input.notes ?? null,
         lkrToCents(input.creditLimit),
-        lkrToCents(input.openingBalance),
         input.branchId,
         now,
         actorId
@@ -121,7 +117,6 @@ export async function createParty(
     nic: input.nic ?? null,
     notes: input.notes ?? null,
     credit_limit: input.creditLimit,
-    opening_balance: input.openingBalance,
     is_active: 1,
     branch_id: input.branchId,
     created_at: now,

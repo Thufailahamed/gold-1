@@ -22,7 +22,6 @@ const PARTY_FIELDS: CrudField[] = [
   { name: "nic", label: "NIC", type: "text" },
   { name: "notes", label: "Notes", type: "text" },
   { name: "creditLimit", label: "Credit limit (LKR)", type: "number" },
-  { name: "openingBalance", label: "Opening balance (LKR)", type: "number" },
   { name: "branchId", label: "Branch ID", type: "text", required: true },
 ];
 
@@ -37,17 +36,22 @@ function branchDefault(): Record<string, string> | undefined {
 
 type Ledger = {
   opening: number;
-  debits: number;
-  credits: number;
-  balance: number;
+  debitSales: number;
+  creditPayments: number;
+  creditReturns: number;
+  creditPurchases: number;
+  debitPayments: number;
+  debitReturns: number;
+  closing: number;
   lines: {
-    id: string;
-    account_code: string;
-    debit_cents: number;
-    credit_cents: number;
-    ref_entity: string;
+    entryId: string;
+    entryNo: string;
+    entryDate: string;
+    refEntity: string;
+    refNo: string | null;
     memo: string | null;
-    created_at: number;
+    debitCents: number;
+    creditCents: number;
   }[];
 };
 
@@ -108,9 +112,10 @@ export function LedgerDrawer({
             <div className="grid grid-cols-2 gap-3">
               {[
                 ["Opening", fmt(ledger.data.opening)],
-                ["Balance", fmt(ledger.data.balance)],
-                ["Debits", fmt(ledger.data.debits)],
-                ["Credits", fmt(ledger.data.credits)],
+                ["Closing", fmt(ledger.data.closing)],
+                ["Sales / Purchases", fmt(ledger.data.debitSales + ledger.data.creditPurchases)],
+                ["Payments", fmt(ledger.data.creditPayments + ledger.data.debitPayments)],
+                ["Returns", fmt(ledger.data.creditReturns + ledger.data.debitReturns)],
               ].map(([k, v]) => (
                 <div key={k} className="g-surface rounded-xl p-3.5">
                   <p className="g-kicker !text-[10px]">{k}</p>
@@ -128,19 +133,21 @@ export function LedgerDrawer({
                 <table className="g-table">
                   <thead>
                     <tr>
-                      <th>Account</th>
+                      <th>Date</th>
+                      <th>Entry</th>
+                      <th>Ref</th>
                       <th className="!text-right">DR</th>
                       <th className="!text-right">CR</th>
-                      <th>Ref</th>
                     </tr>
                   </thead>
                   <tbody>
                     {ledger.data.lines.map((l) => (
-                      <tr key={l.id}>
-                        <td className="g-metric text-xs">{l.account_code}</td>
-                        <td className="!text-right num-tabular">{l.debit_cents ? fmt(l.debit_cents) : "—"}</td>
-                        <td className="!text-right num-tabular">{l.credit_cents ? fmt(l.credit_cents) : "—"}</td>
-                        <td className="text-xs text-ink-4">{l.ref_entity}</td>
+                      <tr key={l.entryId}>
+                        <td className="text-xs text-ink-3">{l.entryDate}</td>
+                        <td className="g-metric text-xs">{l.entryNo}</td>
+                        <td className="text-xs text-ink-4">{l.refNo ?? l.refEntity}</td>
+                        <td className="!text-right num-tabular">{l.debitCents ? fmt(l.debitCents) : "—"}</td>
+                        <td className="!text-right num-tabular">{l.creditCents ? fmt(l.creditCents) : "—"}</td>
                       </tr>
                     ))}
                   </tbody>
