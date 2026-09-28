@@ -1,16 +1,17 @@
-import { gToMg, lkrToCents, type CreateInvoiceInput, type CreateOrderInput } from "@goldos/shared";
+import {
+  allocateProportional,
+  gToMg,
+  lkrToCents,
+  type CreateInvoiceInput,
+  type CreateOrderInput,
+} from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
 import { postJournalStmts } from "./journal";
 import { buildCreateProductStmts, buildVoidProductStmts } from "./products";
 
-export function allocateCharges(totalCharges: number, weights: number[]): number[] {
-  const total = weights.reduce((s, w) => s + w, 0);
-  if (total <= 0) throw new Error("weights must be positive");
-  const shares = weights.map((w) => Math.floor((totalCharges * w) / total));
-  shares[0] = (shares[0] ?? 0) + totalCharges - shares.reduce((s, x) => s + x, 0);
-  return shares;
-}
+/** @deprecated Use `allocateProportional` from @goldos/shared directly. */
+export const allocateCharges = allocateProportional;
 
 async function nextNumber(
   db: D1Database,

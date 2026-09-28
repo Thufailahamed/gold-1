@@ -160,9 +160,9 @@ describe("allocateProportional", () => {
   });
 
   it("splits the spec's melt lot example exactly", () => {
-    const shares = allocateProportional(39_603_961, [6000, 4000]);
-    expect(shares).toEqual([23_762_377, 15_841_584]);
-    expect(shares[0]! + shares[1]!).toBe(39_603_961);
+    const shares = allocateProportional(39_603_960, [6000, 4000]);
+    expect(shares).toEqual([23_762_376, 15_841_584]);
+    expect(shares[0]! + shares[1]!).toBe(39_603_960);
   });
 
   it("handles a single weight", () => {
@@ -177,9 +177,9 @@ describe("allocateProportional", () => {
 
 describe("allocateGoldValue", () => {
   it("does NOT normalise, so the shortfall is the manufacturing loss", () => {
-    const values = allocateGoldValue(23_762_377, 6000, [5950]);
-    expect(values).toEqual([23_564_657]);
-    expect(23_762_377 - values.reduce((s, v) => s + v, 0)).toBe(197_720);
+    const values = allocateGoldValue(23_762_376, 6000, [5950]);
+    expect(values).toEqual([23_564_356]);
+    expect(23_762_376 - values.reduce((s, v) => s + v, 0)).toBe(198_020);
   });
 
   it("sums to vIn when there is no loss", () => {
@@ -275,7 +275,7 @@ describe("computePartyLedger", () => {
 
 describe("meltingLossValue", () => {
   it("matches the spec worked example", () => {
-    expect(meltingLossValue(40_000_000, 10_000, 100)).toBe(396_039);
+    expect(meltingLossValue(40_000_000, 10_000, 100)).toBe(396_040);
   });
 
   it("is zero when nothing was lost", () => {
@@ -287,7 +287,7 @@ describe("meltingLossValue", () => {
   });
 
   it("leaves the remainder with the lot", () => {
-    expect(40_000_000 - meltingLossValue(40_000_000, 10_000, 100)).toBe(39_603_961);
+    expect(40_000_000 - meltingLossValue(40_000_000, 10_000, 100)).toBe(39_603_960);
   });
 });
 

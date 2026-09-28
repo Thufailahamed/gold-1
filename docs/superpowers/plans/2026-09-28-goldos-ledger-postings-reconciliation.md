@@ -141,7 +141,7 @@ The `UPDATE melting_outputs` is keyed on `batch_id` alone because
 - [ ] **Step 4: Verify the loss arithmetic against the spec example**
 
 Run: `cd packages/shared && pnpm exec vitest run -t "meltingLossValue" 2>&1 | tail -12`
-Expected: PASS, including `meltingLossValue(40_000_000, 10_000, 100) === 396_039`.
+Expected: PASS, including `meltingLossValue(40_000_000, 10_000, 100) === 396_040`.
 
 - [ ] **Step 5: Typecheck and test**
 
@@ -356,8 +356,8 @@ body is the common case and simply means "accrue".
 - [ ] **Step 8: Verify the gold-value arithmetic against the spec example**
 
 Run: `cd packages/shared && pnpm exec vitest run -t "allocateGoldValue" 2>&1 | tail -12`
-Expected: PASS — `allocateGoldValue(23_762_377, 6000, [5950])` returns
-`[23_564_657]`, leaving a shortfall of `197_720`.
+Expected: PASS — `allocateGoldValue(23_762_376, 6000, [5950])` returns
+`[23_564_356]`, leaving a shortfall of `198_020`.
 
 - [ ] **Step 9: Typecheck and test**
 
@@ -1245,12 +1245,12 @@ Run after Task 16. `wrangler dev` serves the API on 8787.
 
 1. Melting: create a batch from old gold bought for LKR 400,000, melt to
    10,000 mg fine from 10,200 mg in with 100 mg loss, and approve. Account 5100
-   is debited 396,039 cents, `melting_batches.input_cost_cents` is 40,000,000,
-   and `melting_outputs.cost_cents` is 39,603,961.
+   is debited 396,040 cents, `melting_batches.input_cost_cents` is 40,000,000,
+   and `melting_outputs.cost_cents` is 39,603,960.
 2. Manufacturing: allocate 6,000 mg of that lot, finish with labour 30,000 and
    making 20,000 and one output of 5,950 mg fine. Account 2200 is credited
-   5,000,000, 5200 is debited 197,720, and the product's `cost_cents` is
-   28,564,657 — not its market value at the day's rate.
+   5,000,000, 5200 is debited 198,020, and the product's `cost_cents` is
+   28,564,356 — not its market value at the day's rate.
 3. Repeat step 2 with `paidFrom: "bank"` on a second order. 1010 is credited
    instead of 2200, and 2200 is unchanged.
 4. Gold adjustment: record a 5 g LOSS at 22K. 5300 is debited by

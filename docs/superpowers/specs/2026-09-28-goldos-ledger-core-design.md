@@ -543,23 +543,29 @@ A melt of old gold bought for 400,000 (LKR 400,000) that yields 10,000 mg
 fine out of 10,200 mg fine in, with 100 mg loss:
 
 - `melting_batches.input_cost_cents = 40,000,000`
-- `lossValue = round(40,000,000 × 100 / (10,000 + 100)) = 396,039`
-- `lotCost = 40,000,000 − 396,039 = 39,603,961`
-- Entry: `DR 5100 396,039 / CR 1100 396,039`
+- `lossValue = round(40,000,000 × 100 / (10,000 + 100)) = round(396,039.604) = 396,040`
+- `lotCost = 40,000,000 − 396,040 = 39,603,960`
+- Entry: `DR 5100 396,040 / CR 1100 396,040`
 
 Manufacturing then allocates 6,000 mg of that lot, whose book value is
-`allocateProportional(39,603,961, [6,000, 4,000])[0] = 23,762,377`. With
+`allocateProportional(39,603,960, [6,000, 4,000])[0] = 23,762,376`. With
 labour 30,000 and making 20,000, `extras = 5,000,000`, and one output of
 5,950 mg fine:
 
-- `goldValue = round(5,950 / 6,000 × 23,762,377) = 23,564,657`
-- `mfgLossValue = 23,762,377 − 23,564,657 = 197,720`
-- `cost_cents = 23,564,657 + 5,000,000 = 28,564,657`
+- `goldValue = round(23,762,376 × 5,950 / 6,000) = 23,564,356`
+- `mfgLossValue = 23,762,376 − 23,564,356 = 198,020`
+- `cost_cents = 23,564,356 + 5,000,000 = 28,564,356`
 - Entry: `DR 1100 5,000,000 / CR 2200 5,000,000` and
-  `DR 5200 197,720 / CR 1100 197,720`
+  `DR 5200 198,020 / CR 1100 198,020`
 
 Check 8 still balances: 6,000 mg of lot consumed, 5,950 mg into the product,
 50 mg into manufacturing loss.
+
+**The chain cross-checks itself.** The melt lost 100 mg for 396,040 cents and
+manufacture lost 50 mg for 198,020 cents. Both are exactly **3,960.40 cents per
+fine mg** — 396,040 / 100 = 198,020 / 50 — so gold is valued at one consistent
+rate the whole way down the chain. If a future change breaks the trace, that
+equality is the first thing that fails.
 
 ## 8. Testing
 
