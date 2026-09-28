@@ -586,7 +586,20 @@ authorisation, closing snapshots, audit-trail UI, all report UI, month and
 year-end closing, multi-currency, revaluing inventory to the daily rate, and
 reclassifying historical card sales.
 
-## 10. Self-review
+## 11. Implementation
+
+This spec is delivered as **two plans**, so each is independently reviewable
+and testable rather than one 120 KB monolith:
+
+| Plan | Delivers |
+|---|---|
+| `2026-09-28-goldos-ledger-core-foundation.md` | The ledger exists and is correct: shared math, both migrations, the journal service with reversal, all six posting call sites migrated, chart-of-accounts CRUD, and the journal/trial-balance/statement endpoints. A reviewer can reject "the backfill grouped wrongly" without blocking "the chart is immutable". |
+| `2026-09-28-goldos-ledger-postings-reconciliation.md` | The ledger is *complete*: melting loss valued, manufacturing at book cost, gold adjustments valued, shop-local report windows, the eight reconciliation checks, and the documentation update. A reviewer can reject "melting loss valuation" without blocking "shop-local windows". |
+
+The second plan depends on the first being merged; it assumes
+`buildEntryStmts`, `businessDateFor`, and migrations 0015/0016 are in place.
+
+## 12. Self-review
 
 - No TBD/TODO. Every account code, posting pair, formula, endpoint, permission,
   and check is stated explicitly.
