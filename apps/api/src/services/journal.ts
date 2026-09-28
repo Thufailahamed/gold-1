@@ -110,19 +110,26 @@ async function assertAccountsActive(db: D1Database, lines: JournalLine[]): Promi
   }
 }
 
-async function takeEntryNo(
-  db: D1Database,
-  stmts: D1PreparedStatement[],
-  override?: string
-): Promise<string> {
-  if (override) return override;
+/**
+ * Reserve the next entry number.
+ *
+ * This is a single atomic UPDATE ... RETURNING, NOT a SELECT followed by an
+ * UPDATE in the caller's batch. A read-then-write split hands out the same
+ * number twice whenever one call posts two entries before the batch runs —
+ * receiveBatch does exactly that when an invoice is paid on receipt — and the
+ * second INSERT then dies on the UNIQUE index.
+ *
+ * Reserving outside the caller's batch means a business write that later
+ * fails leaves a gap in the sequence. A gap is correct; a collision is not.
+ */
+async function reserveEntryNo(db: D1Database): Promise<string> {
   const row = await db
-    .prepare("SELECT next FROM counters WHERE name = 'JE'")
+    .prepare("UPDATE counters SET next = next + 1 WHERE name = 'JE' RETURNING next - 1 AS allocated")
     .bind()
-    .first<{ next: number }>();
-  if (!row) throw Object.assign(new Error("Counter JE missing"), { code: "INTERNAL" });
-  stmts.push(db.prepare("UPDATE counters SET next = ? WHERE name = 'JE'").bind(row.next + 1));
-  return nextEntryNo(row.next);
+    .first<{ allocated: number }>();
+  if (!row || row.allocated === null)
+    throw Object.assign(new Error("Counter JE missing"), { code: "INTERNAL" });
+  return nextEntryNo(row.allocated);
 }
 
 export async function buildEntryStmts(
@@ -139,7 +146,7 @@ export async function buildEntryStmts(
   await assertAccountsActive(db, post.lines);
 
   const stmts: D1PreparedStatement[] = [];
-  const entryNo = await takeEntryNo(db, stmts, opts?.entryNo);
+  const entryNo = opts?.entryNo ?? (await reserveEntryNo(db));
   const entryId = crypto.randomUUID();
   const now = Date.now();
 
@@ -261,12 +268,47 @@ export async function accountEntryCount(db: D1Database, code: string): Promise<n
 const ENTRY_COLS =
   "e.id, e.entry_no, e.entry_date, e.memo, e.ref_entity, e.ref_id, e.ref_no, e.source_module, e.status, e.reverses_entry_id, e.branch_id, e.created_at, e.created_by";
 
+/** The raw header row, before it is mapped to the camelCase JournalEntryRow. */
+type RawEntryRow = {
+  id: string;
+  entry_no: string;
+  entry_date: string;
+  memo: string | null;
+  ref_entity: string | null;
+  ref_id: string | null;
+  ref_no: string | null;
+  source_module: string;
+  status: string;
+  reverses_entry_id: string | null;
+  branch_id: string | null;
+  created_at: number;
+  created_by: string | null;
+};
+
+function mapEntryHead(r: RawEntryRow): Omit<JournalEntryRow, "lines"> {
+  return {
+    id: r.id,
+    entryNo: r.entry_no,
+    entryDate: r.entry_date,
+    memo: r.memo,
+    refEntity: r.ref_entity,
+    refId: r.ref_id,
+    refNo: r.ref_no,
+    sourceModule: r.source_module,
+    status: r.status,
+    reversesEntryId: r.reverses_entry_id,
+    branchId: r.branch_id,
+    createdAt: r.created_at,
+    createdBy: r.created_by,
+  };
+}
+
 export async function getJournalEntry(db: D1Database, id: string): Promise<JournalEntryRow> {
-  const head = await db
+  const raw = await db
     .prepare(`SELECT ${ENTRY_COLS} FROM journal_entries e WHERE e.id = ?`)
     .bind(id)
-    .first<Omit<JournalEntryRow, "lines">>();
-  if (!head) throw Object.assign(new Error("Journal entry not found"), { code: "NOT_FOUND" });
+    .first<RawEntryRow>();
+  if (!raw) throw Object.assign(new Error("Journal entry not found"), { code: "NOT_FOUND" });
   const { results } = await db
     .prepare(
       "SELECT id, line_no, account_code, debit_cents, credit_cents, party_type, party_id, memo FROM journal_lines WHERE entry_id = ? ORDER BY line_no"
@@ -283,7 +325,7 @@ export async function getJournalEntry(db: D1Database, id: string): Promise<Journ
       memo: string | null;
     }>();
   return {
-    ...head,
+    ...mapEntryHead(raw),
     lines: (results ?? []).map((l) => ({
       id: l.id,
       lineNo: l.line_no,
@@ -337,9 +379,9 @@ export async function listJournalEntries(
       `SELECT ${ENTRY_COLS} FROM journal_entries e ${where} ORDER BY e.entry_date DESC, e.created_at DESC, e.id DESC LIMIT ? OFFSET ?`
     )
     .bind(...vals, opts.limit, (opts.page - 1) * opts.limit)
-    .all<Omit<JournalEntryRow, "lines">>();
+    .all<RawEntryRow>();
   const rows: JournalEntryRow[] = [];
-  for (const head of results ?? []) rows.push(await getJournalEntry(db, head.id));
+  for (const raw of results ?? []) rows.push(await getJournalEntry(db, raw.id));
   return { rows, total: count?.total ?? 0 };
 }
 

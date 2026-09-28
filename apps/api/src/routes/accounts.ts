@@ -173,7 +173,8 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     try {
       const built = await reverseEntry(c.env.DB, parsed.data.entryId, {
         reason: parsed.data.reason,
-        entryDate: parsed.data.entryDate,
+        entryDate:
+          parsed.data.entryDate ?? (await businessDateFor(c.env.DB, Date.now())),
         actorId: c.get("userId"),
       });
       await c.env.DB.batch(built.stmts);
