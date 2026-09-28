@@ -9,6 +9,8 @@ import { businessDateFor } from "./busdate";
 import { accountBalance, buildEntryStmts } from "./journal";
 
 const CARD_CLEARING = "1020";
+/** Where dispatched branch cash rests until the receiving branch records it. */
+const CASH_IN_TRANSIT = "1030";
 /** 1010 is the system "Bank" account; 1020 is Card Clearing. */
 const RESERVED = new Set([CARD_CLEARING]);
 
@@ -376,7 +378,10 @@ export async function dispatchTransfer(
   const built = await buildEntryStmts(
     db,
     {
-      lines: [{ account: "1000", debitCents: 0, creditCents: input.amountCents }],
+      lines: [
+        { account: CASH_IN_TRANSIT, debitCents: input.amountCents, creditCents: 0 },
+        { account: "1000", debitCents: 0, creditCents: input.amountCents },
+      ],
       refEntity: "cash_transfer_out",
       refId: id,
       refNo: number,
@@ -429,7 +434,10 @@ export async function receiveTransfer(
   const built = await buildEntryStmts(
     db,
     {
-      lines: [{ account: "1000", debitCents: t.amount_cents, creditCents: 0 }],
+      lines: [
+        { account: "1000", debitCents: t.amount_cents, creditCents: 0 },
+        { account: CASH_IN_TRANSIT, debitCents: 0, creditCents: t.amount_cents },
+      ],
       refEntity: "cash_transfer_in",
       refId: t.id,
       refNo: t.number,

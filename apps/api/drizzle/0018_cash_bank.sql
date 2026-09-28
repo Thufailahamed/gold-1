@@ -2,6 +2,13 @@
 -- Configurable bank accounts, card settlement out of Card Clearing, two-entry
 -- branch cash transfers, and recorded bank statement reconciliation.
 
+-- A branch transfer is a movement WITHIN the shop, so no total changes — but
+-- double-entry still has to balance, and the money really is in transit
+-- between the two branches until it is received. 1030 is that honest resting
+-- place: it is an asset the shop owns and its balance IS the cash in transit.
+INSERT INTO chart_of_accounts (code, name, type, is_active, is_system, description) VALUES
+  ('1030', 'Cash in Transit', 'ASSET', 1, 1, 'Cash dispatched between branches but not yet received');
+
 CREATE TABLE bank_accounts (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,

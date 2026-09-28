@@ -76,8 +76,8 @@ one, because a shop with two banks has to be able to reconcile them separately.
 | Bank opening balance | `DR <account> / CR 3100` |
 | Cash deposit | `DR <account> / CR 1000` |
 | Cash withdrawal | `DR 1000 / CR <account>` |
-| Branch transfer — sent | `CR 1000` at the **from** branch |
-| Branch transfer — received | `DR 1000` at the **to** branch |
+| Branch transfer — sent | `CR 1000` at the **from** branch / `DR 1030` |
+| Branch transfer — received | `DR 1000` at the **to** branch / `CR 1030` |
 | Card settlement | `DR <account> net / CR 1020 gross / CR 6060 fee` |
 | Supplier payment | `CR <the named bank account>` |
 
@@ -90,8 +90,10 @@ so the historical record still says where the money went.
 A journal entry has exactly one `branch_id`. Attributing a cross-branch
 movement to either branch would make the other branch's cash wrong by the full
 amount, so dispatch and receipt are separate entries linked by
-`cash_transfers`. Between them the money is explicitly `IN_TRANSIT` rather than
-silently missing from both branches. Dispatch and receipt are separate
+`cash_transfers`. Between them the money rests in **1030 Cash in Transit** rather than
+silently missing from both branches. A transfer moves money *within* the shop,
+so no total changes — but double-entry still has to balance, and the money
+genuinely is between the two branches until it arrives. Dispatch and receipt are separate
 endpoints because in reality they happen at different times in different
 places.
 

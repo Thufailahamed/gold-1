@@ -135,8 +135,8 @@ batch, so the two can never disagree.
 | Bank opening balance | `DR <code> / CR 3100` |
 | Cash deposit | `DR <code> / CR 1000` |
 | Cash withdrawal | `DR 1000 / CR <code>` |
-| Branch transfer — sent | `CR 1000` at the **from** branch |
-| Branch transfer — received | `DR 1000` at the **to** branch |
+| Branch transfer — sent | `CR 1000` at the **from** branch / `DR 1030` |
+| Branch transfer — received | `DR 1000` at the **to** branch / `CR 1030` |
 | Card settlement | `DR <code> (net) / CR 1020 (gross) / CR 6060 (fee)` |
 | Supplier payment | already `CR 1000 or 1010`; becomes `CR <bank account code>` |
 
@@ -157,6 +157,13 @@ than silently missing from both branches.
 
 Dispatch and receipt are separate endpoints, because in reality they happen at
 different times in different places.
+
+A transfer is a movement *within* the shop, so no total changes — but
+double-entry still has to balance and the money really is in transit between
+the two branches until it arrives. **1030 Cash in Transit** is that resting
+place, an asset the shop owns. Its balance is exactly what
+`cash_in_transit` asserts against the transfers table, so the check needs no
+sign gymnastics: a dispatch debits 1030 and a receipt credits it.
 
 ### Opening balances
 
