@@ -109,7 +109,23 @@ export async function heldGoldMg(db: D1Database, branchId?: string): Promise<num
      JOIN manufacturing_orders mo ON mo.id = m.order_id AND mo.status <> 'VOID'${bp.sql}`,
     bp.vals
   );
-  return n(products?.fine_mg) + n(oldGold?.fine_mg) + (n(lots?.total) - n(lots?.allocated)) + n(wip?.fine_mg);
+  // Gold recovered during melting is real metal the shop now owns, but it is
+  // not yet a lot, a product or a work-in-progress. It sits in the ledger and
+  // it sits in the safe, so it has to sit on BOTH sides or the stock check
+  // reports a shortage of metal the shop is holding.
+  const recovered = await firstRow<{ fine_mg: number }>(
+    db,
+    `SELECT COALESCE(SUM(fine_mg), 0) AS fine_mg FROM gold_ledger
+     WHERE type = 'RECOVERY' AND destination LIKE 'branch:%'${bp.sql}`,
+    bp.vals
+  );
+  return (
+    n(products?.fine_mg) +
+    n(oldGold?.fine_mg) +
+    (n(lots?.total) - n(lots?.allocated)) +
+    n(wip?.fine_mg) +
+    n(recovered?.fine_mg)
+  );
 }
 
 /** Local business date for an epoch-millis column, for day-scoped gold checks. */
@@ -327,6 +343,12 @@ export async function reconcile(
   //    day. Scoped to documents *posted* that day: gold rows are written at
   //    approval and finish, not at allocation, so scoping to the creating row
   //    would fail every melt and every manufactured order.
+  //
+  //    Every net_mg x permille conversion here is ROUNDed and forced to a
+  //    float divisor. SQLite's `/` on two integers truncates, while the ledger
+  //    writes fineGoldMg's Math.round — so 10,800mg at 916 gives 9,892 on this
+  //    side and 9,893 on the ledger, and a perfectly correct order reads as a
+  //    1mg discrepancy.
   const glb = branchSql(opts.branchId, "l.branch_id");
   const { results: goldRows } = await db
     .prepare(
@@ -344,7 +366,7 @@ export async function reconcile(
   const docQueries: [string, string, { sql: string; vals: unknown[] }][] = [
     [
       "PURCHASE",
-      `SELECT COALESCE(SUM(ii.net_mg * pu.permille / 1000), 0) AS fine_mg
+      `SELECT COALESCE(SUM(ROUND(ii.net_mg * pu.permille / 1000.0)), 0) AS fine_mg
        FROM purchase_invoice_items ii
        JOIN purities pu ON pu.id = ii.purity_id
        JOIN purchase_invoices pi ON pi.id = ii.invoice_id
@@ -388,7 +410,7 @@ export async function reconcile(
     ],
     [
       "MANUFACTURING_OUTPUT",
-      `SELECT COALESCE(SUM(m2.net_mg * pu.permille / 1000), 0) AS fine_mg FROM manufacturing_outputs m2
+      `SELECT COALESCE(SUM(ROUND(m2.net_mg * pu.permille / 1000.0)), 0) AS fine_mg FROM manufacturing_outputs m2
        JOIN manufacturing_orders mo ON mo.id = m2.order_id
        JOIN purities pu ON pu.id = m2.purity_id
        WHERE mo.status = 'COMPLETE' AND ${LOCAL_DAY("mo.created_at")} = ?${moB.sql}`,
