@@ -7,6 +7,18 @@ import { toast } from "sonner";
 import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
 import { ItemEditor, type ItemDraft } from "@/components/purchase-items";
+import {
+  Page,
+  Hero,
+  TableCard,
+  TableSkeleton,
+  Pager,
+  EmptyBlock,
+  StatusPill,
+  Modal,
+  controlClass,
+  heroBtnPrimary,
+} from "@/components/ui";
 
 type Invoice = {
   id: string;
@@ -27,6 +39,7 @@ function branchDefault(): string {
 }
 
 const STATUSES = ["UNPAID", "PARTIAL", "PAID", "VOID"];
+const fmt = (c: number) => (c / 100).toLocaleString("en-US");
 
 export default function InvoicesPage() {
   const [search, setSearch] = useState("");
@@ -86,25 +99,30 @@ export default function InvoicesPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Create failed"),
   });
 
-  const inputCls =
-    "w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold";
+  const rows = list.data?.rows ?? [];
+  const total = list.data?.total ?? 0;
+  const outstanding = rows.reduce((n, r) => n + (r.status === "VOID" ? 0 : Math.max(0, r.total_cents - r.paid_cents)), 0);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Purchase Invoices</h1>
-          <p className="text-sm text-stone-500">Stock, ledger and journal post atomically</p>
-        </div>
-        {canCreate ? (
-          <button
-            onClick={() => setDialog(true)}
-            className="rounded-md bg-stone-900 px-3 py-2 text-sm font-medium text-white hover:bg-stone-800"
-          >
-            New invoice
-          </button>
-        ) : null}
-      </div>
+    <Page>
+      <Hero
+        kicker="Purchases"
+        title="Purchase invoices"
+        description="Stock, ledger and journal post atomically."
+        note="Unpaid and partial balances become supplier payables on the ledger."
+        stats={[
+          { label: "Invoices", value: total },
+          { label: "On this page", value: rows.length },
+          { label: "Outstanding", value: `${fmt(outstanding)} LKR` },
+        ]}
+        actions={
+          canCreate ? (
+            <button onClick={() => setDialog(true)} className={heroBtnPrimary}>
+              New invoice
+            </button>
+          ) : null
+        }
+      />
       <div className="flex flex-wrap gap-2">
         <input
           placeholder="Search by number…"
@@ -113,97 +131,87 @@ export default function InvoicesPage() {
             setSearch(e.target.value);
             setPage(1);
           }}
-          className="w-full max-w-sm rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
+          className={controlClass}
         />
-        <select value={fStatus} onChange={(e) => { setFStatus(e.target.value); setPage(1); }} className="rounded-md border border-stone-300 px-3 py-2 text-sm">
+        <select value={fStatus} onChange={(e) => { setFStatus(e.target.value); setPage(1); }} className={controlClass}>
           <option value="">All statuses</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
       </div>
-      {list.isLoading ? (
-        <div className="space-y-2">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="h-12 animate-pulse rounded-md bg-stone-200" />
-          ))}
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-          <table className="w-full text-sm">
+      <TableCard footer={<Pager page={page} onChange={setPage} pageSize={20} count={rows.length} total={total} unit="invoices" />}>
+        {list.isLoading ? (
+          <TableSkeleton rows={5} cols={5} />
+        ) : list.isError ? (
+          <EmptyBlock title="Failed to load" description="Check the API connection and retry." />
+        ) : rows.length === 0 ? (
+          <EmptyBlock title="No invoices" description="Post the first purchase invoice." />
+        ) : (
+          <table className="g-table">
             <thead>
-              <tr className="border-b border-stone-200 text-left text-xs uppercase text-stone-500">
-                <th className="px-4 py-2">Number</th>
-                <th className="px-4 py-2">Supplier</th>
-                <th className="px-4 py-2 text-right">Total</th>
-                <th className="px-4 py-2 text-right">Paid</th>
-                <th className="px-4 py-2">Status</th>
+              <tr>
+                <th>Number</th>
+                <th>Supplier</th>
+                <th className="!text-right">Total</th>
+                <th className="!text-right">Paid</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              {(list.data?.rows ?? []).map((r) => (
-                <tr key={r.id} className="border-b border-stone-100 last:border-0">
-                  <td className="px-4 py-2 font-mono">
-                    <Link href={`/purchases/invoices/${r.id}`} className="hover:underline">
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td>
+                    <Link href={`/purchases/invoices/${r.id}`} className="g-metric font-medium text-ink hover:text-gold-700">
                       {r.number}
                     </Link>
                   </td>
-                  <td className="px-4 py-2">{r.supplier_name}</td>
-                  <td className="px-4 py-2 text-right">{(r.total_cents / 100).toLocaleString("en-US")}</td>
-                  <td className="px-4 py-2 text-right">{(r.paid_cents / 100).toLocaleString("en-US")}</td>
-                  <td className="px-4 py-2">{r.status}</td>
+                  <td>{r.supplier_name}</td>
+                  <td className="!text-right num-tabular font-medium text-ink">{fmt(r.total_cents)}</td>
+                  <td className="!text-right num-tabular">{fmt(r.paid_cents)}</td>
+                  <td><StatusPill status={r.status} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </TableCard>
       {dialog ? (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/30 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl space-y-3 overflow-y-auto rounded-xl bg-white p-6 shadow-lg">
-            <h2 className="font-semibold">New invoice (direct intake)</h2>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Supplier</label>
-              <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className={inputCls}>
-                <option value="">Select…</option>
-                {(suppliers.data?.rows ?? []).map((s) => (
-                  <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
-                ))}
+        <Modal
+          wide
+          kicker="Purchases"
+          title="New invoice (direct intake)"
+          onClose={() => setDialog(false)}
+          onSubmit={() => create.mutate()}
+          pending={create.isPending}
+          submitDisabled={!supplierId || items.length === 0}
+          submitLabel="Post invoice"
+        >
+          <label className="block text-sm text-ink-2">Supplier
+            <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className={controlClass}>
+              <option value="">Select…</option>
+              {(suppliers.data?.rows ?? []).map((s) => (
+                <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+              ))}
+            </select>
+          </label>
+          <ItemEditor items={items} onChange={setItems} />
+          <div className="grid grid-cols-3 gap-3">
+            <label className="block text-sm text-ink-2">Charges LKR
+              <input type="number" step="any" value={charges} onChange={(e) => setCharges(e.target.value)} className={`num-tabular ${controlClass}`} />
+            </label>
+            <label className="block text-sm text-ink-2">Paid LKR
+              <input type="number" step="any" value={paid} onChange={(e) => setPaid(e.target.value)} className={`num-tabular ${controlClass}`} />
+            </label>
+            <label className="block text-sm text-ink-2">Method
+              <select value={method} onChange={(e) => setMethod(e.target.value)} className={controlClass}>
+                <option value="cash">Cash</option>
+                <option value="bank">Bank</option>
               </select>
-            </div>
-            <ItemEditor items={items} onChange={setItems} />
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium">Charges LKR</label>
-                <input type="number" step="any" value={charges} onChange={(e) => setCharges(e.target.value)} className={inputCls} />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Paid LKR</label>
-                <input type="number" step="any" value={paid} onChange={(e) => setPaid(e.target.value)} className={inputCls} />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Method</label>
-                <select value={method} onChange={(e) => setMethod(e.target.value)} className={inputCls}>
-                  <option value="cash">Cash</option>
-                  <option value="bank">Bank</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setDialog(false)} className="rounded-md border px-3 py-2 text-sm">
-                Cancel
-              </button>
-              <button
-                onClick={() => create.mutate()}
-                disabled={create.isPending || !supplierId || items.length === 0}
-                className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white disabled:opacity-50"
-              >
-                Post invoice
-              </button>
-            </div>
+            </label>
           </div>
-        </div>
+        </Modal>
       ) : null}
-    </div>
+    </Page>
   );
 }

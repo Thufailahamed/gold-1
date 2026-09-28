@@ -5,7 +5,19 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
-import { ItemEditor, usePurchaseOptions, type ItemDraft } from "@/components/purchase-items";
+import { ItemEditor, type ItemDraft } from "@/components/purchase-items";
+import {
+  Page,
+  Hero,
+  TableCard,
+  TableSkeleton,
+  Pager,
+  EmptyBlock,
+  StatusPill,
+  Modal,
+  controlClass,
+  heroBtnPrimary,
+} from "@/components/ui";
 
 type Order = { id: string; number: string; supplier_name: string; status: string; items: number; created_at: number };
 type Supplier = { id: string; name: string; code: string };
@@ -87,114 +99,115 @@ export default function OrdersPage() {
     }
   }
 
-  const inputCls =
-    "w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold";
+  const rows = list.data?.rows ?? [];
+  const total = list.data?.total ?? 0;
+  const open = rows.filter((r) => r.status === "DRAFT" || r.status === "SENT").length;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Purchase Orders</h1>
-          <p className="text-sm text-stone-500">Drafts — receiving posts stock, ledger and journal</p>
-        </div>
-        {canCreate ? (
-          <button
-            onClick={() => setDialog(true)}
-            className="rounded-md bg-stone-900 px-3 py-2 text-sm font-medium text-white hover:bg-stone-800"
-          >
-            New order
-          </button>
-        ) : null}
-      </div>
-      <input
-        placeholder="Search by number…"
-        value={search}
-        onChange={(e) => {
-          setSearch(e.target.value);
-          setPage(1);
-        }}
-        className="w-full max-w-sm rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
+    <Page>
+      <Hero
+        kicker="Purchases"
+        title="Purchase orders"
+        description="Drafts — receiving posts stock, ledger and journal atomically."
+        note="Receiving a draft creates products, stock movements and journal entries in one step."
+        stats={[
+          { label: "Orders", value: total },
+          { label: "On this page", value: rows.length },
+          { label: "Open drafts", value: open },
+        ]}
+        actions={
+          canCreate ? (
+            <button onClick={() => setDialog(true)} className={heroBtnPrimary}>
+              New order
+            </button>
+          ) : null
+        }
       />
-      {list.isLoading ? (
-        <div className="space-y-2">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="h-12 animate-pulse rounded-md bg-stone-200" />
-          ))}
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-          <table className="w-full text-sm">
+      <div className="flex flex-wrap gap-2">
+        <input
+          placeholder="Search by number…"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+          className={controlClass}
+        />
+      </div>
+      <TableCard footer={<Pager page={page} onChange={setPage} pageSize={20} count={rows.length} total={total} unit="orders" />}>
+        {list.isLoading ? (
+          <TableSkeleton rows={5} cols={5} />
+        ) : list.isError ? (
+          <EmptyBlock title="Failed to load" description="Check the API connection and retry." />
+        ) : rows.length === 0 ? (
+          <EmptyBlock title="No orders" description="Create the first purchase order." />
+        ) : (
+          <table className="g-table">
             <thead>
-              <tr className="border-b border-stone-200 text-left text-xs uppercase text-stone-500">
-                <th className="px-4 py-2">Number</th>
-                <th className="px-4 py-2">Supplier</th>
-                <th className="px-4 py-2">Items</th>
-                <th className="px-4 py-2">Status</th>
-                <th className="px-4 py-2" />
+              <tr>
+                <th>Number</th>
+                <th>Supplier</th>
+                <th className="!text-right">Items</th>
+                <th>Status</th>
+                <th />
               </tr>
             </thead>
             <tbody>
-              {(list.data?.rows ?? []).map((o) => (
-                <tr key={o.id} className="border-b border-stone-100 last:border-0">
-                  <td className="px-4 py-2 font-mono">{o.number}</td>
-                  <td className="px-4 py-2">{o.supplier_name}</td>
-                  <td className="px-4 py-2">{o.items}</td>
-                  <td className="px-4 py-2">{o.status}</td>
-                  <td className="px-4 py-2 text-right">
-                    {(o.status === "DRAFT" || o.status === "SENT") && canCreate ? (
-                      <button onClick={() => setReceiveId(o.id)} className="mr-3 text-xs hover:underline">
-                        Receive
-                      </button>
-                    ) : null}
-                    {(o.status === "DRAFT" || o.status === "SENT") && canCancel ? (
-                      <button onClick={() => cancel(o.id)} className="text-xs text-red-600 hover:underline">
-                        Cancel
-                      </button>
-                    ) : null}
+              {rows.map((o) => (
+                <tr key={o.id}>
+                  <td className="g-metric font-medium text-ink">{o.number}</td>
+                  <td>{o.supplier_name}</td>
+                  <td className="!text-right num-tabular">{o.items}</td>
+                  <td><StatusPill status={o.status} /></td>
+                  <td className="!text-right">
+                    <span className="flex justify-end gap-3">
+                      {(o.status === "DRAFT" || o.status === "SENT") && canCreate ? (
+                        <button onClick={() => setReceiveId(o.id)} className="text-xs font-medium text-ink hover:underline">
+                          Receive
+                        </button>
+                      ) : null}
+                      {(o.status === "DRAFT" || o.status === "SENT") && canCancel ? (
+                        <button onClick={() => cancel(o.id)} className="text-xs font-medium text-rose-600 hover:underline">
+                          Cancel
+                        </button>
+                      ) : null}
+                    </span>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </TableCard>
       {dialog ? (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/30 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl space-y-3 overflow-y-auto rounded-xl bg-white p-6 shadow-lg">
-            <h2 className="font-semibold">New purchase order</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium">Supplier</label>
-                <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className={inputCls}>
-                  <option value="">Select…</option>
-                  {(suppliers.data?.rows ?? []).map((s) => (
-                    <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Notes</label>
-                <input value={notes} onChange={(e) => setNotes(e.target.value)} className={inputCls} />
-              </div>
-            </div>
-            <ItemEditor items={items} onChange={setItems} />
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setDialog(false)} className="rounded-md border px-3 py-2 text-sm">
-                Cancel
-              </button>
-              <button
-                onClick={() => create.mutate()}
-                disabled={create.isPending || !supplierId || items.length === 0}
-                className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white disabled:opacity-50"
-              >
-                Save draft
-              </button>
-            </div>
+        <Modal
+          wide
+          kicker="Purchases"
+          title="New purchase order"
+          onClose={() => setDialog(false)}
+          onSubmit={() => create.mutate()}
+          pending={create.isPending}
+          submitDisabled={!supplierId || items.length === 0}
+          submitLabel="Save draft"
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm text-ink-2">Supplier
+              <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className={controlClass}>
+                <option value="">Select…</option>
+                {(suppliers.data?.rows ?? []).map((s) => (
+                  <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm text-ink-2">Notes
+              <input value={notes} onChange={(e) => setNotes(e.target.value)} className={controlClass} />
+            </label>
           </div>
-        </div>
+          <ItemEditor items={items} onChange={setItems} />
+        </Modal>
       ) : null}
       {receiveId ? <ReceiveDialog id={receiveId} onClose={() => setReceiveId(null)} /> : null}
-    </div>
+    </Page>
   );
 }
 
@@ -228,37 +241,30 @@ function ReceiveDialog({ id, onClose }: { id: string; onClose: () => void }) {
     }
   }
 
-  const inputCls =
-    "w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold";
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-6 shadow-lg">
-        <h2 className="font-semibold">Receive order</h2>
-        <p className="text-sm text-stone-500">Creates products, stock, ledger and journal entries atomically.</p>
-        <div>
-          <label className="mb-1 block text-sm font-medium">Additional charges LKR</label>
-          <input type="number" step="any" value={charges} onChange={(e) => setCharges(e.target.value)} className={inputCls} />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1 block text-sm font-medium">Paid now LKR</label>
-            <input type="number" step="any" value={paid} onChange={(e) => setPaid(e.target.value)} className={inputCls} />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Method</label>
-            <select value={method} onChange={(e) => setMethod(e.target.value)} className={inputCls}>
-              <option value="cash">Cash</option>
-              <option value="bank">Bank</option>
-            </select>
-          </div>
-        </div>
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-md border px-3 py-2 text-sm">Cancel</button>
-          <button onClick={receive} disabled={pending} className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white disabled:opacity-50">
-            Receive
-          </button>
-        </div>
+    <Modal
+      kicker="Purchases"
+      title="Receive order"
+      onClose={onClose}
+      onSubmit={receive}
+      pending={pending}
+      submitLabel="Receive"
+    >
+      <p className="text-sm text-ink-3">Creates products, stock, ledger and journal entries atomically.</p>
+      <label className="block text-sm text-ink-2">Additional charges LKR
+        <input type="number" step="any" value={charges} onChange={(e) => setCharges(e.target.value)} className={`num-tabular ${controlClass}`} />
+      </label>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block text-sm text-ink-2">Paid now LKR
+          <input type="number" step="any" value={paid} onChange={(e) => setPaid(e.target.value)} className={`num-tabular ${controlClass}`} />
+        </label>
+        <label className="block text-sm text-ink-2">Method
+          <select value={method} onChange={(e) => setMethod(e.target.value)} className={controlClass}>
+            <option value="cash">Cash</option>
+            <option value="bank">Bank</option>
+          </select>
+        </label>
       </div>
-    </div>
+    </Modal>
   );
 }

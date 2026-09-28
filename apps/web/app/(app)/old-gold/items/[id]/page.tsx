@@ -1,11 +1,27 @@
 "use client";
 
 import { use, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { LineageChain, type LineageNode, type LineageEdge } from "@/components/lineage-chain";
+import {
+  Page,
+  Hero,
+  Panel,
+  StatGrid,
+  StatCard,
+  Pill,
+  type PillTone,
+  Modal,
+  Skeleton,
+  Callout,
+  EmptyBlock,
+  controlClass,
+  heroBtnPrimary,
+  heroBtnGhost,
+} from "@/components/ui";
 
 type Detail = {
   item: {
@@ -26,12 +42,21 @@ type Detail = {
   converted: { id: string; barcode: string; name: string; status: string } | null;
 };
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
-const inputCls = "mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold";
+const TONES: Record<string, PillTone> = {
+  RECEIVED: "warning",
+  TESTED: "info",
+  VALUED: "info",
+  PURCHASED: "brand",
+  AVAILABLE: "success",
+  RESERVED_FOR_MELTING: "warning",
+  MELTED: "dark",
+  RESOLD: "neutral",
+  TRANSFERRED: "info",
+  VOID: "danger",
+};
 
 export default function OldGoldDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const router = useRouter();
   const qc = useQueryClient();
   const [dialog, setDialog] = useState<null | "value" | "purchase" | "convert" | "void">(null);
   const detail = useQuery({
@@ -62,100 +87,141 @@ export default function OldGoldDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  if (detail.isLoading) return <div className="h-64 animate-pulse rounded-xl bg-stone-200" />;
-  if (detail.isError || !detail.data) return <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">Item not found.</div>;
-  const { item, customer, tests, purchase, journal, gold, converted } = detail.data;
   const fmt = (c: number) => (c / 100).toLocaleString("en-US");
   const g = (mg: number) => (mg / 1000).toLocaleString("en-US");
 
+  if (detail.isLoading) {
+    return (
+      <Page>
+        <Skeleton className="h-56" />
+        <Skeleton className="h-64" />
+      </Page>
+    );
+  }
+  if (detail.isError || !detail.data) {
+    return (
+      <Page>
+        <Callout tone="danger" title="Item not found">
+          This old-gold item does not exist or could not be loaded.{" "}
+          <Link href="/old-gold/items" className="font-medium underline">Back to items</Link>
+        </Callout>
+      </Page>
+    );
+  }
+  const { item, customer, tests, purchase, journal, gold, converted } = detail.data;
+
   return (
-    <div className="space-y-4">
-      <button onClick={() => router.push("/old-gold/items")} className="text-sm text-stone-500 hover:underline">← Items</button>
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="font-mono text-xl font-semibold">{item.number}</h1>
-          <p className="text-sm text-stone-500">{item.description} · {customer?.name ?? "—"} · {item.status}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {item.status === "TESTED" || item.status === "VALUED" ? (
-            <button onClick={() => setDialog("value")} className="rounded-md bg-stone-900 px-3 py-1.5 text-sm text-white">Value</button>
-          ) : null}
-          {item.status === "VALUED" ? (
-            <button onClick={() => setDialog("purchase")} className="rounded-md bg-stone-900 px-3 py-1.5 text-sm text-white">Purchase</button>
-          ) : null}
-          {item.status === "PURCHASED" ? (
-            <ActionButton label="Release" onClick={() => act("/release", {}, "Released")} />
-          ) : null}
-          {item.status === "AVAILABLE" ? (
-            <button onClick={() => setDialog("convert")} className="rounded-md border px-3 py-1.5 text-sm hover:bg-stone-100">Convert to product</button>
-          ) : null}
-          {["RECEIVED", "TESTED", "VALUED"].includes(item.status) ? (
-            <button onClick={() => setDialog("void")} className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-600">Void</button>
-          ) : null}
-        </div>
-      </div>
+    <Page>
+      <Hero
+        back={{ href: "/old-gold/items", label: "Old gold items" }}
+        kicker="Old gold"
+        title={item.number}
+        description={`${item.description} · ${customer?.name ?? "—"}${item.notes ? ` — ${item.notes}` : ""}`}
+        meta={
+          <>
+            <Pill tone="ghost" className="!text-paper">{item.status.replace(/_/g, " ")}</Pill>
+            {item.karat ? <Pill tone="ghost" className="!text-paper">{item.karat}</Pill> : null}
+            {item.item_type ? <Pill tone="ghost" className="!text-paper">{item.item_type}</Pill> : null}
+          </>
+        }
+        stats={[
+          { label: "Net weight", value: `${g(item.net_mg)} g` },
+          { label: "Fine gold", value: `${g(item.fine_mg)} g` },
+          { label: "Value", value: item.purchase_value_cents !== null ? `${fmt(item.purchase_value_cents)} LKR` : "—" },
+          { label: "Paid", value: `${fmt(item.paid_cents)} LKR` },
+        ]}
+        actions={
+          <>
+            {item.status === "TESTED" || item.status === "VALUED" ? (
+              <button onClick={() => setDialog("value")} className={heroBtnPrimary}>Value</button>
+            ) : null}
+            {item.status === "VALUED" ? (
+              <button onClick={() => setDialog("purchase")} className={heroBtnPrimary}>Purchase</button>
+            ) : null}
+            {item.status === "PURCHASED" ? (
+              <button onClick={() => act("/release", {}, "Released")} className={heroBtnPrimary}>Release</button>
+            ) : null}
+            {item.status === "AVAILABLE" ? (
+              <button onClick={() => setDialog("convert")} className={heroBtnGhost}>Convert to product</button>
+            ) : null}
+            {["RECEIVED", "TESTED", "VALUED"].includes(item.status) ? (
+              <button onClick={() => setDialog("void")} className={`${heroBtnGhost} !text-rose-300`}>Void</button>
+            ) : null}
+          </>
+        }
+      />
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        {[
-          ["Gross", `${g(item.gross_mg)}g`],
-          ["Net", `${g(item.net_mg)}g`],
-          ["Tested", item.tested_permille !== null ? `${item.tested_permille}` : "—"],
-          ["Fine gold", `${g(item.fine_mg)}g`],
-          ["Board rate", item.rate_cents_per_g !== null ? `${fmt(item.rate_cents_per_g)}/g` : "—"],
-          ["Buy %", item.buy_pct !== null ? `${item.buy_pct}%` : "—"],
-          ["Value", item.purchase_value_cents !== null ? `${fmt(item.purchase_value_cents)} LKR` : "—"],
-          ["Paid", `${fmt(item.paid_cents)} LKR`],
-        ].map(([k, v]) => (
-          <div key={k} className="rounded-xl border border-stone-200 bg-white p-4">
-            <p className="text-xs text-stone-500">{k}</p>
-            <p className="mt-1 font-medium">{v}</p>
-          </div>
-        ))}
-      </div>
+      <StatGrid>
+        <StatCard label="Gross" value={`${g(item.gross_mg)}g`} />
+        <StatCard label="Net" value={`${g(item.net_mg)}g`} />
+        <StatCard label="Tested" value={item.tested_permille !== null ? `${item.tested_permille}‰` : "—"} />
+        <StatCard label="Board rate" value={item.rate_cents_per_g !== null ? `${fmt(item.rate_cents_per_g)}/g` : "—"} />
+      </StatGrid>
 
-      {item.negotiated_cents !== null ? <p className="text-sm text-stone-500">Negotiated total: {fmt(item.negotiated_cents)} LKR</p> : null}
-      {converted ? <p className="text-sm">Converted → <a className="underline" href={`/products/${converted.id}`}>{converted.barcode} {converted.name}</a></p> : null}
-
-      <div className="rounded-xl border border-stone-200 bg-white p-4">
-        <h2 className="font-medium">Tests ({tests.length})</h2>
-        <ul className="mt-2 space-y-1 text-sm">
-          {tests.map((t) => (
-            <li key={t.id}>{t.method} · {t.tested_permille} · {t.result}{t.approved_by ? ` · approved ${t.approved_by.slice(0, 8)}` : ""}</li>
-          ))}
-        </ul>
-      </div>
-
-      {purchase ? (
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <h2 className="font-medium">Purchase</h2>
-          <p className="mt-1 text-sm">Value {fmt(purchase.value_cents)} · Paid {fmt(purchase.paid_cents)} ({purchase.method})</p>
-          <h3 className="mt-3 font-medium">Journal</h3>
-          <ul className="mt-1 space-y-1 font-mono text-xs">
-            {journal.map((j) => (
-              <li key={j.id} className="flex justify-between"><span>{j.account_code}</span><span>{j.debit_cents ? `DR ${fmt(j.debit_cents)}` : `CR ${fmt(j.credit_cents)}`}</span></li>
-            ))}
-          </ul>
-          <h3 className="mt-3 font-medium">Gold</h3>
-          <ul className="mt-1 space-y-1 font-mono text-xs">
-            {gold.map((m) => (
-              <li key={m.id}>{m.direction} {g(m.fine_mg)}g fine</li>
-            ))}
-          </ul>
-        </div>
+      {item.negotiated_cents !== null ? (
+        <Callout tone="info" title="Negotiated total">
+          {fmt(item.negotiated_cents)} LKR overrides the computed value.
+        </Callout>
       ) : null}
+      {converted ? (
+        <Callout tone="success" title="Converted to product">
+          <Link className="font-medium underline" href={`/products/${converted.id}`}>
+            {converted.barcode} — {converted.name}
+          </Link>
+        </Callout>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Panel title="Tests" description={`${tests.length} recorded`}>
+          {tests.length === 0 ? (
+            <EmptyBlock title="No tests" description="Record a purity test from the testing queue." />
+          ) : (
+            <ul className="space-y-2.5 text-sm">
+              {tests.map((t) => (
+                <li key={t.id} className="flex items-center justify-between gap-3">
+                  <span className="text-ink-2">
+                    <span className="capitalize">{t.method.replace(/_/g, " ")}</span>
+                    <span className="g-metric ml-2 text-xs text-ink-4">{t.tested_permille}‰</span>
+                    {t.approved_by ? <span className="ml-2 text-xs text-ink-4">· approved {t.approved_by.slice(0, 8)}</span> : null}
+                  </span>
+                  <Pill tone={t.result === "pass" ? "success" : t.result === "fail" ? "danger" : "warning"} dot>{t.result}</Pill>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+        {purchase ? (
+          <Panel title="Purchase" description={`Paid ${fmt(purchase.paid_cents)} of ${fmt(purchase.value_cents)} LKR`}>
+            <ul className="space-y-2 g-metric text-xs">
+              {journal.map((j) => (
+                <li key={j.id} className="flex items-center justify-between gap-3">
+                  <span className="text-ink-3">{j.account_code}</span>
+                  <span className="text-ink">{j.debit_cents ? `DR ${fmt(j.debit_cents)}` : `CR ${fmt(j.credit_cents)}`}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="g-kicker mt-4 !text-[10px]">Gold movements</p>
+            <ul className="mt-2 space-y-2 g-metric text-xs">
+              {gold.map((m) => (
+                <li key={m.id} className="flex items-center justify-between gap-3">
+                  <span className="text-ink-3">{m.direction}</span>
+                  <span className="text-ink">{g(m.fine_mg)}g fine</span>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        ) : null}
+      </div>
+
+      <Panel title="Gold lineage" description="Intake → melt → lot → product">
+        <OldGoldLineage id={id} />
+      </Panel>
 
       {dialog === "value" ? <ValueDialog onSubmit={(b) => act("/value", b, "Valued")} onClose={() => setDialog(null)} /> : null}
       {dialog === "purchase" ? <PurchaseDialog maxLkr={item.purchase_value_cents !== null ? item.purchase_value_cents / 100 : 0} onSubmit={(b) => act("/purchase", b, "Purchased")} onClose={() => setDialog(null)} /> : null}
       {dialog === "convert" ? <ConvertDialog onSubmit={(b) => act("/convert", b, "Converted")} onClose={() => setDialog(null)} /> : null}
       {dialog === "void" ? <VoidDialog onSubmit={(r) => voidIt(r)} onClose={() => setDialog(null)} /> : null}
-
-      <div className="rounded-xl border border-stone-200 bg-white p-4">
-        <h2 className="font-medium">Gold lineage</h2>
-        <div className="mt-2">
-          <OldGoldLineage id={id} />
-        </div>
-      </div>
-    </div>
+    </Page>
   );
 }
 
@@ -167,13 +233,9 @@ function OldGoldLineage({ id }: { id: string }) {
         `/api/v1/gold/lineage?refEntity=old_gold&refId=${id}`
       ),
   });
-  if (lineage.isLoading) return <p className="text-sm text-stone-400">Loading lineage…</p>;
-  if (lineage.isError || !lineage.data) return <p className="text-sm text-stone-400">Lineage unavailable.</p>;
+  if (lineage.isLoading) return <Skeleton className="h-10" />;
+  if (lineage.isError || !lineage.data) return <EmptyBlock title="Lineage unavailable" description="Could not load the gold lineage." />;
   return <LineageChain nodes={lineage.data.nodes} edges={lineage.data.edges} />;
-}
-
-function ActionButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return <button onClick={onClick} className="rounded-md bg-stone-900 px-3 py-1.5 text-sm text-white">{label}</button>;
 }
 
 function ValueDialog({ onSubmit, onClose }: { onSubmit: (b: object) => void; onClose: () => void }) {
@@ -183,19 +245,23 @@ function ValueDialog({ onSubmit, onClose }: { onSubmit: (b: object) => void; onC
   const [neg, setNeg] = useState("");
   const [reason, setReason] = useState("");
   return (
-    <Dialog title="Valuation" onClose={onClose} onSubmit={() => onSubmit({
+    <Modal kicker="Old gold" title="Valuation" onClose={onClose} onSubmit={() => onSubmit({
       ...(buyPct !== "" ? { buyPct: Number(buyPct) } : {}),
       stoneDeductionLkr: stone === "" ? 0 : Number(stone),
       processingDeductionLkr: proc === "" ? 0 : Number(proc),
       ...(neg !== "" ? { negotiatedLkr: Number(neg) } : {}),
       ...(reason !== "" ? { reason } : {}),
-    })}>
-      <label className="text-sm">Buy % (blank = settings default)<input value={buyPct} onChange={(e) => setBuyPct(e.target.value)} type="number" step="any" className={inputCls} /></label>
-      <label className="text-sm">Stone deduction LKR<input value={stone} onChange={(e) => setStone(e.target.value)} type="number" step="any" className={inputCls} /></label>
-      <label className="text-sm">Processing deduction LKR<input value={proc} onChange={(e) => setProc(e.target.value)} type="number" step="any" className={inputCls} /></label>
-      <label className="text-sm">Negotiated total LKR (optional)<input value={neg} onChange={(e) => setNeg(e.target.value)} type="number" step="any" className={inputCls} /></label>
-      <label className="text-sm">Reason (required for overrides)<input value={reason} onChange={(e) => setReason(e.target.value)} className={inputCls} /></label>
-    </Dialog>
+    })} submitLabel="Value">
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block text-sm text-ink-2">Buy % (blank = default)<input value={buyPct} onChange={(e) => setBuyPct(e.target.value)} type="number" step="any" className={`num-tabular ${controlClass}`} /></label>
+        <label className="block text-sm text-ink-2">Stone deduction LKR<input value={stone} onChange={(e) => setStone(e.target.value)} type="number" step="any" className={`num-tabular ${controlClass}`} /></label>
+        <label className="block text-sm text-ink-2">Processing deduction LKR<input value={proc} onChange={(e) => setProc(e.target.value)} type="number" step="any" className={`num-tabular ${controlClass}`} /></label>
+        <label className="block text-sm text-ink-2">Negotiated total LKR<input value={neg} onChange={(e) => setNeg(e.target.value)} type="number" step="any" className={`num-tabular ${controlClass}`} /></label>
+      </div>
+      <label className="block text-sm text-ink-2">Reason (required for overrides)
+        <input value={reason} onChange={(e) => setReason(e.target.value)} className={controlClass} />
+      </label>
+    </Modal>
   );
 }
 
@@ -203,11 +269,27 @@ function PurchaseDialog({ maxLkr, onSubmit, onClose }: { maxLkr: number; onSubmi
   const [paid, setPaid] = useState("");
   const [method, setMethod] = useState("cash");
   return (
-    <Dialog title={`Purchase (value ${maxLkr.toLocaleString("en-US")} LKR)`} onClose={onClose} onSubmit={() => onSubmit({ paidLkr: Number(paid), method })}>
-      <label className="text-sm">Paid now LKR<input value={paid} onChange={(e) => setPaid(e.target.value)} type="number" step="any" className={inputCls} /></label>
-      <label className="text-sm">Method<select value={method} onChange={(e) => setMethod(e.target.value)} className={inputCls}><option value="cash">Cash</option><option value="bank">Bank</option></select></label>
-      <p className="text-xs text-stone-500">Remainder becomes a customer payable.</p>
-    </Dialog>
+    <Modal
+      kicker="Old gold"
+      title={`Purchase — value ${maxLkr.toLocaleString("en-US")} LKR`}
+      onClose={onClose}
+      onSubmit={() => onSubmit({ paidLkr: Number(paid), method })}
+      submitDisabled={!paid}
+      submitLabel="Purchase"
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block text-sm text-ink-2">Paid now LKR
+          <input value={paid} onChange={(e) => setPaid(e.target.value)} type="number" step="any" className={`num-tabular ${controlClass}`} />
+        </label>
+        <label className="block text-sm text-ink-2">Method
+          <select value={method} onChange={(e) => setMethod(e.target.value)} className={controlClass}>
+            <option value="cash">Cash</option>
+            <option value="bank">Bank</option>
+          </select>
+        </label>
+      </div>
+      <p className="text-xs text-ink-4">Remainder becomes a customer payable.</p>
+    </Modal>
   );
 }
 
@@ -216,34 +298,21 @@ function ConvertDialog({ onSubmit, onClose }: { onSubmit: (b: object) => void; o
   const [metalTypeId, setMetalTypeId] = useState("");
   const [name, setName] = useState("");
   return (
-    <Dialog title="Convert to sellable product" onClose={onClose} onSubmit={() => onSubmit({ categoryId, metalTypeId, name })}>
-      <label className="text-sm">Category ID<input value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputCls} /></label>
-      <label className="text-sm">Metal type ID<input value={metalTypeId} onChange={(e) => setMetalTypeId(e.target.value)} className={inputCls} /></label>
-      <label className="text-sm">Name<input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} /></label>
-    </Dialog>
+    <Modal kicker="Old gold" title="Convert to sellable product" onClose={onClose} onSubmit={() => onSubmit({ categoryId, metalTypeId, name })} submitLabel="Convert">
+      <label className="block text-sm text-ink-2">Category ID<input value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={controlClass} /></label>
+      <label className="block text-sm text-ink-2">Metal type ID<input value={metalTypeId} onChange={(e) => setMetalTypeId(e.target.value)} className={controlClass} /></label>
+      <label className="block text-sm text-ink-2">Name<input value={name} onChange={(e) => setName(e.target.value)} className={controlClass} /></label>
+    </Modal>
   );
 }
 
 function VoidDialog({ onSubmit, onClose }: { onSubmit: (r: string) => void; onClose: () => void }) {
   const [reason, setReason] = useState("");
   return (
-    <Dialog title="Void item" onClose={onClose} onSubmit={() => onSubmit(reason)}>
-      <label className="text-sm">Reason<input value={reason} onChange={(e) => setReason(e.target.value)} className={inputCls} /></label>
-    </Dialog>
-  );
-}
-
-function Dialog({ title, children, onClose, onSubmit }: { title: string; children: React.ReactNode; onClose: () => void; onSubmit: () => void }) {
-  return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-6 shadow-lg">
-        <h2 className="font-semibold">{title}</h2>
-        {children}
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-md border px-3 py-2 text-sm">Cancel</button>
-          <button onClick={onSubmit} className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white">Confirm</button>
-        </div>
-      </div>
-    </div>
+    <Modal kicker="Old gold" title="Void item" danger onClose={onClose} onSubmit={() => onSubmit(reason)} submitLabel="Void">
+      <label className="block text-sm text-ink-2">Reason
+        <input value={reason} onChange={(e) => setReason(e.target.value)} className={controlClass} />
+      </label>
+    </Modal>
   );
 }

@@ -2,10 +2,24 @@
 
 import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { LineageChain, type LineageNode, type LineageEdge } from "@/components/lineage-chain";
+import {
+  Page,
+  Hero,
+  Panel,
+  Pill,
+  type PillTone,
+  Modal,
+  Skeleton,
+  Callout,
+  EmptyBlock,
+  controlClass,
+  heroBtnPrimary,
+  heroBtnGhost,
+} from "@/components/ui";
+import { ScanBarcodeIcon } from "@/components/icons";
 
 type Detail = {
   batch: {
@@ -17,11 +31,19 @@ type Detail = {
   ledger: { type: string; fine_mg: number }[];
 };
 
-const inputCls = "w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold";
+const TONES: Record<string, PillTone> = {
+  DRAFT: "neutral",
+  LOCKED: "warning",
+  MELTED: "info",
+  APPROVED: "success",
+  VOID: "danger",
+};
+
+const g = (mg: number) => (mg / 1000).toLocaleString("en-US");
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
 export default function MeltDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const router = useRouter();
   const qc = useQueryClient();
   const [scan, setScan] = useState("");
   const [dialog, setDialog] = useState<null | "melt" | "approve" | "void">(null);
@@ -70,139 +92,212 @@ export default function MeltDetailPage({ params }: { params: Promise<{ id: strin
     onError: (e) => toast.error(e instanceof Error ? e.message : "Add failed"),
   });
 
-  if (detail.isLoading) return <div className="h-64 animate-pulse rounded-xl bg-stone-200" />;
-  if (detail.isError || !detail.data) return <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">Batch not found.</div>;
+  if (detail.isLoading) {
+    return (
+      <Page>
+        <Skeleton className="h-56" />
+        <Skeleton className="h-64" />
+      </Page>
+    );
+  }
+  if (detail.isError || !detail.data) {
+    return (
+      <Page>
+        <Callout tone="danger" title="Batch not found">
+          This melting batch does not exist or could not be loaded.
+        </Callout>
+      </Page>
+    );
+  }
   const { batch, inputs, outputs, ledger } = detail.data;
   const preview = outG && assay ? Math.round((Number(outG) * 1000 * Number(assay)) / 1000) : null;
   const previewLoss = preview !== null ? batch.input_fine_mg - preview - Math.round(Number(waste || 0) * 1000) : null;
 
   return (
-    <div className="space-y-4">
-      <button onClick={() => router.push("/gold/melting")} className="text-sm text-stone-500 hover:underline">← Batches</button>
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="font-mono text-xl font-semibold">{batch.number}</h1>
-          <p className="text-sm text-stone-500">{batch.status} · input {(batch.input_fine_mg / 1000).toLocaleString("en-US")}g fine</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {batch.status === "DRAFT" ? (
-            <button onClick={() => call("/lock", "POST", {}, "Locked")} className="rounded-md bg-stone-900 px-3 py-1.5 text-sm text-white">Lock</button>
-          ) : null}
-          {batch.status === "LOCKED" ? (
-            <button onClick={() => setDialog("melt")} className="rounded-md bg-stone-900 px-3 py-1.5 text-sm text-white">Record melt</button>
-          ) : null}
-          {batch.status === "MELTED" ? (
-            <button onClick={() => setDialog("approve")} className="rounded-md bg-stone-900 px-3 py-1.5 text-sm text-white">Approve</button>
-          ) : null}
-          {batch.status === "DRAFT" ? (
-            <button onClick={() => setDialog("void")} className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-600">Void</button>
-          ) : null}
-          <a href={`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787"}/api/v1/melting/batches/${id}/label`} target="_blank" rel="noreferrer" className="rounded-md border px-3 py-1.5 text-sm hover:bg-stone-100">
-            Label
-          </a>
-        </div>
-      </div>
+    <Page>
+      <Hero
+        back={{ href: "/gold/melting", label: "Melting batches" }}
+        kicker="Gold · Vault"
+        title={batch.number}
+        description="Old gold in, assayed lots out — every milligram reconciled."
+        meta={<Pill tone="ghost" className="!text-paper">{batch.status}</Pill>}
+        stats={[
+          { label: "Input fine", value: `${g(batch.input_fine_mg)} g` },
+          { label: "Output fine", value: `${g(batch.output_fine_mg)} g` },
+          { label: "Waste", value: `${g(batch.waste_mg)} g` },
+          { label: batch.loss_mg > 0 ? "Loss" : "Recovery", value: `${batch.loss_mg > 0 ? batch.loss_mg : batch.recovery_mg} mg` },
+        ]}
+        actions={
+          <>
+            {batch.status === "DRAFT" ? (
+              <button onClick={() => call("/lock", "POST", {}, "Locked")} className={heroBtnPrimary}>Lock</button>
+            ) : null}
+            {batch.status === "LOCKED" ? (
+              <button onClick={() => setDialog("melt")} className={heroBtnPrimary}>Record melt</button>
+            ) : null}
+            {batch.status === "MELTED" ? (
+              <button onClick={() => setDialog("approve")} className={heroBtnPrimary}>Approve</button>
+            ) : null}
+            {batch.status === "DRAFT" ? (
+              <button onClick={() => setDialog("void")} className={`${heroBtnGhost} !text-rose-300`}>Void</button>
+            ) : null}
+            <a href={`${API}/api/v1/melting/batches/${id}/label`} target="_blank" rel="noreferrer" className={heroBtnGhost}>
+              Label
+            </a>
+          </>
+        }
+      />
 
       {batch.status === "DRAFT" ? (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (scan.trim()) addItems.mutate([scan.trim()]);
-          }}
-          className="flex gap-2"
-        >
-          <input value={scan} onChange={(e) => setScan(e.target.value)} placeholder="Scan OG- item…" autoComplete="off" className="w-full max-w-sm rounded-md border-2 border-gold px-4 py-2 font-mono outline-none" />
-          <button type="submit" className="rounded-md bg-stone-900 px-4 py-2 text-sm text-white">Add</button>
-        </form>
+        <Panel title="Add old-gold items" description="Scan OG- item numbers into this batch">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (scan.trim()) addItems.mutate([scan.trim()]);
+            }}
+            className="flex gap-2"
+          >
+            <div className="relative flex-1">
+              <ScanBarcodeIcon size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gold" />
+              <input
+                value={scan}
+                onChange={(e) => setScan(e.target.value)}
+                placeholder="Scan OG- item…"
+                autoComplete="off"
+                className={`w-full pl-10 font-mono ${controlClass}`}
+              />
+            </div>
+            <button type="submit" disabled={addItems.isPending} className="g-btn g-btn-primary h-10 px-4 text-sm">
+              {addItems.isPending ? "Adding…" : "Add"}
+            </button>
+          </form>
+        </Panel>
       ) : null}
 
-      <div className="rounded-xl border border-stone-200 bg-white p-4">
-        <h2 className="font-medium">Inputs ({inputs.length})</h2>
-        <ul className="mt-2 space-y-1 text-sm">
-          {inputs.map((i) => (
-            <li key={i.old_gold_id} className="flex justify-between">
-              <a href={`/old-gold/items/${i.old_gold_id}`} className="font-mono text-xs hover:underline">{i.number} · {i.description}</a>
-              <span>{(i.fine_mg / 1000).toLocaleString("en-US")}g fine</span>
-            </li>
-          ))}
-        </ul>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Panel title="Inputs" description={`${inputs.length} item${inputs.length === 1 ? "" : "s"}`}>
+          {inputs.length === 0 ? (
+            <EmptyBlock title="No inputs yet" description="Scan old-gold items into the batch." />
+          ) : (
+            <ul className="space-y-2.5 text-sm">
+              {inputs.map((i) => (
+                <li key={i.old_gold_id} className="flex items-center justify-between gap-3">
+                  <a href={`/old-gold/items/${i.old_gold_id}`} className="min-w-0 truncate text-ink-2 hover:text-gold-700">
+                    <span className="g-metric text-xs text-ink">{i.number}</span> · {i.description}
+                  </a>
+                  <span className="num-tabular shrink-0 font-medium text-ink">{g(i.fine_mg)}g fine</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+        {outputs.length > 0 ? (
+          <Panel title="Outputs" description={`${outputs.length} lot${outputs.length === 1 ? "" : "s"}`}>
+            <ul className="space-y-2.5 text-sm">
+              {outputs.map((o) => (
+                <li key={o.lot_number} className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate text-ink-2">
+                    <span className="g-metric text-xs text-ink">{o.lot_number}</span> · {o.output_type} · {o.permille}‰
+                  </span>
+                  <span className="num-tabular shrink-0 font-medium text-ink">{g(o.fine_mg)}g fine</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 border-t border-ink/10 pt-3 text-xs text-ink-4">
+              Waste {g(batch.waste_mg)}g · Loss {batch.loss_mg}mg · Recovery {batch.recovery_mg}mg
+            </p>
+          </Panel>
+        ) : null}
       </div>
 
-      {outputs.length > 0 ? (
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <h2 className="font-medium">Outputs</h2>
-          <ul className="mt-2 space-y-1 text-sm">
-            {outputs.map((o) => (
-              <li key={o.lot_number} className="flex justify-between">
-                <span className="font-mono text-xs">{o.lot_number} · {o.output_type} · {o.permille}</span>
-                <span>{(o.fine_mg / 1000).toLocaleString("en-US")}g fine</span>
+      {ledger.length > 0 ? (
+        <Panel title="Ledger postings">
+          <ul className="space-y-2 g-metric text-xs">
+            {ledger.map((l, i) => (
+              <li key={i} className="flex items-center justify-between gap-3">
+                <span className="text-ink-3">{l.type}</span>
+                <span className="text-ink">{l.fine_mg}mg</span>
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-sm text-stone-500">Waste {(batch.waste_mg / 1000).toLocaleString("en-US")}g · Loss {batch.loss_mg}mg · Recovery {batch.recovery_mg}mg</p>
-        </div>
+        </Panel>
       ) : null}
 
-      {ledger.length > 0 ? (
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <h2 className="font-medium">Ledger postings</h2>
-          <ul className="mt-2 space-y-1 font-mono text-xs">
-            {ledger.map((l, i) => (
-              <li key={i} className="flex justify-between"><span>{l.type}</span><span>{l.fine_mg}mg</span></li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      <div className="rounded-xl border border-stone-200 bg-white p-4">
-        <h2 className="font-medium">Lineage</h2>
-        <div className="mt-2">
-          {lineage.data ? <LineageChain nodes={lineage.data.nodes} edges={lineage.data.edges} /> : <p className="text-sm text-stone-400">Loading…</p>}
-        </div>
-      </div>
+      <Panel title="Gold lineage" description="Where this gold came from and where it went">
+        {lineage.data ? (
+          <LineageChain nodes={lineage.data.nodes} edges={lineage.data.edges} />
+        ) : (
+          <Skeleton className="h-10" />
+        )}
+      </Panel>
 
       {dialog === "melt" ? (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-6 shadow-lg">
-            <h2 className="font-semibold">Record melt + assay</h2>
-            <label className="block text-sm">Output weight g<input value={outG} onChange={(e) => setOutG(e.target.value)} type="number" step="any" className={inputCls} /></label>
-            <label className="block text-sm">Assay permille<input value={assay} onChange={(e) => setAssay(e.target.value)} type="number" className={inputCls} /></label>
-            <label className="block text-sm">Waste g<input value={waste} onChange={(e) => setWaste(e.target.value)} type="number" step="any" className={inputCls} /></label>
-            <label className="block text-sm">Output type<select value={otype} onChange={(e) => setOtype(e.target.value)} className={inputCls}><option value="grain">grain</option><option value="bar">bar</option></select></label>
-            {previewLoss !== null ? <p className="text-sm">Output fine ≈ {(preview! / 1000).toLocaleString("en-US")}g · {previewLoss >= 0 ? `Loss ${previewLoss}mg` : `Recovery ${-previewLoss}mg`}</p> : null}
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setDialog(null)} className="rounded-md border px-3 py-2 text-sm">Cancel</button>
-              <button onClick={() => call("/melt", "POST", { outputWeightG: Number(outG), assayPermille: Number(assay), wasteG: Number(waste || 0), outputType: otype }, "Melt recorded")} className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white">Record</button>
-            </div>
+        <Modal
+          kicker="Gold"
+          title="Record melt + assay"
+          onClose={() => setDialog(null)}
+          onSubmit={() => call("/melt", "POST", { outputWeightG: Number(outG), assayPermille: Number(assay), wasteG: Number(waste || 0), outputType: otype }, "Melt recorded")}
+          submitDisabled={!outG || !assay}
+          submitLabel="Record"
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm text-ink-2">Output weight g
+              <input value={outG} onChange={(e) => setOutG(e.target.value)} type="number" step="any" className={`num-tabular ${controlClass}`} />
+            </label>
+            <label className="block text-sm text-ink-2">Assay permille
+              <input value={assay} onChange={(e) => setAssay(e.target.value)} type="number" className={`num-tabular ${controlClass}`} />
+            </label>
+            <label className="block text-sm text-ink-2">Waste g
+              <input value={waste} onChange={(e) => setWaste(e.target.value)} type="number" step="any" className={`num-tabular ${controlClass}`} />
+            </label>
+            <label className="block text-sm text-ink-2">Output type
+              <select value={otype} onChange={(e) => setOtype(e.target.value)} className={controlClass}>
+                <option value="grain">grain</option>
+                <option value="bar">bar</option>
+              </select>
+            </label>
           </div>
-        </div>
+          {previewLoss !== null ? (
+            <Callout tone={previewLoss >= 0 ? "warning" : "info"}>
+              Output fine ≈ {g(preview!)}g · {previewLoss >= 0 ? `Loss ${previewLoss}mg` : `Recovery ${-previewLoss}mg`}
+            </Callout>
+          ) : null}
+        </Modal>
       ) : null}
       {dialog === "approve" ? (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-6 shadow-lg">
-            <h2 className="font-semibold">Approve reconciliation</h2>
-            <p className="text-sm text-stone-500">Loss {batch.loss_mg}mg · Recovery {batch.recovery_mg}mg</p>
-            <label className="block text-sm">Reason (required)<input value={reason} onChange={(e) => setReason(e.target.value)} className={inputCls} /></label>
-            <label className="block text-sm">Approver ID (if over threshold)<input value={approver} onChange={(e) => setApprover(e.target.value)} className={inputCls} /></label>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setDialog(null)} className="rounded-md border px-3 py-2 text-sm">Cancel</button>
-              <button onClick={() => call("/approve", "POST", { reason, approvedBy: approver || undefined }, "Approved")} className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white">Approve</button>
-            </div>
-          </div>
-        </div>
+        <Modal
+          kicker="Gold"
+          title="Approve reconciliation"
+          onClose={() => setDialog(null)}
+          onSubmit={() => call("/approve", "POST", { reason, approvedBy: approver || undefined }, "Approved")}
+          submitDisabled={!reason}
+          submitLabel="Approve"
+        >
+          <Callout tone="info">
+            Loss {batch.loss_mg}mg · Recovery {batch.recovery_mg}mg
+          </Callout>
+          <label className="block text-sm text-ink-2">Reason (required)
+            <input value={reason} onChange={(e) => setReason(e.target.value)} className={controlClass} />
+          </label>
+          <label className="block text-sm text-ink-2">Approver ID (if over threshold)
+            <input value={approver} onChange={(e) => setApprover(e.target.value)} className={controlClass} />
+          </label>
+        </Modal>
       ) : null}
       {dialog === "void" ? (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-6 shadow-lg">
-            <h2 className="font-semibold">Void batch</h2>
-            <label className="block text-sm">Reason<input value={reason} onChange={(e) => setReason(e.target.value)} className={inputCls} /></label>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setDialog(null)} className="rounded-md border px-3 py-2 text-sm">Cancel</button>
-              <button onClick={() => call("/void", "PATCH", { reason }, "Voided")} className="rounded-md bg-red-700 px-3 py-2 text-sm text-white">Void</button>
-            </div>
-          </div>
-        </div>
+        <Modal
+          kicker="Gold"
+          title="Void batch"
+          danger
+          onClose={() => setDialog(null)}
+          onSubmit={() => call("/void", "PATCH", { reason }, "Voided")}
+          submitLabel="Void"
+        >
+          <label className="block text-sm text-ink-2">Reason
+            <input value={reason} onChange={(e) => setReason(e.target.value)} className={controlClass} />
+          </label>
+        </Modal>
       ) : null}
-    </div>
+    </Page>
   );
 }

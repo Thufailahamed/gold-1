@@ -5,6 +5,18 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import {
+  Page,
+  Hero,
+  Panel,
+  TableCard,
+  EmptyBlock,
+  Callout,
+  Pill,
+  controlClass,
+  controlSmClass,
+} from "@/components/ui";
+import { PlusIcon, ScanBarcodeIcon, TrashIcon } from "@/components/icons";
 
 type Lookup = {
   product: {
@@ -39,6 +51,7 @@ function branchDefault(): string {
 }
 
 const METHODS = ["cash", "card", "bank", "credit", "other"];
+const fmt = (c: number) => (c / 100).toLocaleString("en-US");
 
 export default function PosPage() {
   const [scan, setScan] = useState("");
@@ -144,67 +157,77 @@ export default function PosPage() {
     setPays((ps) => ps.map((p, i) => (i === ps.length - 1 ? { ...p, amountLkr: String(rest / 100) } : p)));
   }
 
-  const inputCls =
-    "rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold";
-
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">POS</h1>
-        <p className="text-sm text-stone-500">F2 scan · F9 pay · Enter completes</p>
-      </div>
-      {done ? (
-        <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm">
-          Sale <span className="font-mono font-semibold">{done.number}</span> complete.{" "}
-          <Link href={`/sales/invoices/${done.invoiceId}/print`} className="underline">
-            Print invoice
-          </Link>{" "}
-          <button onClick={() => setDone(null)} className="ml-2 underline">New sale</button>
-        </div>
-      ) : null}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (scan.trim()) lookup.mutate(scan.trim());
-        }}
-        className="flex gap-2"
+    <Page>
+      <Hero
+        kicker="Sales"
+        title="Point of sale"
+        description="Scan pieces, apply discounts, split payments — Enter completes the sale."
+        note="F2 scan · F9 pay · Enter completes the sale"
+        meta={
+          <>
+            <Pill tone="ghost" className="!text-paper">{cart.length} item{cart.length === 1 ? "" : "s"}</Pill>
+            <Pill tone="ghost" className="!text-paper">{fmt(total)} LKR due</Pill>
+          </>
+        }
       >
-        <input
-          ref={scanRef}
-          autoFocus
-          value={scan}
-          onChange={(e) => setScan(e.target.value)}
-          placeholder="Scan barcode…"
-          autoComplete="off"
-          className="w-full max-w-md rounded-md border-2 border-gold px-4 py-3 font-mono text-lg outline-none"
-        />
-        <button type="submit" className="rounded-md bg-stone-900 px-4 py-2 text-sm text-white">
-          Add
-        </button>
-      </form>
-      {cart.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-stone-300 bg-white p-8 text-center text-sm text-stone-500">
-          Cart is empty — scan the first piece.
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-          <table className="w-full text-sm">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (scan.trim()) lookup.mutate(scan.trim());
+          }}
+          className="relative mt-6 flex gap-2"
+        >
+          <div className="relative flex-1">
+            <ScanBarcodeIcon size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold" />
+            <input
+              ref={scanRef}
+              autoFocus
+              value={scan}
+              onChange={(e) => setScan(e.target.value)}
+              placeholder="Scan barcode…"
+              autoComplete="off"
+              className="h-13 w-full rounded-xl bg-paper/10 py-3.5 pl-11 pr-4 font-mono text-lg text-paper placeholder:text-paper/35 shadow-[inset_0_0_0_1px_rgba(201,162,39,0.45)] transition-shadow focus:outline-none focus:shadow-[inset_0_0_0_2px_#C9A227,0_0_0_4px_rgba(201,162,39,0.2)]"
+            />
+          </div>
+          <button type="submit" className="g-btn h-auto rounded-xl bg-gold px-5 text-sm font-medium text-ink transition-colors hover:bg-gold-light">
+            Add
+          </button>
+        </form>
+      </Hero>
+
+      {done ? (
+        <Callout tone="success" title={`Sale ${done.number} complete`}>
+          <span className="flex flex-wrap items-center gap-3">
+            <Link href={`/sales/invoices/${done.invoiceId}/print`} className="font-medium underline">
+              Print invoice
+            </Link>
+            <button onClick={() => setDone(null)} className="font-medium underline">New sale</button>
+          </span>
+        </Callout>
+      ) : null}
+
+      <TableCard title="Cart" description={`${cart.length} item${cart.length === 1 ? "" : "s"} scanned`}>
+        {cart.length === 0 ? (
+          <EmptyBlock title="Cart is empty" description="Scan the first piece to start the sale." />
+        ) : (
+          <table className="g-table">
             <thead>
-              <tr className="border-b border-stone-200 text-left text-xs uppercase text-stone-500">
-                <th className="px-4 py-2">Barcode</th>
-                <th className="px-4 py-2">Item</th>
-                <th className="px-4 py-2 text-right">Price</th>
-                <th className="px-4 py-2 text-right">Discount</th>
-                <th className="px-4 py-2" />
+              <tr>
+                <th>Barcode</th>
+                <th>Item</th>
+                <th className="!text-right">Price</th>
+                <th className="!text-right">Discount</th>
+                <th />
               </tr>
             </thead>
             <tbody>
               {cart.map((l, i) => (
-                <tr key={l.productId} className="border-b border-stone-100 last:border-0">
-                  <td className="px-4 py-2 font-mono text-xs">{l.barcode}</td>
-                  <td className="px-4 py-2">{l.name} · {l.karat}</td>
-                  <td className="px-4 py-2 text-right">{(l.priceCents / 100).toLocaleString("en-US")}</td>
-                  <td className="px-4 py-2 text-right">
+                <tr key={l.productId}>
+                  <td className="g-metric text-xs">{l.barcode}</td>
+                  <td className="font-medium text-ink">{l.name} <span className="text-ink-4">· {l.karat}</span></td>
+                  <td className="!text-right num-tabular">{fmt(l.priceCents)}</td>
+                  <td className="!text-right">
                     <input
                       type="number"
                       step="any"
@@ -213,105 +236,105 @@ export default function PosPage() {
                       onChange={(e) =>
                         setLine(i, { discountCents: Math.round(Number(e.target.value || 0) * 100) })
                       }
-                      className="w-24 rounded border border-stone-300 px-2 py-1 text-right text-sm"
+                      className={`${controlSmClass} w-24 !text-right num-tabular`}
                     />
                   </td>
-                  <td className="px-4 py-2 text-right">
+                  <td className="!text-right">
                     <button
                       onClick={() => setCart((c) => c.filter((_, j) => j !== i))}
-                      className="text-xs text-red-600 hover:underline"
+                      aria-label="Remove"
+                      className="inline-flex size-7 items-center justify-center rounded-md text-rose-600 transition-colors hover:bg-rose-50"
                     >
-                      Remove
+                      <TrashIcon size={14} />
                     </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </TableCard>
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <h2 className="font-medium">Customer (optional)</h2>
+        <Panel title="Customer" description="Optional — required for credit">
           <input
             placeholder="Search customers…"
             value={customerSearch}
             onChange={(e) => setCustomerSearch(e.target.value)}
-            className={`mt-2 ${inputCls}`}
+            className={`w-full ${controlClass}`}
           />
-          <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className={`mt-2 ${inputCls}`}>
+          <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className={`mt-2 w-full ${controlClass}`}>
             <option value="">Walk-in</option>
             {(customers.data?.rows ?? []).map((c) => (
               <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
             ))}
           </select>
-          <p className="mt-2 text-xs text-stone-500">Required for credit payments.</p>
-        </div>
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <h2 className="font-medium">Discount · {pct.toFixed(1)}%</h2>
-          <p className="mt-1 text-sm text-stone-500">Total discount {(discount / 100).toLocaleString("en-US")} LKR</p>
-          <label className="mt-2 block text-sm">Approver user ID (over limit)</label>
-          <input
-            placeholder="Manager/owner ID if over limit"
-            value={approver}
-            onChange={(e) => setApprover(e.target.value)}
-            className={`mt-1 ${inputCls}`}
-          />
-        </div>
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <h2 className="font-medium">Total: {(total / 100).toLocaleString("en-US")} LKR</h2>
+        </Panel>
+        <Panel title="Discount" description={`${pct.toFixed(1)}% of subtotal`}>
+          <p className="num-tabular text-lg font-semibold text-ink">{fmt(discount)} LKR</p>
+          <label className="mt-3 block text-sm text-ink-2">Approver user ID (over limit)
+            <input
+              placeholder="Manager/owner ID"
+              value={approver}
+              onChange={(e) => setApprover(e.target.value)}
+              className={`mt-1 w-full ${controlClass}`}
+            />
+          </label>
+        </Panel>
+        <Panel title="Payment" description={`Total ${fmt(total)} LKR`}>
           <form
             onSubmit={(e) => {
               e.preventDefault();
               if (cart.length > 0 && paidSum === total && total > 0) complete.mutate();
             }}
           >
-          {pays.map((p, i) => (
-            <div key={i} className="mt-2 flex gap-2">
-              <select
-                value={p.method}
-                onChange={(e) => setPays((ps) => ps.map((x, j) => (j === i ? { ...x, method: e.target.value } : x)))}
-                className={inputCls}
+            {pays.map((p, i) => (
+              <div key={i} className="mt-2 flex gap-2">
+                <select
+                  value={p.method}
+                  onChange={(e) => setPays((ps) => ps.map((x, j) => (j === i ? { ...x, method: e.target.value } : x)))}
+                  className={controlClass}
+                >
+                  {METHODS.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+                <input
+                  id={i === 0 ? "pos-pay-0" : undefined}
+                  type="number"
+                  step="any"
+                  placeholder="Amount"
+                  value={p.amountLkr}
+                  onChange={(e) => setPays((ps) => ps.map((x, j) => (j === i ? { ...x, amountLkr: e.target.value } : x)))}
+                  className={`num-tabular flex-1 ${controlClass}`}
+                />
+              </div>
+            ))}
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPays((ps) => [...ps, { method: "cash", amountLkr: "" }])}
+                className="g-btn g-btn-secondary h-8 px-2.5 text-xs"
               >
-                {["cash", "card", "bank", "credit", "other"].map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-              <input
-                id={i === 0 ? "pos-pay-0" : undefined}
-                type="number"
-                step="any"
-                placeholder="Amount"
-                value={p.amountLkr}
-                onChange={(e) => setPays((ps) => ps.map((x, j) => (j === i ? { ...x, amountLkr: e.target.value } : x)))}
-                className={inputCls}
-              />
+                <PlusIcon size={12} /> Split
+              </button>
+              <button type="button" onClick={autoBalance} className="g-btn g-btn-secondary h-8 px-2.5 text-xs">
+                Auto-balance last
+              </button>
             </div>
-          ))}
-          <div className="mt-2 flex gap-2">
+            <p className={`mt-3 num-tabular text-sm ${paidSum === total && total > 0 ? "font-semibold text-emerald-700" : "text-ink-3"}`}>
+              Paid {fmt(paidSum)} / {fmt(total)}
+            </p>
             <button
-              onClick={() => setPays((ps) => [...ps, { method: "cash", amountLkr: "" }])}
-              className="rounded border px-2 py-1 text-xs"
+              type="submit"
+              disabled={complete.isPending || cart.length === 0 || paidSum !== total || total <= 0}
+              className="g-btn g-btn-primary mt-3 h-11 w-full text-sm"
             >
-              + Split
+              {complete.isPending ? "Posting…" : "Complete sale (Enter)"}
             </button>
-            <button onClick={autoBalance} className="rounded border px-2 py-1 text-xs">
-              Auto-balance last
-            </button>
-          </div>
-          <p className={`mt-2 text-sm ${paidSum === total ? "text-green-700" : "text-stone-500"}`}>
-            Paid {(paidSum / 100).toLocaleString("en-US")} / {(total / 100).toLocaleString("en-US")}
-          </p>
-          <button
-            type="submit"
-            disabled={complete.isPending || cart.length === 0 || paidSum !== total || total <= 0}
-            className="mt-2 w-full rounded-md bg-stone-900 px-3 py-2 text-sm text-white disabled:opacity-50"
-          >
-            Complete sale (Enter)
-          </button>
           </form>
-        </div>
+        </Panel>
       </div>
-    </div>
+    </Page>
   );
 }

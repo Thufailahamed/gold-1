@@ -5,6 +5,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import {
+  Page,
+  Hero,
+  TableCard,
+  TableSkeleton,
+  EmptyBlock,
+  Pill,
+  Modal,
+  controlClass,
+} from "@/components/ui";
 
 type QueueRow = { id: string; number: string; description: string; status: string; net_mg: number };
 
@@ -57,14 +67,22 @@ export default function TestingPage() {
 
   function row(r: QueueRow) {
     return (
-      <tr key={r.id} className="border-b border-stone-100 last:border-0">
-        <td className="px-4 py-2 font-mono text-xs">
-          <Link href={`/old-gold/items/${r.id}`} className="hover:underline">{r.number}</Link>
+      <tr key={r.id}>
+        <td>
+          <Link href={`/old-gold/items/${r.id}`} className="g-metric text-xs font-medium text-ink hover:text-gold-700">
+            {r.number}
+          </Link>
         </td>
-        <td className="px-4 py-2">{r.description}</td>
-        <td className="px-4 py-2">{(r.net_mg / 1000).toLocaleString("en-US")}g</td>
-        <td className="px-4 py-2 text-right">
-          <button onClick={() => setTestingId(r.id)} className="text-xs underline">
+        <td className="text-ink-2">{r.description}</td>
+        <td className="num-tabular">{(r.net_mg / 1000).toLocaleString("en-US")}g</td>
+        <td>
+          <Pill tone={r.status === "RECEIVED" ? "warning" : "info"} dot>{r.status}</Pill>
+        </td>
+        <td className="!text-right">
+          <button
+            onClick={() => setTestingId(r.id)}
+            className="g-btn g-btn-secondary h-8 px-3 text-xs"
+          >
             {r.status === "RECEIVED" ? "Test" : "Retest"}
           </button>
         </td>
@@ -72,70 +90,78 @@ export default function TestingPage() {
     );
   }
 
+  const waiting = queue.data?.rows.length ?? 0;
+  const retests = retest.data?.rows.length ?? 0;
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Purity Testing</h1>
-        <p className="text-sm text-stone-500">Disagreements need a manager approval ID</p>
-      </div>
-      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-stone-200 text-left text-xs uppercase text-stone-500">
-              <th className="px-4 py-2">Item</th>
-              <th className="px-4 py-2">Description</th>
-              <th className="px-4 py-2">Net</th>
-              <th className="px-4 py-2" />
-            </tr>
-          </thead>
-          <tbody>
-            {(queue.data?.rows ?? []).map(row)}
-            {(retest.data?.rows ?? []).map(row)}
-          </tbody>
-        </table>
-      </div>
-      {(queue.data?.rows.length ?? 0) + (retest.data?.rows.length ?? 0) === 0 && !queue.isLoading ? (
-        <p className="text-sm text-stone-500">Queue is empty — nothing awaiting testing.</p>
-      ) : null}
+    <Page>
+      <Hero
+        kicker="Old gold · Lab"
+        title="Purity testing"
+        description="Assay every received piece before valuation — disagreements need a manager approval ID."
+        note="A second opinion requires an approver — record the manager ID on the test."
+        stats={[
+          { label: "Awaiting test", value: waiting },
+          { label: "Retest queue", value: retests },
+        ]}
+      />
+      <TableCard title="Testing queue" description={`${waiting + retests} item${waiting + retests === 1 ? "" : "s"}`}>
+        {queue.isLoading || retest.isLoading ? (
+          <TableSkeleton rows={4} cols={5} />
+        ) : waiting + retests === 0 ? (
+          <EmptyBlock title="Queue is empty" description="Nothing awaiting testing right now." />
+        ) : (
+          <table className="g-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Description</th>
+                <th>Net</th>
+                <th>Status</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {(queue.data?.rows ?? []).map(row)}
+              {(retest.data?.rows ?? []).map(row)}
+            </tbody>
+          </table>
+        )}
+      </TableCard>
       {testingId ? (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-6 shadow-lg">
-            <h2 className="font-semibold">Record test</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium">Method</label>
-                <select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm">
-                  {METHODS.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Permille</label>
-                <input type="number" value={permille} onChange={(e) => setPermille(e.target.value)} placeholder="916" className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm" />
-              </div>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Result</label>
-              <select value={result} onChange={(e) => setResult(e.target.value)} className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm">
-                <option value="pass">pass</option>
-                <option value="fail">fail</option>
-                <option value="inconclusive">inconclusive</option>
+        <Modal
+          kicker="Old gold"
+          title="Record test"
+          onClose={() => setTestingId(null)}
+          onSubmit={() => test.mutate()}
+          pending={test.isPending}
+          submitDisabled={!permille}
+          submitLabel="Save test"
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm text-ink-2">Method
+              <select value={method} onChange={(e) => setMethod(e.target.value)} className={controlClass}>
+                {METHODS.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
               </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Approver ID (only if disagreeing)</label>
-              <input value={approvedBy} onChange={(e) => setApprovedBy(e.target.value)} placeholder="Manager/owner ID" className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm" />
-            </div>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setTestingId(null)} className="rounded-md border px-3 py-2 text-sm">Cancel</button>
-              <button onClick={() => test.mutate()} disabled={test.isPending || !permille} className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white disabled:opacity-50">
-                Save test
-              </button>
-            </div>
+            </label>
+            <label className="block text-sm text-ink-2">Permille
+              <input type="number" value={permille} onChange={(e) => setPermille(e.target.value)} placeholder="916" className={`num-tabular ${controlClass}`} />
+            </label>
           </div>
-        </div>
+          <label className="block text-sm text-ink-2">Result
+            <select value={result} onChange={(e) => setResult(e.target.value)} className={controlClass}>
+              <option value="pass">pass</option>
+              <option value="fail">fail</option>
+              <option value="inconclusive">inconclusive</option>
+            </select>
+          </label>
+          <label className="block text-sm text-ink-2">Approver ID (only if disagreeing)
+            <input value={approvedBy} onChange={(e) => setApprovedBy(e.target.value)} placeholder="Manager/owner ID" className={controlClass} />
+          </label>
+        </Modal>
       ) : null}
-    </div>
+    </Page>
   );
 }

@@ -8,6 +8,17 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
+import {
+  Page,
+  Hero,
+  TableCard,
+  TableSkeleton,
+  EmptyBlock,
+  StatusPill,
+  controlClass,
+  heroBtnPrimary,
+} from "@/components/ui";
+import { XIcon } from "@/components/icons";
 
 type Account = { code: string; name: string; type: string; balance_cents: number };
 
@@ -57,121 +68,132 @@ export default function AccountsPage() {
   });
 
   const rows = chart.data ?? [];
-  const inputCls =
-    "w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold";
+  const fmt = (c: number) => (c / 100).toLocaleString("en-US");
+  const byType = (t: string) => rows.filter((r) => r.type === t).reduce((n, r) => n + Math.abs(r.balance_cents), 0);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Chart of Accounts</h1>
-          <p className="text-sm text-stone-500">Double-entry books; balances derived from journal</p>
-        </div>
-        {canManage ? (
-          <button
-            onClick={() => setDialog(true)}
-            className="rounded-md bg-stone-900 px-3 py-2 text-sm font-medium text-white hover:bg-stone-800"
-          >
-            Adjustment
-          </button>
-        ) : null}
-      </div>
-      <input
-        placeholder="Branch filter (ID, optional)"
-        value={branch}
-        onChange={(e) => setBranch(e.target.value)}
-        className="w-full max-w-sm rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
+    <Page>
+      <Hero
+        kicker="System"
+        title="Chart of accounts"
+        description="Double-entry books — every balance derives from a posted journal."
+        note="Adjustments post a balanced journal entry: one debit, one credit, one amount, a required reason."
+        stats={[
+          { label: "Accounts", value: rows.length },
+          { label: "Assets", value: `${fmt(byType("ASSET"))} LKR` },
+          { label: "Liabilities", value: `${fmt(byType("LIABILITY"))} LKR` },
+          { label: "Equity", value: `${fmt(byType("EQUITY"))} LKR` },
+        ]}
+        actions={
+          canManage ? (
+            <button onClick={() => setDialog(true)} className={heroBtnPrimary}>
+              Post adjustment
+            </button>
+          ) : null
+        }
       />
-      {chart.isLoading ? (
-        <div className="h-48 animate-pulse rounded-xl bg-stone-200" />
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-          <table className="w-full text-sm">
+      <div className="flex flex-wrap gap-2">
+        <input
+          placeholder="Filter by branch ID (optional)…"
+          value={branch}
+          onChange={(e) => setBranch(e.target.value)}
+          className={controlClass}
+        />
+      </div>
+      <TableCard>
+        {chart.isLoading ? (
+          <TableSkeleton rows={8} cols={4} />
+        ) : chart.isError ? (
+          <EmptyBlock title="Failed to load" description="Check the API connection and retry." />
+        ) : rows.length === 0 ? (
+          <EmptyBlock title="No accounts" description="Accounts appear as journals post to them." />
+        ) : (
+          <table className="g-table">
             <thead>
-              <tr className="border-b border-stone-200 text-left text-xs uppercase text-stone-500">
-                <th className="px-4 py-2">Code</th>
-                <th className="px-4 py-2">Name</th>
-                <th className="px-4 py-2">Type</th>
-                <th className="px-4 py-2 text-right">Balance LKR</th>
+              <tr>
+                <th>Code</th>
+                <th>Account</th>
+                <th>Type</th>
+                <th className="!text-right">Balance LKR</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((a) => (
-                <tr key={a.code} className="border-b border-stone-100 last:border-0">
-                  <td className="px-4 py-2 font-mono">{a.code}</td>
-                  <td className="px-4 py-2">{a.name}</td>
-                  <td className="px-4 py-2">{a.type}</td>
-                  <td className="px-4 py-2 text-right">
-                    {(a.balance_cents / 100).toLocaleString("en-US")}
+                <tr key={a.code}>
+                  <td className="g-metric text-xs">{a.code}</td>
+                  <td className="font-medium text-ink">{a.name}</td>
+                  <td><StatusPill status={a.type} /></td>
+                  <td className={`!text-right num-tabular ${a.balance_cents < 0 ? "text-rose-600" : ""}`}>
+                    {fmt(a.balance_cents)}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </TableCard>
       {dialog ? (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/30 p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
+          onClick={() => setDialog(false)}
+        >
           <form
             onSubmit={handleSubmit((v) => adjust.mutate(v))}
-            className="w-full max-w-md space-y-3 rounded-xl bg-white p-6 shadow-lg"
+            className="g-floating w-full max-w-md animate-fade-in space-y-4 p-6"
+            onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="font-semibold">Post adjustment</h2>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium">Debit account</label>
-                <select className={inputCls} {...register("debitAccount")}>
-                  <option value="">Select…</option>
-                  {rows.map((a) => (
-                    <option key={a.code} value={a.code}>
-                      {a.code} {a.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="g-kicker">Journal</div>
+                <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">Post adjustment</h2>
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Credit account</label>
-                <select className={inputCls} {...register("creditAccount")}>
-                  <option value="">Select…</option>
-                  {rows.map((a) => (
-                    <option key={a.code} value={a.code}>
-                      {a.code} {a.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Amount LKR</label>
-              <input type="number" step="any" className={inputCls} {...register("amountLkr")} />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Memo</label>
-              <input className={inputCls} {...register("memo")} />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Reason (required)</label>
-              <input className={inputCls} {...register("reason")} />
-            </div>
-            <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setDialog(false)}
-                className="rounded-md border px-3 py-2 text-sm"
+                aria-label="Close"
+                className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
               >
+                <XIcon size={16} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-sm text-ink-2">Debit account
+                <select className={controlClass} {...register("debitAccount")}>
+                  <option value="">Select…</option>
+                  {rows.map((a) => (
+                    <option key={a.code} value={a.code}>{a.code} · {a.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm text-ink-2">Credit account
+                <select className={controlClass} {...register("creditAccount")}>
+                  <option value="">Select…</option>
+                  {rows.map((a) => (
+                    <option key={a.code} value={a.code}>{a.code} · {a.name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label className="block text-sm text-ink-2">Amount LKR
+              <input type="number" step="any" className={`num-tabular ${controlClass}`} {...register("amountLkr")} />
+            </label>
+            <label className="block text-sm text-ink-2">Memo
+              <input className={controlClass} {...register("memo")} />
+            </label>
+            <label className="block text-sm text-ink-2">Reason (required)
+              <input className={controlClass} {...register("reason")} />
+            </label>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setDialog(false)} className="g-btn g-btn-secondary h-10 px-4 text-sm">
                 Cancel
               </button>
-              <button
-                type="submit"
-                disabled={adjust.isPending}
-                className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white disabled:opacity-50"
-              >
-                Post
+              <button type="submit" disabled={adjust.isPending} className="g-btn g-btn-primary h-10 px-4 text-sm">
+                {adjust.isPending ? "Posting…" : "Post"}
               </button>
             </div>
           </form>
         </div>
       ) : null}
-    </div>
+    </Page>
   );
 }

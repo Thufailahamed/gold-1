@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Page, Hero, Panel, TableCard, TableSkeleton, Pager, EmptyBlock, controlClass } from "@/components/ui";
+import { Page, Hero, TableCard, TableSkeleton, Pager, EmptyBlock, Pill, controlClass, heroBtnGhost } from "@/components/ui";
+import { FileDownIcon } from "@/components/icons";
 
 const TYPES = ["PURCHASE", "OLD_GOLD_PURCHASE", "SALE", "MELTING_INPUT", "MELTING_OUTPUT", "MANUFACTURING_INPUT", "MANUFACTURING_OUTPUT", "TRANSFER", "RETURN", "ADJUSTMENT", "LOSS", "RECOVERY"];
 
@@ -64,9 +65,15 @@ export default function GoldLedgerPage() {
         kicker="Gold"
         title="Gold ledger"
         description="Every gram in and out — immutable and traceable."
+        note="Ledger lines are immutable — corrections post as new adjustment entries."
+        stats={[
+          { label: "Entries", value: total },
+          { label: "On this page", value: rows.length },
+          { label: "Filter", value: fType || "All types" },
+        ]}
         actions={
-          <button onClick={exportCsv} className="g-btn border border-ink/15 bg-transparent px-4 text-sm text-ink">
-            Export CSV
+          <button onClick={exportCsv} className={heroBtnGhost}>
+            <FileDownIcon size={15} /> Export CSV
           </button>
         }
       />
@@ -112,7 +119,7 @@ export default function GoldLedgerPage() {
               {rows.map((r) => (
                 <tr key={r.id}>
                   <td className="whitespace-nowrap text-ink-3">{new Date(r.occurred_at).toLocaleString()}</td>
-                  <td><span className="font-mono text-xs">{r.type}</span></td>
+                  <td><Pill tone="neutral">{r.type}</Pill></td>
                   <td className="max-w-56 truncate text-ink-3" title={`${r.source} → ${r.destination}`}>
                     {r.source} → {r.destination}
                   </td>

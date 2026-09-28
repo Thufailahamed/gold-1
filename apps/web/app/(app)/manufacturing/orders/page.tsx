@@ -6,7 +6,19 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
-import { Page, Hero, TableCard, TableSkeleton, Pager, EmptyBlock, controlClass } from "@/components/ui";
+import {
+  Page,
+  Hero,
+  TableCard,
+  TableSkeleton,
+  Pager,
+  EmptyBlock,
+  StatusPill,
+  Pill,
+  Modal,
+  controlClass,
+  heroBtnPrimary,
+} from "@/components/ui";
 
 type Order = { id: string; number: string; type: string; design: string; status: string; customer_name: string | null; created_at: number };
 type Customer = { id: string; name: string; code: string };
@@ -73,16 +85,23 @@ export default function MfgOrdersPage() {
 
   const rows = list.data?.rows ?? [];
   const total = list.data?.total ?? 0;
+  const active = rows.filter((r) => !["COMPLETE", "VOID"].includes(r.status)).length;
 
   return (
     <Page>
       <Hero
-        kicker="Manufacturing"
-        title="Orders"
+        kicker="Workshop"
+        title="Manufacturing orders"
         description="Refined lots in, finished jewellery out."
+        note="Materials allocate from approved melting lots — every gram is lineage-tracked."
+        stats={[
+          { label: "Orders", value: total },
+          { label: "On this page", value: rows.length },
+          { label: "In progress", value: active },
+        ]}
         actions={
           canCreate ? (
-            <button onClick={() => setDialog(true)} className="g-btn bg-gold px-4 text-sm text-ink">
+            <button onClick={() => setDialog(true)} className={heroBtnPrimary}>
               New order
             </button>
           ) : null
@@ -108,6 +127,8 @@ export default function MfgOrdersPage() {
       <TableCard footer={<Pager page={page} onChange={setPage} pageSize={20} count={rows.length} total={total} unit="orders" />}>
         {list.isLoading ? (
           <TableSkeleton rows={5} cols={5} />
+        ) : list.isError ? (
+          <EmptyBlock title="Failed to load" description="Check the API connection and retry." />
         ) : rows.length === 0 ? (
           <EmptyBlock title="No orders" description="Create the first manufacturing order." />
         ) : (
@@ -124,13 +145,15 @@ export default function MfgOrdersPage() {
             <tbody>
               {rows.map((o) => (
                 <tr key={o.id}>
-                  <td className="font-mono">
-                    <Link href={`/manufacturing/orders/${o.id}`} className="hover:underline">{o.number}</Link>
+                  <td>
+                    <Link href={`/manufacturing/orders/${o.id}`} className="g-metric font-medium text-ink hover:text-gold-700">
+                      {o.number}
+                    </Link>
                   </td>
-                  <td>{o.type}</td>
-                  <td>{o.design}</td>
+                  <td><Pill tone="neutral">{o.type}</Pill></td>
+                  <td className="font-medium text-ink">{o.design}</td>
                   <td className="text-ink-3">{o.customer_name ?? "—"}</td>
-                  <td>{o.status}</td>
+                  <td><StatusPill status={o.status} /></td>
                 </tr>
               ))}
             </tbody>
@@ -138,37 +161,45 @@ export default function MfgOrdersPage() {
         )}
       </TableCard>
       {dialog ? (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-6 shadow-lg">
-            <h2 className="font-semibold">New manufacturing order</h2>
-            <div className="flex gap-2">
-              {(["INTERNAL", "CUSTOMER"] as const).map((t) => (
-                <button key={t} onClick={() => setType(t)} className={`rounded-md px-3 py-1.5 text-sm ${type === t ? "bg-stone-900 text-white" : "border"}`}>
-                  {t}
-                </button>
-              ))}
-            </div>
-            {type === "CUSTOMER" ? (
-              <>
-                <input placeholder="Search customers…" value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} className={controlClass} />
-                <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className={controlClass}>
-                  <option value="">Select customer…</option>
-                  {(customers.data?.rows ?? []).map((c) => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
-                  ))}
-                </select>
-              </>
-            ) : null}
-            <label className="block text-sm">Design<input value={design} onChange={(e) => setDesign(e.target.value)} className={controlClass} /></label>
-            <label className="block text-sm">Description<input value={description} onChange={(e) => setDescription(e.target.value)} className={controlClass} /></label>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setDialog(false)} className="rounded-md border px-3 py-2 text-sm">Cancel</button>
-              <button onClick={() => create.mutate()} disabled={create.isPending || !design || (type === "CUSTOMER" && !customerId)} className="rounded-md bg-stone-900 px-3 py-2 text-sm text-white disabled:opacity-50">
-                Create
+        <Modal
+          kicker="Workshop"
+          title="New manufacturing order"
+          onClose={() => setDialog(false)}
+          onSubmit={() => create.mutate()}
+          pending={create.isPending}
+          submitDisabled={!design || (type === "CUSTOMER" && !customerId)}
+          submitLabel="Create"
+        >
+          <div className="flex gap-2">
+            {(["INTERNAL", "CUSTOMER"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setType(t)}
+                className={`g-btn h-9 flex-1 px-3.5 text-xs ${type === t ? "g-btn-primary" : "g-btn-secondary"}`}
+              >
+                {t}
               </button>
-            </div>
+            ))}
           </div>
-        </div>
+          {type === "CUSTOMER" ? (
+            <div className="space-y-2">
+              <input placeholder="Search customers…" value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} className={controlClass} />
+              <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className={controlClass}>
+                <option value="">Select customer…</option>
+                {(customers.data?.rows ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          <label className="block text-sm text-ink-2">Design
+            <input value={design} onChange={(e) => setDesign(e.target.value)} className={controlClass} />
+          </label>
+          <label className="block text-sm text-ink-2">Description
+            <input value={description} onChange={(e) => setDescription(e.target.value)} className={controlClass} />
+          </label>
+        </Modal>
       ) : null}
     </Page>
   );

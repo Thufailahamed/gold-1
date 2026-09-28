@@ -2,17 +2,38 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { api } from "@/lib/api";
+import {
+  Page,
+  Hero,
+  Panel,
+  TableCard,
+  TableSkeleton,
+  EmptyBlock,
+  Pill,
+  type PillTone,
+  Tabs,
+} from "@/components/ui";
 
 type Summary = { items: number; gross_mg: number; fine_mg: number; value_cents: number; paid_cents: number; outstanding_cents: number };
 type Row = { key: string; items: number; value_cents: number; fine_mg: number };
 type Pending = { id: string; number: string; description: string; fine_mg: number; purchase_value_cents: number; status: string; customer_name: string | null };
 
 const GROUPS = ["purity", "customer", "branch"] as const;
+type Period = "today" | "month" | "all";
+type Group = (typeof GROUPS)[number];
+
+const PENDING_TONES: Record<string, PillTone> = {
+  PURCHASED: "brand",
+  VALUED: "info",
+  TESTED: "info",
+  RECEIVED: "warning",
+};
 
 export default function OldGoldReportsPage() {
-  const [period, setPeriod] = useState("month");
-  const [groupBy, setGroupBy] = useState<(typeof GROUPS)[number]>("purity");
+  const [period, setPeriod] = useState<Period>("month");
+  const [groupBy, setGroupBy] = useState<Group>("purity");
 
   const summary = useQuery({
     queryKey: ["og-summary", period],
@@ -32,68 +53,99 @@ export default function OldGoldReportsPage() {
   const g = (mg: number) => (mg / 1000).toLocaleString("en-US");
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Old Gold Reports</h1>
-        <p className="text-sm text-stone-500">Void items excluded</p>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {(["today", "month", "all"] as const).map((p) => (
-          <button key={p} onClick={() => setPeriod(p)} className={`rounded-md px-3 py-1.5 text-sm ${period === p ? "bg-stone-900 text-white" : "border"}`}>{p}</button>
-        ))}
-        <span className="mx-1" />
+    <Page>
+      <Hero
+        kicker="Old gold"
+        title="Old gold reports"
+        description="Buy-ins, fine gold recovered, and outstanding payables — void items excluded."
+        stats={[
+          { label: "Items", value: s?.items ?? "—" },
+          { label: "Fine gold", value: s ? `${g(s.fine_mg)} g` : "—" },
+          { label: "Value", value: s ? `${fmt(s.value_cents)} LKR` : "—" },
+          { label: "Outstanding", value: s ? `${fmt(s.outstanding_cents)} LKR` : "—" },
+        ]}
+      />
+      <Tabs<Period>
+        ariaLabel="Period"
+        items={[
+          { key: "today", label: "Today" },
+          { key: "month", label: "This month" },
+          { key: "all", label: "All time" },
+        ]}
+        value={period}
+        onChange={setPeriod}
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="g-kicker">Group by</span>
         {GROUPS.map((x) => (
-          <button key={x} onClick={() => setGroupBy(x)} className={`rounded-md px-3 py-1.5 text-sm ${groupBy === x ? "bg-stone-900 text-white" : "border"}`}>{x}</button>
+          <button
+            key={x}
+            onClick={() => setGroupBy(x)}
+            className={`g-btn h-9 px-3.5 text-xs capitalize ${groupBy === x ? "g-btn-primary" : "g-btn-secondary"}`}
+          >
+            {x}
+          </button>
         ))}
       </div>
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {[
-          ["Items", String(s?.items ?? "—")],
           ["Gross", s ? `${g(s.gross_mg)} g` : "—"],
-          ["Fine gold", s ? `${g(s.fine_mg)} g` : "—"],
-          ["Value", s ? `${fmt(s.value_cents)} LKR` : "—"],
           ["Paid", s ? `${fmt(s.paid_cents)} LKR` : "—"],
-          ["Outstanding", s ? `${fmt(s.outstanding_cents)} LKR` : "—"],
         ].map(([k, v]) => (
-          <div key={k} className="rounded-xl border border-stone-200 bg-white p-4">
-            <p className="text-xs text-stone-500">{k}</p>
-            <p className="mt-1 text-xl font-semibold">{v}</p>
+          <div key={k} className="g-surface rounded-xl p-5">
+            <p className="g-kicker !text-[10px]">{k}</p>
+            <p className="g-metric mt-1.5 text-xl font-semibold text-ink">{v}</p>
           </div>
         ))}
       </div>
-      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-stone-200 text-left text-xs uppercase text-stone-500">
-              <th className="px-4 py-2">{groupBy}</th>
-              <th className="px-4 py-2 text-right">Items</th>
-              <th className="px-4 py-2 text-right">Fine g</th>
-              <th className="px-4 py-2 text-right">Value LKR</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(breakdown.data ?? []).map((r) => (
-              <tr key={r.key} className="border-b border-stone-100 last:border-0">
-                <td className="px-4 py-2">{r.key}</td>
-                <td className="px-4 py-2 text-right">{r.items}</td>
-                <td className="px-4 py-2 text-right">{g(r.fine_mg)}</td>
-                <td className="px-4 py-2 text-right">{fmt(r.value_cents)}</td>
+      <TableCard title={`By ${groupBy}`} description={`${(breakdown.data ?? []).length} groups`}>
+        {breakdown.isLoading ? (
+          <TableSkeleton rows={5} cols={4} />
+        ) : (breakdown.data ?? []).length === 0 ? (
+          <EmptyBlock title="Nothing in this period" description="Try widening the period or a different grouping." />
+        ) : (
+          <table className="g-table">
+            <thead>
+              <tr>
+                <th className="capitalize">{groupBy}</th>
+                <th className="!text-right">Items</th>
+                <th className="!text-right">Fine g</th>
+                <th className="!text-right">Value LKR</th>
               </tr>
+            </thead>
+            <tbody>
+              {(breakdown.data ?? []).map((r) => (
+                <tr key={r.key}>
+                  <td className="font-medium text-ink">{r.key}</td>
+                  <td className="!text-right num-tabular">{r.items}</td>
+                  <td className="!text-right num-tabular">{g(r.fine_mg)}</td>
+                  <td className="!text-right num-tabular">{fmt(r.value_cents)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </TableCard>
+      <Panel title="Pending processing" description={`${(pending.data ?? []).length} items awaiting settlement or melt`}>
+        {(pending.data ?? []).length === 0 ? (
+          <EmptyBlock title="All clear" description="No old-gold items pending processing." />
+        ) : (
+          <ul className="space-y-2.5 text-sm">
+            {(pending.data ?? []).map((p) => (
+              <li key={p.id} className="flex items-center justify-between gap-3">
+                <span className="min-w-0 truncate text-ink-2">
+                  <Link href={`/old-gold/items/${p.id}`} className="g-metric text-xs text-ink hover:text-gold-700">{p.number}</Link>
+                  {" "}· {p.description} · {p.customer_name ?? "—"}
+                </span>
+                <span className="flex shrink-0 items-center gap-3">
+                  <span className="num-tabular text-ink-3">{g(p.fine_mg)}g</span>
+                  <Pill tone={PENDING_TONES[p.status] ?? "neutral"} dot>{p.status.replace(/_/g, " ")}</Pill>
+                </span>
+              </li>
             ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="rounded-xl border border-stone-200 bg-white p-4">
-        <h2 className="font-medium">Pending processing ({(pending.data ?? []).length})</h2>
-        <ul className="mt-2 space-y-1 text-sm">
-          {(pending.data ?? []).map((p) => (
-            <li key={p.id} className="flex justify-between">
-              <span className="font-mono text-xs">{p.number} · {p.description} · {p.customer_name ?? "—"}</span>
-              <span>{p.status} · {g(p.fine_mg)}g</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
+          </ul>
+        )}
+      </Panel>
+    </Page>
   );
 }

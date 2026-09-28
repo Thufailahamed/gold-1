@@ -4,6 +4,16 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import {
+  Page,
+  Hero,
+  TableCard,
+  TableSkeleton,
+  Pager,
+  EmptyBlock,
+  StatusPill,
+  controlClass,
+} from "@/components/ui";
 
 type Invoice = {
   id: string;
@@ -16,6 +26,7 @@ type Invoice = {
 };
 
 const STATUSES = ["PAID", "PARTIAL", "UNPAID", "VOID"];
+const fmt = (c: number) => (c / 100).toLocaleString("en-US");
 
 export default function SalesInvoicesPage() {
   const [search, setSearch] = useState("");
@@ -30,12 +41,23 @@ export default function SalesInvoicesPage() {
       ),
   });
 
+  const rows = list.data?.rows ?? [];
+  const total = list.data?.total ?? 0;
+  const value = rows.reduce((n, r) => n + (r.status === "VOID" ? 0 : r.total_cents), 0);
+
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Sales Invoices</h1>
-        <p className="text-sm text-stone-500">Completed counter sales</p>
-      </div>
+    <Page>
+      <Hero
+        kicker="Sales"
+        title="Sales invoices"
+        description="Completed counter sales — every line linked to a physical piece."
+        note="Credit balances sit on the customer ledger until fully settled."
+        stats={[
+          { label: "Invoices", value: total },
+          { label: "On this page", value: rows.length },
+          { label: "Page value", value: `${fmt(value)} LKR` },
+        ]}
+      />
       <div className="flex flex-wrap gap-2">
         <input
           placeholder="Search by number…"
@@ -44,51 +66,51 @@ export default function SalesInvoicesPage() {
             setSearch(e.target.value);
             setPage(1);
           }}
-          className="w-full max-w-sm rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-gold"
+          className={controlClass}
         />
-        <select value={fStatus} onChange={(e) => { setFStatus(e.target.value); setPage(1); }} className="rounded-md border border-stone-300 px-3 py-2 text-sm">
+        <select value={fStatus} onChange={(e) => { setFStatus(e.target.value); setPage(1); }} className={controlClass}>
           <option value="">All statuses</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
       </div>
-      {list.isLoading ? (
-        <div className="space-y-2">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="h-12 animate-pulse rounded-md bg-stone-200" />
-          ))}
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-          <table className="w-full text-sm">
+      <TableCard footer={<Pager page={page} onChange={setPage} pageSize={20} count={rows.length} total={total} unit="invoices" />}>
+        {list.isLoading ? (
+          <TableSkeleton rows={6} cols={5} />
+        ) : list.isError ? (
+          <EmptyBlock title="Failed to load" description="Check the API connection and retry." />
+        ) : rows.length === 0 ? (
+          <EmptyBlock title="No invoices" description="Counter sales appear here once posted." />
+        ) : (
+          <table className="g-table">
             <thead>
-              <tr className="border-b border-stone-200 text-left text-xs uppercase text-stone-500">
-                <th className="px-4 py-2">Number</th>
-                <th className="px-4 py-2">Customer</th>
-                <th className="px-4 py-2 text-right">Total</th>
-                <th className="px-4 py-2">Status</th>
-                <th className="px-4 py-2">Time</th>
+              <tr>
+                <th>Number</th>
+                <th>Customer</th>
+                <th className="!text-right">Total</th>
+                <th>Status</th>
+                <th>Time</th>
               </tr>
             </thead>
             <tbody>
-              {(list.data?.rows ?? []).map((r) => (
-                <tr key={r.id} className="border-b border-stone-100 last:border-0">
-                  <td className="px-4 py-2 font-mono">
-                    <Link href={`/sales/invoices/${r.id}`} className="hover:underline">
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td>
+                    <Link href={`/sales/invoices/${r.id}`} className="g-metric font-medium text-ink hover:text-gold-700">
                       {r.number}
                     </Link>
                   </td>
-                  <td className="px-4 py-2">{r.customer_name ?? "Walk-in"}</td>
-                  <td className="px-4 py-2 text-right">{(r.total_cents / 100).toLocaleString("en-US")}</td>
-                  <td className="px-4 py-2">{r.status}</td>
-                  <td className="px-4 py-2">{new Date(r.created_at).toLocaleString()}</td>
+                  <td>{r.customer_name ?? <span className="text-ink-4">Walk-in</span>}</td>
+                  <td className="!text-right num-tabular font-medium text-ink">{fmt(r.total_cents)}</td>
+                  <td><StatusPill status={r.status} /></td>
+                  <td className="whitespace-nowrap text-ink-3">{new Date(r.created_at).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      )}
-    </div>
+        )}
+      </TableCard>
+    </Page>
   );
 }

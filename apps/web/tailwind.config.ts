@@ -74,12 +74,17 @@ export default {
           "60%": { transform: "scale(1.12)" },
           "100%": { transform: "scale(1)" },
         },
+        "slide-in": {
+          from: { transform: "translateX(24px)", opacity: "0" },
+          to: { transform: "translateX(0)", opacity: "1" },
+        },
       },
       animation: {
         "fade-in": "fade-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both",
         "pulse-soft": "pulse-soft 1.6s ease-in-out infinite",
         shimmer: "shimmer 2s linear infinite",
         "cart-pop": "cart-pop 320ms cubic-bezier(0.16, 1, 0.3, 1) both",
+        "slide-in": "slide-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both",
       },
     },
   },

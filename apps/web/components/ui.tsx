@@ -1,7 +1,14 @@
 import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/cn";
-import { AlertCircleIcon, ArrowLeftIcon, ArrowRightIcon, CheckCircleIcon, InboxIcon } from "./icons";
+import {
+  AlertCircleIcon,
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  CheckCircleIcon,
+  InboxIcon,
+  XIcon,
+} from "./icons";
 
 type Maybe<T> = T | undefined;
 
@@ -761,6 +768,95 @@ export function Callout({
     </div>
   );
 }
+
+/* ---------------------------------------------------------------- Modal */
+
+/**
+ * Centered floating dialog with backdrop blur, kicker/title header and an
+ * optional Cancel/Confirm footer. Wrap plain content or a <form> in children.
+ */
+export function Modal({
+  title,
+  kicker,
+  onClose,
+  onSubmit,
+  submitLabel = "Save",
+  pending = false,
+  submitDisabled = false,
+  danger = false,
+  wide = false,
+  footer = true,
+  children,
+}: {
+  title: ReactNode;
+  kicker?: ReactNode;
+  onClose: () => void;
+  onSubmit?: () => void;
+  submitLabel?: Maybe<string>;
+  pending?: Maybe<boolean>;
+  submitDisabled?: Maybe<boolean>;
+  /** Confirm button turns rose for destructive actions. */
+  danger?: Maybe<boolean>;
+  wide?: Maybe<boolean>;
+  /** Set false to render your own footer buttons. */
+  footer?: Maybe<boolean>;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className={cn(
+          "g-floating max-h-[90vh] w-full animate-fade-in space-y-4 overflow-y-auto p-6 scrollbar-thin",
+          wide ? "max-w-2xl" : "max-w-md"
+        )}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            {kicker ? <div className="g-kicker">{kicker}</div> : null}
+            <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">{title}</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex size-8 items-center justify-center rounded-lg text-ink-4 transition-colors hover:bg-ink/5 hover:text-ink"
+          >
+            <XIcon size={16} />
+          </button>
+        </div>
+        {children}
+        {footer && onSubmit ? (
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="g-btn g-btn-secondary h-10 px-4 text-sm">
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={pending || submitDisabled}
+              className={cn(
+                "g-btn h-10 px-4 text-sm",
+                danger
+                  ? "bg-rose-700 text-paper hover:bg-rose-800"
+                  : "g-btn-primary"
+              )}
+            >
+              {pending ? "Saving…" : submitLabel}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- Misc */
 
 /** Inline "View all" style link for card headers. */
 export function CardLink({ href, children }: { href: string; children: ReactNode }) {
