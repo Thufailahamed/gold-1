@@ -148,6 +148,27 @@ day's board rate. See `gold-accounting.md`.
 `JE` and `GADJ` were added alongside the existing `PO, PINV, SINV, SRET, OG,
 MELT, MO`.
 
+## Cash and bank (migration `0018_cash_bank`)
+
+- `bank_accounts(id PK, name, bank_name?, account_number?, account_code UNIQUE FK chart_of_accounts, branch_id?, opening_balance_cents, opened_on?, is_active, created_at, created_by)` — one row per bank the shop uses.
+- `card_settlements(id PK, number UNIQUE, bank_account_id, settled_on, gross_cents, fee_cents, net_cents, acquirer_ref?, note?, journal_entry_id?, created_at, created_by)`.
+- `cash_transfers(id PK, number UNIQUE, from_branch_id, to_branch_id, amount_cents, sent_on, received_on?, status IN_TRANSIT|COMPLETE, reason, from_entry_id?, to_entry_id?, created_at, created_by)`.
+- `bank_reconciliations(id PK, bank_account_id, statement_date, statement_balance_cents, ledger_balance_cents, difference_cents, note?, created_at, created_by)`.
+- Indexes on `card_settlements(bank_account_id, settled_on)`, `cash_transfers(status, sent_on)`, `bank_reconciliations(bank_account_id, statement_date DESC)`.
+- Counters `SETL` and `XFER` added.
+
+**Account-code allocation.** The first bank account adopts the existing `1010
+Bank` system account, so a shop that has only ever had one bank does not get a
+second account it never asked for. Each later account takes the **lowest unused
+code in 1011-1099**, minus `1020` (Card Clearing), and is created with
+`is_system = 0` so the chart's system-account guard still applies to it. When
+the range is exhausted the request fails with `VALIDATION` rather than
+inventing a code outside the asset block.
+
+**A transfer is never cancelled.** One that turns out to be wrong is a second,
+opposite transfer, per the append-only rule. `cash_transfers` therefore has no
+`VOID` status.
+
 ## Later-phase reservations (not yet created)
 
 - Gold ledger: gross/stone/net weight, purity, karat, fine-gold equiv, rate,

@@ -62,6 +62,18 @@ Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 | POST | /inventory/movements | products:edit | IN_STOCK→TRANSFER_PENDING/RETURNED/LOST/VOID; locked → 409 |
 | GET | /inventory/movements | products:view | filterable by productId, branchId, type |
 | GET | /inventory/stock?groupBy= | products:view | branch/purity/product totals (mg + value at current rates) |
+| GET | /bank-accounts | accounts:view | each with its ledger balance; optional ?branchId= |
+| POST | /bank-accounts | accounts:manage | allocates the account code and creates the ledger account and the registration together |
+| PATCH | /bank-accounts/:id | accounts:manage | rename, deactivate |
+| POST | /bank-accounts/:id/opening | accounts:manage | {amountCents, reason, entryDate?}; DR bank / CR 3100; 409 if already opened |
+| POST | /bank-accounts/:id/reconcile | accounts:view | {statementDate, statementBalanceCents, note?}; records the statement and returns ledger balance, difference and the uncleared list |
+| POST | /cash/deposits | accounts:manage | {branchId, bankAccountId, amountCents, note?, entryDate?}; DR bank / CR 1000 |
+| POST | /cash/withdrawals | accounts:manage | same shape; DR 1000 / CR bank |
+| GET | /cash/transfers | accounts:view | ?status&branchId |
+| POST | /cash/transfers | accounts:manage | dispatch; {fromBranchId, toBranchId, amountCents, sentOn?, reason} |
+| POST | /cash/transfers/:id/receive | accounts:manage | {receivedOn?, note?} |
+| GET | /card-settlements | accounts:view | paginated; ?bankAccountId= |
+| POST | /card-settlements | accounts:manage | {bankAccountId, grossCents, feeCents?, settledOn?, acquirerRef?, note?}; DR bank net / CR 1020 gross / CR 6060 fee |
 | GET | /accounts | accounts:view | 24 accounts + balance_cents, entry_count, is_system, is_editable; optional ?branchId= |
 | POST | /accounts | accounts:manage | create account; code /\d{4}/, unique, is_system=0 |
 | PATCH | /accounts/:code | accounts:manage | rename/describe; refuses system accounts and any account with journal lines |
@@ -85,7 +97,7 @@ Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 | POST | /purchases/invoices | purchases:create | direct intake, same atomic flow |
 | GET | /purchases/invoices | purchases:view | filters supplier, branch, status, date range |
 | GET | /purchases/invoices/:id | purchases:view | items + payments + journal |
-| POST | /purchases/invoices/:id/payments | purchases:edit | amount ≤ outstanding, cash/bank |
+| POST | /purchases/invoices/:id/payments | purchases:edit | {amountLkr, bankAccountId}; amount ≤ outstanding. `bankAccountId` replaces the old `method: cash\|bank` — a payment names the account it left, so a shop with two banks can reconcile them separately |
 | PATCH | /purchases/invoices/:id/void | purchases:cancel | IN_STOCK items only + reversal + reason |
 | GET | /purchases/reports/summary | purchases:view | ?period=today\|month\|all |
 | GET | /purchases/reports/breakdown | purchases:view | ?groupBy=supplier\|purity\|category |

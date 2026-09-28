@@ -65,6 +65,55 @@ Voiding a purchase that already has payments against it is refused: a void
 reverses the receive only, so the payment would survive as a genuine payable
 and the money would silently disappear from the inventory side.
 
+## Cash and bank
+
+Cash needs no table of its own: one `1000` per branch is already what the
+ledger models, because every entry carries `branch_id`. Bank accounts do need
+one, because a shop with two banks has to be able to reconcile them separately.
+
+| Flow | Posting |
+|---|---|
+| Bank opening balance | `DR <account> / CR 3100` |
+| Cash deposit | `DR <account> / CR 1000` |
+| Cash withdrawal | `DR 1000 / CR <account>` |
+| Branch transfer — sent | `CR 1000` at the **from** branch |
+| Branch transfer — received | `DR 1000` at the **to** branch |
+| Card settlement | `DR <account> net / CR 1020 gross / CR 6060 fee` |
+| Supplier payment | `CR <the named bank account>` |
+
+A payment names a registered bank account rather than picking `1000` or `1010`
+by a free-text method, and the resolved account code is stored on the payment
+so the historical record still says where the money went.
+
+### A transfer is two entries
+
+A journal entry has exactly one `branch_id`. Attributing a cross-branch
+movement to either branch would make the other branch's cash wrong by the full
+amount, so dispatch and receipt are separate entries linked by
+`cash_transfers`. Between them the money is explicitly `IN_TRANSIT` rather than
+silently missing from both branches. Dispatch and receipt are separate
+endpoints because in reality they happen at different times in different
+places.
+
+### Card settlement
+
+The gross the shop took is not the net the acquirer pays. `1020` falls by the
+**full gross**, the bank rises by only the **net**, and the difference the
+acquirer withheld is booked to **6060 Bank & Card Charges** — not absorbed.
+Losing that fee is how a shop quietly under-makes on card turnover. Whatever
+is left in `1020` at close is what the acquirer still owes, which is the whole
+point of clearing through `1020` rather than booking card sales straight to
+bank.
+
+### Bank reconciliation
+
+Recording a statement balance shows the difference and the entries after the
+statement date. It does not fix anything: a correcting entry is a manual
+adjustment under `accounts:manage`, the rule that already applies to
+corrections. There is no statement import and no auto-matching — a shop
+turning over LKR 30,000 a day reconciles by eye faster than it configures a
+parser.
+
 ## Book cost chain
 
 Gold inventory is carried at **what the shop actually paid**, never at the day's
@@ -118,9 +167,9 @@ Gold direction is read from the ledger row: a `destination` of
 Summing every row instead would count a sale and a loss as stock still on the
 shelf.
 
-`GET /accounts/reconciliation` runs 15 checks: per-entry balance, trial balance,
-and cross-foots for sales, purchases, payments, party ledgers, each gold
-movement type, and cumulative stock on hand. A failing check is a `200` with
+`GET /accounts/reconciliation` runs 17 checks: per-entry balance, trial balance,
+and cross-foots for sales, purchases, payments, party ledgers, card clearing,
+cash in transit, each gold movement type, and cumulative stock on hand. A failing check is a `200` with
 `passed: false` and the offending figures, not an error — the caller needs the
 whole report to show the operator what is out.
 
