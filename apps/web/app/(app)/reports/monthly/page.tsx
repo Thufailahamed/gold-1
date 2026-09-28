@@ -147,7 +147,11 @@ export default function MonthlyPage() {
         </Panel>
       ) : null}
       {!r ? (
-        <EmptyBlock title="Loading" description="Fetching the monthly report." />
+        report.isError ? (
+          <EmptyBlock title="Report unavailable" description={report.error instanceof Error ? report.error.message : "Could not load this report."} />
+        ) : (
+          <EmptyBlock title="Loading" description="Fetching the monthly report." />
+        )
       ) : (
         <>
           <Panel title="Sales" icon={<StoreIcon size={17} />} description={`Invoices: ${r.sales.invoiceCount}`}>
