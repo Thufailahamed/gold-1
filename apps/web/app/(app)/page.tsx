@@ -30,6 +30,7 @@ const CARDS = [
   { title: "Today's Sales", value: null as string | null, hint: "Live from sales invoices", icon: BanknoteIcon },
   { title: "Today's Purchases", value: null as string | null, hint: "Live from purchase invoices", icon: TruckIcon },
   { title: "Gold Purchased", value: null as string | null, hint: "Live from old gold", icon: ScaleIcon },
+  { title: "Gold in Manufacturing", value: null as string | null, hint: "Live WIP fine gold", icon: PackageIcon },
   { title: "Gold Sold", value: null as string | null, hint: "Live from sales", icon: CoinsIcon },
   { title: "Cash", value: "LKR 0", hint: "Cash module not connected yet", icon: BanknoteIcon },
   { title: "Inventory", value: "0", hint: "Pieces on hand", icon: ArchiveIcon },
@@ -70,6 +71,11 @@ export default function DashboardPage() {
     queryFn: () => api<{ fine_mg: number }>(`/api/v1/oldgold/reports/summary?period=today`),
     retry: false,
   });
+  const mfgWip = useQuery({
+    queryKey: ["dash-mfg-wip"],
+    queryFn: () => api<{ allocatedMg: number }[]>(`/api/v1/manufacturing/reports/wip`),
+    retry: false,
+  });
 
   function cardValue(title: string, fallback: string | null): string {
     if (title === "Today's Purchases")
@@ -84,6 +90,8 @@ export default function DashboardPage() {
       return todaySales.data ? `${(todaySales.data.gold_mg / 1000).toLocaleString("en-US")} g` : "—";
     if (title === "Gold Purchased")
       return todayOldGold.data ? `${(todayOldGold.data.fine_mg / 1000).toLocaleString("en-US")} g` : "—";
+    if (title === "Gold in Manufacturing")
+      return mfgWip.data ? `${(mfgWip.data.reduce((s, w) => s + w.allocatedMg, 0) / 1000).toLocaleString("en-US")} g` : "—";
     return fallback ?? "—";
   }
 

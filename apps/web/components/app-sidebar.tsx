@@ -97,6 +97,14 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: "Manufacturing",
+    tag: "Workshop",
+    items: [
+      { href: "/manufacturing/orders", label: "Orders", icon: PackageIcon, perm: "mfg:view" },
+      { href: "/manufacturing/reports", label: "Reports", icon: TrendingUpIcon, perm: "mfg:view" },
+    ],
+  },
+  {
     title: "Old Gold",
     tag: "Counter",
     items: [
