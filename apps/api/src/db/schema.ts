@@ -674,3 +674,27 @@ export const monthSnapshots = sqliteTable("month_snapshots", {
   createdBy: text("created_by"),
   createdAt: integer("created_at").notNull(),
 });
+
+export const stockCounts = sqliteTable("stock_counts", {
+  id: text("id").primaryKey(),
+  branchId: text("branch_id").notNull(),
+  scope: text("scope").notNull(),
+  scopeRef: text("scope_ref"),
+  status: text("status").notNull().default("OPEN"),
+  expectedJson: text("expected_json").notNull(),
+  resultJson: text("result_json"),
+  openedBy: text("opened_by"),
+  closedBy: text("closed_by"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const countScans = sqliteTable("count_scans", {
+  id: text("id").primaryKey(),
+  countId: text("count_id").notNull(),
+  barcode: text("barcode").notNull(),
+  productId: text("product_id"),
+  flag: text("flag").notNull().default("OK"),
+  scannedBy: text("scanned_by"),
+  scannedAt: integer("scanned_at").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
