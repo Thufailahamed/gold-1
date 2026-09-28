@@ -62,29 +62,14 @@ async function allocatedFine(db: D1Database, orderId: string): Promise<number> {
   return row?.t ?? 0;
 }
 
-async function lotRemaining(db: D1Database, lotBatchId: string, lotNumber: string): Promise<{ fineMg: number; branchId: string }> {
-  const lot = await db
-    .prepare("SELECT o.fine_mg, b.branch_id, b.status FROM melting_outputs o JOIN melting_batches b ON b.id = o.batch_id WHERE o.batch_id = ? AND o.lot_number = ?")
-    .bind(lotBatchId, lotNumber)
-    .first<{ fine_mg: number; branch_id: string; status: string }>();
-  if (!lot) throw Object.assign(new Error(`Lot not found: ${lotNumber}`), { code: "NOT_FOUND" });
-  if (lot.status !== "APPROVED")
-    throw Object.assign(new Error(`Lot not from an approved batch: ${lotNumber}`), { code: "VALIDATION" });
-  const used = await db
-    .prepare("SELECT COALESCE(SUM(m.fine_mg), 0) AS t FROM manufacturing_materials m JOIN manufacturing_orders o ON o.id = m.order_id WHERE m.lot_batch_id = ? AND m.lot_number = ? AND o.status != 'VOID'")
-    .bind(lotBatchId, lotNumber)
-    .first<{ t: number }>();
-  return { fineMg: lot.fine_mg - (used?.t ?? 0), branchId: lot.branch_id };
-}
-
 export async function createOrder(
   db: D1Database,
   input: CreateMfgOrderInput,
   actorId: string
 ): Promise<{ id: string; number: string }> {
-  if (input.type === "CUSTOMER" && !input.customerId)
-    throw Object.assign(new Error("Customer required for customer orders"), { code: "VALIDATION" });
-  if (input.customerId) {
+  if (input.type === "CUSTOMER") {
+    if (!input.customerId)
+      throw Object.assign(new Error("Customer required for customer orders"), { code: "VALIDATION" });
     const c = await db
       .prepare("SELECT id FROM customers WHERE id = ? AND is_active = 1")
       .bind(input.customerId)
@@ -126,11 +111,22 @@ export async function addMaterials(
   for (const lot of lots) {
     if (lot.fineMg <= 0)
       throw Object.assign(new Error("Allocation must be positive"), { code: "VALIDATION" });
-    const rem = await lotRemaining(db, lot.lotBatchId, lot.lotNumber);
-    if (rem.branchId !== order.branch_id)
+    const found = await db
+      .prepare("SELECT o.fine_mg, b.branch_id, b.status FROM melting_outputs o JOIN melting_batches b ON b.id = o.batch_id WHERE o.batch_id = ? AND o.lot_number = ?")
+      .bind(lot.lotBatchId, lot.lotNumber)
+      .first<{ fine_mg: number; branch_id: string; status: string }>();
+    if (!found) throw Object.assign(new Error(`Lot not found: ${lot.lotNumber}`), { code: "NOT_FOUND" });
+    if (found.status !== "APPROVED")
+      throw Object.assign(new Error(`Lot not from an approved batch: ${lot.lotNumber}`), { code: "VALIDATION" });
+    if (found.branch_id !== order.branch_id)
       throw Object.assign(new Error(`Lot not in order branch: ${lot.lotNumber}`), { code: "VALIDATION" });
-    if (lot.fineMg > rem.fineMg)
-      throw Object.assign(new Error(`Lot short: ${rem.fineMg}mg available for ${lot.lotNumber}`), { code: "CONFLICT" });
+    const used = await db
+      .prepare("SELECT COALESCE(SUM(m.fine_mg), 0) AS t FROM manufacturing_materials m JOIN manufacturing_orders o ON o.id = m.order_id WHERE m.lot_batch_id = ? AND m.lot_number = ? AND o.status != 'VOID'")
+      .bind(lot.lotBatchId, lot.lotNumber)
+      .first<{ t: number }>();
+    const remaining = found.fine_mg - (used?.t ?? 0);
+    if (lot.fineMg > remaining)
+      throw Object.assign(new Error(`Lot short: ${remaining}mg available for ${lot.lotNumber}`), { code: "CONFLICT" });
     stmts.push(
       db
         .prepare("INSERT INTO manufacturing_materials (id, order_id, lot_batch_id, lot_number, fine_mg) VALUES (?, ?, ?, ?, ?)")
@@ -269,21 +265,24 @@ export async function finishOrder(
   const barcodes: string[] = [];
 
   const goldValues = new Map<string, number>();
+  const outFine = new Map<string, { fineMg: number; permille: number }>();
   for (const o of outputs) {
     const rate = byPurity.get(o.purity_id);
     if (rate === undefined)
       throw Object.assign(new Error("No board rate for output purity"), { code: "VALIDATION" });
-    const out = await db
+    const pur = await db
       .prepare("SELECT permille FROM purities WHERE id = ?")
       .bind(o.purity_id)
       .first<{ permille: number }>();
-    if (!out) throw Object.assign(new Error("Purity not found"), { code: "NOT_FOUND" });
-    goldValues.set(o.id, Math.round((fineGoldMg(o.net_mg, out.permille) * rate) / 1000));
+    if (!pur) throw Object.assign(new Error("Purity not found"), { code: "NOT_FOUND" });
+    const fineMg = fineGoldMg(o.net_mg, pur.permille);
+    goldValues.set(o.id, Math.round((fineMg * rate) / 1000));
+    outFine.set(o.id, { fineMg, permille: pur.permille });
   }
   const extras = order.labour_cents + order.making_cents + order.stone_cost_cents;
   const weights = outputs.map((o) => o.net_mg);
-  const totalFine = weights.reduce((s, v) => s + v, 0);
-  const shares = weights.map((f) => Math.floor((extras * f) / Math.max(totalFine, 1)));
+  const totalW = weights.reduce((s, v) => s + v, 0);
+  const shares = weights.map((f) => Math.floor((extras * f) / Math.max(totalW, 1)));
 
   for (let i = 0; i < outputs.length; i++) {
     const o = outputs[i]!;
@@ -315,6 +314,12 @@ export async function finishOrder(
     );
     productIds.push(built.id);
     barcodes.push(built.barcode);
+    const spec = outFine.get(o.id)!;
+    stmts.push(
+      db
+        .prepare("INSERT INTO gold_ledger (id, occurred_at, branch_id, source, destination, type, weight_mg, permille, fine_mg, ref_entity, ref_id, product_id, old_gold_id, user_id, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, 'MANUFACTURING_OUTPUT', ?, ?, ?, 'manufacturing_order', ?, ?, NULL, ?, ?, ?, ?)")
+        .bind(crypto.randomUUID(), now, order.branch_id, `manufacturing:${orderId}`, `branch:${order.branch_id}`, o.net_mg, spec.permille, spec.fineMg, orderId, built.id, actorId, null, now, actorId)
+    );
   }
   for (const m of mats ?? []) {
     const lot = await db
@@ -328,18 +333,6 @@ export async function finishOrder(
         .bind(crypto.randomUUID(), now, order.branch_id, `melting-lot:${m.lot_number}`, `manufacturing:${orderId}`, lot.weight_mg, lot.permille, m.fine_mg, orderId, actorId, null, now, actorId)
     );
   }
-  for (const pid of productIds) {
-    const p = await db
-      .prepare("SELECT p.net_mg, p.fine_gold_mg, pu.permille FROM products p JOIN purities pu ON pu.id = p.purity_id WHERE p.id = ?")
-      .bind(pid)
-      .first<{ net_mg: number; fine_gold_mg: number; permille: number }>();
-    if (!p) throw new Error("Finished product missing");
-    stmts.push(
-      db
-        .prepare("INSERT INTO gold_ledger (id, occurred_at, branch_id, source, destination, type, weight_mg, permille, fine_mg, ref_entity, ref_id, product_id, old_gold_id, user_id, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, 'MANUFACTURING_OUTPUT', ?, ?, ?, 'manufacturing_order', ?, ?, NULL, ?, ?, ?, ?)")
-        .bind(crypto.randomUUID(), now, order.branch_id, `manufacturing:${orderId}`, `branch:${order.branch_id}`, p.net_mg, p.permille, p.fine_gold_mg, orderId, pid, actorId, null, now, actorId)
-    );
-  }
   if (order.loss_mg > 0) {
     const firstPur = await db
       .prepare("SELECT pu.permille FROM manufacturing_outputs mo JOIN purities pu ON pu.id = mo.purity_id WHERE mo.order_id = ? LIMIT 1")
@@ -347,7 +340,7 @@ export async function finishOrder(
       .first<{ permille: number }>();
     stmts.push(
       db
-        .prepare(        "INSERT INTO gold_ledger (id, occurred_at, branch_id, source, destination, type, weight_mg, permille, fine_mg, ref_entity, ref_id, product_id, old_gold_id, user_id, notes, created_at, created_by) VALUES (?, ?, ?, ?, 'loss', 'LOSS', ?, ?, ?, 'manufacturing_order', ?, NULL, NULL, ?, ?, ?, ?)")
+        .prepare("INSERT INTO gold_ledger (id, occurred_at, branch_id, source, destination, type, weight_mg, permille, fine_mg, ref_entity, ref_id, product_id, old_gold_id, user_id, notes, created_at, created_by) VALUES (?, ?, ?, ?, 'loss', 'LOSS', ?, ?, ?, 'manufacturing_order', ?, NULL, NULL, ?, ?, ?, ?)")
         .bind(crypto.randomUUID(), now, order.branch_id, `manufacturing:${orderId}`, order.loss_mg, firstPur?.permille ?? 0, order.loss_mg, orderId, actorId, null, now, actorId)
     );
   }
@@ -483,6 +476,6 @@ export async function wipList(db: D1Database, branchId?: string) {
       `SELECT o.id, o.number, o.status, o.branch_id, COALESCE(SUM(m.fine_mg), 0) AS allocatedMg, COUNT(DISTINCT mo.id) AS outputs FROM manufacturing_orders o LEFT JOIN manufacturing_materials m ON m.order_id = o.id LEFT JOIN manufacturing_outputs mo ON mo.order_id = o.id WHERE o.status IN ('ALLOCATED', 'IN_PRODUCTION', 'QC_PASSED', 'QC_FAILED') ${cond} GROUP BY o.id ORDER BY o.created_at DESC`
     )
     .bind(...vals)
-    .all();
+    .all<{ id: string; number: string; status: string; branch_id: string; allocatedMg: number; outputs: number }>();
   return results ?? [];
 }
