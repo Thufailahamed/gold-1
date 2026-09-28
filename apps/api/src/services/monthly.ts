@@ -1,4 +1,14 @@
-import { cashflowClose, goldClose, KNOWN_CASH_REFS, monthBounds, monthlyPnl } from "@goldos/shared";
+import { agingBuckets, cashflowClose, goldClose, KNOWN_CASH_REFS, monthBounds, monthlyPnl } from "@goldos/shared";
+
+export type AgingBuckets = { "0-30": number; "31-60": number; "61-90": number; "90+": number };
+
+export type PartyAging = {
+  lines: { partyId: string; name: string; balanceCents: number }[];
+  aging: AgingBuckets;
+  outstanding: { id: string; number: string; date: string; totalCents: number; outstandingCents: number }[];
+  totalCents: number;
+  hasData: boolean;
+};
 
 export type MonthlyReport = {
   meta: { from: string; to: string; month: string; branchId: string | null };
@@ -8,6 +18,8 @@ export type MonthlyReport = {
   profit: { revenueCents: number; cogsCents: number; grossProfitCents: number; operatingExpensesCents: number; netProfitCents: number; basis: "ledger-posted-only" };
   gold: { openingFineMg: number; inFineMg: number; outFineMg: number; closingFineMg: number; hasData: boolean };
   cashflow: { openingCents: number; inflowsCents: number; outflowsCents: number; closingCents: number; unclassifiedCents: number; hasData: boolean };
+  receivables: PartyAging;
+  payables: PartyAging;
   estimates: { kind: "estimate"; label: string; note: string }[];
   warnings: string[];
 };
@@ -105,6 +117,47 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
   ).bind(from, to, ...cashBv, ...knownCash).first<{ n: number }>();
   const unclassifiedCents = unRow?.n ?? 0;
   if (unclassifiedCents !== 0) warnings.push(`Unclassified cash ${unclassifiedCents}c blocks snapshot`);
+  const bEq = opts.branchId ? " AND e.branch_id = ?" : "";
+  const bEqv: unknown[] = opts.branchId ? [opts.branchId] : [];
+  // Balances as of `to`: every 1200/2000 line on or before month-end, opening
+  // entries included (they are journal lines too — never a separate column).
+  const custBal = await db.prepare(
+    `SELECT l.party_id AS partyId, COALESCE(SUM(l.debit_cents - l.credit_cents),0) AS balance FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id WHERE l.account_code = '1200' AND l.party_type = 'customer' AND e.entry_date <= ? AND e.status = 'POSTED'${bEq} GROUP BY l.party_id`
+  ).bind(to, ...bEqv).all<{ partyId: string; balance: number }>();
+  const custNames = new Map<string, string>();
+  for (const row of custBal.results ?? []) {
+    const c = await db.prepare("SELECT name FROM customers WHERE id = ?").bind(row.partyId).first<{ name: string }>();
+    custNames.set(row.partyId, c?.name ?? row.partyId);
+  }
+  // Outstanding as of `to`: invoice totals minus payments received on/before
+  // `to` (payment created_at business day). Live status column ignored.
+  const siB2 = opts.branchId ? " AND si.branch_id = ?" : "";
+  const siB2v: unknown[] = opts.branchId ? [opts.branchId] : [];
+  const { results: sinvs } = await db.prepare(
+    `SELECT si.id, si.number, si.total_cents, date(si.created_at/1000,'unixepoch','+330 minutes') AS d,
+            COALESCE((SELECT SUM(sp.amount_cents) FROM sales_payments sp WHERE sp.invoice_id = si.id AND sp.method <> 'credit' AND date(sp.created_at/1000,'unixepoch','+330 minutes') <= ?), 0) AS paid
+     FROM sales_invoices si WHERE si.status <> 'VOID' AND date(si.created_at/1000,'unixepoch','+330 minutes') <= ?${siB2}`
+  ).bind(to, to, ...siB2v).all<{ id: string; number: string; total_cents: number; d: string; paid: number }>();
+  const receivablesOut = (sinvs ?? []).map((r) => ({ id: r.id, number: r.number, date: r.d, totalCents: r.total_cents, outstandingCents: r.total_cents - r.paid })).filter((r) => r.outstandingCents > 0);
+  const receivablesAging = agingBuckets(to, receivablesOut.map((r) => ({ id: r.id, date: r.date, outstandingCents: r.outstandingCents })));
+  // Suppliers mirror: credit-positive (we owe = credit on 2000).
+  const supBal = await db.prepare(
+    `SELECT l.party_id AS partyId, COALESCE(SUM(l.credit_cents - l.debit_cents),0) AS balance FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id WHERE l.account_code = '2000' AND l.party_type = 'supplier' AND e.entry_date <= ? AND e.status = 'POSTED'${bEq} GROUP BY l.party_id`
+  ).bind(to, ...bEqv).all<{ partyId: string; balance: number }>();
+  const supNames = new Map<string, string>();
+  for (const row of supBal.results ?? []) {
+    const s = await db.prepare("SELECT name FROM suppliers WHERE id = ?").bind(row.partyId).first<{ name: string }>();
+    supNames.set(row.partyId, s?.name ?? row.partyId);
+  }
+  const piB = opts.branchId ? " AND pi.branch_id = ?" : "";
+  const piBv: unknown[] = opts.branchId ? [opts.branchId] : [];
+  const { results: pinvs } = await db.prepare(
+    `SELECT pi.id, pi.number, pi.total_cents, date(pi.created_at/1000,'unixepoch','+330 minutes') AS d,
+            COALESCE((SELECT SUM(pp.amount_cents) FROM purchase_payments pp WHERE pp.invoice_id = pi.id AND date(pp.created_at/1000,'unixepoch','+330 minutes') <= ?), 0) AS paid
+     FROM purchase_invoices pi WHERE pi.status <> 'VOID' AND date(pi.created_at/1000,'unixepoch','+330 minutes') <= ?${piB}`
+  ).bind(to, to, ...piBv).all<{ id: string; number: string; total_cents: number; d: string; paid: number }>();
+  const payablesOut = (pinvs ?? []).map((r) => ({ id: r.id, number: r.number, date: r.d, totalCents: r.total_cents, outstandingCents: r.total_cents - r.paid })).filter((r) => r.outstandingCents > 0);
+  const payablesAging = agingBuckets(to, payablesOut.map((r) => ({ id: r.id, date: r.date, outstandingCents: r.outstandingCents })));
   return {
     meta: { from, to, month: label, branchId: opts.branchId ?? null },
     sales: { totalCents: grossCents, invoiceCount: grossRow?.c ?? 0, grossCents, returnsCents, netCents: revenueCents, hasData: (grossRow?.c ?? 0) > 0 },
@@ -113,6 +166,8 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
     profit: { revenueCents, cogsCents, grossProfitCents, operatingExpensesCents: opexCents, netProfitCents, basis: "ledger-posted-only" },
     gold: { openingFineMg, inFineMg: gIn, outFineMg: gOut, closingFineMg, hasData: gIn !== 0 || gOut !== 0 || openingFineMg !== 0 },
     cashflow: { openingCents, inflowsCents, outflowsCents, closingCents, unclassifiedCents, hasData: inflowsCents !== 0 || outflowsCents !== 0 || openingCents !== 0 },
+    receivables: { lines: (custBal.results ?? []).map((r) => ({ partyId: r.partyId, name: custNames.get(r.partyId) ?? r.partyId, balanceCents: r.balance })), aging: receivablesAging, outstanding: receivablesOut, totalCents: (custBal.results ?? []).reduce((s, r) => s + r.balance, 0), hasData: receivablesOut.length > 0 },
+    payables: { lines: (supBal.results ?? []).map((r) => ({ partyId: r.partyId, name: supNames.get(r.partyId) ?? r.partyId, balanceCents: r.balance })), aging: payablesAging, outstanding: payablesOut, totalCents: (supBal.results ?? []).reduce((s, r) => s + r.balance, 0), hasData: payablesOut.length > 0 },
     estimates: [{ kind: "estimate", label: "Board-rate memo", note: "Weight x current rate is a memo only — not in profit or stock value" }],
     warnings,
   };
