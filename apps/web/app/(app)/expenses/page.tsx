@@ -13,9 +13,18 @@ import {
   StatusPill,
   TableCard,
   TableSkeleton,
+  Tabs,
   controlClass,
+  heroBtnPrimary,
 } from "@/components/ui";
-import { PlusIcon } from "@/components/icons";
+import {
+  BanknoteIcon,
+  CheckCircleIcon,
+  HistoryIcon,
+  LayoutGridIcon,
+  PlusIcon,
+  XIcon,
+} from "@/components/icons";
 import { api, type MeData } from "@/lib/api";
 
 type Category = {
@@ -132,7 +141,7 @@ export default function ExpensesPage() {
         description="Every expense posts itself to its category's ledger account"
         actions={
           canManage ? (
-            <button type="button" onClick={() => setOpen(true)} className="g-btn g-btn-primary h-10 px-4 text-sm">
+            <button type="button" onClick={() => setOpen(true)} className={heroBtnPrimary}>
               <PlusIcon size={15} />
               Record expense
             </button>
@@ -147,23 +156,29 @@ export default function ExpensesPage() {
       />
 
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value);
-              setPage(1);
-            }}
-            className={controlClass}
-          >
-            <option value="">All statuses</option>
-            <option value="POSTED">Posted</option>
-            <option value="PENDING_APPROVAL">Awaiting approval</option>
-            <option value="REJECTED">Rejected</option>
-          </select>
-        </div>
+        <Tabs
+          ariaLabel="Expense status"
+          value={status}
+          onChange={(k) => {
+            setStatus(k);
+            setPage(1);
+          }}
+          items={[
+            { key: "", label: "All", icon: <LayoutGridIcon size={14} /> },
+            { key: "POSTED", label: "Posted", icon: <CheckCircleIcon size={14} /> },
+            { key: "PENDING_APPROVAL", label: "Awaiting approval", icon: <HistoryIcon size={14} /> },
+            { key: "REJECTED", label: "Rejected", icon: <XIcon size={14} /> },
+          ]}
+        />
 
         <TableCard
+          title="Expense register"
+          icon={<BanknoteIcon size={17} />}
+          actions={
+            <span className="g-metric text-[11px] font-medium uppercase tracking-[0.14em] text-ink-4">
+              {String(list.data?.total ?? 0).padStart(2, "0")} on file
+            </span>
+          }
           footer={
             <Pager
               page={page}

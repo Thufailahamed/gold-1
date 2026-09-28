@@ -3,10 +3,35 @@
 import { useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { hasPermission } from "@goldos/shared";
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { api, type MeData } from "@/lib/api";
 import { last12Months, type MonthlySummary } from "@/lib/monthly";
-import { Page, Hero, StatGrid, StatCard, Panel, Pill, EmptyBlock } from "@/components/ui";
+import { Page, Hero, StatGrid, StatCard, Panel, Pill, EmptyBlock, Toolbar, controlClass } from "@/components/ui";
+import {
+  AlertCircleIcon,
+  BanknoteIcon,
+  GemIcon,
+  PackageIcon,
+  TrendingUpIcon,
+  UsersIcon,
+} from "@/components/icons";
+
+/* Theme palette for charts — gold first, then the stone ramp. */
+const CHART = {
+  gold: "#C9A227",
+  goldDark: "#A8861B",
+  ink: "#1C1917",
+  stone: "#78716C",
+  mist: "#D6D3D1",
+  grid: "rgba(28,25,23,0.08)",
+};
+const PIE_COLORS = ["#C9A227", "#A8861B", "#E7C65A", "#78716C", "#A8A29E", "#D6D3D1"];
+const tooltipStyle = {
+  borderRadius: 10,
+  border: "1px solid rgba(28,25,23,0.12)",
+  background: "#FFFFFF",
+  fontSize: 12,
+};
 
 const lkr = (c: number) => (c / 100).toLocaleString("en-US");
 
@@ -70,80 +95,84 @@ export default function AnalyticsPage() {
         ]}
         note={missing > 0 ? `${missing} of 12 months unavailable — gaps shown, never interpolated` : "Ledger-posted · estimates separate"}
       />
-      <div className="no-print flex flex-wrap items-center gap-2">
-        <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="g-btn h-9 px-3 text-xs" aria-label="Branch">
+      <Toolbar className="no-print" actions={<Pill tone="neutral" dot>Ledger-posted</Pill>}>
+        <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={controlClass} aria-label="Branch">
           <option value="">All branches</option>
           {(branches.data?.rows ?? []).map((b) => (
             <option key={b.id} value={b.id}>{b.name}</option>
           ))}
         </select>
-        <Pill tone="ghost">Ledger</Pill>
-      </div>
+      </Toolbar>
       {trends.every((t) => !t.data) && trends.every((t) => !t.isLoading) ? (
         <EmptyBlock title="No data yet" description="Post sales or purchases to see trends." />
       ) : (
         <>
           <div className="grid gap-4 lg:grid-cols-2">
-            <Panel title="Revenue vs net profit" description="LKR · 12 months">
+            <Panel title="Revenue vs net profit" icon={<TrendingUpIcon size={17} />} description="LKR · 12 months">
               <ResponsiveContainer width="100%" height={260}>
                 <LineChart data={revenue}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+                  <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#78716C" }} />
+                  <YAxis tick={{ fontSize: 10, fill: "#78716C" }} />
+                  <Tooltip contentStyle={tooltipStyle} />
                   <Legend />
-                  <Line type="monotone" dataKey="revenue" connectNulls={false} dot={false} />
-                  <Line type="monotone" dataKey="net" connectNulls={false} dot={false} />
+                  <Line type="monotone" dataKey="revenue" stroke={CHART.gold} strokeWidth={2} connectNulls={false} dot={false} />
+                  <Line type="monotone" dataKey="net" stroke={CHART.ink} strokeWidth={2} connectNulls={false} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </Panel>
-            <Panel title="Cash in vs out" description="LKR · 12 months">
+            <Panel title="Cash in vs out" icon={<BanknoteIcon size={17} />} description="LKR · 12 months">
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={cash}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+                  <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#78716C" }} />
+                  <YAxis tick={{ fontSize: 10, fill: "#78716C" }} />
+                  <Tooltip contentStyle={tooltipStyle} />
                   <Legend />
-                  <Bar dataKey="in" />
-                  <Bar dataKey="out" />
+                  <Bar dataKey="in" fill={CHART.gold} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="out" fill={CHART.ink} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </Panel>
-            <Panel title="Gold in vs out" description="grams · 12 months">
+            <Panel title="Gold in vs out" icon={<GemIcon size={17} />} description="grams · 12 months">
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={gold}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+                  <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#78716C" }} />
+                  <YAxis tick={{ fontSize: 10, fill: "#78716C" }} />
+                  <Tooltip contentStyle={tooltipStyle} />
                   <Legend />
-                  <Bar dataKey="in" />
-                  <Bar dataKey="out" />
+                  <Bar dataKey="in" fill={CHART.goldDark} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="out" fill={CHART.stone} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </Panel>
-            <Panel title="Inventory by purity" description="Book cost LKR">
+            <Panel title="Inventory by purity" icon={<PackageIcon size={17} />} description="Book cost LKR">
               <ResponsiveContainer width="100%" height={260}>
                 <PieChart>
-                  <Pie data={purity} dataKey="value" nameKey="name" outerRadius={90} label />
-                  <Tooltip />
+                  <Pie data={purity} dataKey="value" nameKey="name" outerRadius={90} label>
+                    {purity.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={tooltipStyle} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
             </Panel>
           </div>
-          <Panel title="Receivables aging" description="LKR by bucket">
+          <Panel title="Receivables aging" icon={<UsersIcon size={17} />} description="LKR by bucket">
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={aging} layout="vertical">
-                <XAxis type="number" tick={{ fontSize: 10 }} />
-                <YAxis type="category" dataKey="bucket" tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Bar dataKey="value" />
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: "#78716C" }} />
+                <YAxis type="category" dataKey="bucket" tick={{ fontSize: 10, fill: "#78716C" }} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="value" fill={CHART.gold} radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </Panel>
-          <Panel title="Estimates" description="Not in profit">
+          <Panel title="Estimates" icon={<AlertCircleIcon size={17} />} description="Not in profit">
             {(current?.estimates ?? []).map((e) => (
               <div key={e.label} className="flex items-center gap-2 text-sm"><Pill tone="warning">Estimate</Pill><span>{e.label} — {e.note}</span></div>
             ))}

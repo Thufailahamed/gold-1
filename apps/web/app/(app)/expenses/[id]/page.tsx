@@ -5,15 +5,17 @@ import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { hasPermission } from "@goldos/shared";
-import { ArrowLeftIcon } from "@/components/icons";
+import { CreditCardIcon, FileTextIcon } from "@/components/icons";
 import {
   EmptyBlock,
   Hero,
   Modal,
   Page,
+  Panel,
   Skeleton,
   StatusPill,
   controlClass,
+  heroBtnGhost,
 } from "@/components/ui";
 import { api, assetUrl, formApi, type MeData } from "@/lib/api";
 
@@ -104,16 +106,27 @@ export default function ExpenseDetailPage() {
   return (
     <Page>
       <Hero
-        kicker="Accounts"
+        kicker="Accounts · Expenses"
         title={exp ? exp.number : "Expense"}
         description={exp?.description ?? "Expense detail"}
+        back={{ href: "/expenses", label: "Expenses" }}
+        meta={exp ? <StatusPill status={exp.status} /> : undefined}
+        stats={
+          exp
+            ? [
+                { label: "Amount", value: `${fmt(exp.amount_cents)} LKR` },
+                { label: "Paid from", value: exp.payment_account_code },
+                { label: "Incurred", value: exp.incurred_on },
+                { label: "Branch", value: exp.branch_id },
+              ]
+            : undefined
+        }
         actions={
           <button
             type="button"
             onClick={() => router.back()}
-            className="g-btn g-btn-secondary h-10 px-4 text-sm"
+            className={heroBtnGhost}
           >
-            <ArrowLeftIcon size={15} />
             Back
           </button>
         }
@@ -125,11 +138,12 @@ export default function ExpenseDetailPage() {
         <EmptyBlock title="Not found" description="This expense does not exist." />
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="g-surface space-y-2 rounded-xl p-5 text-sm">
-            <div className="flex items-center justify-between">
-              <p className="g-kicker">Amount</p>
-              <StatusPill status={exp.status} />
-            </div>
+          <Panel
+            title="Amount"
+            icon={<CreditCardIcon size={17} />}
+            actions={<StatusPill status={exp.status} />}
+            className="space-y-2 text-sm"
+          >
             <p className="g-metric text-2xl font-semibold text-ink">
               {fmt(exp.amount_cents)} <span className="text-sm font-normal text-ink-3">LKR</span>
             </p>
@@ -173,11 +187,10 @@ export default function ExpenseDetailPage() {
                 Approved {new Date(exp.approved_at).toLocaleString()}
               </p>
             ) : null}
-          </div>
+          </Panel>
 
           <div className="space-y-4">
-            <div className="g-surface space-y-3 rounded-xl p-5">
-              <p className="g-kicker">Receipt</p>
+            <Panel title="Receipt" icon={<FileTextIcon size={17} />} className="space-y-3">
               {exp.receipt_key ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -215,7 +228,7 @@ export default function ExpenseDetailPage() {
                   </button>
                 </div>
               ) : null}
-            </div>
+            </Panel>
 
             {canManage && exp.status === "PENDING_APPROVAL" ? (
               <div className="flex gap-3">

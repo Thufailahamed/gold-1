@@ -5,16 +5,25 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { hasPermission } from "@goldos/shared";
 import {
+  Callout,
   EmptyBlock,
   Hero,
   Modal,
   Page,
   Pager,
+  Panel,
+  Skeleton,
   StatusPill,
   TableCard,
   TableSkeleton,
   controlClass,
 } from "@/components/ui";
+import {
+  BanknoteIcon,
+  ClipboardCheckIcon,
+  CoinsIcon,
+  GemIcon,
+} from "@/components/icons";
 import { api, type MeData } from "@/lib/api";
 
 type CashLine = { label: string; refEntity: string; cents: number };
@@ -175,48 +184,44 @@ export default function DayClosingPage() {
             />
           </div>
         }
+        stats={[
+          { label: "Expected closing", value: r ? `${fmt(expectedCents)} LKR` : "—" },
+          { label: "Checks", value: r ? `${r.checks.total - r.checks.failing.length}/${r.checks.total} pass` : "—" },
+          { label: "Days closed", value: (closings.data?.total ?? 0).toLocaleString("en-US") },
+          { label: "Awaiting approval", value: r ? `${fmt(r.closing.awaitingApprovalCents)} LKR` : "—" },
+        ]}
         note="Money is in LKR. Gold is in fine milligrams. The two never mix."
       />
 
       <div className="space-y-4">
         {/* The things that stop the close, above everything else. */}
         {r && !r.checks.passed ? (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
-            <p className="g-kicker !text-rose-700">Cannot close this day</p>
-            <p className="mt-1 text-sm text-rose-800">
-              {r.checks.total - r.checks.failing.length} of {r.checks.total} checks pass. Failing:{" "}
-              {r.checks.failing.join(", ")}.
-            </p>
-          </div>
+          <Callout tone="danger" title="Cannot close this day">
+            {r.checks.total - r.checks.failing.length} of {r.checks.total} checks pass. Failing:{" "}
+            {r.checks.failing.join(", ")}.
+          </Callout>
         ) : null}
 
         {unclassified > 0 ? (
-          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
-            <p className="g-kicker !text-amber-800">{fmt(unclassified)} LKR unrecognised</p>
-            <p className="mt-1 text-sm text-amber-900">
-              Some cash movement does not belong to a category this screen knows, so the
-              breakdown would be wrong. The close is blocked until it is named.
-            </p>
-          </div>
+          <Callout tone="warning" title={`${fmt(unclassified)} LKR unrecognised`}>
+            Some cash movement does not belong to a category this screen knows, so the
+            breakdown would be wrong. The close is blocked until it is named.
+          </Callout>
         ) : null}
 
         {r && r.closing.awaitingApprovalCents > 0 ? (
-          <div className="rounded-xl border border-gold/40 bg-gold/5 p-4">
-            <p className="g-kicker !text-gold-dark">
-              {fmt(r.closing.awaitingApprovalCents)} LKR has left the bank but is not yet
-              approved
-            </p>
-            <p className="mt-1 text-sm text-ink-2">
-              The books read this much higher than the drawer. If your count is short by
-              about that much, this is why — not a shortage.
-            </p>
-          </div>
+          <Callout
+            tone="info"
+            title={`${fmt(r.closing.awaitingApprovalCents)} LKR has left the bank but is not yet approved`}
+          >
+            The books read this much higher than the drawer. If your count is short by
+            about that much, this is why — not a shortage.
+          </Callout>
         ) : null}
 
         <div className="grid gap-4 lg:grid-cols-2">
           {/* The arithmetic */}
-          <div className="g-surface space-y-3 rounded-xl p-5">
-            <p className="g-kicker">Cash</p>
+          <Panel title="Cash" icon={<BanknoteIcon size={17} />} className="space-y-3">
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-ink-3">Opening Cash</span>
@@ -307,12 +312,11 @@ export default function DayClosingPage() {
                 </p>
               )}
             </div>
-          </div>
+          </Panel>
 
           {/* The money and gold summaries */}
           <div className="space-y-4">
-            <div className="g-surface space-y-1.5 rounded-xl p-5 text-sm">
-              <p className="g-kicker">The day in money</p>
+            <Panel title="The day in money" icon={<CoinsIcon size={17} />} className="space-y-1.5 text-sm">
               {r ? (
                 <>
                   {[
@@ -331,12 +335,11 @@ export default function DayClosingPage() {
                   ))}
                 </>
               ) : (
-                <Skeleton />
+                <Skeleton className="h-24" />
               )}
-            </div>
+            </Panel>
 
-            <div className="g-surface space-y-1.5 rounded-xl p-5 text-sm">
-              <p className="g-kicker">The day in gold (fine milligrams)</p>
+            <Panel title="The day in gold" icon={<GemIcon size={17} />} description="Fine milligrams" className="space-y-1.5 text-sm">
               {goldRows.length === 0 ? (
                 <p className="text-ink-4">No gold moved today.</p>
               ) : (
@@ -347,12 +350,18 @@ export default function DayClosingPage() {
                   </div>
                 ))
               )}
-            </div>
+            </Panel>
           </div>
         </div>
 
         <TableCard
           title="Closed days"
+          icon={<ClipboardCheckIcon size={17} />}
+          actions={
+            <span className="g-metric text-[11px] font-medium uppercase tracking-[0.14em] text-ink-4">
+              {String(closings.data?.total ?? 0).padStart(2, "0")} on file
+            </span>
+          }
           footer={
             <Pager
               page={page}
@@ -402,7 +411,7 @@ export default function DayClosingPage() {
                           <button
                             type="button"
                             onClick={() => setReopenFor(c)}
-                            className="text-xs text-ink-3 underline hover:text-ink"
+                            className="g-btn g-btn-secondary h-8 px-3 text-xs"
                           >
                             Re-open
                           </button>
@@ -455,8 +464,4 @@ export default function DayClosingPage() {
       ) : null}
     </Page>
   );
-}
-
-function Skeleton() {
-  return <div className="h-24 animate-pulse rounded-lg bg-ink/5" />;
 }

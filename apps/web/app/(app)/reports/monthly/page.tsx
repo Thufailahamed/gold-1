@@ -5,8 +5,20 @@ import { useQuery } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import { hasPermission } from "@goldos/shared";
 import { api, downloadCsv, type MeData } from "@/lib/api";
-import { Page, Hero, Panel, Pill, EmptyBlock, heroBtnGhost } from "@/components/ui";
-import { FileDownIcon } from "@/components/icons";
+import { Page, Hero, Panel, Pill, EmptyBlock, Callout, Toolbar, controlClass, heroBtnGhost } from "@/components/ui";
+import {
+  AlertCircleIcon,
+  BanknoteIcon,
+  Building2Icon,
+  CreditCardIcon,
+  FileDownIcon,
+  GemIcon,
+  PackageIcon,
+  StoreIcon,
+  TrendingUpIcon,
+  TruckIcon,
+  UsersIcon,
+} from "@/components/icons";
 import "./print.css";
 
 type Report = {
@@ -101,83 +113,85 @@ export default function MonthlyPage() {
             ) : null}
           </>
         }
+        note="Live-read from the ledger — freeze a snapshot to lock a period for audit"
       />
-      <div className="no-print flex flex-wrap items-center gap-2">
-        <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="g-btn h-9 px-3 text-xs" aria-label="Month">
+      <Toolbar className="no-print" actions={canFreeze && r ? (
+        <>
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Snapshot note (required if warnings)" className={controlClass} />
+          <button onClick={freeze} className="g-btn g-btn-secondary h-10 px-4 text-sm">Freeze snapshot</button>
+        </>
+      ) : undefined}>
+        <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className={controlClass} aria-label="Month">
           {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-            <option key={m} value={m}>{m}</option>
+            <option key={m} value={m}>
+              {new Date(2000, m - 1, 1).toLocaleString("en-US", { month: "long" })}
+            </option>
           ))}
         </select>
-        <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="g-btn h-9 px-3 text-xs" aria-label="Year">
+        <select value={year} onChange={(e) => setYear(Number(e.target.value))} className={controlClass} aria-label="Year">
           {Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i).map((y) => (
             <option key={y} value={y}>{y}</option>
           ))}
         </select>
-        <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="g-btn h-9 px-3 text-xs" aria-label="Branch">
+        <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={controlClass} aria-label="Branch">
           <option value="">{canShop ? "All branches" : "Select branch"}</option>
           {visibleBranches.map((b) => (
             <option key={b.id} value={b.id}>{b.name}</option>
           ))}
         </select>
-        {canFreeze && r ? (
-          <>
-            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Snapshot note (required if warnings)" className="g-btn h-9 px-3 text-xs" />
-            <button onClick={freeze} className="g-btn h-9 px-3 text-xs">Freeze snapshot</button>
-          </>
-        ) : null}
-      </div>
-      {frozen ? <Pill tone="success">Frozen: {frozen}</Pill> : null}
+      </Toolbar>
+      {frozen ? <Callout tone="success" title="Snapshot frozen">Snapshot id {frozen} — this period is locked for audit.</Callout> : null}
       {r?.warnings?.length ? (
-        <Panel title="Warnings" description="Snapshot requires a note while these stand">
-          <ul className="list-disc pl-5 text-sm">{r.warnings.map((w) => <li key={w}>{w}</li>)}</ul>
+        <Panel title="Warnings" icon={<AlertCircleIcon size={17} />} description="Snapshot requires a note while these stand">
+          <ul className="list-disc space-y-1 pl-5 text-sm text-ink-2">{r.warnings.map((w) => <li key={w}>{w}</li>)}</ul>
         </Panel>
       ) : null}
       {!r ? (
         <EmptyBlock title="Loading" description="Fetching the monthly report." />
       ) : (
         <>
-          <Panel title="Sales" description={`Invoices: ${r.sales.invoiceCount}`}>
+          <Panel title="Sales" icon={<StoreIcon size={17} />} description={`Invoices: ${r.sales.invoiceCount}`}>
             {r.sales.hasData ? (
               <div className="text-sm">Gross {lkr(r.sales.grossCents)} · Returns {lkr(r.sales.returnsCents)} · Net {lkr(r.sales.netCents)} LKR</div>
             ) : <div className="text-sm text-ink-4">No postings this month</div>}
-            {canExport ? <button className="no-print g-btn mt-2 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=sales`, `monthly-sales.csv`)}>CSV</button> : null}
+            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=sales`, `monthly-sales.csv`)}>CSV</button> : null}
           </Panel>
-          <Panel title="Purchases" description="Supplier + old-gold intake">
+          <Panel title="Purchases" icon={<TruckIcon size={17} />} description="Supplier + old-gold intake">
             {r.purchases.hasData ? (
               <div className="text-sm">Value {lkr(r.purchases.purchaseValueCents)} · Old gold {lkr(r.purchases.oldGoldCents)} LKR · {g(r.purchases.goldFineMg)} g</div>
             ) : <div className="text-sm text-ink-4">No postings this month</div>}
-            {canExport ? <button className="no-print g-btn mt-2 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=purchases`, `monthly-purchases.csv`)}>CSV</button> : null}
+            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=purchases`, `monthly-purchases.csv`)}>CSV</button> : null}
           </Panel>
-          <Panel title="Profit" description={r.profit.basis}>
+          <Panel title="Profit" icon={<TrendingUpIcon size={17} />} description={r.profit.basis}>
             <div className="text-sm">Revenue {lkr(r.profit.revenueCents)} · COGS {lkr(r.profit.cogsCents)} · Gross {lkr(r.profit.grossProfitCents)} · Opex {lkr(r.profit.operatingExpensesCents)} · Net {lkr(r.profit.netProfitCents)} LKR</div>
             <Pill tone="ghost">Ledger</Pill>
-            {canExport ? <button className="no-print g-btn mt-2 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=profit`, `monthly-profit.csv`)}>CSV</button> : null}
+            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=profit`, `monthly-profit.csv`)}>CSV</button> : null}
           </Panel>
-          <Panel title="Cashflow" description="Drawer + bank movement">
+          <Panel title="Cashflow" icon={<BanknoteIcon size={17} />} description="Drawer + bank movement">
             <div className="text-sm">Opening {lkr(r.cashflow.openingCents)} · In {lkr(r.cashflow.inflowsCents)} · Out {lkr(r.cashflow.outflowsCents)} · Closing {lkr(r.cashflow.closingCents)} LKR</div>
-            {canExport ? <button className="no-print g-btn mt-2 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=cashflow`, `monthly-cashflow.csv`)}>CSV</button> : null}
+            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=cashflow`, `monthly-cashflow.csv`)}>CSV</button> : null}
           </Panel>
-          <Panel title="Gold" description="Fine gold flows">
+          <Panel title="Gold" icon={<GemIcon size={17} />} description="Fine gold flows">
             <div className="text-sm">Opening {g(r.gold.openingFineMg)} · In {g(r.gold.inFineMg)} · Out {g(r.gold.outFineMg)} · Closing {g(r.gold.closingFineMg)} g</div>
-            {canExport ? <button className="no-print g-btn mt-2 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=gold`, `monthly-gold.csv`)}>CSV</button> : null}
+            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=gold`, `monthly-gold.csv`)}>CSV</button> : null}
           </Panel>
-          <Panel title="Expenses" description={`Pending: ${lkr(r.expenses.pendingCents)} LKR`}>
+          <Panel title="Expenses" icon={<CreditCardIcon size={17} />} description={`Pending: ${lkr(r.expenses.pendingCents)} LKR`}>
             <div className="text-sm">Total {lkr(r.expenses.totalCents)} LKR · {r.expenses.byCategory.length} categories</div>
-            {canExport ? <button className="no-print g-btn mt-2 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=expenses`, `monthly-expenses.csv`)}>CSV</button> : null}
+            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=expenses`, `monthly-expenses.csv`)}>CSV</button> : null}
           </Panel>
-          <Panel title="Receivables" description={`Total ${lkr(r.receivables.totalCents)} LKR`}>
+          <Panel title="Receivables" icon={<UsersIcon size={17} />} description={`Total ${lkr(r.receivables.totalCents)} LKR`}>
             <div className="text-sm">Outstanding {r.receivables.outstanding.length} invoices · Buckets {Object.entries(r.receivables.aging).map(([k, v]) => `${k}: ${lkr(v)}`).join(" · ")}</div>
-            {canExport ? <button className="no-print g-btn mt-2 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=receivables`, `monthly-receivables.csv`)}>CSV</button> : null}
+            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=receivables`, `monthly-receivables.csv`)}>CSV</button> : null}
           </Panel>
-          <Panel title="Payables" description={`Total ${lkr(r.payables.totalCents)} LKR`}>
+          <Panel title="Payables" icon={<Building2Icon size={17} />} description={`Total ${lkr(r.payables.totalCents)} LKR`}>
             <div className="text-sm">Outstanding {r.payables.outstanding.length} invoices · Buckets {Object.entries(r.payables.aging).map(([k, v]) => `${k}: ${lkr(v)}`).join(" · ")}</div>
-            {canExport ? <button className="no-print g-btn mt-2 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=payables`, `monthly-payables.csv`)}>CSV</button> : null}
+            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=payables`, `monthly-payables.csv`)}>CSV</button> : null}
           </Panel>
-          <Panel title="Inventory" description={`${r.inventory.basis} · ${r.inventory.method}`}>
+          <Panel title="Inventory" icon={<PackageIcon size={17} />} description={`${r.inventory.basis} · ${r.inventory.method}`}>
             <div className="text-sm">Jewellery {lkr(r.inventory.jewelleryCents)} · Gold {lkr(r.inventory.goldCents)} LKR · Uncosted {r.inventory.uncostedPieces} pcs</div>
-            {canExport ? <button className="no-print g-btn mt-2 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=inventory`, `monthly-inventory.csv`)}>CSV</button> : null}
+            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=inventory`, `monthly-inventory.csv`)}>CSV</button> : null}
           </Panel>
-          <Panel title="Estimates" description="Not in profit">
+          <Panel title="Estimates" icon={<AlertCircleIcon size={17} />} description="Not in profit">
             {r.estimates.map((e) => (
               <div key={e.label} className="flex items-center gap-2 text-sm"><Pill tone="warning">Estimate</Pill><span>{e.label} — {e.note}</span></div>
             ))}
