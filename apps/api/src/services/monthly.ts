@@ -48,6 +48,49 @@ async function allRows<T>(db: D1Database, sql: string, vals: unknown[]): Promise
   return (res.results ?? []) as T[];
 }
 
+export const MONTHLY_SECTIONS = ["sales", "purchases", "gold", "expenses", "profit", "cashflow", "receivables", "payables", "inventory"] as const;
+export type MonthlySection = (typeof MONTHLY_SECTIONS)[number];
+
+export function sectionRows(section: MonthlySection, report: MonthlyReport): { cols: string[]; rows: Record<string, unknown>[] } {
+  const flat = (o: Record<string, unknown>): Record<string, unknown> => {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(o)) {
+      if (v !== null && typeof v === "object" && !Array.isArray(v)) Object.assign(out, flat(v as Record<string, unknown>));
+      else if (!Array.isArray(v)) out[k] = v;
+    }
+    return out;
+  };
+  const pick = (o: unknown): Record<string, unknown>[] => {
+    if (Array.isArray(o)) return o as Record<string, unknown>[];
+    if (o !== null && typeof o === "object") return [flat(o as Record<string, unknown>)];
+    return [];
+  };
+  const r = (report as unknown as Record<string, unknown>)[section as string];
+  if (section === "receivables" || section === "payables") {
+    const p = r as { lines: Record<string, unknown>[]; aging: Record<string, number> };
+    return { cols: ["partyId", "name", "balanceCents"], rows: [...(p.lines ?? []), { partyId: "AGING", name: JSON.stringify(p.aging ?? {}), balanceCents: "" }] };
+  }
+  if (section === "inventory") {
+    const inv = (r ?? {}) as { byBranch?: Record<string, unknown>[]; byCategory?: Record<string, unknown>[]; byPurity?: Record<string, unknown>[] } & Record<string, unknown>;
+    const { byBranch, byCategory, byPurity, ...rest } = inv;
+    return {
+      cols: ["scope", "key", "cents"],
+      rows: [
+        ...Object.entries(rest).filter(([, v]) => typeof v !== "object").map(([key, cents]) => ({ scope: "total", key, cents })),
+        ...(byBranch ?? []).map((b) => ({ scope: "branch", ...b })),
+        ...(byCategory ?? []).map((b) => ({ scope: "category", ...b })),
+        ...(byPurity ?? []).map((b) => ({ scope: "purity", ...b })),
+      ],
+    };
+  }
+  if (section === "expenses") {
+    const e = (r ?? {}) as { byCategory?: Record<string, unknown>[]; totalCents?: number; pendingCents?: number };
+    return { cols: ["accountCode", "name", "cents"], rows: [...(e.byCategory ?? []), { accountCode: "TOTAL", name: "", cents: e.totalCents ?? 0 }, { accountCode: "PENDING", name: "", cents: e.pendingCents ?? 0 }] };
+  }
+  const rows = pick(r);
+  return { cols: Object.keys(rows[0] ?? { note: "empty" }), rows: rows.length ? rows : [{ note: "no data" }] };
+}
+
 async function sumCents(db: D1Database, sql: string, vals: unknown[]): Promise<number> {
   const stmt = vals.length ? db.prepare(sql).bind(...vals) : db.prepare(sql);
   const row = await stmt.first<{ n: number }>();

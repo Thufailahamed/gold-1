@@ -1,9 +1,11 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import { monthlyQuerySchema, monthlySnapshotSchema, PERMISSIONS } from "@goldos/shared";
 import type { Env } from "../db/client";
 import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
-import { buildMonthlyReport } from "../services/monthly";
+import { buildMonthlyReport, MONTHLY_SECTIONS, sectionRows } from "../services/monthly";
+import { toCsv } from "../services/discrepancies";
 import { buildAuditStmt } from "../middleware/audit";
 import { serviceError } from "./http";
 
@@ -30,6 +32,25 @@ export const monthly = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return c.json({ success: false, error: { code: "FORBIDDEN", message: "branchId required without branches:manage" } }, 403);
     try {
       const data = await buildMonthlyReport(c.env.DB, parsed.data);
+      if (c.req.query("format") === "csv") {
+        if (!perms.includes(PERMISSIONS.AUDIT_EXPORT))
+          return c.json({ success: false, error: { code: "FORBIDDEN", message: "CSV requires audit:export" } }, 403);
+        const section = z.enum(MONTHLY_SECTIONS).safeParse(c.req.query("section"));
+        if (!section.success)
+          return c.json({ success: false, error: { code: "VALIDATION", message: "section required" } }, 400);
+        const branchRow = parsed.data.branchId
+          ? await c.env.DB.prepare("SELECT name FROM branches WHERE id = ?").bind(parsed.data.branchId).first<{ name: string }>()
+          : null;
+        const { cols, rows } = sectionRows(section.data, data);
+        return new Response(
+          toCsv(
+            [`generated_at: ${new Date().toISOString()}`, `month: ${data.meta.month}`, `branch: ${branchRow?.name ?? parsed.data.branchId ?? "shop"}`, "units: money=cents weight=mg", "basis: ledger-posted", "source: live-read, not a frozen snapshot"],
+            cols,
+            rows
+          ),
+          { status: 200, headers: { "Content-Type": "text/csv" } }
+        );
+      }
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
