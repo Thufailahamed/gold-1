@@ -6,6 +6,7 @@ import { accounts } from "./routes/accounts";
 import { audit } from "./routes/audit";
 import { auth } from "./routes/auth";
 import { branches } from "./routes/branches";
+import { bankAccounts, cash, settlements } from "./routes/cashbank";
 import { catalog } from "./routes/catalog";
 import { gold } from "./routes/gold";
 import { health } from "./routes/health";
@@ -43,6 +44,9 @@ app.route("/api/v1/gold", gold);
 app.route("/api/v1/melting", melting);
 app.route("/api/v1/oldgold", oldgold);
 app.route("/api/v1/accounts", accounts);
+app.route("/api/v1/bank-accounts", bankAccounts);
+app.route("/api/v1/cash", cash);
+app.route("/api/v1/card-settlements", settlements);
 app.route("/api/v1/purchases", purchases);
 app.route("/api/v1/sales", sales);
 

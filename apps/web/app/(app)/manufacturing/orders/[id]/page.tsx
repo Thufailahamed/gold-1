@@ -19,7 +19,7 @@ import {
   heroBtnPrimary,
   heroBtnGhost,
 } from "@/components/ui";
-import { CheckIcon, PlusIcon, TrashIcon } from "@/components/icons";
+import { CheckIcon, PlusIcon, TrashIcon, GemIcon, PackageIcon, BookOpenIcon } from "@/components/icons";
 import { cn } from "@/lib/cn";
 
 type Detail = {
@@ -148,7 +148,7 @@ export default function MfgOrderDetailPage({ params }: { params: Promise<{ id: s
       </ol>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel title="Materials" description={`${materials.length} lot${materials.length === 1 ? "" : "s"} allocated`}>
+        <Panel title="Materials" icon={<GemIcon size={17} />} description={`${materials.length} lot${materials.length === 1 ? "" : "s"} allocated`}>
           {materials.length === 0 ? (
             <EmptyBlock title="No materials" description="Allocate refined lots from approved melting batches." />
           ) : (
@@ -163,7 +163,7 @@ export default function MfgOrderDetailPage({ params }: { params: Promise<{ id: s
           )}
         </Panel>
         {outputs.length > 0 ? (
-          <Panel title="Outputs" description={`${outputs.length} produced`}>
+          <Panel title="Outputs" icon={<PackageIcon size={17} />} description={`${outputs.length} produced`}>
             <ul className="space-y-2.5 text-sm">
               {outputs.map((o) => (
                 <li key={o.id} className="flex items-center justify-between gap-3">
@@ -187,7 +187,7 @@ export default function MfgOrderDetailPage({ params }: { params: Promise<{ id: s
       </div>
 
       {ledger.length > 0 ? (
-        <Panel title="Gold postings">
+        <Panel title="Gold postings" icon={<BookOpenIcon size={17} />}>
           <ul className="space-y-2 g-metric text-xs">
             {ledger.map((l, i) => (
               <li key={i} className="flex items-center justify-between gap-3">

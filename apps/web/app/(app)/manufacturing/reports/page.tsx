@@ -13,6 +13,7 @@ import {
   StatusPill,
   Tabs,
 } from "@/components/ui";
+import { HammerIcon } from "@/components/icons";
 
 type Summary = {
   byStatus: { status: string; n: number }[];
@@ -73,7 +74,7 @@ export default function MfgReportsPage() {
           </div>
         ))}
       </div>
-      <TableCard title="Work in progress" description={`${(wip.data ?? []).length} open orders`}>
+      <TableCard title="Work in progress" icon={<HammerIcon size={17} />} description={`${(wip.data ?? []).length} open orders`}>
         {wip.isLoading ? (
           <TableSkeleton rows={4} cols={4} />
         ) : (wip.data ?? []).length === 0 ? (

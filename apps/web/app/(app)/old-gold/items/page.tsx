@@ -16,7 +16,7 @@ import {
   controlClass,
   heroBtnPrimary,
 } from "@/components/ui";
-import { ScanBarcodeIcon } from "@/components/icons";
+import { ScanBarcodeIcon, ArchiveIcon } from "@/components/icons";
 
 const STATUSES = ["RECEIVED", "TESTED", "VALUED", "PURCHASED", "AVAILABLE", "RESERVED_FOR_MELTING", "MELTED", "RESOLD", "TRANSFERRED", "VOID"];
 
@@ -101,7 +101,12 @@ export default function OldGoldItemsPage() {
           ))}
         </select>
       </div>
-      <TableCard footer={<Pager page={page} onChange={setPage} pageSize={20} count={rows.length} total={total} unit="items" />}>
+      <TableCard
+        title="Item register"
+        icon={<ArchiveIcon size={17} />}
+        actions={<span className="g-metric text-[11px] font-medium uppercase tracking-[0.14em] text-ink-4">{String(total).padStart(2, "0")} on file</span>}
+        footer={<Pager page={page} onChange={setPage} pageSize={20} count={rows.length} total={total} unit="items" />}
+      >
         {list.isLoading ? (
           <TableSkeleton rows={6} cols={5} />
         ) : list.isError ? (

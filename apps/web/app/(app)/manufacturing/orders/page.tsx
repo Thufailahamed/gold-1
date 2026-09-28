@@ -19,6 +19,7 @@ import {
   controlClass,
   heroBtnPrimary,
 } from "@/components/ui";
+import { HammerIcon } from "@/components/icons";
 
 type Order = { id: string; number: string; type: string; design: string; status: string; customer_name: string | null; created_at: number };
 type Customer = { id: string; name: string; code: string };
@@ -124,7 +125,12 @@ export default function MfgOrdersPage() {
           ))}
         </select>
       </div>
-      <TableCard footer={<Pager page={page} onChange={setPage} pageSize={20} count={rows.length} total={total} unit="orders" />}>
+      <TableCard
+        title="Orders"
+        icon={<HammerIcon size={17} />}
+        actions={<span className="g-metric text-[11px] font-medium uppercase tracking-[0.14em] text-ink-4">{String(total).padStart(2, "0")} on file</span>}
+        footer={<Pager page={page} onChange={setPage} pageSize={20} count={rows.length} total={total} unit="orders" />}
+      >
         {list.isLoading ? (
           <TableSkeleton rows={5} cols={5} />
         ) : list.isError ? (

@@ -175,7 +175,7 @@ export default function MeltDetailPage({ params }: { params: Promise<{ id: strin
       ) : null}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel title="Inputs" description={`${inputs.length} item${inputs.length === 1 ? "" : "s"}`}>
+        <Panel title="Inputs" icon={<GemIcon size={17} />} description={`${inputs.length} item${inputs.length === 1 ? "" : "s"}`}>
           {inputs.length === 0 ? (
             <EmptyBlock title="No inputs yet" description="Scan old-gold items into the batch." />
           ) : (
@@ -192,7 +192,7 @@ export default function MeltDetailPage({ params }: { params: Promise<{ id: strin
           )}
         </Panel>
         {outputs.length > 0 ? (
-          <Panel title="Outputs" description={`${outputs.length} lot${outputs.length === 1 ? "" : "s"}`}>
+          <Panel title="Outputs" icon={<RefreshCwIcon size={17} />} description={`${outputs.length} lot${outputs.length === 1 ? "" : "s"}`}>
             <ul className="space-y-2.5 text-sm">
               {outputs.map((o) => (
                 <li key={o.lot_number} className="flex items-center justify-between gap-3">
@@ -211,7 +211,7 @@ export default function MeltDetailPage({ params }: { params: Promise<{ id: strin
       </div>
 
       {ledger.length > 0 ? (
-        <Panel title="Ledger postings">
+        <Panel title="Ledger postings" icon={<BookOpenIcon size={17} />}>
           <ul className="space-y-2 g-metric text-xs">
             {ledger.map((l, i) => (
               <li key={i} className="flex items-center justify-between gap-3">

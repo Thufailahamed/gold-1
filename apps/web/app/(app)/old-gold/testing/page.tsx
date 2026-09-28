@@ -15,6 +15,7 @@ import {
   Modal,
   controlClass,
 } from "@/components/ui";
+import { FlaskConicalIcon } from "@/components/icons";
 
 type QueueRow = { id: string; number: string; description: string; status: string; net_mg: number };
 
@@ -105,7 +106,12 @@ export default function TestingPage() {
           { label: "Retest queue", value: retests },
         ]}
       />
-      <TableCard title="Testing queue" description={`${waiting + retests} item${waiting + retests === 1 ? "" : "s"}`}>
+      <TableCard
+        title="Testing queue"
+        icon={<FlaskConicalIcon size={17} />}
+        description={`${waiting + retests} item${waiting + retests === 1 ? "" : "s"}`}
+        actions={<span className="g-metric text-[11px] font-medium uppercase tracking-[0.14em] text-ink-4">{waiting} awaiting</span>}
+      >
         {queue.isLoading || retest.isLoading ? (
           <TableSkeleton rows={4} cols={5} />
         ) : waiting + retests === 0 ? (
