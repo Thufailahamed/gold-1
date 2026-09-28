@@ -156,6 +156,8 @@ export async function recordMovement(
       .bind(input.toBranchId)
       .first();
     if (!br) throw Object.assign(new Error("Branch not found"), { code: "NOT_FOUND" });
+    if (input.toBranchId !== prev.branch_id)
+      throw Object.assign(new Error("Cross-branch transfers must go through POST /transfers"), { code: "CONFLICT" });
     const inId = crypto.randomUUID();
     await db.batch([
       db.prepare("UPDATE products SET status = 'TRANSFER_PENDING' WHERE id = ?").bind(input.productId),

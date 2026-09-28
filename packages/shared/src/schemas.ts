@@ -523,3 +523,11 @@ export const startCountSchema = z.object({
 export const scanSchema = z.object({ barcode: z.string().min(1).max(32) });
 export const approveCountSchema = z.object({ reason: z.string().min(1).max(500), approvedBy: z.string().min(1) });
 export type StartCountInput = z.infer<typeof startCountSchema>;
+
+export const requestTransferSchema = z.object({
+  fromBranchId: z.string().min(1),
+  toBranchId: z.string().min(1),
+  productIds: z.array(z.string().min(1)).min(1).max(100),
+  reason: z.string().max(500).optional(),
+});
+export type RequestTransferInput = z.infer<typeof requestTransferSchema>;

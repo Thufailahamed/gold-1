@@ -16,6 +16,7 @@ import { manufacturing } from "./routes/manufacturing";
 import { melting } from "./routes/melting";
 import { monthly } from "./routes/monthly";
 import { counts } from "./routes/counts";
+import { stockTransferRoutes } from "./routes/transfers";
 import { customers, suppliers } from "./routes/parties";
 import { inventory } from "./routes/inventory";
 import { oldgold } from "./routes/oldgold";
@@ -58,5 +59,6 @@ app.route("/api/v1/purchases", purchases);
 app.route("/api/v1/sales", sales);
 app.route("/api/v1/reports", monthly);
 app.route("/api/v1/counts", counts);
+app.route("/api/v1/transfers", stockTransferRoutes);
 
 export default app;
