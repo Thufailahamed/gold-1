@@ -1,4 +1,4 @@
-import { monthBounds, monthlyPnl } from "@goldos/shared";
+import { cashflowClose, goldClose, KNOWN_CASH_REFS, monthBounds, monthlyPnl } from "@goldos/shared";
 
 export type MonthlyReport = {
   meta: { from: string; to: string; month: string; branchId: string | null };
@@ -6,6 +6,9 @@ export type MonthlyReport = {
   purchases: { purchaseValueCents: number; oldGoldCents: number; goldFineMg: number; hasData: boolean };
   expenses: { totalCents: number; pendingCents: number; byCategory: { accountCode: string; name: string; cents: number }[]; hasData: boolean };
   profit: { revenueCents: number; cogsCents: number; grossProfitCents: number; operatingExpensesCents: number; netProfitCents: number; basis: "ledger-posted-only" };
+  gold: { openingFineMg: number; inFineMg: number; outFineMg: number; closingFineMg: number; hasData: boolean };
+  cashflow: { openingCents: number; inflowsCents: number; outflowsCents: number; closingCents: number; unclassifiedCents: number; hasData: boolean };
+  estimates: { kind: "estimate"; label: string; note: string }[];
   warnings: string[];
 };
 
@@ -51,12 +54,66 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
   const expRow = await db.prepare(
     `SELECT COALESCE(SUM(CASE WHEN status='POSTED' THEN amount_cents ELSE 0 END),0) AS p, COALESCE(SUM(CASE WHEN status='PENDING_APPROVAL' THEN amount_cents ELSE 0 END),0) AS pend FROM expenses WHERE incurred_on>=? AND incurred_on<=?${opts.branchId ? " AND branch_id=?" : ""}`
   ).bind(from, to, ...(opts.branchId ? [opts.branchId] : [])).first<{ p: number; pend: number }>();
+  const expCat = await (async () => {
+    const sql = `SELECT e2.category_id AS cat, c.account_code AS code, c.name AS name, COALESCE(SUM(e2.amount_cents),0) AS cents FROM expenses e2 JOIN expense_categories c ON c.id=e2.category_id WHERE e2.status='POSTED' AND e2.incurred_on>=? AND e2.incurred_on<=?${opts.branchId ? " AND e2.branch_id=?" : ""} GROUP BY e2.category_id`;
+    const vals: unknown[] = opts.branchId ? [from, to, opts.branchId] : [from, to];
+    const { results } = await db.prepare(sql).bind(...vals).all<{ cat: string; code: string; name: string; cents: number }>();
+    return (results ?? []).map((r) => ({ accountCode: r.code, name: r.name, cents: r.cents }));
+  })();
+  const warnings: string[] = [];
+  const slug = opts.branchId ? `branch:${opts.branchId}` : null;
+  async function goldSum(dirCol: "source" | "destination", f: string, t: string, before: boolean): Promise<number> {
+    const cmp = before ? `<?` : `>=? AND date(occurred_at/1000,'unixepoch','+330 minutes')<=?`;
+    const like = slug
+      ? (dirCol === "destination" ? `${dirCol}=?` : `${dirCol}=?`)
+      : (dirCol === "destination" ? `${dirCol} LIKE 'branch:%'` : `${dirCol} LIKE 'branch:%'`);
+    const vals: unknown[] = before ? (slug ? [f, slug] : [f]) : slug ? [f, t, slug] : [f, t];
+    const row = await db.prepare(
+      `SELECT COALESCE(SUM(fine_mg),0) AS n FROM gold_ledger WHERE ${like} AND date(occurred_at/1000,'unixepoch','+330 minutes')${cmp}`
+    ).bind(...vals).first<{ n: number }>();
+    return row?.n ?? 0;
+  }
+  const gIn = await goldSum("destination", from, to, false);
+  const gOut = await goldSum("source", from, to, false);
+  const gOpenIn = await goldSum("destination", from, to, true);
+  const gOpenOut = await goldSum("source", from, to, true);
+  const openingFineMg = gOpenIn - gOpenOut;
+  const { closingMg: closingFineMg } = goldClose(openingFineMg, gIn, gOut);
+  const goldFineMg = await (async () => {
+    const row = await db.prepare(
+      `SELECT COALESCE(SUM(fine_mg),0) AS n FROM gold_ledger WHERE type IN ('PURCHASE','OLD_GOLD_PURCHASE') AND date(occurred_at/1000,'unixepoch','+330 minutes')>=? AND date(occurred_at/1000,'unixepoch','+330 minutes')<=?${slug ? " AND destination=?" : ""}`
+    ).bind(...(slug ? [from, to, slug] : [from, to])).first<{ n: number }>();
+    return row?.n ?? 0;
+  })();
+  const bankRows = await db.prepare(`SELECT account_code AS code FROM bank_accounts WHERE is_active=1`).all<{ code: string }>();
+  const bankCodes = (bankRows.results ?? []).map((r) => r.code).filter((c) => /^\d{4}$/.test(c));
+  const cashAccts = ["'1000'", "'1020'", "'1030'", ...bankCodes.map((c) => `'${c}'`)].join(",");
+  const cashBranch = opts.branchId ? " AND e.branch_id=?" : "";
+  const cashBv: unknown[] = opts.branchId ? [opts.branchId] : [];
+  const openingCents = await sumCents(db,
+    `SELECT COALESCE(SUM(l.debit_cents-l.credit_cents),0) AS n FROM journal_lines l JOIN journal_entries e ON e.id=l.entry_id WHERE l.account_code IN (${cashAccts}) AND e.entry_date<? AND e.status='POSTED'${cashBranch}`, [from, ...cashBv]);
+  const flowRow = await db.prepare(
+    `SELECT COALESCE(SUM(l.debit_cents),0) AS dr, COALESCE(SUM(l.credit_cents),0) AS cr FROM journal_lines l JOIN journal_entries e ON e.id=l.entry_id WHERE l.account_code IN (${cashAccts}) AND e.entry_date>=? AND e.entry_date<=? AND e.status='POSTED'${cashBranch}`
+  ).bind(from, to, ...cashBv).first<{ dr: number; cr: number }>();
+  const inflowsCents = flowRow?.dr ?? 0;
+  const outflowsCents = flowRow?.cr ?? 0;
+  const { closingCents } = cashflowClose(openingCents, inflowsCents, outflowsCents);
+  const knownCash = [...KNOWN_CASH_REFS, "card_settlement"] as string[];
+  const placeholders = knownCash.map(() => "?").join(",");
+  const unRow = await db.prepare(
+    `SELECT COALESCE(SUM(l.debit_cents+l.credit_cents),0) AS n FROM journal_lines l JOIN journal_entries e ON e.id=l.entry_id WHERE l.account_code IN (${cashAccts}) AND e.entry_date>=? AND e.entry_date<=? AND e.status='POSTED'${cashBranch} AND (e.ref_entity IS NULL OR e.ref_entity NOT IN (${placeholders}))`
+  ).bind(from, to, ...cashBv, ...knownCash).first<{ n: number }>();
+  const unclassifiedCents = unRow?.n ?? 0;
+  if (unclassifiedCents !== 0) warnings.push(`Unclassified cash ${unclassifiedCents}c blocks snapshot`);
   return {
     meta: { from, to, month: label, branchId: opts.branchId ?? null },
     sales: { totalCents: grossCents, invoiceCount: grossRow?.c ?? 0, grossCents, returnsCents, netCents: revenueCents, hasData: (grossRow?.c ?? 0) > 0 },
-    purchases: { purchaseValueCents: purchCents, oldGoldCents: ogCents, goldFineMg: 0, hasData: purchCents !== 0 || ogCents !== 0 },
-    expenses: { totalCents: expRow?.p ?? 0, pendingCents: expRow?.pend ?? 0, byCategory: [], hasData: (expRow?.p ?? 0) !== 0 },
+    purchases: { purchaseValueCents: purchCents, oldGoldCents: ogCents, goldFineMg, hasData: purchCents !== 0 || ogCents !== 0 || goldFineMg !== 0 },
+    expenses: { totalCents: expRow?.p ?? 0, pendingCents: expRow?.pend ?? 0, byCategory: expCat, hasData: (expRow?.p ?? 0) !== 0 },
     profit: { revenueCents, cogsCents, grossProfitCents, operatingExpensesCents: opexCents, netProfitCents, basis: "ledger-posted-only" },
-    warnings: [],
+    gold: { openingFineMg, inFineMg: gIn, outFineMg: gOut, closingFineMg, hasData: gIn !== 0 || gOut !== 0 || openingFineMg !== 0 },
+    cashflow: { openingCents, inflowsCents, outflowsCents, closingCents, unclassifiedCents, hasData: inflowsCents !== 0 || outflowsCents !== 0 || openingCents !== 0 },
+    estimates: [{ kind: "estimate", label: "Board-rate memo", note: "Weight x current rate is a memo only — not in profit or stock value" }],
+    warnings,
   };
 }
