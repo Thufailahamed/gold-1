@@ -159,6 +159,25 @@ export async function buildEntryStmts(
     throw Object.assign(new Error(`Invalid entry date: ${entryDate || "(none)"}`), {
       code: "VALIDATION",
     });
+  // A closed day rejects new postings. This is the ONLY place the check lives,
+  // because it is the one place every posting already passes through — putting
+  // it in each of the six services means six chances to forget one. It also
+  // covers backdating, since backdating is just an entryDate in the past.
+  //
+  // After the balance and date checks, so a malformed post still fails as
+  // malformed rather than as locked.
+  if (post.branchId) {
+    const locked = await db
+      .prepare(
+        "SELECT 1 AS x FROM day_closings WHERE branch_id = ? AND close_date = ? AND status = 'CLOSED'"
+      )
+      .bind(post.branchId, entryDate)
+      .first();
+    if (locked)
+      throw Object.assign(new Error(`The day ${entryDate} is closed at this branch`), {
+        code: "TRANSITION_LOCKED",
+      });
+  }
   await assertAccountsActive(db, post.lines);
 
   const stmts: D1PreparedStatement[] = [];

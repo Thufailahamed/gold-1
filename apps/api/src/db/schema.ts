@@ -634,3 +634,32 @@ export const expenses = sqliteTable("expenses", {
   createdAt: integer("created_at").notNull(),
   createdBy: text("created_by"),
 });
+
+export const dayClosings = sqliteTable("day_closings", {
+  id: text("id").primaryKey(),
+  branchId: text("branch_id").notNull(),
+  closeDate: text("close_date").notNull(),
+  openingCents: integer("opening_cents").notNull(),
+  cashInCents: integer("cash_in_cents").notNull(),
+  cashOutCents: integer("cash_out_cents").notNull(),
+  expectedCents: integer("expected_cents").notNull(),
+  actualCents: integer("actual_cents").notNull(),
+  differenceCents: integer("difference_cents").notNull(),
+  differenceReason: text("difference_reason"),
+  reportJson: text("report_json").notNull(),
+  checksPassed: integer("checks_passed").notNull(),
+  status: text("status").notNull().default("CLOSED"),
+  closedBy: text("closed_by"),
+  closedAt: integer("closed_at").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const dayReopens = sqliteTable("day_reopens", {
+  id: text("id").primaryKey(),
+  closingId: text("closing_id").notNull(),
+  reason: text("reason").notNull(),
+  requestedBy: text("requested_by"),
+  approvedBy: text("approved_by"),
+  approvedAt: integer("approved_at").notNull(),
+  createdAt: integer("created_at").notNull(),
+});

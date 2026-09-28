@@ -1,18 +1,75 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BranchSwitcher } from "@/components/branch-switcher";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Providers } from "@/components/providers";
 import { UserMenu } from "@/components/user-menu";
+import { ScanField } from "@/components/scan-field";
 import { Skeleton } from "@/components/ui";
-import { BellIcon, MenuIcon, SearchIcon } from "@/components/icons";
+import { BellIcon, MenuIcon } from "@/components/icons";
 import { useSession } from "@/lib/auth";
+
+function Notifications() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        title="Notifications"
+        aria-label="Notifications"
+        aria-expanded={open}
+        onClick={() => setOpen((b) => !b)}
+        className="relative flex size-9 items-center justify-center rounded-lg text-ink transition-colors hover:bg-ink/5"
+      >
+        <BellIcon size={16} />
+      </button>
+      {open ? (
+        <div className="g-floating absolute right-0 z-40 mt-2 w-80 animate-fade-in overflow-hidden">
+          <div className="flex items-center justify-between border-b border-ink/[0.07] px-4 py-3">
+            <span className="g-kicker">Notifications</span>
+            <span className="g-metric rounded-full bg-ink/[0.06] px-2 py-0.5 text-[10px] font-semibold text-ink-4">
+              00
+            </span>
+          </div>
+          <div className="p-4">
+            <div className="flex flex-col items-center rounded-xl border border-dashed border-ink/15 bg-bone/50 px-5 py-8 text-center">
+              <span className="mb-3 flex size-10 items-center justify-center rounded-xl bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.08)]">
+                <BellIcon size={18} />
+              </span>
+              <p className="text-sm font-medium text-ink">All clear</p>
+              <p className="mt-1 max-w-[15rem] text-xs leading-relaxed text-ink-4">
+                Approvals, rate publishes and stock alerts land here.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { me, loading } = useSession();
-  const [bell, setBell] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
@@ -59,51 +116,40 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Main column */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-ink/[0.08] bg-bone/85 px-4 backdrop-blur-md lg:px-6">
-            <button
-              type="button"
-              aria-label="Open navigation"
-              aria-expanded={drawerOpen}
-              onClick={() => setDrawerOpen(true)}
-              className="flex size-10 items-center justify-center rounded-lg text-ink transition-colors hover:bg-ink/5 lg:hidden"
-            >
-              <MenuIcon size={20} />
-            </button>
-
-            <div className="hidden min-w-0 flex-1 md:block">
-              <div className="relative max-w-sm">
-                <SearchIcon
-                  size={15}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-4"
-                />
-                <input
-                  placeholder="Search — arrives with catalog"
-                  disabled
-                  title="Global search arrives with a later phase"
-                  className="h-9 w-full cursor-not-allowed rounded-lg bg-paper pl-9 pr-3 text-sm text-ink-4 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.1)] placeholder:text-ink-5"
-                />
-              </div>
-            </div>
-            <div className="flex-1 md:hidden" />
-
-            <BranchSwitcher />
-            <div className="relative">
+          <header className="sticky top-0 z-30">
+            <div className="flex h-14 items-center gap-2.5 border-b border-ink/[0.08] bg-bone/85 px-4 backdrop-blur-md lg:px-6">
               <button
-                title="Notifications"
-                aria-label="Notifications"
-                onClick={() => setBell((b) => !b)}
-                className="flex size-10 items-center justify-center rounded-lg text-ink transition-colors hover:bg-ink/5"
+                type="button"
+                aria-label="Open navigation"
+                aria-expanded={drawerOpen}
+                onClick={() => setDrawerOpen(true)}
+                className="flex size-9 items-center justify-center rounded-lg text-ink transition-colors hover:bg-ink/5 lg:hidden"
               >
-                <BellIcon size={17} />
+                <MenuIcon size={19} />
               </button>
-              {bell ? (
-                <div className="g-floating absolute right-0 z-40 mt-2 w-72 animate-fade-in p-4 text-sm text-ink-4">
-                  <div className="g-kicker mb-1.5">Notifications</div>
-                  No notifications yet. Alerts arrive with the approvals phase.
-                </div>
-              ) : null}
+
+              <div className="hidden min-w-0 flex-1 md:block">
+                <ScanField compact />
+              </div>
+              <div className="flex-1 md:hidden" />
+
+              <span className="hidden items-center gap-2 rounded-full border border-ink/10 bg-paper px-2.5 py-1 xl:inline-flex">
+                <span className="size-1.5 animate-pulse-soft rounded-full bg-emerald-600" aria-hidden />
+                <span className="g-metric text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-4">
+                  LK · Live
+                </span>
+              </span>
+
+              <BranchSwitcher />
+              <span className="hidden h-6 w-px bg-ink/10 sm:block" aria-hidden />
+              <Notifications />
+              <UserMenu me={me} />
             </div>
-            <UserMenu me={me} />
+            {/* gold accent hairline */}
+            <div
+              aria-hidden
+              className="h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent"
+            />
           </header>
 
           <main id="main-content" className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
