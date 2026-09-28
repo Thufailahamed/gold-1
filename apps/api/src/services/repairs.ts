@@ -1,5 +1,7 @@
 import { gToMg, lkrToCents } from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
+import { buildEntryStmts } from "./journal";
+import { businessDateFor } from "./busdate";
 
 export type RepairStatus = "RECEIVED" | "IN_PROGRESS" | "QC" | "READY" | "COLLECTED" | "CANCELLED";
 
@@ -68,6 +70,49 @@ export async function qcRepair(db: D1Database, id: string, pass: boolean, reason
 
 export async function cancelRepair(db: D1Database, id: string, reason: string, actorId: string): Promise<void> {
   await transition(db, id, "CANCELLED", actorId, reason);
+}
+
+export type RepairPayment = { method: "cash" | "card" | "bank" | "credit"; amountLkr: number; bankAccountId?: string };
+
+async function paymentAccount(db: D1Database, p: RepairPayment): Promise<string> {
+  if (p.method === "cash") return "1000";
+  if (p.method === "card") return "1020";
+  if (p.method === "credit") return "1200";
+  if (p.bankAccountId) {
+    const acct = await db.prepare("SELECT account_code FROM bank_accounts WHERE id = ? AND is_active = 1").bind(p.bankAccountId).first<{ account_code: string }>();
+    if (!acct) throw Object.assign(new Error("Bank account not found"), { code: "NOT_FOUND" });
+    return acct.account_code;
+  }
+  return "1010";
+}
+
+export async function collectRepair(db: D1Database, id: string, input: { payments: RepairPayment[]; actualLkr?: number; conditionOut: string }, actorId: string): Promise<{ entryId: string }> {
+  const job = await db.prepare("SELECT id, status, customer_id, branch_id, estimate_cents FROM repairs WHERE id = ?").bind(id).first<{ id: string; status: string; customer_id: string; branch_id: string; estimate_cents: number }>();
+  if (!job) throw Object.assign(new Error("Repair not found"), { code: "NOT_FOUND" });
+  if (job.status !== "READY") throw Object.assign(new Error("Repair not ready for collection"), { code: "CONFLICT" });
+  if (!input.conditionOut.trim()) throw Object.assign(new Error("After-condition required"), { code: "VALIDATION" });
+  if (!input.payments.length) throw Object.assign(new Error("Payment required for collection"), { code: "VALIDATION" });
+  const actualCents = input.actualLkr === undefined ? job.estimate_cents : lkrToCents(input.actualLkr);
+  if (actualCents <= 0) throw Object.assign(new Error("Actual cost must be positive"), { code: "VALIDATION" });
+  const billed = input.actualLkr === undefined ? "estimate" : "actual";
+  const legs: { account: string; debitCents: number; creditCents: number; partyType?: "customer" | "supplier"; partyId?: string }[] = [];
+  let paid = 0;
+  for (const p of input.payments) {
+    if (!(p.amountLkr > 0)) throw Object.assign(new Error("Payment amounts must be positive"), { code: "VALIDATION" });
+    const cents = lkrToCents(p.amountLkr);
+    paid += cents;
+    legs.push({ account: await paymentAccount(db, p), debitCents: cents, creditCents: 0, ...(p.method === "credit" ? { partyType: "customer" as const, partyId: job.customer_id } : {}) });
+  }
+  if (paid !== actualCents) throw Object.assign(new Error("Payments must sum to the billed amount"), { code: "VALIDATION" });
+  legs.push({ account: "4000", debitCents: 0, creditCents: actualCents });
+  const now = Date.now();
+  const entry = await buildEntryStmts(db, { lines: legs, refEntity: "repair", refId: id, memo: `Repair collection (${billed})`, branchId: job.branch_id, actorId, auditAction: "repair.collect", auditEntity: "repair", auditEntityId: id, sourceModule: "sales" }, { entryDate: await businessDateFor(db, now) });
+  await db.batch([
+    ...entry.stmts,
+    db.prepare("UPDATE repairs SET status = 'COLLECTED', actual_cents = ?, condition_out = ? WHERE id = ? AND status = 'READY'").bind(actualCents, input.conditionOut.trim(), id),
+    db.prepare("INSERT INTO repair_events (id, repair_id, from_status, to_status, actor_id, reason, created_at) VALUES (?, ?, 'READY', 'COLLECTED', ?, ?, ?)").bind(crypto.randomUUID(), id, actorId, `collected (${billed})`, now),
+  ]);
+  return { entryId: entry.entryId };
 }
 
 export async function getRepair(db: D1Database, id: string) {
