@@ -37,7 +37,11 @@ const adjustSchema = z.object({
   amountCents: z.number().int().gt(0),
   memo: z.string().max(500).optional(),
   reason: z.string().min(1).max(500),
-  branchId: z.string().min(1).optional(),
+  // Required, not optional. A branchless entry is invisible to the per-branch
+  // day lock in buildEntryStmts, which let a manual adjustment — the most
+  // powerful correction the shop has — slip past a closed day. Every entry
+  // should be attributable to somewhere.
+  branchId: z.string().min(1),
   entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 

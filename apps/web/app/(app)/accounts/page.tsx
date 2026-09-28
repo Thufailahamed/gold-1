@@ -28,6 +28,7 @@ const adjustSchema = z.object({
   amountLkr: z.coerce.number().gt(0),
   memo: z.string().max(500).optional(),
   reason: z.string().min(1).max(500),
+  branchId: z.string().min(1),
 });
 
 export default function AccountsPage() {
@@ -182,6 +183,13 @@ export default function AccountsPage() {
             </label>
             <label className="block text-sm text-ink-2">Reason (required)
               <input className={controlClass} {...register("reason")} />
+            </label>
+            <label className="block text-sm text-ink-2">Branch (required)
+              <input
+                className={controlClass}
+                placeholder="branch-main"
+                {...register("branchId")}
+              />
             </label>
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={() => setDialog(false)} className="g-btn g-btn-secondary h-10 px-4 text-sm">
