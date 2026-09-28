@@ -482,3 +482,46 @@ export const meltingOutputs = sqliteTable("melting_outputs", {
   fineMg: integer("fine_mg").notNull(),
   outputType: text("output_type").notNull().default("grain"),
 });
+
+export const manufacturingOrders = sqliteTable("manufacturing_orders", {
+  id: text("id").primaryKey(),
+  number: text("number").notNull().unique(),
+  type: text("type").notNull(),
+  customerId: text("customer_id"),
+  branchId: text("branch_id").notNull(),
+  design: text("design").notNull(),
+  description: text("description"),
+  dueAt: integer("due_at"),
+  status: text("status").notNull().default("DRAFT"),
+  labourCents: integer("labour_cents").notNull().default(0),
+  makingCents: integer("making_cents").notNull().default(0),
+  stoneCostCents: integer("stone_cost_cents").notNull().default(0),
+  lossMg: integer("loss_mg").notNull().default(0),
+  lossReason: text("loss_reason"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+export const manufacturingMaterials = sqliteTable("manufacturing_materials", {
+  id: text("id").primaryKey(),
+  orderId: text("order_id").notNull(),
+  lotBatchId: text("lot_batch_id").notNull(),
+  lotNumber: text("lot_number").notNull(),
+  fineMg: integer("fine_mg").notNull(),
+});
+
+export const manufacturingOutputs = sqliteTable("manufacturing_outputs", {
+  id: text("id").primaryKey(),
+  orderId: text("order_id").notNull(),
+  productId: text("product_id"),
+  categoryId: text("category_id").notNull(),
+  metalTypeId: text("metal_type_id").notNull(),
+  purityId: text("purity_id").notNull(),
+  name: text("name").notNull(),
+  grossMg: integer("gross_mg").notNull(),
+  stoneMg: integer("stone_mg").notNull().default(0),
+  netMg: integer("net_mg").notNull(),
+  makingCents: integer("making_cents").notNull().default(0),
+  costCents: integer("cost_cents").notNull().default(0),
+  location: text("location"),
+});

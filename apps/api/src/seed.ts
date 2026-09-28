@@ -71,6 +71,10 @@ export const SEED_PERMISSIONS = [
   "oldgold:approve",
   "gold:view",
   "gold:manage",
+  "mfg:view",
+  "mfg:create",
+  "mfg:edit",
+  "mfg:approve",
 ] as const;
 
 export const SEED_ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -86,6 +90,7 @@ export const SEED_ROLE_PERMISSIONS: Record<string, string[]> = {
     "sales:view", "sales:export",
     "oldgold:view", "oldgold:export",
     "gold:view",
+    "mfg:view",
   ],
   cashier: ["users:view", "branches:view", "masters:view", "products:view", "accounts:view", "purchases:view", "sales:view", "sales:create", "oldgold:view", "oldgold:create", "gold:view"],
   salesperson: ["branches:view", "masters:view", "products:view", "purchases:view", "sales:view", "sales:create", "oldgold:view"],
@@ -96,14 +101,16 @@ export const SEED_ROLE_PERMISSIONS: Record<string, string[]> = {
     "purchases:view", "purchases:create", "purchases:edit",
     "sales:view",
     "oldgold:view",
+    "mfg:view",
   ],
   gold_officer: [
     "branches:view", "masters:view", "masters:create", "masters:export",
     "products:view", "purchases:view", "sales:view",
     "oldgold:view", "oldgold:create", "oldgold:edit",
     "gold:view", "gold:manage",
+    "mfg:view",
   ],
-  manufacturing_staff: ["products:view"],
+  manufacturing_staff: ["products:view", "mfg:view", "mfg:create", "mfg:edit"],
 };
 
 export function buildSeedSql(opts: {
