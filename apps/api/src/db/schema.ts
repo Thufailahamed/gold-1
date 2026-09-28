@@ -719,3 +719,30 @@ export const transferLines = sqliteTable("transfer_lines", {
   status: text("status").notNull().default("PENDING"),
   createdAt: integer("created_at").notNull(),
 });
+
+export const repairs = sqliteTable("repairs", {
+  id: text("id").primaryKey(),
+  number: text("number").notNull().unique(),
+  customerId: text("customer_id").notNull(),
+  branchId: text("branch_id").notNull(),
+  itemDesc: text("item_desc").notNull(),
+  weightMg: integer("weight_mg").notNull(),
+  conditionIn: text("condition_in").notNull(),
+  conditionOut: text("condition_out"),
+  repairType: text("repair_type").notNull(),
+  estimateCents: integer("estimate_cents").notNull(),
+  actualCents: integer("actual_cents"),
+  technicianId: text("technician_id"),
+  status: text("status").notNull().default("RECEIVED"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const repairEvents = sqliteTable("repair_events", {
+  id: text("id").primaryKey(),
+  repairId: text("repair_id").notNull(),
+  fromStatus: text("from_status").notNull(),
+  toStatus: text("to_status").notNull(),
+  actorId: text("actor_id"),
+  reason: text("reason"),
+  createdAt: integer("created_at").notNull(),
+});
