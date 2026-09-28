@@ -163,11 +163,18 @@ export async function reconcile(
     .bind(day, ...b.vals)
     .first<{ net: number }>();
   const siB = branchSql(opts.branchId, "si.branch_id");
+  // A document whose journal entry was reversed recognised no revenue, so it
+  // must not count on the document side either — otherwise a reversal is a
+  // permanent cross-foot failure. journal_entry_id is the link that makes
+  // this knowable.
+  const NOT_REVERSED = (alias: string, col: string) =>
+    ` AND (${alias}.${col} IS NULL OR NOT EXISTS (
+        SELECT 1 FROM journal_entries je WHERE je.id = ${alias}.${col} AND je.status = 'REVERSED'))`;
   const salesDocs = await db
     .prepare(
       `SELECT
          COALESCE((SELECT SUM(si.total_cents) FROM sales_invoices si
-                   WHERE si.status <> 'VOID' AND ${LOCAL_DAY("si.created_at")} = ?${siB.sql}), 0)
+                   WHERE si.status <> 'VOID' AND ${LOCAL_DAY("si.created_at")} = ?${siB.sql}${NOT_REVERSED("si", "journal_entry_id")}), 0)
        - COALESCE((SELECT SUM(sr.refund_cents + sr.credit_cents) FROM sales_returns sr
                    JOIN sales_invoices si2 ON si2.id = sr.invoice_id
                    WHERE sr.status = 'COMPLETE' AND ${LOCAL_DAY("sr.created_at")} = ?${siB.sql}), 0)
@@ -197,8 +204,8 @@ export async function reconcile(
   const piB = branchSql(opts.branchId, "pi.branch_id");
   const purchDocs = await db
     .prepare(
-      `SELECT COALESCE(SUM(total_cents), 0) AS net FROM purchase_invoices pi
-       WHERE pi.status <> 'VOID' AND ${LOCAL_DAY("pi.created_at")} = ?${piB.sql}`
+      `SELECT COALESCE(SUM(pi.total_cents), 0) AS net FROM purchase_invoices pi
+       WHERE pi.status <> 'VOID' AND ${LOCAL_DAY("pi.created_at")} = ?${piB.sql}${NOT_REVERSED("pi", "journal_entry_id")}`
     )
     .bind(day, ...piB.vals)
     .first<{ net: number }>();
