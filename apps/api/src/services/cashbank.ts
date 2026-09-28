@@ -508,14 +508,17 @@ export async function settleCardBatch(
   const stmts: D1PreparedStatement[] = [];
   const number = await nextNumber(db, stmts, "SETL", "SETL", "card_settlements");
   const settledOn = input.settledOn ?? (await businessDateFor(db, Date.now()));
-  // 1020 falls by the FULL gross, the bank rises by only the net, and the
-  // difference the acquirer withheld is booked to 6060 rather than lost.
+  // 1020 falls by the FULL gross because that is the whole receivable the
+  // acquirer took off the shop. The bank rises by only the net, and the fee
+  // they withheld is a CHARGE — a debit to the 6060 expense — which is what
+  // makes the entry balance:
+  //   DR bank net + DR 6060 fee = CR 1020 gross
   const lines = [
     { account: bank.account_code, debitCents: amounts.netCents, creditCents: 0 },
     { account: "1020", debitCents: 0, creditCents: amounts.grossCents },
   ];
   if (amounts.feeCents > 0)
-    lines.push({ account: "6060", debitCents: 0, creditCents: amounts.feeCents });
+    lines.push({ account: "6060", debitCents: amounts.feeCents, creditCents: 0 });
   const built = await buildEntryStmts(
     db,
     {
