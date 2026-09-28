@@ -155,6 +155,73 @@ awaiting approval for the day alongside expected cash.** Without that line,
 every evening closing after a large unapproved purchase looks like a till
 shortage.
 
+## Daily closing
+
+One close per branch per day. Cash is a physical thing in a specific place, so
+a combined figure is not something anyone can count.
+
+```
+Opening Cash        = Σ(1000 movement) where entry_date < the day, this branch
+Cash In             = Σ(debits to 1000)
+Cash Out            = Σ(credits to 1000)
+Expected Closing    = Opening + Cash In − Cash Out
+Actual Closing      = what the shop counted
+Cash Difference     = Actual − Expected
+```
+
+Opening cash is read from the **ledger**, not carried from yesterday's count,
+so the screen reconciles against the books rather than against itself and a
+wrong opening is caught instead of propagated. It also works on the first day
+and after a missed close.
+
+### The unclassified guard
+
+Every cash line is classified by the entry's `ref_entity`:
+
+| Direction | `ref_entity` | Line |
+|---|---|---|
+| In | `sale_invoice` | Sales |
+| In | `cash_withdrawal` | Bank withdrawals |
+| In | `cash_transfer_in` | Transfers in |
+| Out | `purchase_payment` | Supplier payments |
+| Out | `expense` | Expenses |
+| Out | `cash_deposit` | Deposits |
+| Out | `sale_return` | Refunds |
+| Out | `cash_transfer_out` | Transfers out |
+| Out | `old_gold_purchase` | Old gold purchases |
+
+A movement not on that list appears as **Unrecognised** and **blocks the
+close**. That guard is the whole reason the breakdown can be believed: without
+it the screen would quietly report a wrong number whenever someone added a new
+cash flow, and the shop would reconcile against it — which is precisely the
+manual work this exists to remove. It found `old_gold_purchase` on its first
+run.
+
+### The gate
+
+A day may be closed only when **all 18 reconciliation checks pass** for that
+branch and date, no cash is unrecognised, and a difference carries an
+explanation. The close records which checks it saw and freezes the whole screen
+into `report_json`.
+
+A closed day rejects new postings — see the lock in `database.md`. It covers
+backdating too.
+
+### Re-opening
+
+Re-opening needs a written reason and an approver who is **neither the
+requester nor whoever closed the day**. The close row is kept; a `day_reopens`
+row records who asked, who approved and why. A day reopened twice has two rows.
+
+### The awaiting-approval line
+
+**An unapproved expense has left the bank but is not in the ledger**, so the
+books read high by exactly that amount. The closing screen shows *expenses
+awaiting approval* above the arithmetic for exactly this reason: without it,
+every evening after a large unapproved purchase looks like a till shortage.
+`expenses_crossfoot` is unaffected — a pending expense is on neither side, so
+the check stays true, and that is deliberate.
+
 ## Book cost chain
 
 Gold inventory is carried at **what the shop actually paid**, never at the day's
@@ -208,7 +275,9 @@ Gold direction is read from the ledger row: a `destination` of
 Summing every row instead would count a sale and a loss as stock still on the
 shelf.
 
-`GET /accounts/reconciliation` runs 18 checks: per-entry balance, trial balance, and cross-foots
+`GET /accounts/reconciliation` All 18 must pass for a branch and date before that day can close. They
+are branch-scopable, and a per-branch run exercises code paths the
+shop-wide run does not. `reconcile` runs 18 checks: per-entry balance, trial balance, and cross-foots
 for sales, purchases, payments, party ledgers, card clearing, cash in
 transit, expenses, each gold movement type, and cumulative stock on hand. A failing check is a `200` with
 `passed: false` and the offending figures, not an error — the caller needs the

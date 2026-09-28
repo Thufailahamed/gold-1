@@ -85,11 +85,17 @@ Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 | POST | /expenses/:id/receipt | accounts:manage | multipart, jpeg/png/webp, 5MB |
 | GET | /expenses/:id/receipt | accounts:view | streams the receipt |
 | GET | /expenses/reports/summary | accounts:view | by category; registered BEFORE /expenses/:id |
+| GET | /day-closings | accounts:view | ?branchId&from&to&page&limit |
+| GET | /day-closings/preview | accounts:view | ?branchId&date; the rendered screen plus each check's state. Registered BEFORE /day-closings/:id |
+| GET | /day-closings/:id | accounts:view | the frozen report plus the re-open trail |
+| GET | /day-closings/:id/report | accounts:view | the frozen report, for printing or export |
+| POST | /day-closings | accounts:manage | {branchId, date, actualCents, differenceReason?}; 409 if a check fails, 409 on unrecognised cash, 409 if already closed, 400 on a difference with no reason |
+| POST | /day-closings/:id/reopen | accounts:manage | {reason, approvedBy}; the approver must hold accounts:manage and be neither the requester nor whoever closed the day |
 | GET | /accounts | accounts:view | 24 accounts + balance_cents, entry_count, is_system, is_editable; optional ?branchId= |
 | POST | /accounts | accounts:manage | create account; code /\d{4}/, unique, is_system=0 |
 | PATCH | /accounts/:code | accounts:manage | rename/describe; refuses system accounts and any account with journal lines |
 | PATCH | /accounts/:code/status | accounts:manage | deactivate/reactivate; same refusals |
-| POST | /accounts/adjustments | accounts:manage | balanced two-leg entry + reason; cents; optional ?entryDate=; returns id, entryId, entryNo |
+| POST | /accounts/adjustments | accounts:manage | balanced two-leg entry + reason + **branchId (required)**; cents; optional entryDate; returns id, entryId, entryNo |
 | GET | /accounts/journal | accounts:view | ?from&to&branchId&accountCode&sourceModule&refEntity&page&limit |
 | GET | /accounts/journal/:id | accounts:view | one entry with ordered lines |
 | POST | /accounts/journal/reverse | accounts:manage | {entryId, reason, entryDate?}; mirror + reverses_entry_id, original becomes REVERSED |

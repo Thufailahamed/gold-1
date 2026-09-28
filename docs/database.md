@@ -205,6 +205,37 @@ Both gates are strictly-greater-than: an expense exactly *at* a threshold is
 not gated. A threshold is a "watch anything above this" line, and the shop
 sets it to its largest routine spend.
 
+## Day closing (migration `0020_day_closing`)
+
+- `day_closings(id PK, branch_id, close_date, opening_cents, cash_in_cents, cash_out_cents, expected_cents, actual_cents, difference_cents, difference_reason?, report_json, checks_passed, status CLOSED|REOPENED, closed_by?, closed_at, created_at)`.
+- `day_reopens(id PK, closing_id, reason, requested_by?, approved_by?, approved_at, created_at)`.
+- Unique on `(branch_id, close_date)`; indexes on `day_closings(close_date)` and `day_reopens(closing_id)`.
+
+`day_reopens` is a separate table rather than columns on `day_closings` so a
+day reopened twice has two records, not one overwritten reason. **The close
+row is never deleted or rewritten**: its snapshot, actual count and difference
+are the record of what the shop believed at the time, and `report_json` is
+that record frozen.
+
+Only `status = 'CLOSED'` blocks a posting. A `REOPENED` day can be posted to
+again and its `day_closings` row is left intact.
+
+### The lock lives in `buildEntryStmts`
+
+A closed day rejects new postings, and the check is **not** in each posting
+service — it is in the one function every journal entry already passes through,
+which already has both `entryDate` and `branchId`. One guard covers sales,
+purchases, expenses, card settlement, bank transfers and gold adjustments.
+Putting it in each of the six services would mean six chances to forget one,
+and the failure mode is silent: the day stays closed in the books while the
+shop keeps trading against it.
+
+It covers backdating too, since backdating is just an `entryDate` in the past.
+It fires only when `post.branchId` is set, which is why **every entry must
+name a branch** — a branchless entry belongs to no branch's day, so it can
+never be counted in one. `POST /accounts/adjustments` therefore requires
+`branchId`.
+
 ## Later-phase reservations (not yet created)
 
 - Gold ledger: gross/stone/net weight, purity, karat, fine-gold equiv, rate,
