@@ -503,3 +503,14 @@ export const reopenDaySchema = z.object({
 
 export type CloseDayInput = z.infer<typeof closeDaySchema>;
 export type ReopenDayInput = z.infer<typeof reopenDaySchema>;
+
+export const monthlyQuerySchema = z.object({
+  month: z.coerce.number().int().min(1).max(12),
+  year: z.coerce.number().int().min(1970).max(2100),
+  branchId: z.string().min(1).optional(),
+  categoryId: z.string().min(1).optional(),
+  purityId: z.string().min(1).optional(),
+  staffId: z.string().min(1).optional(),
+});
+export type MonthlyQueryInput = z.infer<typeof monthlyQuerySchema>;
+export const monthlySnapshotSchema = monthlyQuerySchema.extend({ note: z.string().max(500).optional() });

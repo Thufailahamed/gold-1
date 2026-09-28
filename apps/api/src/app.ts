@@ -14,6 +14,7 @@ import { expenseCategories, expenses } from "./routes/expenses";
 import { health } from "./routes/health";
 import { manufacturing } from "./routes/manufacturing";
 import { melting } from "./routes/melting";
+import { monthly } from "./routes/monthly";
 import { customers, suppliers } from "./routes/parties";
 import { inventory } from "./routes/inventory";
 import { oldgold } from "./routes/oldgold";
@@ -54,5 +55,6 @@ app.route("/api/v1/cash", cash);
 app.route("/api/v1/card-settlements", settlements);
 app.route("/api/v1/purchases", purchases);
 app.route("/api/v1/sales", sales);
+app.route("/api/v1/reports", monthly);
 
 export default app;
