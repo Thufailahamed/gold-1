@@ -1,4 +1,8 @@
+import { fineGoldMg, goldValueCents } from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
+import { businessDateFor } from "./busdate";
+import { buildEntryStmts } from "./journal";
+import { currentGoldRatesCents } from "./rates";
 import type { PageOpts } from "./catalog";
 import { getSetting } from "./settings";
 
@@ -422,7 +426,7 @@ export async function recordAdjustment(
   db: D1Database,
   input: { type: "ADJUSTMENT" | "LOSS" | "RECOVERY"; branchId: string; weightMg: number; permille: number; reason: string; approvedBy?: string },
   actorId: string
-): Promise<{ id: string }> {
+): Promise<{ id: string; refNo: string; valueCents: number }> {
   const branch = await db
     .prepare("SELECT id FROM branches WHERE id = ? AND is_active = 1")
     .bind(input.branchId)
@@ -435,7 +439,34 @@ export async function recordAdjustment(
       throw Object.assign(new Error("Adjustment exceeds approval threshold"), { code: "FORBIDDEN" });
     await requireGoldApprover(db, input.approvedBy, actorId);
   }
+  // An adjustment carries a weight but no money, so the value has to be
+  // derived. A guessed loss is worse than no loss: if there is no effective
+  // rate for this purity the adjustment is refused outright rather than
+  // valued at zero and quietly forgotten.
+  const purity = await db
+    .prepare("SELECT id, permille FROM purities WHERE permille = ?")
+    .bind(input.permille)
+    .first<{ id: string; permille: number }>();
+  if (!purity)
+    throw Object.assign(new Error(`No purity matches ${input.permille} permille`), {
+      code: "VALIDATION",
+    });
+  const rateRow = (await currentGoldRatesCents(db)).find((r) => r.purity_id === purity.id);
+  if (!rateRow)
+    throw Object.assign(new Error("No gold rate for this purity; cannot value the adjustment"), {
+      code: "VALIDATION",
+    });
+  const valueCents = goldValueCents(fineGoldMg(input.weightMg, purity.permille), rateRow.rate_cents_per_g);
+  if (valueCents <= 0)
+    throw Object.assign(new Error("Adjustment has no value"), { code: "VALIDATION" });
+
   const id = crypto.randomUUID();
+  const counter = await db
+    .prepare("SELECT next FROM counters WHERE name = 'GADJ'")
+    .bind()
+    .first<{ next: number }>();
+  if (!counter) throw Object.assign(new Error("Counter GADJ missing"), { code: "INTERNAL" });
+  const refNo = `GADJ-${String(counter.next).padStart(6, "0")}`;
   const now = Date.now();
   const stmts = await postGoldStmts(
     db,
@@ -454,6 +485,39 @@ export async function recordAdjustment(
     ],
     { actorId, auditAction: "gold.adjust", auditEntity: "adjustment", auditEntityId: id, branchId: input.branchId }
   );
+  // 5300 is netted across LOSS, ADJUSTMENT and RECOVERY so the account always
+  // shows net gold variance rather than mixing shrinkage and surplus.
+  const lines: { account: string; debitCents: number; creditCents: number }[] =
+    input.type === "LOSS"
+      ? [
+          { account: "5300", debitCents: valueCents, creditCents: 0 },
+          { account: "1100", debitCents: 0, creditCents: valueCents },
+        ]
+      : [
+          { account: "1100", debitCents: valueCents, creditCents: 0 },
+          { account: "5300", debitCents: 0, creditCents: valueCents },
+        ];
+  const entry = await buildEntryStmts(
+    db,
+    {
+      lines,
+      refEntity: "gold_adjustment",
+      refId: id,
+      refNo,
+      memo: `${input.type} ${input.weightMg}g: ${input.reason}`,
+      branchId: input.branchId,
+      actorId,
+      auditAction: "gold.adjust.value",
+      auditEntity: "adjustment",
+      auditEntityId: id,
+      sourceModule: "gold",
+    },
+    { entryDate: await businessDateFor(db, now) }
+  );
+  stmts.push(
+    db.prepare("UPDATE counters SET next = ? WHERE name = 'GADJ'").bind(counter.next + 1),
+    ...entry.stmts
+  );
   await db.batch(stmts);
-  return { id };
+  return { id, refNo, valueCents };
 }
