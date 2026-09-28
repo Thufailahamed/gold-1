@@ -138,3 +138,36 @@ export function allocateGoldValue(vIn: number, fineIn: number, outputsFineMg: nu
 export function goldValueCents(fineMg: number, rateCentsPerG: number): number {
   return Math.round((fineMg * rateCentsPerG) / 1000);
 }
+
+/**
+ * A card settlement splits the gross the shop took into the net the acquirer
+ * actually pays and the fee they withhold. The fee is booked to 6060, not
+ * absorbed — losing it is how a shop quietly under-makes on card turnover.
+ */
+export function settlementAmounts(
+  grossCents: number,
+  feeCents: number
+): { grossCents: number; feeCents: number; netCents: number } {
+  if (!Number.isInteger(grossCents) || grossCents <= 0)
+    throw Object.assign(new Error("Settlement gross must be a positive whole amount"), {
+      code: "VALIDATION",
+    });
+  if (!Number.isInteger(feeCents) || feeCents < 0)
+    throw Object.assign(new Error("Settlement fee must be a whole amount of zero or more"), {
+      code: "VALIDATION",
+    });
+  if (feeCents > grossCents)
+    throw Object.assign(new Error("Settlement fee cannot exceed the gross"), {
+      code: "VALIDATION",
+    });
+  return { grossCents, feeCents, netCents: grossCents - feeCents };
+}
+
+/**
+ * Money that left the sending branch but has not yet arrived. Floored at zero
+ * so an over-receipt in the books reads as nothing in transit rather than as
+ * negative money, which would hide the error.
+ */
+export function inTransitTotal(dispatchedCents: number, receivedCents: number): number {
+  return Math.max(dispatchedCents - receivedCents, 0);
+}

@@ -9,8 +9,10 @@ import {
   closingCash,
   computePartyLedger,
   goldValueCents,
+  inTransitTotal,
   isBusinessDate,
   meltingLossValue,
+  settlementAmounts,
   type PartyLedgerLine,
 } from "./accounting";
 
@@ -239,5 +241,51 @@ describe("cashDifference", () => {
 
   it("is zero when the count matches", () => {
     expect(cashDifference(23_000, 23_000)).toBe(0);
+  });
+});
+
+describe("settlementAmounts", () => {
+  it("splits gross into net plus fee", () => {
+    expect(settlementAmounts(250_000, 6_000)).toEqual({
+      grossCents: 250_000,
+      feeCents: 6_000,
+      netCents: 244_000,
+    });
+  });
+
+  it("allows a zero fee", () => {
+    expect(settlementAmounts(100_000, 0).netCents).toBe(100_000);
+  });
+
+  it("rejects a fee larger than the settlement", () => {
+    expect(() => settlementAmounts(100_000, 100_001)).toThrow(/fee/i);
+  });
+
+  it("rejects a negative or fractional fee", () => {
+    expect(() => settlementAmounts(100_000, -1)).toThrow();
+    expect(() => settlementAmounts(100_000, 1.5)).toThrow();
+  });
+
+  it("rejects a non-positive gross", () => {
+    expect(() => settlementAmounts(0, 0)).toThrow(/gross/i);
+    expect(() => settlementAmounts(-100, 0)).toThrow(/gross/i);
+  });
+});
+
+describe("inTransitTotal", () => {
+  it("is the sent amount until the receipt is recorded", () => {
+    expect(inTransitTotal(100_000, 0)).toBe(100_000);
+  });
+
+  it("clears when the whole amount is received", () => {
+    expect(inTransitTotal(100_000, 100_000)).toBe(0);
+  });
+
+  it("shows the remainder on a part-received transfer", () => {
+    expect(inTransitTotal(100_000, 40_000)).toBe(60_000);
+  });
+
+  it("never reports negative when the books over-receive", () => {
+    expect(inTransitTotal(100_000, 120_000)).toBe(0);
   });
 });

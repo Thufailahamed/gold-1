@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Syne, IBM_Plex_Mono } from "next/font/google";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -24,6 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className={`${inter.variable} ${syne.variable} ${plexMono.variable} font-sans`}>
         {children}
+        <Toaster richColors />
       </body>
     </html>
   );

@@ -558,6 +558,7 @@ export function TableCard({
   title,
   description,
   actions,
+  icon,
   toolbar,
   footer,
   children,
@@ -566,17 +567,18 @@ export function TableCard({
   title?: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
+  icon?: ReactNode;
   toolbar?: ReactNode;
   footer?: ReactNode;
   children: ReactNode;
   className?: Maybe<string>;
 }) {
-  const hasHeader = Boolean(title || actions);
+  const hasHeader = Boolean(title || actions || icon);
   return (
     <section className={cn("g-surface overflow-hidden", className)}>
       {hasHeader && (
         <div className="px-5 pt-5 pb-4 sm:px-6">
-          <CardHeader title={title} description={description} actions={actions} />
+          <CardHeader title={title} description={description} actions={actions} icon={icon} />
         </div>
       )}
       {toolbar && <div className={cn("px-5 pb-4 sm:px-6", !hasHeader && "pt-4")}>{toolbar}</div>}
