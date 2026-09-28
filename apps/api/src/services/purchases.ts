@@ -176,7 +176,7 @@ async function receiveBatch(
     stmts.push(
       db
         .prepare(
-          "INSERT INTO gold_ledger (id, occurred_at, branch_id, source, destination, type, weight_mg, permille, fine_mg, ref_entity, ref_id, product_id, old_gold_id, user_id, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, 'PURCHASE', ?, ?, ?, 'purchase_invoice', ?, ?, NULL, NULL, ?, ?, ?)"
+          "INSERT INTO gold_ledger (id, occurred_at, branch_id, source, destination, type, weight_mg, permille, fine_mg, ref_entity, ref_id, product_id, old_gold_id, user_id, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, 'PURCHASE', ?, ?, ?, 'purchase_invoice', ?, ?, NULL, ?, ?, ?, ?)"
         )
         .bind(
           crypto.randomUUID(),

@@ -60,28 +60,35 @@ function branchSql(branchId: string | undefined, col: string): { sql: string; va
 }
 
 /**
+ * D1 rejects `.bind()` with no arguments, and every query here is optional on
+ * branch. Bind only when there is something to bind.
+ */
+async function firstRow<T>(db: D1Database, sql: string, vals: unknown[]): Promise<T | null> {
+  const stmt = db.prepare(sql);
+  return (vals.length ? await stmt.bind(...vals).first<T>() : await stmt.first<T>()) ?? null;
+}
+
+/**
  * Every fine milligram the shop physically holds: catalogue product on the
  * shelf, old gold that has been bought into inventory, melt lots not yet
  * consumed, and gold sitting in an unfinished manufacturing order.
  */
 export async function heldGoldMg(db: D1Database, branchId?: string): Promise<number> {
   const bp = branchSql(branchId, "branch_id");
-  const products = await db
-    .prepare(
-      `SELECT COALESCE(SUM(fine_gold_mg), 0) AS fine_mg FROM products
-       WHERE status NOT IN ('SOLD','RETURNED','VOID','LOST','MELTED')${bp.sql}`
-    )
-    .bind(...bp.vals)
-    .first<{ fine_mg: number }>();
-  const oldGold = await db
-    .prepare(
-      `SELECT COALESCE(SUM(fine_mg), 0) AS fine_mg FROM old_gold_items
-       WHERE status IN ('PURCHASED','AVAILABLE','RESERVED_FOR_MELTING')${bp.sql}`
-    )
-    .bind(...bp.vals)
-    .first<{ fine_mg: number }>();
-  const lots = await db
-    .prepare(
+  const products = await firstRow<{ fine_mg: number }>(
+    db,
+    `SELECT COALESCE(SUM(fine_gold_mg), 0) AS fine_mg FROM products
+     WHERE status NOT IN ('SOLD','RETURNED','VOID','LOST','MELTED')${bp.sql}`,
+    bp.vals
+  );
+  const oldGold = await firstRow<{ fine_mg: number }>(
+    db,
+    `SELECT COALESCE(SUM(fine_mg), 0) AS fine_mg FROM old_gold_items
+     WHERE status IN ('PURCHASED','AVAILABLE','RESERVED_FOR_MELTING')${bp.sql}`,
+    bp.vals
+  );
+  const lots = await firstRow<{ total: number; allocated: number }>(
+    db,
       `SELECT COALESCE(SUM(o.fine_mg), 0) AS total,
               COALESCE(SUM(COALESCE(a.fine_mg, 0)), 0) AS allocated
        FROM melting_outputs o
@@ -91,17 +98,15 @@ export async function heldGoldMg(db: D1Database, branchId?: string): Promise<num
          FROM manufacturing_materials m
          JOIN manufacturing_orders mo ON mo.id = m.order_id AND mo.status <> 'VOID'
          GROUP BY m.lot_batch_id, m.lot_number
-       ) a ON a.lot_batch_id = o.batch_id AND a.lot_number = o.lot_number${bp.sql}`
-    )
-    .bind(...bp.vals)
-    .first<{ total: number; allocated: number }>();
-  const wip = await db
-    .prepare(
-      `SELECT COALESCE(SUM(m.fine_mg), 0) AS fine_mg FROM manufacturing_materials m
-       JOIN manufacturing_orders mo ON mo.id = m.order_id AND mo.status <> 'VOID'${bp.sql}`
-    )
-    .bind(...bp.vals)
-    .first<{ fine_mg: number }>();
+       ) a ON a.lot_batch_id = o.batch_id AND a.lot_number = o.lot_number${bp.sql}`,
+    bp.vals
+  );
+  const wip = await firstRow<{ fine_mg: number }>(
+    db,
+    `SELECT COALESCE(SUM(m.fine_mg), 0) AS fine_mg FROM manufacturing_materials m
+     JOIN manufacturing_orders mo ON mo.id = m.order_id AND mo.status <> 'VOID'${bp.sql}`,
+    bp.vals
+  );
   return n(products?.fine_mg) + n(oldGold?.fine_mg) + (n(lots?.total) - n(lots?.allocated)) + n(wip?.fine_mg);
 }
 
@@ -276,7 +281,9 @@ export async function reconcile(
     compareMoney(
       "payments_crossfoot",
       "Payment-driven cash movement matches the payment records",
-      n(salesPay?.net) - n(refunds?.net) + n(purchPay?.net) + n(oldGoldPaid?.net),
+      // A supplier payment and an old-gold settlement are cash OUTFLOWS, so
+      // they subtract. Adding them made every paid purchase a discrepancy.
+      n(salesPay?.net) - n(refunds?.net) - n(purchPay?.net) - n(oldGoldPaid?.net),
       n(payJournal?.net),
       "day"
     )
@@ -314,6 +321,7 @@ export async function reconcile(
        WHERE l.type IN ('PURCHASE','OLD_GOLD_PURCHASE','SALE','MELTING_INPUT','MELTING_OUTPUT',
                         'MANUFACTURING_INPUT','MANUFACTURING_OUTPUT','LOSS')
          AND ${LOCAL_DAY("l.occurred_at")} = ?${glb.sql}
+         AND (l.type <> 'LOSS' OR l.ref_entity IN ('melting_batch','manufacturing_order'))
        GROUP BY l.type`
     )
     .bind(day, ...glb.vals)
@@ -366,6 +374,12 @@ export async function reconcile(
        JOIN purities pu ON pu.id = m2.purity_id
        WHERE mo.status = 'COMPLETE' AND ${LOCAL_DAY("mo.created_at")} = ?${bp.sql}`,
     ],
+    // LOSS covers melting and manufacturing only. A manual stock-count
+    // adjustment is recorded *only* in the gold ledger — there is no
+    // independent document for it — so including it would compare the ledger
+    // with itself and always pass, which is worse than not checking. Its
+    // weight is carried by gold_stock_consistency instead, where a loss that
+    // does not reduce stock on hand shows up.
     [
       "LOSS",
       `SELECT
@@ -378,10 +392,11 @@ export async function reconcile(
   ];
   for (const [type, sql] of docQueries) {
     const br = sql.includes(piB.sql) ? piB : sql.includes(siB.sql) ? siB : bp;
-    const row = await db
-      .prepare(sql)
-      .bind(...(type === "LOSS" ? [day, day] : [day]), ...br.vals)
-      .first<{ fine_mg: number }>();
+    const row = await firstRow<{ fine_mg: number }>(
+      db,
+      sql,
+      type === "LOSS" ? [day, day, ...br.vals] : [day, ...br.vals]
+    );
     checks.push(
       compareWeight(
         `gold_${type.toLowerCase()}`,
@@ -396,12 +411,20 @@ export async function reconcile(
   //    old gold counts: an item in RECEIVED, TESTED or VALUED is in the shop
   //    but has no journal and no ledger row, because the shop has not bought
   //    it yet. Counting it would make this check fail permanently.
-  const total = await db
-    .prepare(
-      `SELECT COALESCE(SUM(fine_mg), 0) AS fine_mg FROM gold_ledger WHERE 1 = 1${bp.sql}`
-    )
-    .bind(...bp.vals)
-    .first<{ fine_mg: number }>();
+  // Gold is held when a row's destination is this branch, and leaves when its
+  // source is this branch. Summing every row instead would count a sale and a
+  // loss as stock still on the shelf, which is why a shop that has sold
+  // everything it bought looked like it was holding 39g of gold.
+  const tgt = opts.branchId ?? null;
+  const total = await firstRow<{ fine_mg: number }>(
+    db,
+    `SELECT COALESCE(SUM(CASE
+        WHEN destination = 'branch:' || COALESCE(?, branch_id) THEN fine_mg
+        WHEN source      = 'branch:' || COALESCE(?, branch_id) THEN -fine_mg
+        ELSE 0 END), 0) AS fine_mg
+     FROM gold_ledger WHERE 1 = 1${bp.sql}`,
+    [tgt, tgt, ...bp.vals]
+  );
   checks.push(
     compareWeight(
       "gold_stock_consistency",

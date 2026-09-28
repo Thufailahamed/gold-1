@@ -473,8 +473,12 @@ export async function recordAdjustment(
     [
       {
         branchId: input.branchId,
-        source: "adjustment",
-        destination: `branch:${input.branchId}`,
+        // Direction is what gold_stock_consistency reads: a row's destination
+        // being the branch means gold arrived, its source being the branch
+        // means gold left. A LOSS therefore has to leave the branch as its
+        // source, or the lost gold would still read as stock on hand.
+        source: input.type === "LOSS" ? `branch:${input.branchId}` : "adjustment",
+        destination: input.type === "LOSS" ? "loss" : `branch:${input.branchId}`,
         type: input.type,
         weightMg: input.weightMg,
         permille: input.permille,

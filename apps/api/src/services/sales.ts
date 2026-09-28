@@ -223,6 +223,32 @@ export async function receiveSale(
         )
         .bind(crypto.randomUUID(), l.productId, l.fineMg, l.permille, invoiceId, input.branchId, now, actorId)
     );
+    // A sale has to leave the gold ledger as well as the inventory table.
+    // Without this the ledger has no SALE rows, so gold_sale can never match
+    // the sales items and gold_stock_consistency overstates stock by every
+    // gram the shop has sold.
+    stmts.push(
+      db
+        .prepare(
+          "INSERT INTO gold_ledger (id, occurred_at, branch_id, source, destination, type, weight_mg, permille, fine_mg, ref_entity, ref_id, product_id, old_gold_id, user_id, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, 'SALE', ?, ?, ?, 'sale_invoice', ?, ?, NULL, ?, ?, ?, ?)"
+        )
+        .bind(
+          crypto.randomUUID(),
+          now,
+          input.branchId,
+          `branch:${input.branchId}`,
+          `sale:${number}`,
+          l.netMg,
+          l.permille,
+          l.fineMg,
+          invoiceId,
+          l.productId,
+          actorId,
+          `Sale ${number}`,
+          now,
+          actorId
+        )
+    );
   }
   const journal = await buildEntryStmts(
     db,
