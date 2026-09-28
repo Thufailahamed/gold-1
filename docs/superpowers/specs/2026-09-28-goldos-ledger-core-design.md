@@ -446,7 +446,7 @@ check 6.
 | 2 | `trial_balance` | Cumulative Σdebit − Σcredit = 0 as of the date |
 | 3 | `sales_crossfoot` | 4000 net movement = invoice totals − returns, for the day |
 | 4 | `purchases_crossfoot` | 1100 from purchase documents = invoice totals, for the day |
-| 5 | `payments_crossfoot` | 1000/1010/1020 movement = the payment records, for the day |
+| 5 | `payments_crossfoot` | Payment-driven cash movement = the payment records, for the day |
 | 6 | `party_ledgers` | Each party's closing = its 1200/2000 control balance |
 | 7 | `gold_ledger_vs_documents` | Per-type `fine_mg` in `gold_ledger` = the source documents, for the day |
 | 8 | `gold_stock_consistency` | Cumulative ledger weight = products on hand + booked old gold + unconsumed lots + WIP |
@@ -469,6 +469,19 @@ so scoping to the creating row would produce a false failure:
 
 `ADJUSTMENT` and `RECOVERY` are excluded — for those the ledger *is* the
 source of record, and §3.6 already ties them to 5300.
+
+Check 5 is scoped by `ref_entity`, not by "all cash movement". Specs 2-4 add
+their own cash sources — card settlements, expenses, bank payments,
+transfers — each with its own `ref_entity`, and a check that compared *total*
+cash movement to the payment tables would begin failing the moment they land.
+The comparison therefore covers only entries whose `ref_entity` is
+`sale_invoice`, `sale_return`, `purchase_payment`, or `old_gold_purchase`, and
+excludes entries where a cash leg is a **cost** rather than a payment
+(manufacturing labour paid in cash, melting loss). A credit sale inserts a
+`sales_payments` row with `method = 'credit'` but debits 1200 and never a cash
+account, so it is excluded from both sides. The documented side is
+`Σ sales_payments (method ≠ 'credit') − Σ sales_returns.refund_cents +
+Σ purchase_payments + Σ old_gold_purchases.paid_cents`, for the day.
 
 Check 8 is the one that answers "reconciles with inventory". It is cumulative
 by design, because stock persists across days:
@@ -607,9 +620,10 @@ The second plan depends on the first being merged; it assumes
   audit row, as `postJournalStmts` already did; the envelope, `requirePerm`,
   `serviceError`, and `{rows, total}` conventions are unchanged. The
   header+line split adds a table but breaks no existing call-site contract.
-- Single plan: ledger infrastructure and the postings that make it correct.
-  Specs 2, 3, and 4 are separate spec→plan cycles and are named but not
-  designed here.
+- Two plans: foundation (the ledger exists and is correct) then postings and
+  reconciliation (the ledger is complete). Splitting at that seam means each
+  plan ends with something independently demonstrable. Specs 2, 3, and 4 are
+  separate spec→plan cycles and are named but not designed here.
 - Unambiguous: card account (1020), the accrual default for manufacturing
   labour (2200), the treatment of historical card sales (left on 1010), the
   melting loss formula's zero case, the exclusion of `ADJUSTMENT` /
