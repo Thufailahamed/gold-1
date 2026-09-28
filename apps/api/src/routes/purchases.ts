@@ -34,7 +34,7 @@ const receiveSchema = z.object({
   paidMethod: z.enum(["cash", "bank"]).optional(),
 });
 
-const reasonSchema = z.object({ reason: z.string().min(1).max(500) });
+const reasonSchema = z.object({ reason: z.string().min(1).max(500), approvalId: z.string().min(1).optional() });
 
 /**
  * Report windows must agree with journal_entries.entry_date, which is
@@ -99,7 +99,9 @@ export const purchases = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      await cancelOrder(c.env.DB, c.req.param("id"), parsed.data.reason, c.get("userId"));
+      await cancelOrder(c.env.DB, c.req.param("id"), parsed.data.reason, c.get("userId"), {
+        approvalId: parsed.data.approvalId,
+      });
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -222,7 +224,9 @@ export const purchases = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      await voidInvoice(c.env.DB, c.req.param("id"), parsed.data.reason, c.get("userId"));
+      await voidInvoice(c.env.DB, c.req.param("id"), parsed.data.reason, c.get("userId"), {
+        approvalId: parsed.data.approvalId,
+      });
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);

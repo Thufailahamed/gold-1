@@ -24,6 +24,9 @@ export type ApprovalRow = {
   status: string;
   expires_at: number;
   decided_at: number | null;
+  consumed_at: number | null;
+  consumed_by: string | null;
+  metric: number | null;
   created_at: number;
 };
 
@@ -88,7 +91,7 @@ export async function requestApproval(
   db: D1Database,
   input: RequestApprovalInput,
   actorId: string
-): Promise<{ id: string; status: "PENDING" | "APPROVED" }> {
+): Promise<{ id: string; status: "PENDING" | "APPROVED"; entity: string; entityId: string; metric: number }> {
   if (!(APPROVAL_ACTIONS as readonly string[]).includes(input.action))
     fail("VALIDATION", `Unknown approval action: ${input.action}`);
   if (!input.reason.trim()) fail("VALIDATION", "Approval requests require a reason");
@@ -99,7 +102,7 @@ export async function requestApproval(
     await db.batch([
       db
         .prepare(
-          "INSERT INTO approvals (id, action, entity, entity_id, requester_id, old_value_json, new_value_json, reason, branch_id, status, expires_at, decided_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'APPROVED', ?, ?, ?)"
+          "INSERT INTO approvals (id, action, entity, entity_id, requester_id, old_value_json, new_value_json, reason, branch_id, status, expires_at, decided_at, consumed_at, consumed_by, metric, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'APPROVED', ?, ?, ?, ?, ?, ?)"
         )
         .bind(
           id,
@@ -113,6 +116,9 @@ export async function requestApproval(
           input.branchId ?? null,
           now,
           now,
+          now,
+          actorId,
+          input.metric,
           now
         ),
       buildAuditStmt(db, {
@@ -125,12 +131,12 @@ export async function requestApproval(
         reason: input.reason,
       }),
     ]);
-    return { id, status: "APPROVED" };
+    return { id, status: "APPROVED", entity: input.entity, entityId: input.entityId, metric: input.metric };
   }
   await db.batch([
     db
       .prepare(
-        "INSERT INTO approvals (id, action, entity, entity_id, requester_id, old_value_json, new_value_json, reason, branch_id, status, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)"
+        "INSERT INTO approvals (id, action, entity, entity_id, requester_id, old_value_json, new_value_json, reason, branch_id, status, expires_at, metric, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?)"
       )
       .bind(
         id,
@@ -143,6 +149,7 @@ export async function requestApproval(
         input.reason,
         input.branchId ?? null,
         approvalExpiresAt(now, config.ttlHours),
+        input.metric,
         now
       ),
     buildAuditStmt(db, {
@@ -155,7 +162,114 @@ export async function requestApproval(
       reason: input.reason,
     }),
   ]);
-  return { id, status: "PENDING" };
+  return { id, status: "PENDING", entity: input.entity, entityId: input.entityId, metric: input.metric };
+}
+
+/**
+ * Throws the PENDING sentinel the `serviceError` mapper turns into a 202
+ * carrying the approval id + bound terms, so the client can retry unchanged.
+ */
+export function pendingApproval(
+  request: { id: string; entity: string; entityId: string; metric: number },
+  action: ApprovalAction
+): never {
+  throw Object.assign(new Error(`${action} requires approval`), {
+    code: "PENDING",
+    approvalId: request.id,
+    entity: request.entity,
+    entityId: request.entityId,
+    metric: request.metric,
+  });
+}
+
+/**
+ * Records a same-counter inline approval (an approver was present and named
+ * via the legacy `approvedBy` field): executes nothing, just writes the
+ * APPROVED row — already spent, so it is marked consumed immediately.
+ */
+export async function recordInlineApproval(
+  db: D1Database,
+  input: RequestApprovalInput & { approverId: string },
+  actorId: string
+): Promise<{ id: string }> {
+  if (!(APPROVAL_ACTIONS as readonly string[]).includes(input.action))
+    fail("VALIDATION", `Unknown approval action: ${input.action}`);
+  const now = Date.now();
+  const id = crypto.randomUUID();
+  await db.batch([
+    db
+      .prepare(
+        "INSERT INTO approvals (id, action, entity, entity_id, requester_id, approver_id, old_value_json, new_value_json, reason, branch_id, status, expires_at, decided_at, consumed_at, consumed_by, metric, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'APPROVED', ?, ?, ?, ?, ?, ?)"
+      )
+      .bind(
+        id,
+        input.action,
+        input.entity,
+        input.entityId,
+        actorId,
+        input.approverId,
+        JSON.stringify(input.oldValue ?? {}),
+        JSON.stringify(input.newValue ?? {}),
+        `inline approver: ${input.reason}`,
+        input.branchId ?? null,
+        now,
+        now,
+        now,
+        actorId,
+        input.metric,
+        now
+      ),
+    buildAuditStmt(db, {
+      userId: actorId,
+      action: "approvals.inline",
+      entity: "approval",
+      entityId: id,
+      next: { action: input.action, status: "APPROVED", approverId: input.approverId },
+      branchId: input.branchId,
+      reason: input.reason,
+    }),
+  ]);
+  return { id };
+}
+
+/**
+ * Single-use redemption of an APPROVED request. Verifies the row is approved,
+ * unspent, and bound to the same action/entity/terms (exact metric match —
+ * callers round percentage metrics identically on both sides). The losers of
+ * an exact race fail the token check below.
+ */
+export async function consumeApproval(
+  db: D1Database,
+  input: { action: ApprovalAction; id: string; entity: string; entityId: string; metric: number },
+  actorId: string
+): Promise<ApprovalRow> {
+  const row = await loadApproval(db, input.id);
+  if (
+    row.status !== "APPROVED" ||
+    row.consumed_at !== null ||
+    row.action !== input.action ||
+    row.entity !== input.entity ||
+    row.entity_id !== input.entityId ||
+    (row.metric ?? 0) !== input.metric
+  )
+    fail("CONFLICT", "Approval is not redeemable for these terms (re-request if terms changed)");
+  const now = Date.now();
+  const token = crypto.randomUUID();
+  await db.batch([
+    db
+      .prepare("UPDATE approvals SET consumed_at = ?, consumed_by = ? WHERE id = ? AND status = 'APPROVED' AND consumed_at IS NULL")
+      .bind(now, token, input.id),
+    buildAuditStmt(db, {
+      userId: actorId,
+      action: "approvals.consume",
+      entity: "approval",
+      entityId: input.id,
+    }),
+  ]);
+  const check = await loadApproval(db, input.id);
+  if (check.consumed_by !== token)
+    fail("CONFLICT", "Approval was already redeemed (re-request to proceed)");
+  return check;
 }
 
 async function loadApproval(db: D1Database, id: string): Promise<ApprovalRow> {
@@ -274,7 +388,7 @@ export async function listApprovals(
   const offset = (opts.page - 1) * opts.limit;
   const { results } = await db
     .prepare(
-      `SELECT id, action, entity, entity_id, requester_id, approver_id, old_value_json, new_value_json, reason, branch_id, status, expires_at, decided_at, created_at FROM approvals ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+      `SELECT id, action, entity, entity_id, requester_id, approver_id, old_value_json, new_value_json, reason, branch_id, status, expires_at, decided_at, consumed_at, consumed_by, metric, created_at FROM approvals ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`
     )
     .bind(...vals, opts.limit, offset)
     .all<ApprovalRow>();

@@ -7,6 +7,7 @@ import { assertCountLock } from "./counts";
 import { getSetting } from "./settings";
 import { buildEntryStmts } from "./journal";
 import { businessDateFor } from "./busdate";
+import { consumeApproval, pendingApproval, recordInlineApproval, requestApproval } from "./approvals";
 
 export function discountPct(discountCents: number, subtotalCents: number): number {
   if (subtotalCents <= 0) throw new Error("subtotal must be positive");
@@ -174,10 +175,52 @@ export async function receiveSale(
 
   const roles = await callerRoles(db, actorId);
   const limit = await discountLimit(db, roles);
-  if (discountPct(discount, subtotal) > limit) {
+  // Discount approval: unified engine first (config threshold), then the
+  // legacy role limit. pct is rounded to 2dp so the approved terms bind
+  // exactly across request and retry. Zero-discount sales skip the engine.
+  const pct2 = Math.round(discountPct(discount, subtotal) * 100) / 100;
+  if (input.approvalId) {
+    await consumeApproval(
+      db,
+      { action: "SALES_DISCOUNT", id: input.approvalId, entity: "sale", entityId: input.approvalEntityId ?? "", metric: pct2 },
+      actorId
+    );
+  } else if (pct2 > 0) {
+    const req = await requestApproval(
+      db,
+      {
+        action: "SALES_DISCOUNT",
+        entity: "sale",
+        entityId: crypto.randomUUID(),
+        oldValue: { limitPct: limit },
+        newValue: { discountPct: pct2 },
+        metric: pct2,
+        reason: `discount ${pct2}% on LKR sale`,
+        branchId: input.branchId,
+      },
+      actorId
+    );
+    if (req.status === "PENDING") pendingApproval(req, "SALES_DISCOUNT");
+  }
+  if (!input.approvalId && pct2 > limit) {
     if (!input.approvedBy)
       throw Object.assign(new Error(`Discount exceeds your ${limit}% limit`), { code: "FORBIDDEN" });
     await requireApprover(db, input.approvedBy, actorId, "discount");
+    await recordInlineApproval(
+      db,
+      {
+        action: "SALES_DISCOUNT",
+        entity: "sale",
+        entityId: crypto.randomUUID(),
+        oldValue: { limitPct: limit },
+        newValue: { discountPct: pct2 },
+        metric: pct2,
+        reason: `discount ${pct2}% over ${limit}% limit`,
+        branchId: input.branchId,
+        approverId: input.approvedBy,
+      },
+      actorId
+    );
   }
 
   const payTotal = input.payments.reduce((s, p) => s + lkrToCents(p.amountLkr), 0);
@@ -335,12 +378,53 @@ export async function createReturn(
 
   const refundTotal = targets.reduce((s, it) => s + (it.price_cents - it.discount_cents), 0);
   const costTotal = targets.reduce((s, it) => s + it.cost_cents, 0);
-  const thresholdSetting = await getSetting(db, "return_approval_threshold");
-  const threshold = typeof thresholdSetting?.value === "number" ? Math.round(thresholdSetting.value * 100) : 10000000;
-  if (refundTotal >= threshold) {
-    if (!input.approvedBy)
-      throw Object.assign(new Error("Return exceeds approval threshold"), { code: "FORBIDDEN" });
-    await requireApprover(db, input.approvedBy, actorId, "return");
+  // Returns go through the unified engine. A FULL return cancels the sale
+  // economically (there is no sale-void flow), so it records SALES_CANCEL;
+  // PARTIAL/EXCHANGE record SALES_RETURN with the refund as metric.
+  // NOTE: the legacy `return_approval_threshold` setting is superseded by
+  // `approval_threshold_SALES_RETURN` (same default, LKR 100,000 in cents).
+  const returnAction = input.type === "FULL" ? "SALES_CANCEL" : "SALES_RETURN";
+  const returnMetric = input.type === "FULL" ? 1 : refundTotal;
+  if (input.approvalId) {
+    await consumeApproval(
+      db,
+      { action: returnAction, id: input.approvalId, entity: "sale", entityId: input.invoiceId, metric: returnMetric },
+      actorId
+    );
+  } else {
+    const req = await requestApproval(
+      db,
+      {
+        action: returnAction,
+        entity: "sale",
+        entityId: input.invoiceId,
+        oldValue: { invoiceTotalCents: inv.total_cents },
+        newValue: { type: input.type, refundCents: refundTotal },
+        metric: returnMetric,
+        reason: input.reason,
+        branchId: inv.branch_id,
+      },
+      actorId
+    );
+    if (req.status === "PENDING") pendingApproval(req, returnAction);
+    if (input.approvedBy) {
+      await requireApprover(db, input.approvedBy, actorId, "return");
+      await recordInlineApproval(
+        db,
+        {
+          action: returnAction,
+          entity: "sale",
+          entityId: input.invoiceId,
+          oldValue: { invoiceTotalCents: inv.total_cents },
+          newValue: { type: input.type, refundCents: refundTotal },
+          metric: returnMetric,
+          reason: input.reason,
+          branchId: inv.branch_id,
+          approverId: input.approvedBy,
+        },
+        actorId
+      );
+    }
   }
   const method = input.refundMethod ?? "original";
   const stmts: D1PreparedStatement[] = [];

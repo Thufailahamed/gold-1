@@ -12,6 +12,7 @@ import { buildEntryStmts, reverseEntry } from "./journal";
 import { businessDateFor } from "./busdate";
 import { getBankAccount } from "./cashbank";
 import { buildCreateProductStmts, buildVoidProductStmts } from "./products";
+import { consumeApproval, pendingApproval, requestApproval } from "./approvals";
 
 /** @deprecated Use `allocateProportional` from @goldos/shared directly. */
 export const allocateCharges = allocateProportional;
@@ -345,7 +346,8 @@ export async function cancelOrder(
   db: D1Database,
   orderId: string,
   reason: string,
-  actorId: string
+  actorId: string,
+  opts?: { approvalId?: string }
 ): Promise<void> {
   const prev = await db
     .prepare("SELECT id, status, branch_id FROM purchase_orders WHERE id = ?")
@@ -354,6 +356,29 @@ export async function cancelOrder(
   if (!prev) throw Object.assign(new Error("Order not found"), { code: "NOT_FOUND" });
   if (prev.status !== "DRAFT" && prev.status !== "SENT")
     throw Object.assign(new Error("Only draft/sent orders can be cancelled"), { code: "CONFLICT" });
+  if (opts?.approvalId) {
+    await consumeApproval(
+      db,
+      { action: "PURCHASE_CANCEL", id: opts.approvalId, entity: "purchase_order", entityId: orderId, metric: 1 },
+      actorId
+    );
+  } else {
+    const req = await requestApproval(
+      db,
+      {
+        action: "PURCHASE_CANCEL",
+        entity: "purchase_order",
+        entityId: orderId,
+        oldValue: { status: prev.status },
+        newValue: { status: "CANCELLED" },
+        metric: 1,
+        reason,
+        branchId: prev.branch_id,
+      },
+      actorId
+    );
+    if (req.status === "PENDING") pendingApproval(req, "PURCHASE_CANCEL");
+  }
   await db.batch([
     db.prepare("UPDATE purchase_orders SET status = 'CANCELLED' WHERE id = ?").bind(orderId),
     buildAuditStmt(db, {
@@ -554,7 +579,8 @@ export async function voidInvoice(
   db: D1Database,
   invoiceId: string,
   reason: string,
-  actorId: string
+  actorId: string,
+  opts?: { approvalId?: string }
 ): Promise<void> {
   const inv = await db
     .prepare(
@@ -573,6 +599,29 @@ export async function voidInvoice(
   if (!inv) throw Object.assign(new Error("Invoice not found"), { code: "NOT_FOUND" });
   if (inv.status === "VOID")
     throw Object.assign(new Error("Invoice already void"), { code: "CONFLICT" });
+  if (opts?.approvalId) {
+    await consumeApproval(
+      db,
+      { action: "PURCHASE_CANCEL", id: opts.approvalId, entity: "purchase_invoice", entityId: invoiceId, metric: 1 },
+      actorId
+    );
+  } else {
+    const req = await requestApproval(
+      db,
+      {
+        action: "PURCHASE_CANCEL",
+        entity: "purchase_invoice",
+        entityId: invoiceId,
+        oldValue: { status: inv.status, totalCents: inv.total_cents },
+        newValue: { status: "VOID" },
+        metric: 1,
+        reason,
+        branchId: inv.branch_id,
+      },
+      actorId
+    );
+    if (req.status === "PENDING") pendingApproval(req, "PURCHASE_CANCEL");
+  }
   // A void reverses the RECEIVE posting only. Any payment already taken stays
   // posted and becomes a genuine payable to the supplier, so voiding an
   // invoice with payments against it would silently drop money.

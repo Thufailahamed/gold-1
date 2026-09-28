@@ -90,7 +90,6 @@ export const createProductSchema = z.object({
   sellingPriceLkr: z.number().min(0).optional(),
   location: z.string().max(100).optional(),
   notes: z.string().max(2000).optional(),
-  branchId: z.string().min(1),
 });
 
 export const editProductSchema = z.object({
@@ -106,6 +105,7 @@ export const editProductSchema = z.object({
   sellingPriceLkr: z.number().min(0).optional(),
   location: z.string().max(100).optional(),
   notes: z.string().max(2000).optional(),
+  approvalId: z.string().min(1).optional(),
 });
 
 const refSchema = z.object({
@@ -207,7 +207,7 @@ export const payInvoiceSchema = z.object({
   bankAccountId: z.string().min(1),
 });
 
-export const voidInvoiceSchema = z.object({ reason: z.string().min(1).max(500) });
+export const voidInvoiceSchema = z.object({ reason: z.string().min(1).max(500), approvalId: z.string().min(1).optional() });
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
@@ -230,6 +230,8 @@ export const createSaleSchema = z.object({
   items: z.array(saleItemSchema).min(1),
   payments: z.array(splitPaySchema).min(1),
   approvedBy: z.string().min(1).optional(),
+  approvalId: z.string().min(1).optional(),
+  approvalEntityId: z.string().min(1).optional(),
   exchangeReturnId: z.string().min(1).optional(),
 });
 
@@ -240,6 +242,7 @@ export const createReturnSchema = z.object({
   reason: z.string().min(1).max(500),
   refundMethod: z.enum(["original", "cash", "bank", "credit"]).optional().default("original"),
   approvedBy: z.string().min(1).optional(),
+  approvalId: z.string().min(1).optional(),
 });
 
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;

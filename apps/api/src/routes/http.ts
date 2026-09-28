@@ -10,6 +10,23 @@ export function pagination(c: Context): { page: number; limit: number; search?: 
 export function serviceError(c: Context, err: unknown) {
   const code = (err as { code?: string } | null)?.code;
   const message = err instanceof Error ? err.message : "Something went wrong";
+  if (code === "PENDING") {
+    const extra = err as { approvalId?: string; entity?: string; entityId?: string; metric?: number };
+    return c.json(
+      {
+        success: false,
+        error: {
+          code,
+          message,
+          approvalId: extra.approvalId,
+          entity: extra.entity,
+          entityId: extra.entityId,
+          metric: extra.metric,
+        },
+      },
+      202
+    );
+  }
   if (code === "CONFLICT")
     return c.json({ success: false, error: { code, message } }, 409);
   if (code === "NOT_FOUND")

@@ -10,6 +10,7 @@ import {
 import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
 import { currentGoldRatesCents } from "./rates";
+import { consumeApproval, pendingApproval, requestApproval } from "./approvals";
 
 export type ProductRow = {
   id: string;
@@ -225,12 +226,45 @@ export async function editProduct(
   actorId: string
 ): Promise<ProductRow> {
   const prev = await db
-    .prepare("SELECT id, status, branch_id FROM products WHERE id = ?")
+    .prepare("SELECT id, status, branch_id, selling_price_cents FROM products WHERE id = ?")
     .bind(id)
-    .first<{ id: string; status: string; branch_id: string }>();
+    .first<{ id: string; status: string; branch_id: string; selling_price_cents: number | null }>();
   if (!prev) throw Object.assign(new Error("Product not found"), { code: "NOT_FOUND" });
   if (prev.status === "VOID")
     throw Object.assign(new Error("Void products cannot be edited"), { code: "CONFLICT" });
+  // Price overrides go through the unified engine. A first-time price (none
+  // set) always counts as an override (metric 100); otherwise the metric is
+  // the absolute change pct rounded to 2dp so terms bind exactly on retry.
+  if (patch.sellingPriceLkr !== undefined) {
+    const nextCents = lkrToCents(patch.sellingPriceLkr);
+    const metric =
+      prev.selling_price_cents === null || prev.selling_price_cents <= 0
+        ? 100
+        : Math.round((Math.abs(nextCents - prev.selling_price_cents) / prev.selling_price_cents) * 100 * 100) / 100;
+    if (patch.approvalId) {
+      await consumeApproval(
+        db,
+        { action: "PRICE_OVERRIDE", id: patch.approvalId, entity: "product", entityId: id, metric },
+        actorId
+      );
+    } else if (metric > 0) {
+      const req = await requestApproval(
+        db,
+        {
+          action: "PRICE_OVERRIDE",
+          entity: "product",
+          entityId: id,
+          oldValue: { sellingPriceCents: prev.selling_price_cents },
+          newValue: { sellingPriceCents: nextCents },
+          metric,
+          reason: `price ${prev.selling_price_cents ?? "unset"} → ${nextCents}c`,
+          branchId: prev.branch_id,
+        },
+        actorId
+      );
+      if (req.status === "PENDING") pendingApproval(req, "PRICE_OVERRIDE");
+    }
+  }
   if (patch.subcategoryId) await checkRef(db, "subcategories", patch.subcategoryId, "Subcategory");
   if (patch.designId) await checkRef(db, "designs", patch.designId, "Design");
   if (patch.productTypeId) await checkRef(db, "product_types", patch.productTypeId, "Product type");

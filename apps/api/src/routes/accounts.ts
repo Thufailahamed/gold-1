@@ -11,6 +11,7 @@ import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
 import { reconcile } from "../services/reconcile";
 import { businessDateFor } from "../services/busdate";
+import { consumeApproval, pendingApproval, requestApproval } from "../services/approvals";
 import {
   accountStatement,
   buildEntryStmts,
@@ -43,6 +44,8 @@ const adjustSchema = z.object({
   // should be attributable to somewhere.
   branchId: z.string().min(1),
   entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  approvalId: z.string().min(1).optional(),
+  approvalEntityId: z.string().min(1).optional(),
 });
 
 export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
@@ -160,6 +163,44 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return c.json({ success: false, error: { code: "VALIDATION", message: "Accounts must differ" } }, 400);
     try {
       const id = crypto.randomUUID();
+      // Manual adjustments post through the unified engine (uniform
+      // retry-with-approvalId model: no inline fast path on this route).
+      if (parsed.data.approvalId) {
+        await consumeApproval(
+          c.env.DB,
+          {
+            action: "FIN_ADJUST",
+            id: parsed.data.approvalId,
+            entity: "adjustment",
+            entityId: parsed.data.approvalEntityId ?? "",
+            metric: parsed.data.amountCents,
+          },
+          c.get("userId")
+        );
+      } else {
+        // entityId is generated up front so the 202 payload binds the retry
+        // to these exact terms.
+        const req = await requestApproval(
+          c.env.DB,
+          {
+            action: "FIN_ADJUST",
+            entity: "adjustment",
+            entityId: id,
+            oldValue: {},
+            newValue: {
+              debitAccount: parsed.data.debitAccount,
+              creditAccount: parsed.data.creditAccount,
+              amountCents: parsed.data.amountCents,
+              memo: parsed.data.memo ?? null,
+            },
+            metric: parsed.data.amountCents,
+            reason: parsed.data.reason,
+            branchId: parsed.data.branchId,
+          },
+          c.get("userId")
+        );
+        if (req.status === "PENDING") pendingApproval(req, "FIN_ADJUST");
+      }
       const built = await buildEntryStmts(
         c.env.DB,
         {
