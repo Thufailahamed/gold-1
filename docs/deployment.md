@@ -12,7 +12,19 @@ Live (2026-09-27):
 - Web `apps/web/.env.local` points `NEXT_PUBLIC_API_URL` at the Workers URL
   (git-ignored; set the same env var when deploying to Pages).
 
-## Migrate
+## Cloud sync (use this)
+
+```bash
+./scripts/cloudflare-sync.sh                # migrate remote DB + deploy backend
+./scripts/cloudflare-sync.sh --db-only       # migrate remote DB only
+./scripts/cloudflare-sync.sh --backend-only  # deploy backend only
+```
+
+Migrations in `apps/api/drizzle/*.sql` are tracked in the remote
+`schema_migrations` table — re-runs only apply pending files, then the
+worker is deployed and health-checked.
+
+## Migrate (manual alternative)
 
 ```bash
 # local
