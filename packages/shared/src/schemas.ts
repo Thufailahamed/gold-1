@@ -365,3 +365,25 @@ export const qcMfgSchema = z.object({
 
 export type CreateMfgOrderInput = z.infer<typeof createMfgOrderSchema>;
 export type ProduceMfgInput = z.infer<typeof produceMfgSchema>;
+
+export const ACCOUNT_TYPES = ["ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE"] as const;
+
+export const createAccountSchema = z.object({
+  code: z.string().regex(/^\d{4}$/, "Account code must be four digits"),
+  name: z.string().min(1).max(100),
+  type: z.enum(ACCOUNT_TYPES),
+  description: z.string().max(500).optional(),
+});
+
+export const updateAccountSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().max(500).optional(),
+  reason: z.string().min(1).max(500),
+});
+
+export const accountStatusSchema = z.object({
+  isActive: z.union([z.literal(0), z.literal(1)]),
+  reason: z.string().min(1).max(500),
+});
+
+export type CreateAccountInput = z.infer<typeof createAccountSchema>;

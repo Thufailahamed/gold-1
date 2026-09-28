@@ -500,3 +500,133 @@ export async function postJournalStmts(
   });
   return built.stmts;
 }
+
+export type AccountType = "ASSET" | "LIABILITY" | "EQUITY" | "REVENUE" | "EXPENSE";
+
+export type AccountRow = {
+  code: string;
+  name: string;
+  type: string;
+  is_active: number;
+  is_system: number;
+  description: string | null;
+  balance_cents: number;
+  entry_count: number;
+  is_editable: boolean;
+};
+
+function fail(code: string, message: string): never {
+  throw Object.assign(new Error(message), { code });
+}
+
+export async function listAccounts(db: D1Database, branchId?: string): Promise<AccountRow[]> {
+  const { results } = await db
+    .prepare(
+      "SELECT code, name, type, is_active, is_system, description FROM chart_of_accounts ORDER BY code"
+    )
+    .all<Omit<AccountRow, "balance_cents" | "entry_count" | "is_editable">>();
+  const rows: AccountRow[] = [];
+  for (const a of results ?? []) {
+    rows.push({
+      ...a,
+      balance_cents: await accountBalance(db, a.code, branchId),
+      entry_count: await accountEntryCount(db, a.code),
+      is_editable: a.is_system === 0,
+    });
+  }
+  return rows;
+}
+
+export async function createAccount(
+  db: D1Database,
+  input: { code: string; name: string; type: AccountType; description?: string },
+  actorId: string
+): Promise<{ code: string }> {
+  const dup = await db
+    .prepare("SELECT code FROM chart_of_accounts WHERE code = ?")
+    .bind(input.code)
+    .first();
+  if (dup) fail("CONFLICT", `Account ${input.code} already exists`);
+  await db.batch([
+    db
+      .prepare(
+        "INSERT INTO chart_of_accounts (code, name, type, is_active, is_system, description) VALUES (?, ?, ?, 1, 0, ?)"
+      )
+      .bind(input.code, input.name, input.type, input.description ?? null),
+    buildAuditStmt(db, {
+      userId: actorId,
+      action: "accounts.create",
+      entity: "account",
+      entityId: input.code,
+      next: input,
+    }),
+  ]);
+  return { code: input.code };
+}
+
+/**
+ * A system account is one the ledger posts into; the shop configures
+ * additional accounts, it does not repurpose these. An account with any
+ * journal line is frozen: renaming it would rewrite the meaning of history.
+ */
+async function assertMutable(db: D1Database, code: string): Promise<void> {
+  const acc = await db
+    .prepare("SELECT is_system FROM chart_of_accounts WHERE code = ?")
+    .bind(code)
+    .first<{ is_system: number }>();
+  if (!acc) fail("NOT_FOUND", `Account not found: ${code}`);
+  if (acc.is_system === 1) fail("CONFLICT", `Account ${code} is a system account and cannot be changed`);
+  const count = await accountEntryCount(db, code);
+  if (count > 0) fail("CONFLICT", `Account ${code} has ${count} journal entries and cannot be changed`);
+}
+
+export async function updateAccount(
+  db: D1Database,
+  code: string,
+  input: { name?: string; description?: string; reason: string },
+  actorId: string
+): Promise<void> {
+  await assertMutable(db, code);
+  const before = await db
+    .prepare("SELECT name, description FROM chart_of_accounts WHERE code = ?")
+    .bind(code)
+    .first<{ name: string; description: string | null }>();
+  const name = input.name ?? before?.name ?? code;
+  const description = input.description ?? before?.description ?? null;
+  await db.batch([
+    db
+      .prepare("UPDATE chart_of_accounts SET name = ?, description = ? WHERE code = ?")
+      .bind(name, description, code),
+    buildAuditStmt(db, {
+      userId: actorId,
+      action: "accounts.update",
+      entity: "account",
+      entityId: code,
+      prev: before,
+      next: { name, description },
+      reason: input.reason,
+    }),
+  ]);
+}
+
+export async function setAccountActive(
+  db: D1Database,
+  code: string,
+  isActive: 0 | 1,
+  reason: string,
+  actorId: string
+): Promise<void> {
+  await assertMutable(db, code);
+  await db.batch([
+    db.prepare("UPDATE chart_of_accounts SET is_active = ? WHERE code = ?").bind(isActive, code),
+    buildAuditStmt(db, {
+      userId: actorId,
+      action: isActive === 1 ? "accounts.activate" : "accounts.deactivate",
+      entity: "account",
+      entityId: code,
+      prev: { isActive: isActive === 1 ? 0 : 1 },
+      next: { isActive },
+      reason,
+    }),
+  ]);
+}
