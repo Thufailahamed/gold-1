@@ -406,7 +406,7 @@ export function statusTone(status: string | null | undefined): PillTone {
   const s = (status ?? "").toLowerCase();
   if (/(fail|error|reject|cancel|disput|suspend|block|ban|revok|overdue|breach|critical|declin|fraud|expired|lost|void|melt)/.test(s))
     return "danger";
-  if (/(pend|review|await|hold|queue|draft|warn|processing|progress|open|retry|partial|unverified|flag|repair|manufacturing|reserved)/.test(s))
+  if (/(pend|review|await|hold|queue|draft|warn|processing|progress|open|retry|partial|unpaid|unverified|flag|repair|manufacturing|reserved)/.test(s))
     return "warning";
   if (/(success|succeed|complete|deliver|paid|approv|verif|active|resolv|settled|healthy|ok|enabled|live|accept|confirm|sent|published|clear|in_stock|sold|post)/.test(s))
     return "success";

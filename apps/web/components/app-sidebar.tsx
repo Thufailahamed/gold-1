@@ -49,7 +49,7 @@ interface NavSection {
 const SECTIONS: NavSection[] = [
   {
     title: "Overview",
-    items: [{ href: "/", label: "Dashboard", icon: LayoutGridIcon, perm: null }],
+    items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutGridIcon, perm: null }],
   },
   {
     title: "Catalog",
@@ -234,7 +234,7 @@ export function AppSidebar({
   return (
     <aside className="flex h-full w-full shrink-0 select-none flex-col bg-void text-paper">
       <div className="flex h-16 shrink-0 items-center justify-between px-5">
-        <Link href="/" aria-label="GoldOS dashboard" onClick={onNavigate}>
+        <Link href="/dashboard" aria-label="GoldOS dashboard" onClick={onNavigate}>
           <GoldWordmark />
         </Link>
         {onClose ? (
@@ -271,7 +271,7 @@ export function AppSidebar({
               </div>
               <div className="space-y-0.5">
                 {visible.map((item) => {
-                  const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+                  const active = pathname.startsWith(item.href);
                   return (
                     <Link
                       key={item.href}

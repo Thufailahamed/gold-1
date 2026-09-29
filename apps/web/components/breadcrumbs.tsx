@@ -13,6 +13,7 @@ const LABELS: Record<string, string> = {
   suppliers: "Suppliers",
   customers: "Customers",
   products: "Products",
+  new: "New",
   scan: "Scan",
   inventory: "Inventory",
   settings: "Settings",
@@ -22,13 +23,13 @@ const LABELS: Record<string, string> = {
 export function Breadcrumbs() {
   const pathname = usePathname();
   const segs = pathname.split("/").filter(Boolean);
-  if (segs.length === 0) return null;
+  if (segs.length === 0 || (segs.length === 1 && segs[0] === "dashboard")) return null;
   return (
     <nav
       aria-label="Breadcrumb"
       className="mb-5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-4"
     >
-      <Link href="/" className="transition-colors hover:text-gold-dark">
+      <Link href="/dashboard" className="transition-colors hover:text-gold-dark">
         Dashboard
       </Link>
       {segs.map((s, i) => {

@@ -80,7 +80,7 @@ export default {
         },
       },
       animation: {
-        "fade-in": "fade-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both",
+        "fade-in": "fade-in 280ms cubic-bezier(0.16, 1, 0.3, 1) backwards",
         "pulse-soft": "pulse-soft 1.6s ease-in-out infinite",
         shimmer: "shimmer 2s linear infinite",
         "cart-pop": "cart-pop 320ms cubic-bezier(0.16, 1, 0.3, 1) both",

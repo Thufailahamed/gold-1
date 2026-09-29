@@ -47,7 +47,7 @@ export default function LoginPage() {
     try {
       await api("/api/v1/auth/login", { method: "POST", body: JSON.stringify(values) });
       toast.success("Welcome back");
-      router.push("/");
+      router.push("/dashboard");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Login failed");
     } finally {
