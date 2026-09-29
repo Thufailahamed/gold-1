@@ -284,3 +284,145 @@ export async function stockSummary(
     value_cents: valByKey.get((r as { key: string }).key) ?? 0,
   }));
 }
+
+export type KaratLine = {
+  purity_id: string;
+  karat: string;
+  permille: number;
+  pieces: number;
+  net_mg: number;
+  fine_mg: number;
+  value_cents: number;
+};
+
+export type BranchLine = {
+  branch_id: string;
+  name: string;
+  pieces: number;
+  net_mg: number;
+  fine_mg: number;
+  value_cents: number;
+};
+
+export type InventoryInsights = {
+  totals: { pieces: number; net_mg: number; fine_mg: number; value_cents: number };
+  byKarat: KaratLine[];
+  byBranch: BranchLine[];
+  attention: {
+    transfer_pending: number;
+    in_repair: number;
+    reserved: number;
+    last_movement_at: number | null;
+    movements_24h: number;
+  };
+};
+
+/**
+ * One pricing rule for every stock value in the app. Kept in the same file as
+ * stockSummary so the two can never drift: if this changes, both change.
+ * A karat with no published rate contributes 0, not NaN — the UI has a
+ * "no priced stock" state and must keep rendering.
+ */
+export function priceStock(netMg: number, rateCentsPerG: number | undefined): number {
+  if (!rateCentsPerG) return 0;
+  return Math.round((netMg * rateCentsPerG) / 1000);
+}
+
+type InsightRow = {
+  group_key: string;
+  branch_id: string;
+  branch_name: string | null;
+  karat: string;
+  permille: number;
+  pieces: number;
+  net_mg: number;
+  fine_mg: number;
+};
+
+type AttentionCounts = { transfer_pending: number; in_repair: number; reserved: number };
+
+export async function inventoryInsights(db: D1Database): Promise<InventoryInsights> {
+  const [{ results: rows }, rates, counts, last, c24] = await Promise.all([
+    db
+      .prepare(
+        `SELECT p.purity_id AS group_key, p.branch_id, b.name AS branch_name, pu.karat, pu.permille, COUNT(*) AS pieces, SUM(p.net_mg) AS net_mg, SUM(p.fine_gold_mg) AS fine_mg FROM products p JOIN purities pu ON pu.id = p.purity_id LEFT JOIN branches b ON b.id = p.branch_id WHERE p.status = 'IN_STOCK' GROUP BY p.purity_id, p.branch_id, pu.karat, pu.permille, b.name`
+      )
+      .all<InsightRow>(),
+    currentGoldRatesCents(db),
+    db
+      .prepare(
+        `SELECT COUNT(*) FILTER (WHERE status = 'TRANSFER_PENDING') AS transfer_pending, COUNT(*) FILTER (WHERE status = 'IN_REPAIR') AS in_repair, COUNT(*) FILTER (WHERE status = 'RESERVED') AS reserved FROM products`
+      )
+      .first<AttentionCounts>(),
+    db
+      .prepare(`SELECT MAX(created_at) AS last FROM stock_movements`)
+      .first<{ last: number | null }>(),
+    db
+      .prepare(`SELECT COUNT(*) AS c24 FROM stock_movements WHERE created_at >= ?`)
+      .bind(Date.now() - 24 * 60 * 60 * 1000)
+      .first<{ c24: number }>(),
+  ]);
+
+  const byPurityRate = new Map(rates.map((r) => [r.purity_id, r.rate_cents_per_g]));
+  const karat = new Map<string, KaratLine>();
+  const branch = new Map<string, BranchLine>();
+  const totals = { pieces: 0, net_mg: 0, fine_mg: 0, value_cents: 0 };
+
+  for (const r of rows ?? []) {
+    const rate = byPurityRate.get(r.group_key);
+    const pieces = Number(r.pieces ?? 0);
+    const netMg = Number(r.net_mg ?? 0);
+    const fineMg = Number(r.fine_mg ?? 0);
+    const valueCents = priceStock(netMg, rate);
+
+    totals.pieces += pieces;
+    totals.net_mg += netMg;
+    totals.fine_mg += fineMg;
+    totals.value_cents += valueCents;
+
+    const k = karat.get(r.group_key) ?? {
+      purity_id: r.group_key,
+      karat: r.karat,
+      permille: r.permille,
+      pieces: 0,
+      net_mg: 0,
+      fine_mg: 0,
+      value_cents: 0,
+    };
+    k.pieces += pieces;
+    k.net_mg += netMg;
+    k.fine_mg += fineMg;
+    k.value_cents += valueCents;
+    karat.set(r.group_key, k);
+
+    const b = branch.get(r.branch_id) ?? {
+      branch_id: r.branch_id,
+      name: r.branch_name ?? r.branch_id,
+      pieces: 0,
+      net_mg: 0,
+      fine_mg: 0,
+      value_cents: 0,
+    };
+    b.pieces += pieces;
+    b.net_mg += netMg;
+    b.fine_mg += fineMg;
+    b.value_cents += valueCents;
+    branch.set(r.branch_id, b);
+  }
+
+  const byValue = (a: { value_cents: number }, b: { value_cents: number }) =>
+    b.value_cents - a.value_cents;
+
+  return {
+    totals,
+    byKarat: [...karat.values()].sort(byValue),
+    byBranch: [...branch.values()].sort(byValue),
+    attention: {
+      transfer_pending: Number(counts?.transfer_pending ?? 0),
+      in_repair: Number(counts?.in_repair ?? 0),
+      reserved: Number(counts?.reserved ?? 0),
+      last_movement_at: last?.last ?? null,
+      movements_24h: Number(c24?.c24 ?? 0),
+    },
+  };
+}
