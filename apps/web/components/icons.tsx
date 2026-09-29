@@ -480,3 +480,43 @@ export function ShieldIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function PackagePlusIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M16.5 9.4 7.55 4.21" />
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+      <path d="M3.27 6.96 12 12.01l8.73-5.05" />
+      <path d="M12 22.08V12" />
+    </svg>
+  );
+}
+
+export function ArrowUturnLeftIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M9 14 4 9l5-5" />
+      <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+    </svg>
+  );
+}
+
+export function CircleSlashIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m5.6 5.6 12.8 12.8" />
+    </svg>
+  );
+}
+
+export function ArrowLeftRightIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8 3 4 7l4 4" />
+      <path d="M4 7h16" />
+      <path d="m16 21 4-4-4-4" />
+      <path d="M20 17H4" />
+    </svg>
+  );
+}
