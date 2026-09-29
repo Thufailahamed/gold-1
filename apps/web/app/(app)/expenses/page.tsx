@@ -106,18 +106,23 @@ function ExpensesView() {
     queryKey: ["bank-accounts"],
     queryFn: () => api<BankAccount[]>("/api/v1/bank-accounts"),
   });
+  const branchQuery = branchId ? `&branchId=${encodeURIComponent(branchId)}` : "";
   const list = useQuery({
-    queryKey: ["expenses", page, status, from, to],
+    queryKey: ["expenses", page, status, from, to, branchId],
     queryFn: () =>
       api<{ rows: Expense[]; total: number }>(
-        `/api/v1/expenses?page=${page}&limit=20${status ? `&status=${status}` : ""}${dateQuery}`
+        `/api/v1/expenses?page=${page}&limit=20${status ? `&status=${status}` : ""}${dateQuery}${branchQuery}`
       ),
   });
   const summary = useQuery({
-    queryKey: ["expense-summary", from, to],
+    queryKey: ["expense-summary", from, to, branchId],
     queryFn: () => api<{ totalCents: number; pendingCents: number; rejectedCents: number }>(
-      `/api/v1/expenses/reports/summary?${dateQuery.slice(1)}`
+      `/api/v1/expenses/reports/summary?${dateQuery.slice(1)}${branchQuery}`
     ),
+  });
+  const branches = useQuery({
+    queryKey: ["branches-for-expenses"],
+    queryFn: () => api<{ rows: { id: string; name: string }[] }>("/api/v1/branches?limit=100"),
   });
 
   const activeBanks = useMemo(
@@ -301,12 +306,14 @@ function ExpensesView() {
           </label>
           <label className="block text-sm text-ink-2">
             Branch
-            <input
-              value={branchId}
-              onChange={(e) => setBranchId(e.target.value)}
-              placeholder="branch-main"
-              className={controlClass}
-            />
+            <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={controlClass}>
+              <option value="">Choose a branch…</option>
+              {(branches.data?.rows ?? []).map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="block text-sm text-ink-2">
             Amount LKR
