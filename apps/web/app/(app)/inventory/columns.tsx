@@ -147,7 +147,8 @@ export function fineShareBar(ratio: number) {
 }
 
 export function stockColumns(
-  groupBy: "branch" | "purity" | "product"
+  groupBy: "branch" | "purity" | "product",
+  labelFor?: (key: string) => ReactNode
 ): ReadonlyArray<DataColumn<StockRow>> {
   const firstLabel = groupBy === "branch" ? "Branch" : groupBy === "purity" ? "Purity" : "Product";
 
@@ -157,7 +158,7 @@ export function stockColumns(
       label: firstLabel,
       sortable: true,
       value: (r) => r.key,
-      render: (r) => <span className="font-mono text-xs text-ink">{r.key}</span>,
+      render: (r) => (labelFor ? labelFor(r.key) : <span className="font-mono text-xs text-ink">{r.key}</span>),
     },
     {
       key: "pieces",
@@ -233,9 +234,9 @@ export function movementColumns(
       label: "From → To",
       render: (m) => (
         <span className="flex items-center gap-2 text-xs text-ink-3">
-          <span>{m.from_status ?? "—"}</span>
+          <span>{m.from_status ? movementTypeMeta(m.from_status).label : "—"}</span>
           <span className="text-ink-5">→</span>
-          <StatusPill status={m.to_status} />
+          <StatusPill status={m.to_status} label={movementTypeMeta(m.to_status).label} />
         </span>
       ),
     },

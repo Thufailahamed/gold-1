@@ -79,7 +79,11 @@ function Money({ cents, strong }: { cents: number; strong?: boolean }) {
 
 export default function DayClosingPage() {
   const qc = useQueryClient();
-  const [branchId, setBranchId] = useState("branch-main");
+  const [branchId, setBranchId] = useState(() =>
+    typeof document === "undefined"
+      ? "branch-main"
+      : (document.cookie.split("; ").find((c) => c.startsWith("goldos_branch="))?.split("=")[1] ?? "branch-main")
+  );
   const [date, setDate] = useState(today());
   const [actual, setActual] = useState("");
   const [reason, setReason] = useState("");
@@ -93,7 +97,7 @@ export default function DayClosingPage() {
 
   const branches = useQuery({
     queryKey: ["branches"],
-    queryFn: () => api<{ id: string; name: string }[]>("/api/v1/branches"),
+    queryFn: () => api<{ rows: { id: string; name: string }[] }>("/api/v1/branches?limit=100"),
   });
   const preview = useQuery({
     queryKey: ["day-closing-preview", branchId, date],
@@ -161,6 +165,7 @@ export default function DayClosingPage() {
     <Page>
       <Hero
         kicker="Accounts"
+        back={{ href: "/accounts", label: "Accounts dashboard" }}
         title="Day Closing"
         description="Count the drawer, compare it to the books, explain any difference"
         actions={
@@ -170,7 +175,7 @@ export default function DayClosingPage() {
               onChange={(e) => setBranchId(e.target.value)}
               className={controlClass}
             >
-              {(branches.data ?? []).map((b) => (
+              {(branches.data?.rows ?? []).map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
                 </option>

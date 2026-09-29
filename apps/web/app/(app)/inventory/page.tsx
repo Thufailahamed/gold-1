@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -105,6 +105,28 @@ export default function InventoryPage() {
       ),
     staleTime: 60_000,
   });
+  const purities = useQuery({
+    queryKey: ["purities-all"],
+    queryFn: () =>
+      api<{ rows: Array<{ id: string; karat: string }>; total: number }>(
+        "/api/v1/masters/purities?limit=100"
+      ),
+    staleTime: 60_000,
+  });
+  const labelFor = useMemo(() => {
+    const bNames = new Map((branches.data?.rows ?? []).map((b) => [b.id, b.name]));
+    const pKarat = new Map((purities.data?.rows ?? []).map((p) => [p.id, p.karat]));
+    return (key: string): ReactNode => {
+      if (groupBy === "branch") return <span className="font-medium text-ink">{bNames.get(key) ?? key.slice(0, 8)}</span>;
+      if (groupBy === "purity")
+        return (
+          <span className="g-metric rounded-md bg-gold-pale px-2 py-0.5 text-xs font-semibold text-gold-deep ring-1 ring-gold-dark/15">
+            {pKarat.get(key) ?? key.slice(0, 8)}
+          </span>
+        );
+      return <span className="font-mono text-xs text-ink">{key.slice(0, 10)}…</span>;
+    };
+  }, [groupBy, branches.data, purities.data]);
 
   const mSearchDebounced = useDebounced(mSearch);
   const moves = useQuery({
@@ -149,7 +171,7 @@ export default function InventoryPage() {
   const needsBranch = toStatus === "TRANSFER_PENDING";
   const moveInvalid = !barcode.trim() || (needsBranch && !toBranch.trim());
 
-  const columns = useMemo(() => stockColumns(groupBy), [groupBy]);
+  const columns = useMemo(() => stockColumns(groupBy, labelFor), [groupBy, labelFor]);
 
   const rows = useMemo(() => {
     const base = stock.data ?? [];
@@ -309,7 +331,10 @@ export default function InventoryPage() {
                   aria-describedby="mv-barcode-hint"
                 />
               </Field>
-              <PiecePreview code={barcode} />
+              <PiecePreview
+                code={barcode}
+                branchName={(id) => branches.data?.rows.find((b) => b.id === id)?.name ?? id.slice(0, 8)}
+              />
             </div>
 
             <div className="min-w-0 space-y-3">
@@ -451,6 +476,7 @@ export default function InventoryPage() {
           piece={detail}
           onClose={() => setDetail(null)}
           onMove={focusMovement}
+          branchName={(id) => branches.data?.rows.find((b) => b.id === id)?.name ?? id.slice(0, 8)}
         />
       ) : null}
     </Page>

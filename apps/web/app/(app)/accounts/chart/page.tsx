@@ -76,7 +76,8 @@ export default function AccountsPage() {
   return (
     <Page>
       <Hero
-        kicker="System"
+        kicker="Accounts"
+        back={{ href: "/accounts", label: "Accounts dashboard" }}
         title="Chart of accounts"
         description="Double-entry books — every balance derives from a posted journal."
         note="Adjustments post a balanced journal entry: one debit, one credit, one amount, a required reason."

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { hasPermission } from "@goldos/shared";
@@ -13,6 +14,7 @@ import {
   StatusPill,
   TableCard,
   TableSkeleton,
+  FilterChips,
   Tabs,
   controlClass,
   heroBtnPrimary,
@@ -57,12 +59,29 @@ type Expense = {
 };
 
 const fmt = (c: number) => (c / 100).toLocaleString("en-US");
+const todayStr = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
 
-export default function ExpensesPage() {
+function rangeFor(key: string): { from: string; to: string } {
+  const t = todayStr();
+  if (key === "today") return { from: t, to: t };
+  if (key === "week") {
+    const d = new Date(`${t}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 6);
+    return { from: d.toISOString().slice(0, 10), to: t };
+  }
+  if (key === "month") return { from: `${t.slice(0, 8)}01`, to: t };
+  return { from: "", to: "" };
+}
+
+function ExpensesView() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
-  const [open, setOpen] = useState(false);
+  const params = useSearchParams();
+  const [range, setRange] = useState(params.get("range") ?? "all");
+  const { from, to } = rangeFor(range);
+  const dateQuery = `${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`;
+  const [open, setOpen] = useState(params.get("new") === "1");
   const [categoryId, setCategoryId] = useState("");
   const [branchId, setBranchId] = useState("");
   const [amount, setAmount] = useState("");
@@ -70,6 +89,11 @@ export default function ExpensesPage() {
   const [vendor, setVendor] = useState("");
   const [paidFrom, setPaidFrom] = useState<"cash" | "bank">("cash");
   const [bankAccountId, setBankAccountId] = useState("");
+
+  useEffect(() => {
+    const saved = document.cookie.split("; ").find((c) => c.startsWith("goldos_branch="))?.split("=")[1];
+    if (saved) setBranchId((b) => b || saved);
+  }, []);
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
   const canManage = hasPermission(me.data?.permissions ?? [], "accounts:manage");
@@ -83,16 +107,16 @@ export default function ExpensesPage() {
     queryFn: () => api<BankAccount[]>("/api/v1/bank-accounts"),
   });
   const list = useQuery({
-    queryKey: ["expenses", page, status],
+    queryKey: ["expenses", page, status, from, to],
     queryFn: () =>
       api<{ rows: Expense[]; total: number }>(
-        `/api/v1/expenses?page=${page}&limit=20${status ? `&status=${status}` : ""}`
+        `/api/v1/expenses?page=${page}&limit=20${status ? `&status=${status}` : ""}${dateQuery}`
       ),
   });
   const summary = useQuery({
-    queryKey: ["expense-summary"],
+    queryKey: ["expense-summary", from, to],
     queryFn: () => api<{ totalCents: number; pendingCents: number; rejectedCents: number }>(
-      "/api/v1/expenses/reports/summary"
+      `/api/v1/expenses/reports/summary?${dateQuery.slice(1)}`
     ),
   });
 
@@ -127,6 +151,7 @@ export default function ExpensesPage() {
       setVendor("");
       qc.invalidateQueries({ queryKey: ["expenses"] });
       qc.invalidateQueries({ queryKey: ["expense-summary"] });
+      qc.invalidateQueries({ queryKey: ["acct"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not record"),
   });
@@ -137,6 +162,7 @@ export default function ExpensesPage() {
     <Page>
       <Hero
         kicker="Accounts"
+        back={{ href: "/accounts", label: "Accounts dashboard" }}
         title="Expenses"
         description="Every expense posts itself to its category's ledger account"
         actions={
@@ -156,6 +182,22 @@ export default function ExpensesPage() {
       />
 
       <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <FilterChips
+            ariaLabel="Date range"
+            value={range}
+            onChange={(k) => {
+              setRange(k);
+              setPage(1);
+            }}
+            options={[
+              { key: "today", label: "Today" },
+              { key: "week", label: "Last 7 days" },
+              { key: "month", label: "This month" },
+              { key: "all", label: "All time" },
+            ]}
+          />
+        </div>
         <Tabs
           ariaLabel="Expense status"
           value={status}
@@ -322,5 +364,13 @@ export default function ExpensesPage() {
         </Modal>
       ) : null}
     </Page>
+  );
+}
+
+export default function ExpensesPage() {
+  return (
+    <Suspense fallback={null}>
+      <ExpensesView />
+    </Suspense>
   );
 }

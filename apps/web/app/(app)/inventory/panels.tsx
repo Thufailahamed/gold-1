@@ -8,7 +8,6 @@ import { api } from "@/lib/api";
 import { useCountUp } from "@/lib/count-up";
 import { SpotlightCard } from "@/components/home/motion";
 import {
-  BarList,
   Callout,
   controlSmClass,
   Field,
@@ -24,11 +23,15 @@ import {
   Building2Icon,
   CheckCircleIcon,
   GemIcon,
+  HammerIcon,
+  HistoryIcon,
   PackageIcon,
   RefreshCwIcon,
   ScaleIcon,
   ScanBarcodeIcon,
   SearchIcon,
+  TruckIcon,
+  UserCheckIcon,
 } from "@/components/icons";
 import { MOVEMENT_TYPES, type Insights, type Piece } from "./columns";
 
@@ -36,6 +39,9 @@ const grams = (mg: number) => mgToG(mg).toLocaleString("en-US", { maximumFractio
 
 const rupees = (cents: number) =>
   `LKR ${centsToLkr(cents).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+
+const compactLkr = (lkr: number) =>
+  `LKR ${Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(lkr)}`;
 
 /* ---------------------------------------------------------------- Hero */
 
@@ -150,7 +156,7 @@ export function InventoryHero({
                 value={hasValue ? centsToLkr(value) : 0}
                 max={target > 0 ? centsToLkr(target) : 0}
                 label={hasValue ? `Top ${topKarat?.karat}` : "Unpriced"}
-                caption={hasValue ? rupees(Math.round(shown)) : "—"}
+                caption={hasValue ? compactLkr(Math.round(shown)) : "—"}
               />
             )}
           </div>
@@ -163,7 +169,7 @@ export function InventoryHero({
             ) : (
               <div className="mt-1.5 flex items-baseline gap-1.5">
                 <span className="text-xs text-paper/50">LKR</span>
-                <span className="g-metric truncate text-2xl text-paper sm:text-4xl">
+                <span className="g-metric text-2xl text-paper sm:text-3xl">
                   {hasValue ? Math.round(shown).toLocaleString("en-US") : "—"}
                 </span>
               </div>
@@ -316,6 +322,18 @@ function RowsSkeleton({ dark }: { dark?: boolean }) {
   );
 }
 
+/**
+ * Alternating gold shades so neighbouring composition segments stay
+ * distinguishable even when two karats hold similar shares.
+ */
+const KARAT_SEG = [
+  "bg-gradient-to-r from-gold-light to-gold",
+  "bg-gold-deep",
+  "bg-gold-soft",
+  "bg-gold-dark",
+  "bg-gold",
+];
+
 export function StockByKarat({
   data,
   loading,
@@ -329,6 +347,14 @@ export function StockByKarat({
 }) {
   const rows = data?.byKarat ?? [];
   const totalFine = rows.reduce((s, r) => s + r.fine_mg, 0);
+  const totalPieces = rows.reduce((s, r) => s + r.pieces, 0);
+  const empty =
+    !error && !loading && rows.length === 0 ? (
+      <DarkEmpty
+        title="No stock on hand"
+        desc="Intake a purchase or run a count to build up stock."
+      />
+    ) : null;
   return (
     <section className="relative flex flex-col overflow-hidden rounded-2xl bg-void p-5 text-paper shadow-4 sm:p-6">
       <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-50" aria-hidden />
@@ -356,22 +382,79 @@ export function StockByKarat({
           <QueryError dark message={error} onRetry={onRetry} />
         ) : loading ? (
           <RowsSkeleton dark />
+        ) : empty ? (
+          empty
         ) : (
-          <BarList
-            items={rows.map((r) => ({
-              key: r.purity_id,
-              label: r.karat,
-              value: r.fine_mg,
-              secondary: `${r.pieces} pieces · ${grams(r.net_mg)} g net · ${rupees(r.value_cents)}`,
-            }))}
-            format={grams}
-            empty={
-              <DarkEmpty
-                title="No stock on hand"
-                desc="Intake a purchase or run a count to build up stock."
-              />
-            }
-          />
+          <>
+            <div
+              className="flex h-2 gap-[3px] overflow-hidden rounded-full bg-paper/[0.06]"
+              role="img"
+              aria-label={`Fine gold split across ${rows.length} ${
+                rows.length === 1 ? "purity" : "purities"
+              }`}
+            >
+              {rows.map((r, i) => {
+                const share = totalFine > 0 ? (r.fine_mg / totalFine) * 100 : 0;
+                return (
+                  <div
+                    key={r.purity_id}
+                    className={cn(
+                      "h-full rounded-full motion-reduce:transition-none",
+                      KARAT_SEG[i % KARAT_SEG.length]
+                    )}
+                    style={{
+                      width: `${Math.max(share, 2)}%`,
+                      transition: `width 900ms cubic-bezier(0.16, 1, 0.3, 1) ${i * 80}ms`,
+                    }}
+                    title={`${r.karat} · ${Math.round(share)}%`}
+                  />
+                );
+              })}
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[11px] text-paper/40">
+              <span>
+                {rows.length} {rows.length === 1 ? "purity" : "purities"}
+              </span>
+              <span>
+                {totalPieces.toLocaleString("en-US")}{" "}
+                {totalPieces === 1 ? "piece" : "pieces"}
+              </span>
+            </div>
+
+            <ul className="mt-4 space-y-2">
+              {rows.map((r) => {
+                const share = totalFine > 0 ? r.fine_mg / totalFine : 0;
+                return (
+                  <li
+                    key={r.purity_id}
+                    className="rounded-xl bg-paper/[0.03] p-3 ring-1 ring-paper/[0.06] transition-colors hover:bg-paper/[0.06]"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="g-metric flex h-8 min-w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-b from-gold-light to-gold px-2 text-[13px] font-bold text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+                          {r.karat}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-paper">
+                            {r.pieces} {r.pieces === 1 ? "piece" : "pieces"}
+                          </div>
+                          <div className="truncate text-[11px] text-paper/40">
+                            {grams(r.net_mg)} g net · {rupees(r.value_cents)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="g-metric text-sm text-paper">{grams(r.fine_mg)} g</div>
+                        <div className="text-[11px] font-medium text-gold-light/90">
+                          {Math.round(share * 100)}% of fine
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
         )}
       </div>
     </section>
@@ -392,6 +475,7 @@ export function StockByBranch({
   const all = data?.byBranch ?? [];
   const rows = all.slice(0, 10);
   const hidden = all.length - rows.length;
+  const totalNet = all.reduce((s, r) => s + r.net_mg, 0);
   return (
     <section className="relative flex flex-col overflow-hidden rounded-2xl p-5 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.07),0_18px_40px_-28px_rgba(28,25,23,0.25)] sm:p-6">
       <SpotlightCard tone="light" className="flex flex-1 flex-col">
@@ -403,7 +487,17 @@ export function StockByBranch({
             <h2 className="font-sans text-[15px] font-semibold tracking-normal text-ink">
               Stock by branch
             </h2>
-            <p className="truncate text-xs text-ink-4">Where the metal is sitting right now</p>
+            <p className="truncate text-xs text-ink-4">
+              {error
+                ? "Unavailable"
+                : loading
+                  ? "Loading"
+                  : all.length === 0
+                    ? "Where the metal is sitting right now"
+                    : `${grams(totalNet)} g across ${all.length} ${
+                        all.length === 1 ? "branch" : "branches"
+                      }`}
+            </p>
           </div>
         </div>
 
@@ -412,19 +506,52 @@ export function StockByBranch({
             <QueryError message={error} onRetry={onRetry} />
           ) : loading ? (
             <RowsSkeleton />
+          ) : rows.length === 0 ? (
+            <LightEmpty title="No stock on hand" desc="Nothing is in stock at any branch." />
           ) : (
-            <BarList
-              items={rows.map((r) => ({
-                key: r.branch_id,
-                label: r.name,
-                value: r.net_mg,
-                secondary: `${r.pieces} pieces · ${rupees(r.value_cents)}`,
-                href: "/products",
-              }))}
-              ramp="ink"
-              format={grams}
-              empty={<LightEmpty title="No stock on hand" desc="Nothing is in stock at any branch." />}
-            />
+            <ul className="space-y-2">
+              {rows.map((r, i) => {
+                const share = totalNet > 0 ? (r.net_mg / totalNet) * 100 : 0;
+                return (
+                  <li key={r.branch_id}>
+                    <Link
+                      href="/products"
+                      className="group block rounded-xl bg-bone/70 p-3 ring-1 ring-ink/[0.06] transition-colors hover:bg-gold-pale/60 hover:ring-gold-dark/20"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.08)] transition-colors group-hover:bg-gold group-hover:text-void">
+                            <Building2Icon size={14} />
+                          </span>
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium text-ink">{r.name}</div>
+                            <div className="truncate text-[11px] text-ink-4">
+                              {r.pieces} {r.pieces === 1 ? "piece" : "pieces"} ·{" "}
+                              {rupees(r.value_cents)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="g-metric text-sm text-ink">{grams(r.net_mg)} g</div>
+                          <div className="text-[11px] text-ink-4">
+                            {Math.round(share)}% of stock
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-ink/[0.07]">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-ink-2 via-ink-3 to-gold-dark motion-reduce:transition-none"
+                          style={{
+                            width: `${Math.max(share, 2)}%`,
+                            transition: `width 900ms cubic-bezier(0.16, 1, 0.3, 1) ${i * 60}ms`,
+                          }}
+                        />
+                      </div>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
 
@@ -440,22 +567,20 @@ export function StockByBranch({
 
 type AlertRow = {
   key: string;
+  icon: ReactNode;
   count: number;
   label: string;
+  desc: string;
   tone: "warning" | "info" | "neutral";
-  onClick: () => void;
+  /** Statuses are catalog filters; movement types scroll to history. */
+  href?: string;
+  onClick?: () => void;
 };
 
-const ALERT_TONE = {
-  warning: "bg-amber-50/60 ring-amber-600/10 hover:bg-amber-50",
-  info: "bg-gold/[0.07] ring-gold/20 hover:bg-gold/[0.12]",
-  neutral: "bg-bone ring-ink/[0.06] hover:bg-ink/[0.04]",
-} as const;
-
-const ALERT_DOT = {
-  warning: "bg-amber-500",
-  info: "bg-gold",
-  neutral: "bg-ink-4",
+const ALERT_ICON_TONE = {
+  warning: "bg-amber-100/80 text-amber-700 ring-amber-600/15",
+  info: "bg-gold-pale text-gold-deep ring-gold-dark/15",
+  neutral: "bg-ink/[0.06] text-ink-3 ring-ink/[0.08]",
 } as const;
 
 const STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
@@ -476,38 +601,53 @@ export function AttentionCard({
   const a = data?.attention;
   const last = a?.last_movement_at ?? null;
   const quiet = last === null || Date.now() - last > STALE_AFTER_MS;
+  const openCount = (a?.transfer_pending ?? 0) + (a?.in_repair ?? 0) + (a?.reserved ?? 0);
 
   const rows: AlertRow[] = [];
   if (a?.transfer_pending)
     rows.push({
       key: "pending",
+      icon: <TruckIcon size={15} />,
       count: a.transfer_pending,
       label: "pieces in transit",
+      desc: "Awaiting receipt at destination",
       tone: "warning",
       onClick: () => onFilter("TRANSFER_OUT"),
     });
   if (a?.in_repair)
     rows.push({
       key: "repair",
+      icon: <HammerIcon size={15} />,
       count: a.in_repair,
       label: "pieces in repair",
+      desc: "Off the shelf at the workshop",
       tone: "info",
-      onClick: () => onFilter("TRANSFER_IN"),
+      href: "/products?status=IN_REPAIR",
     });
   if (a?.reserved)
     rows.push({
       key: "reserved",
+      icon: <UserCheckIcon size={15} />,
       count: a.reserved,
       label: "pieces reserved",
+      desc: "Held for customers, not on the shelf",
       tone: "neutral",
-      onClick: () => onFilter(""),
+      href: "/products?status=RESERVED",
     });
   if (quiet)
     rows.push({
       key: "quiet",
+      icon: <HistoryIcon size={15} />,
       count: 0,
       label:
-        last === null ? "no movements have ever been logged" : "no movement in over a week",
+        last === null ? "no movements logged yet" : "no movement in over a week",
+      desc:
+        last === null
+          ? "Scan a piece to start the ledger"
+          : `Last activity ${new Date(last).toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "short",
+            })}`,
       tone: "warning",
       onClick: () => onFilter(""),
     });
@@ -519,7 +659,7 @@ export function AttentionCard({
           <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.2)]">
             <ScanBarcodeIcon size={16} />
           </span>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h2 className="font-sans text-[15px] font-semibold tracking-normal text-ink">
               Needs attention
             </h2>
@@ -527,6 +667,19 @@ export function AttentionCard({
               {error ? "Unavailable" : a ? `${a.movements_24h} movements in 24h` : "Loading"}
             </p>
           </div>
+          {!loading && !error && a ? (
+            <span
+              className={cn(
+                "g-metric flex size-8 shrink-0 items-center justify-center rounded-full text-[13px] font-bold ring-1",
+                openCount > 0
+                  ? "bg-amber-100/80 text-amber-700 ring-amber-600/15"
+                  : "bg-emerald-50 text-emerald-700 ring-emerald-600/15"
+              )}
+              title={`${openCount} open ${openCount === 1 ? "item" : "items"}`}
+            >
+              {openCount}
+            </span>
+          ) : null}
         </div>
 
         <div className="mt-5 flex-1">
@@ -547,32 +700,45 @@ export function AttentionCard({
             </div>
           ) : (
             <ul className="space-y-2">
-              {rows.map((r) => (
-                <li key={r.key}>
-                  <button
-                    type="button"
-                    onClick={r.onClick}
-                    className={cn(
-                      "flex w-full items-start gap-3 rounded-xl p-3 text-left ring-1 transition-colors",
-                      ALERT_TONE[r.tone]
-                    )}
-                  >
+              {rows.map((r) => {
+                const inner = (
+                  <>
                     <span
                       className={cn(
-                        "mt-1.5 size-2 shrink-0 animate-pulse-soft rounded-full",
-                        ALERT_DOT[r.tone]
+                        "flex size-9 shrink-0 items-center justify-center rounded-lg ring-1",
+                        ALERT_ICON_TONE[r.tone]
                       )}
-                    />
+                    >
+                      {r.icon}
+                    </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium text-ink">
                         {r.count > 0 ? `${r.count} ${r.label}` : r.label}
                       </span>
-                      <span className="block truncate text-xs text-ink-4">View movements</span>
+                      <span className="block truncate text-xs text-ink-4">{r.desc}</span>
                     </span>
-                    <ArrowRightIcon size={13} className="mt-1 shrink-0 text-ink-5" />
-                  </button>
-                </li>
-              ))}
+                    <ArrowRightIcon
+                      size={14}
+                      className="shrink-0 text-ink-5 transition-all group-hover:translate-x-0.5 group-hover:text-gold-dark"
+                    />
+                  </>
+                );
+                const cls =
+                  "group flex w-full items-center gap-3 rounded-xl bg-paper p-3 text-left ring-1 ring-ink/[0.06] shadow-[0_1px_2px_rgba(28,25,23,0.05)] transition-all hover:-translate-y-px hover:shadow-2 hover:ring-gold-dark/25";
+                return (
+                  <li key={r.key}>
+                    {r.href ? (
+                      <Link href={r.href} className={cls}>
+                        {inner}
+                      </Link>
+                    ) : (
+                      <button type="button" onClick={r.onClick} className={cls}>
+                        {inner}
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -589,7 +755,7 @@ type PreviewState =
   | { kind: "error"; message: string }
   | { kind: "found"; piece: Piece };
 
-export function PiecePreview({ code }: { code: string }) {
+export function PiecePreview({ code, branchName }: { code: string; branchName?: (id: string) => string }) {
   const [state, setState] = useState<PreviewState>({ kind: "idle" });
   const trimmed = code.trim();
 
@@ -645,7 +811,7 @@ export function PiecePreview({ code }: { code: string }) {
       <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
         {[
           ["Purity", p.karat],
-          ["Branch", p.branch_id.slice(0, 8)],
+          ["Branch", branchName ? branchName(p.branch_id) : p.branch_id.slice(0, 8)],
           ["Net weight", `${grams(p.net_mg)} g`],
           ["Fine gold", `${grams(p.fine_gold_mg)} g`],
         ].map(([k, v]) => (
@@ -726,10 +892,12 @@ export function PieceDetail({
   piece,
   onClose,
   onMove,
+  branchName,
 }: {
   piece: Piece;
   onClose: () => void;
   onMove: (barcode: string) => void;
+  branchName?: (id: string) => string;
 }) {
   const p = piece.product;
   return (
@@ -757,7 +925,7 @@ export function PieceDetail({
 
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3 border-y border-ink/[0.07] py-4 text-sm">
           {[
-            ["Branch", p.branch_id.slice(0, 8)],
+            ["Branch", branchName ? branchName(p.branch_id) : p.branch_id.slice(0, 8)],
             ["Net weight", `${grams(p.net_mg)} g`],
             ["Fine gold", `${grams(p.fine_gold_mg)} g`],
             ["Cost", rupees(p.cost_cents)],

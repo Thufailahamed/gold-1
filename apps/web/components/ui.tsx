@@ -893,6 +893,7 @@ export function BarList({
   ramp = "gold",
   format,
   empty,
+  tone = "dark",
 }: {
   items: ReadonlyArray<{
     key: string;
@@ -904,9 +905,12 @@ export function BarList({
   ramp?: Maybe<"gold" | "ink">;
   format: (n: number) => string;
   empty?: ReactNode;
+  /** "dark" renders paper-on-void rows; "light" renders ink-on-bone rows. */
+  tone?: Maybe<"dark" | "light">;
 }) {
   if (items.length === 0) return <>{empty ?? null}</>;
   const max = Math.max(...items.map((i) => i.value), 1);
+  const dark = tone === "dark";
 
   return (
     <ul className="space-y-2.5">
@@ -915,12 +919,19 @@ export function BarList({
         const inner = (
           <>
             <div className="flex items-center justify-between gap-3">
-              <span className="g-metric min-w-0 truncate text-xs font-semibold text-paper/85">
+              <span
+                className={cn(
+                  "g-metric min-w-0 truncate text-xs font-semibold",
+                  dark ? "text-paper/85" : "text-ink"
+                )}
+              >
                 {it.label}
               </span>
-              <span className="g-metric shrink-0 text-xs text-paper">{format(it.value)}</span>
+              <span className={cn("g-metric shrink-0 text-xs", dark ? "text-paper" : "text-ink")}>
+                {format(it.value)}
+              </span>
             </div>
-            <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-paper/[0.06]">
+            <div className={cn("mt-2.5 h-1 overflow-hidden rounded-full", dark ? "bg-paper/[0.06]" : "bg-ink/[0.07]")}>
               <div
                 className={cn("h-full rounded-full motion-reduce:transition-none", RAMP_FILL[ramp])}
                 style={{
@@ -930,12 +941,18 @@ export function BarList({
               />
             </div>
             {it.secondary ? (
-              <div className="mt-2 truncate text-[11px] text-paper/40">{it.secondary}</div>
+              <div className={cn("mt-2 truncate text-[11px]", dark ? "text-paper/40" : "text-ink-4")}>
+                {it.secondary}
+              </div>
             ) : null}
           </>
         );
-        const cls =
-          "group block rounded-xl bg-paper/[0.03] p-3 ring-1 ring-paper/[0.06] transition-colors hover:bg-paper/[0.06]";
+        const cls = cn(
+          "group block rounded-xl p-3 ring-1 transition-colors",
+          dark
+            ? "bg-paper/[0.03] ring-paper/[0.06] hover:bg-paper/[0.06]"
+            : "bg-bone/70 ring-ink/[0.06] hover:bg-gold-pale/60 hover:ring-gold-dark/20"
+        );
         return (
           <li key={it.key}>
             {it.href ? (

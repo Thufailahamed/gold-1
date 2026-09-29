@@ -22,7 +22,6 @@ import {
   SettingsIcon,
   HistoryIcon,
   ScaleIcon,
-  BanknoteIcon,
   ClipboardCheckIcon,
   TrendingUpIcon,
   LogOutIcon,
@@ -118,6 +117,11 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: "Accounts",
+    tag: "Books",
+    items: [{ href: "/accounts", label: "Accounts Dashboard", icon: ScaleIcon, perm: "accounts:view" }],
+  },
+  {
     title: "Organisation",
     tag: "Org",
     items: [
@@ -129,7 +133,6 @@ const SECTIONS: NavSection[] = [
     title: "Reports",
     tag: "Ledger",
     items: [
-      { href: "/reports/monthly", label: "Monthly", icon: HistoryIcon, perm: "accounts:view" },
       { href: "/analytics", label: "Analytics", icon: TrendingUpIcon, perm: "branches:manage" },
     ],
   },
@@ -146,9 +149,6 @@ const SECTIONS: NavSection[] = [
         perm: null,
         anyPerm: ["sales:approve", "oldgold:approve", "mfg:approve", "users:approve", "branches:approve", "accounts:manage", "gold:manage", "products:cancel", "purchases:cancel"],
       },
-      { href: "/accounts", label: "Accounts", icon: ScaleIcon, perm: "accounts:view" },
-      { href: "/expenses", label: "Expenses", icon: BanknoteIcon, perm: "accounts:view" },
-      { href: "/day-closing", label: "Day Closing", icon: ClipboardCheckIcon, perm: "accounts:view" },
     ],
   },
 ];

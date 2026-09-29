@@ -253,6 +253,14 @@ export default function ProductsPage() {
     const saved = localStorage.getItem("goldos_products_view");
     if (saved === "grid" || saved === "table") setView(saved);
   }, []);
+
+  // Deep links like /products?status=IN_REPAIR (from the inventory attention
+  // card) preselect the matching status filter. Read after mount so SSR and
+  // hydration agree.
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get("status");
+    if (s && STATUSES.includes(s)) setFStatus(s);
+  }, []);
   function changeView(v: "grid" | "table") {
     setView(v);
     localStorage.setItem("goldos_products_view", v);

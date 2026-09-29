@@ -15,6 +15,7 @@ import {
   attachReceipt,
   createExpense,
   createExpenseCategory,
+  expenseDaily,
   expenseSummary,
   getExpense,
   getReceipt,
@@ -104,6 +105,18 @@ export const expenses = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     } catch (err) {
       return serviceError(c, err);
     }
+  })
+  .get("/reports/daily", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    const date = /^\d{4}-\d{2}-\d{2}$/;
+    const to = c.req.query("to") ?? (await businessDateFor(c.env.DB, Date.now()));
+    const from = c.req.query("from") ?? to.slice(0, 8) + "01";
+    if (!date.test(from) || !date.test(to)) return invalid(c, "from and to must be YYYY-MM-DD");
+    const data = await expenseDaily(c.env.DB, {
+      from,
+      to,
+      branchId: c.req.query("branchId") ?? undefined,
+    });
+    return c.json({ success: true, data: { from, to, days: data } }, 200);
   })
   .get("/:id", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     try {

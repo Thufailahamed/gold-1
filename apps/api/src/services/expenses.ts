@@ -552,3 +552,40 @@ export async function expenseSummary(
     byCategory,
   };
 }
+
+/* ----------------------------------------------------------------- daily */
+
+export type ExpenseDay = {
+  date: string;
+  postedCents: number;
+  pendingCents: number;
+  count: number;
+};
+
+/**
+ * Per-day expense totals for a date range. Days with no expenses are absent;
+ * the caller fills the calendar so a quiet day reads as zero, not as missing.
+ */
+export async function expenseDaily(
+  db: D1Database,
+  opts: { from: string; to: string; branchId?: string }
+): Promise<ExpenseDay[]> {
+  const conds = ["incurred_on >= ?", "incurred_on <= ?", "status != 'REJECTED'"];
+  const vals: unknown[] = [opts.from, opts.to];
+  if (opts.branchId) {
+    conds.push("branch_id = ?");
+    vals.push(opts.branchId);
+  }
+  const { results } = await db
+    .prepare(
+      `SELECT incurred_on AS date,
+              COALESCE(SUM(CASE WHEN status = 'POSTED' THEN amount_cents ELSE 0 END), 0) AS postedCents,
+              COALESCE(SUM(CASE WHEN status = 'PENDING_APPROVAL' THEN amount_cents ELSE 0 END), 0) AS pendingCents,
+              COUNT(*) AS count
+       FROM expenses WHERE ${conds.join(" AND ")}
+       GROUP BY incurred_on ORDER BY incurred_on`
+    )
+    .bind(...vals)
+    .all<ExpenseDay>();
+  return results ?? [];
+}

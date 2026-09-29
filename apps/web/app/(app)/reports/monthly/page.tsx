@@ -1,17 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import { hasPermission } from "@goldos/shared";
 import { api, downloadCsv, type MeData } from "@/lib/api";
-import { Page, Hero, Panel, Pill, EmptyBlock, Callout, Toolbar, controlClass, heroBtnGhost } from "@/components/ui";
+import { Page, Hero, Panel, Pill, EmptyBlock, Callout, Toolbar, StatGrid, StatCard, BarList, Skeleton, controlClass, heroBtnGhost } from "@/components/ui";
 import {
   AlertCircleIcon,
   BanknoteIcon,
   Building2Icon,
   CreditCardIcon,
   FileDownIcon,
+  PrinterIcon,
   GemIcon,
   PackageIcon,
   StoreIcon,
@@ -19,22 +21,10 @@ import {
   TruckIcon,
   UsersIcon,
 } from "@/components/icons";
+import { type MonthlyReport } from "@/lib/monthly";
 import "./print.css";
 
-type Report = {
-  meta: { month: string; from: string; to: string; branchId: string | null };
-  sales: { netCents: number; invoiceCount: number; grossCents: number; returnsCents: number; hasData: boolean };
-  purchases: { purchaseValueCents: number; oldGoldCents: number; goldFineMg: number; hasData: boolean };
-  gold: { openingFineMg: number; inFineMg: number; outFineMg: number; closingFineMg: number; hasData: boolean };
-  expenses: { totalCents: number; pendingCents: number; byCategory: { accountCode: string; name: string; cents: number }[]; hasData: boolean };
-  profit: { revenueCents: number; cogsCents: number; grossProfitCents: number; operatingExpensesCents: number; netProfitCents: number; basis: string };
-  cashflow: { openingCents: number; inflowsCents: number; outflowsCents: number; closingCents: number; unclassifiedCents: number; hasData: boolean };
-  receivables: { totalCents: number; aging: Record<string, number>; outstanding: { id: string; number: string; outstandingCents: number }[]; hasData: boolean };
-  payables: { totalCents: number; aging: Record<string, number>; outstanding: { id: string; number: string; outstandingCents: number }[]; hasData: boolean };
-  inventory: { jewelleryCents: number; goldCents: number; byBranch: { key: string; cents: number }[]; byCategory: { key: string; cents: number }[]; byPurity: { key: string; cents: number }[]; uncostedPieces: number; method: string; basis: string; hasData: boolean };
-  estimates: { kind: string; label: string; note: string }[];
-  warnings: string[];
-};
+type Report = MonthlyReport;
 
 const SECTIONS = ["sales", "purchases", "gold", "expenses", "profit", "cashflow", "receivables", "payables", "inventory"] as const;
 
@@ -45,14 +35,54 @@ function sectionRowsForXlsx(report: Report, section: string): Record<string, unk
   return [];
 }
 
+function Statement({
+  rows,
+  unit,
+  scale = 100,
+  note,
+}: {
+  rows: [string, number, ("indent" | "sub" | "total")?][];
+  unit?: string;
+  scale?: number;
+  note?: string;
+}) {
+  const f = (n: number) => `${n < 0 ? "−" : ""}${Math.abs(n / scale).toLocaleString("en-US", { maximumFractionDigits: scale === 100 ? 0 : 3 })}${unit ? ` ${unit}` : ""}`;
+  return (
+    <div>
+      {rows.map(([label, v, kind]) => (
+        <div
+          key={label}
+          className={
+            "flex items-baseline justify-between gap-3 py-2 " +
+            (kind === "total" ? "border-t border-ink/[0.12] pt-3 text-[15px] font-semibold text-ink" : kind === "sub" ? "border-t border-ink/[0.06] font-medium text-ink-2" : "text-sm text-ink-3") +
+            (kind === "indent" ? " pl-4" : "")
+          }
+        >
+          <span>{label}</span>
+          <span className={"g-metric " + (v < 0 ? "text-rose-700" : "")}>{f(v)}</span>
+        </div>
+      ))}
+      {note ? <p className="mt-2 text-xs text-ink-4">{note}</p> : null}
+    </div>
+  );
+}
+
+function Aging({ aging }: { aging: Record<string, number> }) {
+  const items = Object.entries(aging);
+  if (items.every(([, v]) => v === 0)) return <div className="text-sm text-ink-4">Nothing outstanding</div>;
+  return <BarList tone="light" format={(n) => lkr(n)} items={items.map(([k, v]) => ({ key: k, label: k, value: v }))} />;
+}
+
 const lkr = (c: number) => (c / 100).toLocaleString("en-US");
 const g = (mg: number) => (mg / 1000).toLocaleString("en-US");
 
-export default function MonthlyPage() {
+function MonthlyView() {
   const now = new Date();
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [year, setYear] = useState(now.getFullYear());
-  const [branchId, setBranchId] = useState("");
+  const params = useSearchParams();
+  const initial = /^\d{4}-\d{2}$/.test(params.get("month") ?? "") ? (params.get("month") as string) : "";
+  const [month, setMonth] = useState(initial ? Number(initial.slice(5)) : now.getMonth() + 1);
+  const [year, setYear] = useState(initial ? Number(initial.slice(0, 4)) : now.getFullYear());
+  const [branchId, setBranchId] = useState(params.get("branch") ?? "");
   const [note, setNote] = useState("");
   const [frozen, setFrozen] = useState<string | null>(null);
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
@@ -70,6 +100,13 @@ export default function MonthlyPage() {
   const query = `/api/v1/reports/monthly?month=${month}&year=${year}${branchId ? `&branchId=${branchId}` : ""}`;
   const report = useQuery({ queryKey: ["monthly", month, year, branchId], queryFn: () => api<Report>(query) });
   const r = report.data;
+
+  const csv = (section: string) =>
+    canExport ? (
+      <button className="no-print g-btn g-btn-secondary h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=${section}`, `monthly-${section}.csv`)}>
+        CSV
+      </button>
+    ) : null;
 
   function exportXlsx() {
     if (!r) return;
@@ -95,7 +132,8 @@ export default function MonthlyPage() {
         <div>Monthly report {r?.meta.month ?? `${year}-${String(month).padStart(2, "0")}`} · generated {new Date().toISOString()} · live-read, not a frozen snapshot</div>
       </div>
       <Hero
-        kicker="Reports · Ledger"
+        kicker="Accounts · Ledger"
+        back={{ href: "/accounts", label: "Accounts dashboard" }}
         title="Monthly report"
         description="Ledger-posted figures with estimates kept separate."
         stats={[
@@ -106,6 +144,9 @@ export default function MonthlyPage() {
         ]}
         actions={
           <>
+            <button onClick={() => window.print()} className={heroBtnGhost}>
+              <PrinterIcon size={14} /> Print
+            </button>
             {canExport && r ? (
               <button onClick={exportXlsx} className={heroBtnGhost}>
                 <FileDownIcon size={14} /> Export .xlsx
@@ -154,47 +195,63 @@ export default function MonthlyPage() {
         )
       ) : (
         <>
-          <Panel title="Sales" icon={<StoreIcon size={17} />} description={`Invoices: ${r.sales.invoiceCount}`}>
-            {r.sales.hasData ? (
-              <div className="text-sm">Gross {lkr(r.sales.grossCents)} · Returns {lkr(r.sales.returnsCents)} · Net {lkr(r.sales.netCents)} LKR</div>
-            ) : <div className="text-sm text-ink-4">No postings this month</div>}
-            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=sales`, `monthly-sales.csv`)}>CSV</button> : null}
+          <StatGrid cols={4}>
+            <StatCard label="Net sales" icon={<StoreIcon size={16} />} value={lkr(r.sales.netCents)} sub={`${r.sales.invoiceCount} invoices`} />
+            <StatCard label="Expenses" icon={<CreditCardIcon size={16} />} value={lkr(r.expenses.totalCents)} sub={r.expenses.pendingCents ? `+ ${lkr(r.expenses.pendingCents)} pending approval` : `${r.expenses.byCategory.length} categories`} />
+            <StatCard label="Net profit" icon={<TrendingUpIcon size={16} />} value={lkr(r.profit.netProfitCents)} tone={r.profit.netProfitCents < 0 ? "danger" : "success"} sub={`Revenue ${lkr(r.profit.revenueCents)}`} />
+            <StatCard label="Closing cash" icon={<BanknoteIcon size={16} />} value={lkr(r.cashflow.closingCents)} sub={`Opening ${lkr(r.cashflow.openingCents)}`} />
+          </StatGrid>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Panel title="Profit & loss" icon={<TrendingUpIcon size={17} />} description={r.profit.basis} actions={csv("profit")}>
+              <Statement rows={[
+                ["Revenue", r.profit.revenueCents],
+                ["Cost of goods sold", -r.profit.cogsCents, "indent"],
+                ["Gross profit", r.profit.grossProfitCents, "sub"],
+                ["Operating expenses", -r.profit.operatingExpensesCents, "indent"],
+                ["Net profit", r.profit.netProfitCents, "total"],
+              ]} />
+            </Panel>
+            <Panel title="Cash flow" icon={<BanknoteIcon size={17} />} description="Drawer + bank movement" actions={csv("cashflow")}>
+              <Statement rows={[
+                ["Opening cash", r.cashflow.openingCents],
+                ["Cash in", r.cashflow.inflowsCents, "indent"],
+                ["Cash out", -r.cashflow.outflowsCents, "indent"],
+                ["Closing cash", r.cashflow.closingCents, "total"],
+              ]} />
+              {r.cashflow.unclassifiedCents ? <p className="mt-3 text-xs text-amber-700">{lkr(r.cashflow.unclassifiedCents)} LKR of movement is unclassified.</p> : null}
+            </Panel>
+            <Panel title="Sales" icon={<StoreIcon size={17} />} description={`${r.sales.invoiceCount} invoices`} actions={csv("sales")}>
+              {r.sales.hasData ? (
+                <Statement rows={[["Gross sales", r.sales.grossCents], ["Returns", -r.sales.returnsCents, "indent"], ["Net sales", r.sales.netCents, "total"]]} />
+              ) : <div className="text-sm text-ink-4">No postings this month</div>}
+            </Panel>
+            <Panel title="Purchases" icon={<TruckIcon size={17} />} description="Supplier + old-gold intake" actions={csv("purchases")}>
+              {r.purchases.hasData ? (
+                <Statement rows={[["Supplier purchases", r.purchases.purchaseValueCents], ["Old gold bought", r.purchases.oldGoldCents]]} note={`${g(r.purchases.goldFineMg)} g fine gold received`} />
+              ) : <div className="text-sm text-ink-4">No postings this month</div>}
+            </Panel>
+          </div>
+          <Panel title="Expenses by category" icon={<CreditCardIcon size={17} />} description={`Total ${lkr(r.expenses.totalCents)} LKR${r.expenses.pendingCents ? ` · ${lkr(r.expenses.pendingCents)} pending approval` : ""}`} actions={csv("expenses")}>
+            {r.expenses.byCategory.length === 0 ? <div className="text-sm text-ink-4">No expenses this month</div> : (
+              <BarList tone="light" format={(n) => lkr(n)} items={[...r.expenses.byCategory].sort((a, b) => b.cents - a.cents).map((c) => ({ key: c.accountCode, label: c.name, value: c.cents, secondary: c.accountCode }))} />
+            )}
           </Panel>
-          <Panel title="Purchases" icon={<TruckIcon size={17} />} description="Supplier + old-gold intake">
-            {r.purchases.hasData ? (
-              <div className="text-sm">Value {lkr(r.purchases.purchaseValueCents)} · Old gold {lkr(r.purchases.oldGoldCents)} LKR · {g(r.purchases.goldFineMg)} g</div>
-            ) : <div className="text-sm text-ink-4">No postings this month</div>}
-            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=purchases`, `monthly-purchases.csv`)}>CSV</button> : null}
-          </Panel>
-          <Panel title="Profit" icon={<TrendingUpIcon size={17} />} description={r.profit.basis}>
-            <div className="text-sm">Revenue {lkr(r.profit.revenueCents)} · COGS {lkr(r.profit.cogsCents)} · Gross {lkr(r.profit.grossProfitCents)} · Opex {lkr(r.profit.operatingExpensesCents)} · Net {lkr(r.profit.netProfitCents)} LKR</div>
-            <Pill tone="ghost">Ledger</Pill>
-            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=profit`, `monthly-profit.csv`)}>CSV</button> : null}
-          </Panel>
-          <Panel title="Cashflow" icon={<BanknoteIcon size={17} />} description="Drawer + bank movement">
-            <div className="text-sm">Opening {lkr(r.cashflow.openingCents)} · In {lkr(r.cashflow.inflowsCents)} · Out {lkr(r.cashflow.outflowsCents)} · Closing {lkr(r.cashflow.closingCents)} LKR</div>
-            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=cashflow`, `monthly-cashflow.csv`)}>CSV</button> : null}
-          </Panel>
-          <Panel title="Gold" icon={<GemIcon size={17} />} description="Fine gold flows">
-            <div className="text-sm">Opening {g(r.gold.openingFineMg)} · In {g(r.gold.inFineMg)} · Out {g(r.gold.outFineMg)} · Closing {g(r.gold.closingFineMg)} g</div>
-            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=gold`, `monthly-gold.csv`)}>CSV</button> : null}
-          </Panel>
-          <Panel title="Expenses" icon={<CreditCardIcon size={17} />} description={`Pending: ${lkr(r.expenses.pendingCents)} LKR`}>
-            <div className="text-sm">Total {lkr(r.expenses.totalCents)} LKR · {r.expenses.byCategory.length} categories</div>
-            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=expenses`, `monthly-expenses.csv`)}>CSV</button> : null}
-          </Panel>
-          <Panel title="Receivables" icon={<UsersIcon size={17} />} description={`Total ${lkr(r.receivables.totalCents)} LKR`}>
-            <div className="text-sm">Outstanding {r.receivables.outstanding.length} invoices · Buckets {Object.entries(r.receivables.aging).map(([k, v]) => `${k}: ${lkr(v)}`).join(" · ")}</div>
-            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=receivables`, `monthly-receivables.csv`)}>CSV</button> : null}
-          </Panel>
-          <Panel title="Payables" icon={<Building2Icon size={17} />} description={`Total ${lkr(r.payables.totalCents)} LKR`}>
-            <div className="text-sm">Outstanding {r.payables.outstanding.length} invoices · Buckets {Object.entries(r.payables.aging).map(([k, v]) => `${k}: ${lkr(v)}`).join(" · ")}</div>
-            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=payables`, `monthly-payables.csv`)}>CSV</button> : null}
-          </Panel>
-          <Panel title="Inventory" icon={<PackageIcon size={17} />} description={`${r.inventory.basis} · ${r.inventory.method}`}>
-            <div className="text-sm">Jewellery {lkr(r.inventory.jewelleryCents)} · Gold {lkr(r.inventory.goldCents)} LKR · Uncosted {r.inventory.uncostedPieces} pcs</div>
-            {canExport ? <button className="no-print g-btn g-btn-secondary mt-3 h-8 px-3 text-xs" onClick={() => downloadCsv(`${query}&format=csv&section=inventory`, `monthly-inventory.csv`)}>CSV</button> : null}
-          </Panel>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Panel title="Receivables" icon={<UsersIcon size={17} />} description={`${lkr(r.receivables.totalCents)} LKR · ${r.receivables.outstanding.length} open invoices`} actions={csv("receivables")}>
+              <Aging aging={r.receivables.aging} />
+            </Panel>
+            <Panel title="Payables" icon={<Building2Icon size={17} />} description={`${lkr(r.payables.totalCents)} LKR · ${r.payables.outstanding.length} open bills`} actions={csv("payables")}>
+              <Aging aging={r.payables.aging} />
+            </Panel>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Panel title="Gold" icon={<GemIcon size={17} />} description="Fine gold flows" actions={csv("gold")}>
+              <Statement rows={[["Opening", r.gold.openingFineMg], ["In", r.gold.inFineMg, "indent"], ["Out", -r.gold.outFineMg, "indent"], ["Closing", r.gold.closingFineMg, "total"]]} unit="g" scale={1000} />
+            </Panel>
+            <Panel title="Inventory" icon={<PackageIcon size={17} />} description={`${r.inventory.basis} · ${r.inventory.method}`} actions={csv("inventory")}>
+              <Statement rows={[["Jewellery", r.inventory.jewelleryCents], ["Gold", r.inventory.goldCents]]} note={r.inventory.uncostedPieces ? `${r.inventory.uncostedPieces} pieces have no cost recorded` : undefined} />
+            </Panel>
+          </div>
           <Panel title="Estimates" icon={<AlertCircleIcon size={17} />} description="Not in profit">
             {r.estimates.map((e) => (
               <div key={e.label} className="flex items-center gap-2 text-sm"><Pill tone="warning">Estimate</Pill><span>{e.label} — {e.note}</span></div>
@@ -203,5 +260,13 @@ export default function MonthlyPage() {
         </>
       )}
     </Page>
+  );
+}
+
+export default function MonthlyPage() {
+  return (
+    <Suspense fallback={null}>
+      <MonthlyView />
+    </Suspense>
   );
 }

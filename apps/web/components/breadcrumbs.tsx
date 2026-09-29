@@ -18,6 +18,12 @@ const LABELS: Record<string, string> = {
   inventory: "Inventory",
   settings: "Settings",
   audit: "Audit",
+  accounts: "Accounts",
+  chart: "Chart of accounts",
+  expenses: "Expenses",
+  "day-closing": "Day closing",
+  reports: "Reports",
+  monthly: "Monthly report",
 };
 
 export function Breadcrumbs() {
