@@ -59,7 +59,7 @@ Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 | GET | /masters/subcategories | masters:view | filterable by categoryId |
 | POST | /masters/designs, /product-types, /metal-types, /stone-types | masters:create | name + code unique |
 | GET | /masters/designs, /product-types, /metal-types, /stone-types | masters:view | paginated |
-| POST | /inventory/movements | products:edit | IN_STOCK→TRANSFER_PENDING/RETURNED/LOST/VOID; locked → 409 |
+| POST | /inventory/movements | products:edit | restocks + same-branch moves only (IN_STOCK→TRANSFER_PENDING same-branch, IN_STOCK→RETURNED, RETURNED→IN_STOCK); SOLD→409 use sales, LOST→409 use counts, VOID→409 use product void, cross-branch→409 use /transfers; locked → 409 |
 | GET | /inventory/movements | products:view | filterable by productId, branchId, type |
 | GET | /inventory/stock?groupBy= | products:view | branch/purity/product totals (mg + value at current rates) |
 | GET | /bank-accounts | accounts:view | each with its ledger balance; optional ?branchId= |

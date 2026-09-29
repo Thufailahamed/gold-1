@@ -143,9 +143,15 @@ export async function recordMovement(
     }>();
   if (!prev) throw Object.assign(new Error("Product not found"), { code: "NOT_FOUND" });
   await assertCountLock(db, input.productId);
+  if (input.toStatus === "SOLD")
+    throw Object.assign(new Error("Sales must go through POST /sales/invoices"), { code: "CONFLICT" });
+  if (input.toStatus === "LOST")
+    throw Object.assign(new Error("Shortages must go through POST /counts (approve)"), { code: "CONFLICT" });
+  if (input.toStatus === "VOID")
+    throw Object.assign(new Error("Voids must go through PATCH /products/:id/void"), { code: "CONFLICT" });
+  if (prev.status === "SOLD")
+    throw Object.assign(new Error("Sold returns must go through POST /sales/returns"), { code: "CONFLICT" });
   checkTransition(prev.status, input.toStatus);
-  if ((input.toStatus === "VOID" || input.toStatus === "LOST") && !input.reason)
-    throw Object.assign(new Error("Reason required for VOID/LOST"), { code: "VALIDATION" });
   const now = Date.now();
 
   if (input.toStatus === "TRANSFER_PENDING") {

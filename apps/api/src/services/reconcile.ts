@@ -80,7 +80,7 @@ export async function heldGoldStages(db: D1Database, branchId?: string): Promise
   const products = await firstRow<{ fine_mg: number }>(
     db,
     `SELECT COALESCE(SUM(fine_gold_mg), 0) AS fine_mg FROM products
-     WHERE status NOT IN ('SOLD','RETURNED','VOID','LOST','MELTED')${bp.sql}`,
+     WHERE status NOT IN ('SOLD','VOID','LOST','MELTED')${bp.sql}`,
     bp.vals
   );
   const oldGold = await firstRow<{ fine_mg: number }>(

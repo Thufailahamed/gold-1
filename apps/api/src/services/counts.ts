@@ -101,8 +101,20 @@ export async function approveCount(db: D1Database, countId: string, input: { rea
   ).bind(input.approvedBy).all<{ name: string }>();
   if (!(approver.results ?? []).some((r) => r.name === "gold:manage"))
     throw Object.assign(new Error("Approval requires gold:manage"), { code: "FORBIDDEN" });
-  const count = await db.prepare("SELECT id, branch_id, status FROM stock_counts WHERE id = ?").bind(countId).first<{ id: string; branch_id: string; status: string }>();
+  const count = await db.prepare("SELECT id, branch_id, status, opened_by FROM stock_counts WHERE id = ?").bind(countId).first<{ id: string; branch_id: string; status: string; opened_by: string | null }>();
   if (!count || count.status !== "OPEN") throw Object.assign(new Error("Count not open"), { code: "CONFLICT" });
+  if (count.opened_by && input.approvedBy === count.opened_by)
+    throw Object.assign(new Error("Approver cannot be the opener"), { code: "FORBIDDEN" });
+  const { results: scanRows } = await db.prepare("SELECT scanned_by FROM count_scans WHERE count_id = ?").bind(countId).all<{ scanned_by: string | null }>();
+  if ((scanRows ?? []).length > 0) {
+    const tally = new Map<string, number>();
+    for (const r of scanRows ?? []) if (r.scanned_by) tally.set(r.scanned_by, (tally.get(r.scanned_by) ?? 0) + 1);
+    let top: string | null = null;
+    let topN = 0;
+    for (const [k, v] of tally) if (v > topN) { top = k; topN = v; }
+    if (top && input.approvedBy === top)
+      throw Object.assign(new Error("Approver cannot be the majority scanner"), { code: "FORBIDDEN" });
+  }
   const cmp = await compare(db, countId);
   const rates = await currentGoldRatesCents(db);
   const now = Date.now();

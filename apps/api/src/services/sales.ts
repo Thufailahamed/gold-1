@@ -460,14 +460,42 @@ export async function createReturn(
     });
     stmts.push(...moved.stmts);
     const p = await db
-      .prepare("SELECT fine_gold_mg, pu.permille AS purity_permille FROM products JOIN purities pu ON pu.id = products.purity_id WHERE products.id = ?")
+      .prepare("SELECT net_mg, fine_gold_mg, pu.permille AS purity_permille FROM products JOIN purities pu ON pu.id = products.purity_id WHERE products.id = ?")
       .bind(it.product_id)
-      .first<{ fine_gold_mg: number; purity_permille: number }>();
+      .first<{ net_mg: number; fine_gold_mg: number; purity_permille: number }>();
     if (p) {
       stmts.push(
         db
           .prepare("INSERT INTO gold_movements (id, product_id, direction, fine_mg, purity_permille, ref_entity, ref_id, branch_id, created_at, created_by) VALUES (?, ?, 'IN', ?, ?, 'sale_return', ?, ?, ?, ?)")
           .bind(crypto.randomUUID(), it.product_id, p.fine_gold_mg, p.purity_permille, returnId, inv.branch_id, now, actorId)
+      );
+      // A return has to come back into the gold ledger as well as the
+      // inventory table. Without this the ledger keeps the SALE outflow
+      // while heldGold (which counts RETURNED) has the metal back, and
+      // gold_stock_consistency fails by exactly the returned weight.
+      // Direction mirrors SALE: SALE leaves branch→sale, RETURN returns
+      // sale→branch so the branch nets back to whole.
+      stmts.push(
+        db
+          .prepare(
+            "INSERT INTO gold_ledger (id, occurred_at, branch_id, source, destination, type, weight_mg, permille, fine_mg, ref_entity, ref_id, product_id, old_gold_id, user_id, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, 'RETURN', ?, ?, ?, 'sale_return', ?, ?, NULL, ?, ?, ?, ?)"
+          )
+          .bind(
+            crypto.randomUUID(),
+            now,
+            inv.branch_id,
+            `sale:${inv.id}`,
+            `branch:${inv.branch_id}`,
+            p.net_mg,
+            p.purity_permille,
+            p.fine_gold_mg,
+            returnId,
+            it.product_id,
+            actorId,
+            `Return ${number}`,
+            now,
+            actorId
+          )
       );
     }
   }

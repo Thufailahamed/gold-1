@@ -27,7 +27,7 @@ type Movement = {
   to_branch: string | null; weight_mg: number; reason: string | null; created_at: number;
 };
 
-const STATUSES = ["IN_STOCK", "RETURNED", "LOST", "VOID", "TRANSFER_PENDING"];
+const STATUSES = ["IN_STOCK", "RETURNED", "TRANSFER_PENDING"];
 
 export default function InventoryPage() {
   const [groupBy, setGroupBy] = useState<"branch" | "purity" | "product">("branch");
@@ -175,7 +175,7 @@ export default function InventoryPage() {
 
       <Panel
         title="Record movement"
-        description="Scan a barcode and post a status change"
+        description="Scan a barcode and post a status change. Sales via POS, shortages via Counts, voids via product page — this form handles restocks and same-branch moves only."
         icon={<RefreshCwIcon size={16} />}
       >
         <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
