@@ -337,18 +337,23 @@ type InsightRow = {
   pieces: number;
   net_mg: number;
   fine_mg: number;
+  value_cents: number | null;
 };
 
 type AttentionCounts = { transfer_pending: number; in_repair: number; reserved: number };
 
 export async function inventoryInsights(db: D1Database): Promise<InventoryInsights> {
-  const [{ results: rows }, rates, counts, last, c24] = await Promise.all([
+  const now = Date.now();
+  const [{ results: rows }, counts, last, c24] = await Promise.all([
+    // Value is rounded per product inside SQL, exactly as stockSummary does
+    // in JS. Rounding after the GROUP BY would sum the aggregate weight first
+    // and disagree with the stock table by a cent or two.
     db
       .prepare(
-        `SELECT p.purity_id AS group_key, p.branch_id, b.name AS branch_name, pu.karat, pu.permille, COUNT(*) AS pieces, SUM(p.net_mg) AS net_mg, SUM(p.fine_gold_mg) AS fine_mg FROM products p JOIN purities pu ON pu.id = p.purity_id LEFT JOIN branches b ON b.id = p.branch_id WHERE p.status = 'IN_STOCK' GROUP BY p.purity_id, p.branch_id, pu.karat, pu.permille, b.name`
+        `SELECT p.purity_id AS group_key, p.branch_id, b.name AS branch_name, pu.karat, pu.permille, COUNT(*) AS pieces, SUM(p.net_mg) AS net_mg, SUM(p.fine_gold_mg) AS fine_mg, SUM(ROUND(p.net_mg * COALESCE((SELECT g.rate_cents_per_g FROM gold_rates g WHERE g.purity_id = p.purity_id AND g.effective_from <= ? ORDER BY g.effective_from DESC LIMIT 1), 0) / 1000)) AS value_cents FROM products p JOIN purities pu ON pu.id = p.purity_id LEFT JOIN branches b ON b.id = p.branch_id WHERE p.status = 'IN_STOCK' GROUP BY p.purity_id, p.branch_id, pu.karat, pu.permille, b.name`
       )
+      .bind(now)
       .all<InsightRow>(),
-    currentGoldRatesCents(db),
     db
       .prepare(
         `SELECT COUNT(*) FILTER (WHERE status = 'TRANSFER_PENDING') AS transfer_pending, COUNT(*) FILTER (WHERE status = 'IN_REPAIR') AS in_repair, COUNT(*) FILTER (WHERE status = 'RESERVED') AS reserved FROM products`
@@ -359,21 +364,19 @@ export async function inventoryInsights(db: D1Database): Promise<InventoryInsigh
       .first<{ last: number | null }>(),
     db
       .prepare(`SELECT COUNT(*) AS c24 FROM stock_movements WHERE created_at >= ?`)
-      .bind(Date.now() - 24 * 60 * 60 * 1000)
+      .bind(now - 24 * 60 * 60 * 1000)
       .first<{ c24: number }>(),
   ]);
 
-  const byPurityRate = new Map(rates.map((r) => [r.purity_id, r.rate_cents_per_g]));
   const karat = new Map<string, KaratLine>();
   const branch = new Map<string, BranchLine>();
   const totals = { pieces: 0, net_mg: 0, fine_mg: 0, value_cents: 0 };
 
   for (const r of rows ?? []) {
-    const rate = byPurityRate.get(r.group_key);
     const pieces = Number(r.pieces ?? 0);
     const netMg = Number(r.net_mg ?? 0);
     const fineMg = Number(r.fine_mg ?? 0);
-    const valueCents = priceStock(netMg, rate);
+    const valueCents = Number(r.value_cents ?? 0);
 
     totals.pieces += pieces;
     totals.net_mg += netMg;

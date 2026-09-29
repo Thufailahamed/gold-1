@@ -33,15 +33,6 @@ function stubDb(overrides: Record<string, unknown[]>, scalars: Record<string, un
   } as unknown as D1Database;
 }
 
-const RATE = (purity_id: string, karat: string, rate: number) => ({
-  id: `r_${purity_id}`,
-  purity_id,
-  karat,
-  rate_cents_per_g: rate,
-  effective_from: 1,
-  created_at: 1,
-});
-
 const ZERO_TOTALS = { pieces: 0, net_mg: 0, fine_mg: 0, value_cents: 0 };
 const ZERO_ATTENTION = {
   transfer_pending: 0,
@@ -80,6 +71,7 @@ describe("inventoryInsights", () => {
             pieces: 2,
             net_mg: 5000,
             fine_mg: 4580,
+            value_cents: 70000,
           },
           {
             group_key: "pu22",
@@ -90,6 +82,7 @@ describe("inventoryInsights", () => {
             pieces: 3,
             net_mg: 3000,
             fine_mg: 2748,
+            value_cents: 42000,
           },
           {
             group_key: "pu18",
@@ -100,9 +93,9 @@ describe("inventoryInsights", () => {
             pieces: 1,
             net_mg: 2000,
             fine_mg: 1500,
+            value_cents: 22000,
           },
         ],
-        "FROM gold_rates g": [RATE("pu22", "22K", 14000), RATE("pu18", "18K", 11000)],
       },
       {
         "COUNT(*) FILTER": { transfer_pending: 0, in_repair: 0, reserved: 0 },
@@ -167,6 +160,52 @@ describe("inventoryInsights", () => {
     });
   });
 
+  it("takes value_cents from SQL so it matches stockSummary's per-product rounding", async () => {
+    const { inventoryInsights } = await import("./inventory");
+    // Two 1500mg pieces at 333 cents/g. Rounding per product then summing is
+    // not the same as rounding the summed weight: the former is what
+    // stockSummary produces and therefore what the stock table shows.
+    const db = stubDb(
+      {
+        "FROM products p": [
+          {
+            group_key: "g1",
+            branch_id: "b1",
+            branch_name: "Colombo",
+            karat: "9K",
+            permille: 375,
+            pieces: 1,
+            net_mg: 1500,
+            fine_mg: 562,
+            value_cents: 499,
+          },
+          {
+            group_key: "g1",
+            branch_id: "b1",
+            branch_name: "Colombo",
+            karat: "9K",
+            permille: 375,
+            pieces: 1,
+            net_mg: 1500,
+            fine_mg: 562,
+            value_cents: 499,
+          },
+        ],
+      },
+      {
+        "COUNT(*) FILTER": { transfer_pending: 0, in_repair: 0, reserved: 0 },
+        "MAX(created_at) AS last": { last: null },
+        "COUNT(*) AS c24": { c24: 0 },
+      }
+    );
+
+    const out = await inventoryInsights(db);
+
+    // 998, not the 999 you would get by rounding 3000mg once.
+    expect(out.totals.value_cents).toBe(998);
+    expect(out.byKarat[0]!.value_cents).toBe(998);
+  });
+
   it("prices a karat with no published rate at 0", async () => {
     const { inventoryInsights } = await import("./inventory");
     const db = stubDb(
@@ -181,9 +220,9 @@ describe("inventoryInsights", () => {
             pieces: 1,
             net_mg: 10000,
             fine_mg: 9990,
+            value_cents: 0,
           },
         ],
-        "FROM gold_rates g": [],
       },
       {
         "COUNT(*) FILTER": { transfer_pending: 0, in_repair: 0, reserved: 0 },
@@ -202,7 +241,7 @@ describe("inventoryInsights", () => {
   it("returns zeroed totals and empty arrays when nothing is in stock", async () => {
     const { inventoryInsights } = await import("./inventory");
     const db = stubDb(
-      { "FROM products p": [], "FROM gold_rates g": [] },
+      { "FROM products p": [] },
       {
         "COUNT(*) FILTER": { transfer_pending: 0, in_repair: 0, reserved: 0 },
         "MAX(created_at) AS last": { last: null },
@@ -221,7 +260,7 @@ describe("inventoryInsights", () => {
   it("counts non-in-stock statuses into attention", async () => {
     const { inventoryInsights } = await import("./inventory");
     const db = stubDb(
-      { "FROM products p": [], "FROM gold_rates g": [] },
+      { "FROM products p": [] },
       {
         "COUNT(*) FILTER": { transfer_pending: 4, in_repair: 2, reserved: 1 },
         "MAX(created_at) AS last": { last: 5 },
