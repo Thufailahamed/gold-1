@@ -1,14 +1,50 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { centsToLkr, hasPermission, mgToG } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
-import { DataTable, EmptyBlock, Page, TableCard, Tabs, type DataColumn } from "@/components/ui";
-import { Building2Icon, GemIcon, PackageIcon } from "@/components/icons";
-import { InventoryHero, StockByKarat, StockByBranch, AttentionCard } from "./panels";
-import { stockColumns, type Insights, type StockRow } from "./columns";
+import { cn } from "@/lib/cn";
+import {
+  ButtonPrimary,
+  ButtonSecondary,
+  Callout,
+  controlClass,
+  DataTable,
+  EmptyBlock,
+  Field,
+  Page,
+  Pager,
+  Panel,
+  TableCard,
+  Tabs,
+  type DataColumn,
+} from "@/components/ui";
+import {
+  Building2Icon,
+  GemIcon,
+  PackageIcon,
+  RefreshCwIcon,
+} from "@/components/icons";
+import {
+  AttentionCard,
+  InventoryHero,
+  MovementFilters,
+  PieceDetail,
+  PiecePreview,
+  StockByBranch,
+  StockByKarat,
+} from "./panels";
+import {
+  movementColumns,
+  stockColumns,
+  type Insights,
+  type Movement,
+  type Piece,
+  type StockRow,
+} from "./columns";
 
 const GROUP_LABEL: Record<"branch" | "purity" | "product", string> = {
   branch: "branch",
@@ -18,10 +54,31 @@ const GROUP_LABEL: Record<"branch" | "purity" | "product", string> = {
 
 const g = (mg: number) => mgToG(mg).toLocaleString("en-US", { maximumFractionDigits: 3 });
 
+const MOVE_STATUSES = ["IN_STOCK", "RETURNED", "TRANSFER_PENDING"];
+
+function useDebounced<T>(value: T, ms = 350): T {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return v;
+}
+
 export default function InventoryPage() {
   const [groupBy, setGroupBy] = useState<"branch" | "purity" | "product">("branch");
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | undefined>(undefined);
-  const [pendingType, setPendingType] = useState("");
+
+  const [barcode, setBarcode] = useState("");
+  const [toStatus, setToStatus] = useState("RETURNED");
+  const [toBranch, setToBranch] = useState("");
+  const [reason, setReason] = useState("");
+  const [detail, setDetail] = useState<Piece | null>(null);
+  const [mType, setMType] = useState("");
+  const [mBranch, setMBranch] = useState("");
+  const [mSearch, setMSearch] = useState("");
+  const [mPage, setMPage] = useState(1);
+  const barcodeRef = useRef<HTMLInputElement>(null);
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
   const canView = hasPermission(me.data?.permissions ?? [], "products:view");
@@ -39,6 +96,58 @@ export default function InventoryPage() {
     queryFn: () => api<StockRow[]>(`/api/v1/inventory/stock?groupBy=${groupBy}`),
     enabled: canView,
   });
+
+  const branches = useQuery({
+    queryKey: ["branches"],
+    queryFn: () =>
+      api<{ rows: Array<{ id: string; name: string }>; total: number }>(
+        "/api/v1/branches?limit=100"
+      ),
+    staleTime: 60_000,
+  });
+
+  const mSearchDebounced = useDebounced(mSearch);
+  const moves = useQuery({
+    queryKey: ["moves", mPage, mType, mBranch, mSearchDebounced],
+    queryFn: () => {
+      const q = new URLSearchParams({ limit: "25", page: String(mPage) });
+      if (mType) q.set("type", mType);
+      if (mBranch) q.set("branchId", mBranch);
+      if (mSearchDebounced.trim()) q.set("search", mSearchDebounced.trim());
+      return api<{ rows: Movement[]; total: number }>(`/api/v1/inventory/movements?${q}`);
+    },
+    enabled: canView,
+  });
+
+  const qc = useQueryClient();
+  const move = useMutation({
+    mutationFn: async () => {
+      const found = await api<Piece>(
+        `/api/v1/products/barcode/${encodeURIComponent(barcode.trim())}`
+      );
+      return api("/api/v1/inventory/movements", {
+        method: "POST",
+        body: JSON.stringify({
+          productId: found.product.id,
+          toStatus,
+          toBranchId: toBranch || undefined,
+          reason: reason || undefined,
+        }),
+      });
+    },
+    onSuccess: () => {
+      toast.success("Movement recorded");
+      setBarcode("");
+      setReason("");
+      qc.invalidateQueries({ queryKey: ["moves"] });
+      qc.invalidateQueries({ queryKey: ["stock"] });
+      qc.invalidateQueries({ queryKey: ["inventory", "insights"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Movement failed"),
+  });
+
+  const needsBranch = toStatus === "TRANSFER_PENDING";
+  const moveInvalid = !barcode.trim() || (needsBranch && !toBranch.trim());
 
   const columns = useMemo(() => stockColumns(groupBy), [groupBy]);
 
@@ -67,6 +176,15 @@ export default function InventoryPage() {
     };
   }, [stock.data]);
 
+  const moveCols = useMemo(
+    () =>
+      movementColumns(
+        (id) =>
+          branches.data?.rows.find((b) => b.id === id)?.name ?? (id ? id.slice(0, 8) : "—")
+      ),
+    [branches.data]
+  );
+
   function onSort(key: string) {
     setSort((s) =>
       s?.key === key
@@ -75,6 +193,30 @@ export default function InventoryPage() {
           : undefined
         : { key, dir: "desc" }
     );
+  }
+
+  // The stock row key is a branch id, purity id or product id depending on the
+  // grouping. Only the product grouping yields a fetchable product id.
+  async function openPiece(key: string) {
+    try {
+      const piece = await api<Piece>(`/api/v1/products/${encodeURIComponent(key)}`);
+      setDetail(piece);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not load the piece");
+    }
+  }
+
+  function focusMovement(code: string) {
+    setDetail(null);
+    setBarcode(code);
+    document.getElementById("record-movement")?.scrollIntoView({ behavior: "smooth" });
+    window.setTimeout(() => barcodeRef.current?.focus(), 300);
+  }
+
+  function focusHistory(type: string) {
+    setMType(type);
+    setMPage(1);
+    document.getElementById("movement-history")?.scrollIntoView({ behavior: "smooth" });
   }
 
   const insightsError = insights.isError ? (insights.error as Error).message : undefined;
@@ -108,17 +250,13 @@ export default function InventoryPage() {
           loading={insights.isLoading}
           error={insightsError}
           onRetry={() => void insights.refetch()}
-          onFilter={(t) => setPendingType(t)}
+          onFilter={focusHistory}
         />
       </div>
 
       <TableCard
         title="Stock on hand"
-        description={
-          pendingType
-            ? `Grouped by ${GROUP_LABEL[groupBy]} · alert filter: ${pendingType}`
-            : `Grouped by ${GROUP_LABEL[groupBy]}`
-        }
+        description={`Grouped by ${GROUP_LABEL[groupBy]}`}
         icon={<PackageIcon size={16} />}
         toolbar={
           <Tabs
@@ -140,8 +278,181 @@ export default function InventoryPage() {
           onSort={onSort}
           loading={stock.isLoading}
           totals={totals}
+          onRowClick={groupBy === "product" ? (r) => void openPiece(r.key) : undefined}
         />
       </TableCard>
+
+      <div id="record-movement">
+        <Panel
+          title="Record movement"
+          description="Scan a barcode and post a status change."
+          icon={<RefreshCwIcon size={16} />}
+        >
+          <div className="grid gap-5 lg:grid-cols-2">
+            <div className="min-w-0 space-y-3">
+              <Field
+                label="Barcode"
+                htmlFor="mv-barcode"
+                hint="Press Enter to post. Scans are picked up automatically."
+              >
+                <input
+                  id="mv-barcode"
+                  ref={barcodeRef}
+                  autoFocus
+                  value={barcode}
+                  onChange={(e) => setBarcode(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !moveInvalid) move.mutate();
+                  }}
+                  placeholder="JW-XXXXXX"
+                  className={cn(controlClass, "font-mono")}
+                  aria-describedby="mv-barcode-hint"
+                />
+              </Field>
+              <PiecePreview code={barcode} />
+            </div>
+
+            <div className="min-w-0 space-y-3">
+              <Field label="To status" htmlFor="mv-status">
+                <select
+                  id="mv-status"
+                  value={toStatus}
+                  onChange={(e) => setToStatus(e.target.value)}
+                  className={controlClass}
+                >
+                  {MOVE_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s.replace(/_/g, " ")}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field
+                label="To branch"
+                htmlFor="mv-branch"
+                hint={needsBranch ? "Required for a transfer." : "Only used for transfers."}
+                error={
+                  needsBranch && !toBranch.trim() ? "Pick a branch to transfer to" : undefined
+                }
+              >
+                <select
+                  id="mv-branch"
+                  value={toBranch}
+                  onChange={(e) => setToBranch(e.target.value)}
+                  className={controlClass}
+                  aria-invalid={needsBranch && !toBranch.trim()}
+                  aria-describedby="mv-branch-hint"
+                >
+                  <option value="">No change</option>
+                  {(branches.data?.rows ?? []).map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field
+                label="Reason"
+                htmlFor="mv-reason"
+                hint="Optional, kept on the movement record."
+              >
+                <input
+                  id="mv-reason"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Customer return, workshop move…"
+                  className={controlClass}
+                />
+              </Field>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <ButtonPrimary
+                  type="button"
+                  onClick={() => move.mutate()}
+                  disabled={move.isPending || moveInvalid}
+                >
+                  {move.isPending ? "Recording…" : "Record movement"}
+                </ButtonPrimary>
+                <ButtonSecondary
+                  type="button"
+                  onClick={() => {
+                    setBarcode("");
+                    setToBranch("");
+                    setReason("");
+                  }}
+                >
+                  Clear
+                </ButtonSecondary>
+              </div>
+            </div>
+          </div>
+
+          <Callout tone="info" className="mt-5">
+            Sales go through the POS, shortages through counts, and voids through the product page.
+            This panel handles restocks and same-branch moves.
+          </Callout>
+        </Panel>
+      </div>
+
+      <div id="movement-history">
+        <TableCard
+          title="Movement history"
+          description={mType ? `Filtered to ${mType.replace(/_/g, " ")}` : "Latest movements"}
+          toolbar={
+            <MovementFilters
+              type={mType}
+              branch={mBranch}
+              search={mSearch}
+              onType={(t) => {
+                setMType(t);
+                setMPage(1);
+              }}
+              onBranch={(b) => {
+                setMBranch(b);
+                setMPage(1);
+              }}
+              onSearch={setMSearch}
+              branches={branches.data?.rows ?? []}
+            />
+          }
+          footer={
+            moves.data ? (
+              <Pager
+                page={mPage}
+                onChange={setMPage}
+                pageSize={25}
+                count={moves.data.rows.length}
+                total={moves.data.total}
+                unit="movements"
+              />
+            ) : null
+          }
+        >
+          <DataTable
+            columns={moveCols}
+            rows={moves.data?.rows ?? []}
+            rowKey={(m) => m.id}
+            loading={moves.isLoading}
+            caption="Inventory movement history"
+            empty={
+              <EmptyBlock
+                title="No movements"
+                description="Nothing matches these filters. Clear them to see the full ledger."
+              />
+            }
+          />
+        </TableCard>
+      </div>
+
+      {detail ? (
+        <PieceDetail
+          piece={detail}
+          onClose={() => setDetail(null)}
+          onMove={focusMovement}
+        />
+      ) : null}
     </Page>
   );
 }
@@ -153,6 +464,7 @@ function StockTableBody({
   onSort,
   loading,
   totals,
+  onRowClick,
 }: {
   rows: StockRow[];
   columns: ReadonlyArray<DataColumn<StockRow>>;
@@ -160,6 +472,7 @@ function StockTableBody({
   onSort: (key: string) => void;
   loading: boolean;
   totals: { pieces: number; net: number; fine: number; value: number; hasValue: boolean };
+  onRowClick?: (r: StockRow) => void;
 }) {
   return (
     <DataTable
@@ -168,6 +481,7 @@ function StockTableBody({
       rowKey={(r) => r.key}
       sort={sort}
       onSort={onSort}
+      onRowClick={onRowClick}
       loading={loading}
       caption="Stock on hand, grouped"
       empty={
