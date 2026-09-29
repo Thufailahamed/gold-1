@@ -7,21 +7,10 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { useCountUp } from "@/lib/count-up";
 import { businessToday, monthBounds, type MonthlyReport } from "@/lib/monthly";
-import {
-  BarList,
-  EmptyBlock,
-  Hero,
-  Page,
-  Panel,
-  Pill,
-  SectionLabel,
-  Skeleton,
-  StatusPill,
-  controlClass,
-  heroBtnGhost,
-  heroBtnPrimary,
-} from "@/components/ui";
+import { BarList, GaugeRing, Page, Pill, SectionLabel, Skeleton, StatusPill, controlClass } from "@/components/ui";
+import { SpotlightCard } from "@/components/home/motion";
 import {
   AlertCircleIcon,
   ArrowRightIcon,
@@ -29,6 +18,7 @@ import {
   BookOpenIcon,
   CheckCircleIcon,
   ClipboardCheckIcon,
+  CoinsIcon,
   CreditCardIcon,
   PlusIcon,
   ScaleIcon,
@@ -66,9 +56,12 @@ type ClosingPreview = {
 type Closing = { id: string; close_date: string; expected_cents: number; actual_cents: number; difference_cents: number; status: string };
 type BankAccount = { id: string; name: string; bank_name: string | null; is_active: number; balance_cents: number };
 
+type IconCmp = (props: { size?: number | string; className?: string }) => ReactNode;
+
 /* ---------------------------------------------------------------- helpers */
 
 const lkr = (c: number) => Math.round(c / 100).toLocaleString("en-US");
+const lkrSigned = (c: number) => `${c < 0 ? "−" : ""}${lkr(Math.abs(c))}`;
 const lkrFull = (c: number) => (c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const compact = (n: number) => Intl.NumberFormat("en-US", { notation: "compact" }).format(n);
 const dayLabel = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
@@ -89,92 +82,231 @@ function Signed({ cents, className }: { cents: number; className?: string }) {
   );
 }
 
-/* ------------------------------------------------------------- components */
+/* ------------------------------------------------------------- primitives */
 
-function KpiCard({
-  label,
-  value,
-  sub,
-  icon,
-  tone = "neutral",
-  loading,
-  href,
-}: {
-  label: string;
-  value: ReactNode;
-  sub?: ReactNode;
-  icon: ReactNode;
-  tone?: "neutral" | "good" | "bad";
-  loading?: boolean;
-  href?: string;
-}) {
-  const body = (
-    <>
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-medium text-ink-3">{label}</span>
-        <span className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.2)]">
-          {icon}
-        </span>
-      </div>
-      <div className="mt-5">
-        {loading ? (
-          <Skeleton className="h-9 w-32" />
-        ) : (
-          <div
-            className={cn(
-              "g-metric text-3xl leading-none",
-              tone === "good" && "text-emerald-700",
-              tone === "bad" && "text-rose-700",
-              tone === "neutral" && "text-ink"
-            )}
-          >
-            {value}
-          </div>
-        )}
-        {sub ? <div className="mt-2 truncate text-xs text-ink-4">{sub}</div> : null}
-      </div>
-    </>
-  );
-  const cls = "g-surface block p-5";
-  return href ? (
-    <Link href={href} className={cn(cls, "transition-all duration-240 ease-brand hover:-translate-y-0.5 hover:shadow-2")}>
-      {body}
-    </Link>
-  ) : (
-    <div className={cls}>{body}</div>
+function Card({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <section
+      className={cn(
+        "relative overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(28,25,23,0.07),0_18px_40px_-28px_rgba(28,25,23,0.25)]",
+        className
+      )}
+    >
+      {children}
+    </section>
   );
 }
 
-function NavTile({
-  href,
-  icon,
+function CardHead({
+  icon: Icon,
   title,
-  description,
-  stat,
+  sub,
+  action,
+  dark,
 }: {
-  href: string;
-  icon: ReactNode;
+  icon: IconCmp;
   title: string;
-  description: string;
-  stat?: ReactNode;
+  sub?: ReactNode;
+  action?: ReactNode;
+  dark?: boolean;
 }) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-5 pb-4 pt-5 sm:px-6">
+      <div className="flex min-w-0 items-center gap-3">
+        <span
+          className={cn(
+            "flex size-9 shrink-0 items-center justify-center rounded-xl",
+            dark
+              ? "bg-gradient-to-b from-gold-light to-gold-deep text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]"
+              : "bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.2)]"
+          )}
+        >
+          <Icon size={16} />
+        </span>
+        <div className="min-w-0">
+          <h2 className={cn("truncate font-sans text-[15px] font-semibold tracking-normal", dark ? "text-paper" : "text-ink")}>{title}</h2>
+          {sub ? <p className={cn("truncate text-xs", dark ? "text-paper/45" : "text-ink-4")}>{sub}</p> : null}
+        </div>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function HeadLink({ href, children, dark }: { href: string; children: ReactNode; dark?: boolean }) {
   return (
     <Link
       href={href}
-      className="group relative flex flex-col gap-3 overflow-hidden rounded-xl bg-void p-5 text-paper transition-transform duration-240 ease-brand hover:-translate-y-0.5"
+      className={cn(
+        "group inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+        dark ? "text-paper/50 hover:bg-paper/[0.06] hover:text-gold-light" : "text-ink-4 hover:bg-ink/[0.05] hover:text-ink"
+      )}
     >
-      <div className="pointer-events-none absolute -right-8 -top-10 size-28 rounded-full bg-gold/15 blur-2xl transition-opacity group-hover:opacity-100" />
-      <div className="relative flex items-center justify-between">
-        <span className="flex size-10 items-center justify-center rounded-xl bg-paper/[0.07] text-gold shadow-[inset_0_0_0_1px_rgba(250,250,249,0.1)]">
-          {icon}
+      {children}
+      <ArrowRightIcon size={12} className="transition-transform group-hover:translate-x-0.5" />
+    </Link>
+  );
+}
+
+function Empty({ icon: Icon, title, desc, dark }: { icon: IconCmp; title: string; desc: string; dark?: boolean }) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col items-center justify-center rounded-xl border border-dashed px-6 py-10 text-center",
+        dark ? "border-paper/15 bg-paper/[0.02]" : "border-ink/[0.12] bg-bone/60"
+      )}
+    >
+      <span
+        className={cn(
+          "mb-3 flex size-10 items-center justify-center rounded-xl",
+          dark ? "bg-paper/[0.06] text-gold-light" : "bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.08)]"
+        )}
+      >
+        <Icon size={18} />
+      </span>
+      <p className={cn("text-sm font-medium", dark ? "text-paper" : "text-ink")}>{title}</p>
+      <p className={cn("mt-1 max-w-[16rem] text-xs leading-relaxed", dark ? "text-paper/50" : "text-ink-4")}>{desc}</p>
+    </div>
+  );
+}
+
+/** Section divider with a mono index, title and an optional right-side control. */
+function SectionHead({ index, title, sub, aside }: { index: string; title: ReactNode; sub?: ReactNode; aside?: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-end gap-3 pt-2 sm:gap-4">
+      <span className="g-metric pb-0.5 text-[11px] font-semibold tracking-[0.22em] text-gold-dark">{index}</span>
+      <div className="min-w-0">
+        <h2 className="font-display text-lg font-bold tracking-tight text-ink">{title}</h2>
+        {sub ? <p className="mt-0.5 text-xs text-ink-4">{sub}</p> : null}
+      </div>
+      <div className="hidden h-px flex-1 translate-y-[-6px] bg-ink/[0.08] sm:block" />
+      {aside}
+    </div>
+  );
+}
+
+/** Spotlight KPI tile with a count-up metric and a gold underline sweep on hover. */
+function KpiTile({
+  label,
+  icon: Icon,
+  cents,
+  format = lkr,
+  sub,
+  href,
+  tone = "neutral",
+  loading,
+  delay = 0,
+}: {
+  label: string;
+  icon: IconCmp;
+  cents?: number;
+  format?: (n: number) => string;
+  sub?: ReactNode;
+  href?: string;
+  tone?: "neutral" | "good" | "bad";
+  loading?: boolean;
+  delay?: number;
+}) {
+  const shown = useCountUp(cents);
+  const body = (
+    <SpotlightCard tone="light" className="flex h-full flex-col p-5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex min-w-0 items-center gap-2.5 text-sm font-medium text-ink-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.2)] transition-all duration-320 group-hover:from-void group-hover:to-ink-2 group-hover:text-gold-light">
+            <Icon size={16} />
+          </span>
+          <span className="truncate">{label}</span>
         </span>
-        <ArrowRightIcon size={16} className="text-paper/30 transition-all group-hover:translate-x-0.5 group-hover:text-gold" />
+        {href ? (
+          <ArrowRightIcon
+            size={14}
+            className="-translate-x-1 shrink-0 text-ink-5 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-gold-dark group-hover:opacity-100"
+          />
+        ) : null}
       </div>
-      <div className="relative">
-        <div className="text-[15px] font-semibold">{title}</div>
-        <p className="mt-1 text-xs leading-relaxed text-paper/55">{description}</p>
+      <div className="mt-6">
+        {loading ? (
+          <Skeleton className="h-9 w-32" />
+        ) : (
+          <div className="flex items-baseline gap-1.5">
+            {cents !== undefined ? <span className="text-xs font-medium text-ink-4">LKR</span> : null}
+            <span
+              className={cn(
+                "g-metric truncate text-3xl leading-none",
+                tone === "good" && "text-emerald-700",
+                tone === "bad" && "text-rose-700",
+                tone === "neutral" && "text-ink"
+              )}
+            >
+              {cents !== undefined ? format(shown) : "—"}
+            </span>
+          </div>
+        )}
+        {sub ? <p className="mt-2 truncate text-xs text-ink-4">{sub}</p> : null}
       </div>
-      {stat ? <div className="relative mt-auto border-t border-paper/[0.08] pt-3 text-[11px] text-paper/50">{stat}</div> : null}
+      <span className="absolute inset-x-5 bottom-0 h-0.5 origin-left scale-x-0 rounded-full bg-gradient-to-r from-gold-dark via-gold-light to-transparent transition-transform duration-500 ease-brand group-hover:scale-x-100" />
+    </SpotlightCard>
+  );
+  const cls = "group block h-full animate-fade-in rounded-[22px]";
+  const style = { animationDelay: `${delay}ms` };
+  return href ? (
+    <Link href={href} className={cls} style={style}>
+      {body}
+    </Link>
+  ) : (
+    <div className={cls} style={style}>
+      {body}
+    </div>
+  );
+}
+
+/** Dark spotlight tile that links to an accounts sub-page. */
+function NavTile({
+  href,
+  index,
+  icon: Icon,
+  title,
+  description,
+  stat,
+  statTone = "muted",
+  delay = 0,
+}: {
+  href: string;
+  index: string;
+  icon: IconCmp;
+  title: string;
+  description: string;
+  stat?: ReactNode;
+  statTone?: "ok" | "warn" | "info" | "muted";
+  delay?: number;
+}) {
+  const dot = { ok: "bg-emerald-400", warn: "bg-amber-400", info: "bg-gold", muted: "bg-paper/30" }[statTone];
+  return (
+    <Link href={href} className="group block h-full animate-fade-in rounded-[22px]" style={{ animationDelay: `${delay}ms` }}>
+      <SpotlightCard tone="dark" className="flex h-full flex-col p-5">
+        <div className="flex items-start justify-between gap-3">
+          <span className="flex size-10 items-center justify-center rounded-xl bg-paper/[0.06] text-gold-light ring-1 ring-paper/[0.08] transition-colors duration-320 group-hover:bg-gold group-hover:text-void">
+            <Icon size={17} />
+          </span>
+          <span className="flex items-center gap-2.5">
+            <span className="g-metric text-[10px] tracking-[0.22em] text-paper/25">{index}</span>
+            <ArrowRightIcon
+              size={14}
+              className="-translate-x-1 text-paper/30 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-gold-light group-hover:opacity-100"
+            />
+          </span>
+        </div>
+        <div className="mt-5">
+          <div className="text-[15px] font-semibold text-paper">{title}</div>
+          <p className="mt-1 text-xs leading-relaxed text-paper/50">{description}</p>
+        </div>
+        {stat ? (
+          <div className="mt-auto flex items-center gap-2 border-t border-paper/[0.08] pt-3 text-[11px] text-paper/55">
+            <span className={cn("size-1.5 shrink-0 rounded-full", dot)} />
+            <span className="truncate">{stat}</span>
+          </div>
+        ) : null}
+      </SpotlightCard>
     </Link>
   );
 }
@@ -195,9 +327,11 @@ function StatementRow({
   return (
     <div
       className={cn(
-        "flex items-baseline justify-between gap-3 py-2",
-        strong ? "border-t border-ink/[0.1] pt-3 text-[15px] font-semibold" : "text-sm text-ink-3",
-        indent && "pl-4"
+        "flex items-baseline justify-between gap-3 py-2.5",
+        indent && "pl-4",
+        strong
+          ? "mt-1.5 rounded-xl bg-bone px-3.5 py-3 text-[15px] font-semibold text-ink shadow-[inset_0_0_0_1px_rgba(28,25,23,0.07)]"
+          : "border-b border-ink/[0.05] text-sm text-ink-3"
       )}
     >
       <span className="min-w-0 truncate" title={hint}>
@@ -208,16 +342,10 @@ function StatementRow({
   );
 }
 
-function CardLinkRow({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <Link href={href} className="inline-flex items-center gap-1 text-xs font-semibold text-gold-dark transition-colors hover:text-ink">
-      {children}
-      <ArrowRightIcon size={12} />
-    </Link>
-  );
-}
-
 /* ------------------------------------------------------------------- page */
+
+const heroSelectClass =
+  "h-11 rounded-full bg-paper/[0.07] px-4 pr-9 text-sm text-paper shadow-[inset_0_0_0_1px_rgba(250,250,249,0.18)] transition-shadow duration-200 hover:bg-paper/[0.1] focus:outline-none focus:shadow-[inset_0_0_0_1px_#E7C65A,0_0_0_3px_rgba(201,162,39,0.3)] [&>option]:bg-paper [&>option]:text-ink";
 
 export default function AccountsDashboardPage() {
   const today = businessToday();
@@ -337,498 +465,689 @@ export default function AccountsDashboardPage() {
     .sort((a, b) => b.posted_cents + b.pending_cents - (a.posted_cents + a.pending_cents));
   const bankTotal = (banks.data ?? []).filter((b) => b.is_active).reduce((s, b) => s + b.balance_cents, 0);
 
+  const checksTotal = p?.checks.total ?? 0;
+  const checksPass = p ? p.checks.total - p.checks.failing.length : 0;
+  const checksPct = checksTotal > 0 ? (checksPass / checksTotal) * 100 : 0;
+  const allClear = !!p && p.checks.passed && p.cashIn.unclassifiedCents === 0;
+
   const monthQuery = `?month=${month}`;
   const monthReportHref = `/reports/monthly${monthQuery}${branchId ? `&branch=${encodeURIComponent(branchId)}` : ""}`;
 
+  const strip: { label: string; value: string; icon: IconCmp; href?: string }[] = [
+    { label: "Spent today", value: todays.isLoading ? "—" : `${lkr(todayPosted)} LKR`, icon: CreditCardIcon, href: "/expenses?range=today" },
+    { label: "Cash expected in drawer", value: p ? `${lkr(p.closing.expectedCents)} LKR` : "—", icon: BanknoteIcon, href: "/day-closing" },
+    { label: "Spent this month", value: summary.data ? `${lkr(monthPosted)} LKR` : "—", icon: TrendingUpIcon, href: "/expenses?range=month" },
+    { label: "Net profit this month", value: r ? `${lkrSigned(r.profit.netProfitCents)} LKR` : "—", icon: ScaleIcon, href: monthReportHref },
+  ];
+
   return (
     <Page>
-      <Hero
-        kicker="Accounts"
-        title="Accounts dashboard"
-        description="Today's spending, the drawer, and the month's books — everything the shop owner checks, in one place."
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={branchId}
-              onChange={(e) => setBranchId(e.target.value)}
-              className={controlClass}
-              aria-label="Branch"
-            >
-              {canShop ? <option value="">All branches</option> : null}
-              {visibleBranches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-            {canManage ? (
-              <Link href="/expenses?new=1" className={heroBtnPrimary}>
-                <PlusIcon size={15} />
-                Record expense
-              </Link>
-            ) : null}
-            <Link href="/day-closing" className={heroBtnGhost}>
-              <ClipboardCheckIcon size={15} />
-              Close the day
-            </Link>
-          </div>
-        }
-        stats={[
-          { label: "Spent today", value: todays.isLoading ? "—" : `${lkr(todayPosted)} LKR` },
-          { label: "Cash expected in drawer", value: p ? `${lkr(p.closing.expectedCents)} LKR` : "—" },
-          { label: "Spent this month", value: summary.data ? `${lkr(monthPosted)} LKR` : "—" },
-          { label: "Net profit this month", value: r ? `${lkr(r.profit.netProfitCents)} LKR` : "—" },
-        ]}
-        note={`${longDate(today)} · figures come straight from the ledger`}
-      />
+      {/* ---------------------------------------------------------------- hero */}
+      <section className="relative overflow-hidden rounded-3xl bg-void text-paper shadow-5">
+        <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-70" />
+        <div className="home-drift pointer-events-none absolute -right-32 -top-40 size-[30rem] rounded-full bg-gold/20 blur-[120px]" />
+        <div
+          className="home-drift pointer-events-none absolute -bottom-48 left-10 size-[26rem] rounded-full bg-gold-deep/25 blur-[120px]"
+          style={{ animationDelay: "-8s" }}
+        />
+        <div className="home-noise pointer-events-none absolute inset-0" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
 
-      {/* ---- where to go ---- */}
+        <div className="relative grid grid-cols-1 items-center gap-8 p-5 sm:p-8 lg:grid-cols-[1.35fr_1fr] lg:p-10">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-gold/25 bg-gold/[0.08] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">
+                <span className="size-1.5 animate-pulse-soft rounded-full bg-gold" />
+                Accounts
+              </span>
+              <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-paper/40">{longDate(today)}</span>
+            </div>
+
+            <h1 className="g-display mt-5 text-4xl text-paper text-balance sm:text-5xl">
+              Every rupee, <span className="home-gold-text">accounted for.</span>
+            </h1>
+            <p className="mt-3 max-w-lg text-sm leading-relaxed text-paper/60 sm:text-[15px]">
+              Today&apos;s spending, the drawer and the month&apos;s books — figures come straight from the ledger.
+            </p>
+
+            <div className="mt-7 flex flex-wrap items-center gap-2.5">
+              <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={heroSelectClass} aria-label="Branch">
+                {canShop ? <option value="">All branches</option> : null}
+                {visibleBranches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+              {canManage ? (
+                <Link href="/expenses?new=1" className="home-btn-gold h-11 px-5 text-sm">
+                  <PlusIcon size={15} />
+                  Record expense
+                </Link>
+              ) : null}
+              <Link href="/day-closing" className="home-btn-ghost h-11 px-5 text-sm">
+                <ClipboardCheckIcon size={15} />
+                Close the day
+              </Link>
+            </div>
+          </div>
+
+          <div className="home-glass relative flex min-w-0 items-center gap-4 p-4 sm:gap-5 sm:p-6">
+            <div className="relative size-24 shrink-0 sm:size-32">
+              {preview.isLoading && branchId ? (
+                <Skeleton className="size-full rounded-full bg-paper/10" />
+              ) : (
+                <GaugeRing
+                  value={closedToday ? Math.max(checksTotal, 1) : checksPass}
+                  max={Math.max(checksTotal, 1)}
+                  caption={p ? (closedToday ? "Done" : `${checksPass}/${checksTotal}`) : "—"}
+                  label={closedToday ? "day closed" : "checks pass"}
+                />
+              )}
+            </div>
+            <div className="min-w-0">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light/80">Cash expected in drawer</div>
+              {preview.isLoading && branchId ? (
+                <Skeleton className="mt-2 h-9 w-36 bg-paper/10" />
+              ) : (
+                <div className="mt-1.5 flex items-baseline gap-1.5">
+                  <span className="text-xs text-paper/50">LKR</span>
+                  <span className="g-metric truncate text-2xl text-paper sm:text-4xl">{p ? lkr(p.closing.expectedCents) : "—"}</span>
+                </div>
+              )}
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-paper/55">
+                <span>
+                  <span className="g-metric text-paper/85">{p ? lkr(p.openingCents) : "—"}</span> opening
+                </span>
+                <span>
+                  <span className="g-metric text-paper/85">{p ? lkr(p.cashIn.totalCents) : "—"}</span> in
+                </span>
+                <span>
+                  <span className="g-metric text-paper/85">{p ? lkr(p.cashOut.totalCents) : "—"}</span> out
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative grid grid-cols-2 border-t border-paper/[0.08] lg:grid-cols-4">
+          {strip.map((s, i) => {
+            const body = (
+              <>
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-paper/[0.05] text-gold-light ring-1 ring-paper/[0.08] transition-colors group-hover:bg-gold group-hover:text-void">
+                  <s.icon size={14} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-paper/40">{s.label}</span>
+                  <span className="g-metric mt-0.5 block truncate text-base text-paper">{s.value}</span>
+                </span>
+              </>
+            );
+            const cls = cn(
+              "group flex min-w-0 items-center gap-3 px-4 py-4 transition-colors hover:bg-paper/[0.03] sm:px-6 lg:px-8",
+              i % 2 === 1 && "border-l border-paper/[0.08]",
+              i >= 2 && "border-t border-paper/[0.08] lg:border-t-0",
+              i === 2 && "lg:border-l",
+              i === 3 && "lg:border-l"
+            );
+            return s.href ? (
+              <Link key={s.label} href={s.href} className={cls}>
+                {body}
+              </Link>
+            ) : (
+              <div key={s.label} className={cls}>
+                {body}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ----------------------------------------------------------- jump to */}
       <section aria-label="Accounts pages" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <NavTile
           href="/expenses"
-          icon={<BanknoteIcon size={18} />}
+          index="01"
+          icon={BanknoteIcon}
           title="Expenses"
           description="Record and review every rupee the shop spends."
           stat={pending.data?.total ? `${pending.data.total} awaiting approval` : "Nothing waiting for approval"}
+          statTone={pending.data?.total ? "warn" : "ok"}
         />
         <NavTile
           href="/day-closing"
-          icon={<ClipboardCheckIcon size={18} />}
+          index="02"
+          icon={ClipboardCheckIcon}
           title="Day closing"
           description="Count the drawer, explain differences, lock the day."
           stat={branchId ? (closedToday ? "Today is closed" : "Today is still open") : "Pick a branch to see status"}
+          statTone={branchId ? (closedToday ? "ok" : "warn") : "muted"}
+          delay={60}
         />
         <NavTile
           href={monthReportHref}
-          icon={<TrendingUpIcon size={18} />}
+          index="03"
+          icon={TrendingUpIcon}
           title="Monthly report"
           description="Sales, profit, cash flow, receivables and stock for any month."
-          stat={r ? `Net profit ${lkr(r.profit.netProfitCents)} LKR` : "Open the full report"}
+          stat={r ? `Net profit ${lkrSigned(r.profit.netProfitCents)} LKR` : "Open the full report"}
+          statTone="info"
+          delay={120}
         />
         <NavTile
           href="/accounts/chart"
-          icon={<BookOpenIcon size={18} />}
+          index="04"
+          icon={BookOpenIcon}
           title="Chart of accounts"
           description="Every ledger balance, plus manual adjustments."
           stat="Double-entry books"
+          delay={180}
         />
       </section>
 
-      {/* ---- today ---- */}
-      <div className="flex items-center justify-between gap-3 pt-2">
-        <div>
-          <SectionLabel>Today</SectionLabel>
-          <h2 className="mt-1 text-lg font-semibold text-ink">{longDate(today)}</h2>
-        </div>
-      </div>
+      {/* -------------------------------------------------------------- today */}
+      <SectionHead index="T-01" title="Today" sub={longDate(today)} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
+        <KpiTile
           label="Spent today"
-          icon={<CreditCardIcon size={16} />}
-          value={lkr(todayPosted)}
+          icon={CreditCardIcon}
+          cents={todays.data ? todayPosted : undefined}
           loading={todays.isLoading}
           sub={
             todayPending > 0
               ? `+ ${lkr(todayPending)} awaiting approval`
               : `${todayRows.length} ${todayRows.length === 1 ? "entry" : "entries"} today`
           }
-          href={`/expenses?range=today`}
+          href="/expenses?range=today"
         />
-        <KpiCard
+        <KpiTile
           label="Sales today"
-          icon={<TrendingUpIcon size={16} />}
-          value={p ? lkr(p.money.salesCents) : "—"}
-          loading={preview.isLoading}
+          icon={TrendingUpIcon}
+          cents={p?.money.salesCents}
+          loading={preview.isLoading && !!branchId}
           sub={p ? `Purchases ${lkr(p.money.purchasesCents)} · Old gold ${lkr(p.money.oldGoldCents)}` : "Select a branch"}
+          delay={60}
         />
-        <KpiCard
-          label="Cash in drawer (expected)"
-          icon={<BanknoteIcon size={16} />}
-          value={p ? lkr(p.closing.expectedCents) : "—"}
-          loading={preview.isLoading}
-          sub={p ? `Opening ${lkr(p.openingCents)} · in ${lkr(p.cashIn.totalCents)} · out ${lkr(p.cashOut.totalCents)}` : "Select a branch"}
+        <KpiTile
+          label="Cash in drawer"
+          icon={BanknoteIcon}
+          cents={p?.closing.expectedCents}
+          loading={preview.isLoading && !!branchId}
+          sub={p ? `Opening ${lkr(p.openingCents)} · in ${lkr(p.cashIn.totalCents)} · out ${lkr(p.cashOut.totalCents)}` : "Expected — select a branch"}
           href="/day-closing"
+          delay={120}
         />
-        <KpiCard
+        <KpiTile
           label="Bank balance"
-          icon={<ScaleIcon size={16} />}
-          value={lkr(bankTotal)}
+          icon={CoinsIcon}
+          cents={banks.data ? bankTotal : undefined}
           loading={banks.isLoading}
           sub={`${(banks.data ?? []).filter((b) => b.is_active).length} active accounts`}
+          delay={180}
         />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-5">
-        <Panel
-          className="lg:col-span-3"
-          title="Today's expenses"
-          icon={<CreditCardIcon size={17} />}
-          description={`${todayRows.length} recorded · ${lkrFull(todayPosted)} LKR posted`}
-          actions={
-            canManage ? (
-              <Link href="/expenses?new=1" className="g-btn g-btn-secondary h-8 px-3 text-xs">
-                <PlusIcon size={13} /> Add
-              </Link>
-            ) : null
-          }
-          bodyClassName="p-0"
-          footer={<CardLinkRow href="/expenses?range=today">Open the expense register</CardLinkRow>}
-        >
-          {todays.isLoading ? (
-            <div className="space-y-3 p-5">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-            </div>
-          ) : todayRows.length === 0 ? (
-            <EmptyBlock title="No expenses today" description="Anything the shop spends today will show up here as soon as it is recorded." />
-          ) : (
-            <ul className="divide-y divide-ink/[0.06]">
-              {todayRows.slice(0, 8).map((e) => (
-                <li key={e.id} className="flex items-center gap-3 px-5 py-3 sm:px-6">
-                  <div className="min-w-0 flex-1">
-                    <Link href={`/expenses/${e.id}`} className="block truncate text-sm font-medium text-ink transition-colors hover:text-gold-dark">
-                      {e.description}
-                    </Link>
-                    <div className="mt-0.5 truncate text-xs text-ink-4">
-                      {e.category_name}
-                      {e.vendor ? ` · ${e.vendor}` : ""} · <span className="font-mono">{e.number}</span>
-                    </div>
-                  </div>
-                  <StatusPill status={e.status} />
-                  <span className="g-metric w-24 shrink-0 text-right text-sm text-ink">{lkrFull(e.amount_cents)}</span>
-                </li>
-              ))}
-              {todayRows.length > 8 ? (
-                <li className="px-5 py-3 text-xs text-ink-4 sm:px-6">+ {todayRows.length - 8} more today</li>
-              ) : null}
-            </ul>
-          )}
-        </Panel>
-
-        <Panel
-          className="lg:col-span-2"
-          title="Day closing"
-          icon={<ClipboardCheckIcon size={17} />}
-          description={branchId ? "Is the drawer counted and locked?" : "Choose a branch above"}
-          actions={
-            branchId ? (
-              closedToday ? (
-                <Pill tone="success" dot>
-                  Closed
-                </Pill>
-              ) : (
-                <Pill tone="warning" dot>
-                  Open
-                </Pill>
-              )
-            ) : null
-          }
-          footer={<CardLinkRow href="/day-closing">{closedToday ? "View closing" : "Count the drawer & close"}</CardLinkRow>}
-        >
-          {!branchId ? (
-            <p className="text-sm text-ink-3">Day closing is per branch. Pick one from the selector to see today's status.</p>
-          ) : preview.isLoading ? (
-            <Skeleton className="h-32 w-full" />
-          ) : p ? (
-            <div className="space-y-4">
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-4">Expected cash</div>
-                <div className="g-metric mt-1 text-3xl text-ink">{lkr(p.closing.expectedCents)}</div>
-              </div>
-              <div
-                className={cn(
-                  "flex items-start gap-2.5 rounded-lg p-3 text-sm",
-                  p.checks.passed && p.cashIn.unclassifiedCents === 0
-                    ? "bg-emerald-700/[0.07] text-emerald-800"
-                    : "bg-amber-600/[0.1] text-amber-800"
-                )}
-              >
-                {p.checks.passed && p.cashIn.unclassifiedCents === 0 ? (
-                  <>
-                    <CheckCircleIcon size={16} className="mt-0.5 shrink-0" />
-                    <span>All {p.checks.total} checks pass — ready to close.</span>
-                  </>
-                ) : (
-                  <>
-                    <AlertCircleIcon size={16} className="mt-0.5 shrink-0" />
-                    <span>
-                      {p.checks.passed ? "Some cash is unclassified." : `Fix before closing: ${p.checks.failing.join(", ")}.`}
-                    </span>
-                  </>
-                )}
-              </div>
-              {p.closing.awaitingApprovalCents > 0 ? (
-                <p className="text-xs text-ink-4">
-                  {lkr(p.closing.awaitingApprovalCents)} LKR of expenses are awaiting approval — cash reads high by that until approved.
-                </p>
-              ) : null}
-              {(closings.data?.rows ?? []).length > 0 ? (
-                <div>
-                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-4">Recent closings</div>
-                  <ul className="space-y-1.5">
-                    {(closings.data?.rows ?? []).slice(0, 4).map((c) => (
-                      <li key={c.id} className="flex items-center justify-between text-xs">
-                        <span className="text-ink-3">{dayLabel(c.close_date)}</span>
-                        <span className={cn("g-metric", c.difference_cents === 0 ? "text-emerald-700" : "text-rose-700")}>
-                          {c.difference_cents === 0 ? "Balanced" : `${c.difference_cents > 0 ? "+" : "−"}${lkr(Math.abs(c.difference_cents))} diff`}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <p className="text-sm text-ink-3">Could not load today's cash position.</p>
-          )}
-        </Panel>
-      </div>
-
-      {/* ---- month ---- */}
-      <div className="flex flex-wrap items-end justify-between gap-3 pt-2">
-        <div>
-          <SectionLabel>Monthly accounts</SectionLabel>
-          <h2 className="mt-1 text-lg font-semibold text-ink">
-            {new Date(Date.UTC(year, mon - 1, 1)).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" })}
-          </h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="month"
-            value={month}
-            max={today.slice(0, 7)}
-            onChange={(e) => e.target.value && setMonth(e.target.value)}
-            className={controlClass}
-            aria-label="Month"
+        <Card className="lg:col-span-3">
+          <CardHead
+            icon={CreditCardIcon}
+            title="Today's expenses"
+            sub={`${todayRows.length} recorded · ${lkrFull(todayPosted)} LKR posted`}
+            action={<HeadLink href="/expenses?range=today">Open register</HeadLink>}
           />
-          {!isCurrentMonth ? (
-            <button type="button" onClick={() => setMonth(today.slice(0, 7))} className="g-btn g-btn-secondary h-10 px-4 text-sm">
-              This month
-            </button>
-          ) : null}
-        </div>
+          <div className="px-3 pb-3 sm:px-4">
+            {todays.isLoading ? (
+              <div className="space-y-2.5 px-2 pb-2">
+                <Skeleton className="h-12 rounded-xl" />
+                <Skeleton className="h-12 rounded-xl" />
+                <Skeleton className="h-12 rounded-xl" />
+              </div>
+            ) : todayRows.length === 0 ? (
+              <div className="px-2 pb-2">
+                <Empty icon={CreditCardIcon} title="No expenses today" desc="Anything the shop spends today shows up here the moment it is recorded." />
+              </div>
+            ) : (
+              <ul>
+                {todayRows.slice(0, 8).map((e) => (
+                  <li key={e.id}>
+                    <Link
+                      href={`/expenses/${e.id}`}
+                      className="group flex items-center gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-gold-pale/60"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium text-ink transition-colors group-hover:text-gold-dark">
+                          {e.description}
+                        </div>
+                        <div className="mt-0.5 truncate text-xs text-ink-4">
+                          {e.category_name}
+                          {e.vendor ? ` · ${e.vendor}` : ""} · <span className="font-mono">{e.number}</span>
+                        </div>
+                      </div>
+                      <StatusPill status={e.status} />
+                      <span className="g-metric w-24 shrink-0 text-right text-sm text-ink">{lkrFull(e.amount_cents)}</span>
+                    </Link>
+                  </li>
+                ))}
+                {todayRows.length > 8 ? (
+                  <li className="px-3 py-2 text-xs text-ink-4">+ {todayRows.length - 8} more today</li>
+                ) : null}
+              </ul>
+            )}
+            {canManage ? (
+              <Link
+                href="/expenses?new=1"
+                className="group mt-2 flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-medium text-ink-4 ring-1 ring-ink/[0.08] transition-colors hover:bg-ink hover:text-paper hover:ring-ink"
+              >
+                <PlusIcon size={12} />
+                Record an expense
+              </Link>
+            ) : null}
+          </div>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHead
+            icon={ClipboardCheckIcon}
+            title="Day closing"
+            sub={branchId ? "Is the drawer counted and locked?" : "Choose a branch above"}
+            action={
+              branchId ? (
+                closedToday ? (
+                  <Pill tone="success" dot>
+                    Closed
+                  </Pill>
+                ) : (
+                  <Pill tone="warning" dot>
+                    Open
+                  </Pill>
+                )
+              ) : undefined
+            }
+          />
+          <div className="px-5 pb-5 sm:px-6">
+            {!branchId ? (
+              <Empty icon={ClipboardCheckIcon} title="Pick a branch" desc="Day closing is per branch — choose one to see today's status." />
+            ) : preview.isLoading ? (
+              <Skeleton className="h-40 rounded-xl" />
+            ) : p ? (
+              <div className="space-y-4">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Expected cash</div>
+                  <div className="mt-1 flex items-baseline gap-1.5">
+                    <span className="text-xs text-ink-4">LKR</span>
+                    <span className="g-metric text-3xl text-ink">{lkr(p.closing.expectedCents)}</span>
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium">
+                    <span className="uppercase tracking-[0.14em] text-ink-4">Closing checks</span>
+                    <span className={cn("g-metric", allClear ? "text-emerald-700" : "text-amber-700")}>
+                      {checksPass}/{checksTotal} pass
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-ink/[0.07]">
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-[width] duration-700 ease-brand",
+                        allClear ? "bg-gradient-to-r from-emerald-700 to-emerald-500" : "bg-gradient-to-r from-gold-deep via-gold to-gold-light"
+                      )}
+                      style={{ width: `${checksPct}%` }}
+                    />
+                  </div>
+                </div>
+                <div
+                  className={cn(
+                    "flex items-start gap-2.5 rounded-xl p-3 text-sm",
+                    allClear ? "bg-emerald-700/[0.07] text-emerald-800" : "bg-amber-600/[0.1] text-amber-800"
+                  )}
+                >
+                  {allClear ? (
+                    <>
+                      <CheckCircleIcon size={16} className="mt-0.5 shrink-0" />
+                      <span>All {p.checks.total} checks pass — ready to close.</span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircleIcon size={16} className="mt-0.5 shrink-0" />
+                      <span>{p.checks.passed ? "Some cash is unclassified." : `Fix before closing: ${p.checks.failing.join(", ")}.`}</span>
+                    </>
+                  )}
+                </div>
+                {p.closing.awaitingApprovalCents > 0 ? (
+                  <p className="text-xs text-ink-4">
+                    {lkr(p.closing.awaitingApprovalCents)} LKR of expenses are awaiting approval — cash reads high by that until approved.
+                  </p>
+                ) : null}
+                {(closings.data?.rows ?? []).length > 0 ? (
+                  <div className="rounded-xl bg-bone/70 p-3 ring-1 ring-ink/[0.05]">
+                    <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Recent closings</div>
+                    <ul className="space-y-1.5">
+                      {(closings.data?.rows ?? []).slice(0, 4).map((c) => (
+                        <li key={c.id} className="flex items-center justify-between text-xs">
+                          <span className="text-ink-3">{dayLabel(c.close_date)}</span>
+                          <span className={cn("g-metric", c.difference_cents === 0 ? "text-emerald-700" : "text-rose-700")}>
+                            {c.difference_cents === 0 ? "Balanced" : `${c.difference_cents > 0 ? "+" : "−"}${lkr(Math.abs(c.difference_cents))} diff`}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <Empty icon={ClipboardCheckIcon} title="Unavailable" desc="Could not load today's cash position." />
+            )}
+          </div>
+          <div className="border-t border-ink/[0.06] px-5 py-3 sm:px-6">
+            <Link
+              href="/day-closing"
+              className="group flex items-center justify-center gap-2 rounded-xl py-2 text-xs font-medium text-ink-4 ring-1 ring-ink/[0.08] transition-colors hover:bg-ink hover:text-paper hover:ring-ink"
+            >
+              {closedToday ? "View closing" : "Count the drawer & close"}
+              <ArrowRightIcon size={12} className="transition-transform group-hover:translate-x-0.5" />
+            </Link>
+          </div>
+        </Card>
       </div>
+
+      {/* -------------------------------------------------------------- month */}
+      <SectionHead
+        index="M-01"
+        title="Monthly accounts"
+        sub={new Date(Date.UTC(year, mon - 1, 1)).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" })}
+        aside={
+          <div className="flex items-center gap-2">
+            <input
+              type="month"
+              value={month}
+              max={today.slice(0, 7)}
+              onChange={(e) => e.target.value && setMonth(e.target.value)}
+              className={controlClass}
+              aria-label="Month"
+            />
+            {!isCurrentMonth ? (
+              <button type="button" onClick={() => setMonth(today.slice(0, 7))} className="g-btn g-btn-secondary h-10 px-4 text-sm">
+                This month
+              </button>
+            ) : null}
+          </div>
+        }
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Sales (net)" icon={<TrendingUpIcon size={16} />} value={r ? lkr(r.sales.netCents) : "—"} loading={report.isLoading} sub={r ? `${r.sales.invoiceCount} invoices` : undefined} />
-        <KpiCard
+        <KpiTile
+          label="Sales (net)"
+          icon={TrendingUpIcon}
+          cents={r?.sales.netCents}
+          loading={report.isLoading}
+          sub={r ? `${r.sales.invoiceCount} invoices` : undefined}
+        />
+        <KpiTile
           label="Expenses"
-          icon={<CreditCardIcon size={16} />}
-          value={summary.data ? lkr(monthPosted) : "—"}
+          icon={CreditCardIcon}
+          cents={summary.data ? monthPosted : undefined}
           loading={summary.isLoading}
           sub={monthPending > 0 ? `+ ${lkr(monthPending)} awaiting approval` : `≈ ${lkr(avgPerDay)} per day`}
-          href={`/expenses?range=month`}
+          href="/expenses?range=month"
+          delay={60}
         />
-        <KpiCard
+        <KpiTile
           label="Net profit"
-          icon={<ScaleIcon size={16} />}
-          value={r ? <Signed cents={r.profit.netProfitCents} className="text-3xl" /> : "—"}
+          icon={ScaleIcon}
+          cents={r?.profit.netProfitCents}
+          format={lkrSigned}
+          tone={r && r.profit.netProfitCents < 0 ? "bad" : "neutral"}
           loading={report.isLoading}
           sub={r ? `Gross ${lkr(r.profit.grossProfitCents)} − opex ${lkr(r.profit.operatingExpensesCents)}` : undefined}
+          href={monthReportHref}
+          delay={120}
         />
-        <KpiCard label="Closing cash" icon={<BanknoteIcon size={16} />} value={r ? lkr(r.cashflow.closingCents) : "—"} loading={report.isLoading} sub={r ? `In ${lkr(r.cashflow.inflowsCents)} · out ${lkr(r.cashflow.outflowsCents)}` : undefined} />
+        <KpiTile
+          label="Closing cash"
+          icon={BanknoteIcon}
+          cents={r?.cashflow.closingCents}
+          loading={report.isLoading}
+          sub={r ? `In ${lkr(r.cashflow.inflowsCents)} · out ${lkr(r.cashflow.outflowsCents)}` : undefined}
+          delay={180}
+        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-5">
-        <Panel
-          className="lg:col-span-3"
-          title="Daily expenses"
-          icon={<CreditCardIcon size={17} />}
-          description="Posted spending per day; lighter bars are still awaiting approval"
-        >
-          {daily.isLoading ? (
-            <Skeleton className="h-64 w-full" />
-          ) : daily.isError ? (
-            <EmptyBlock title="Could not load" description="The daily expense report is unavailable." />
-          ) : (
-            <>
-              <div className="mb-4 grid grid-cols-3 gap-3">
-                {[
-                  ["Month total", `${lkr(monthPosted)}`],
-                  ["Daily average", `${lkr(avgPerDay)}`],
-                  ["Busiest day", peak && peak.posted + peak.pending > 0 ? `${dayLabel(peak.date)} · ${compact(peak.posted + peak.pending)}` : "—"],
-                ].map(([k, v]) => (
-                  <div key={k} className="rounded-lg bg-bone p-3">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-4">{k}</div>
-                    <div className="g-metric mt-1 truncate text-sm text-ink">{v}</div>
+        <Card className="lg:col-span-3">
+          <CardHead
+            icon={CreditCardIcon}
+            title="Daily expenses"
+            sub="Posted spending per day · lighter bars await approval"
+            action={<HeadLink href="/expenses?range=month">This month</HeadLink>}
+          />
+          <div className="px-5 pb-5 sm:px-6">
+            {daily.isLoading ? (
+              <Skeleton className="h-64 rounded-xl" />
+            ) : daily.isError ? (
+              <Empty icon={CreditCardIcon} title="Could not load" desc="The daily expense report is unavailable." />
+            ) : (
+              <>
+                <div className="mb-4 grid grid-cols-3 gap-3">
+                  {[
+                    ["Month total", `${lkr(monthPosted)}`],
+                    ["Daily average", `${lkr(avgPerDay)}`],
+                    ["Busiest day", peak && peak.posted + peak.pending > 0 ? `${dayLabel(peak.date)} · ${compact(peak.posted + peak.pending)}` : "—"],
+                  ].map(([k, v]) => (
+                    <div key={k} className="rounded-xl bg-bone/70 p-3 ring-1 ring-ink/[0.05]">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-4">{k}</div>
+                      <div className="g-metric mt-1 truncate text-sm text-ink">{v}</div>
+                    </div>
+                  ))}
+                </div>
+                {activeDays === 0 ? (
+                  <Empty icon={CreditCardIcon} title="No expenses this month" desc="Recorded expenses will chart here day by day." />
+                ) : (
+                  <div className="h-60" role="img" aria-label={`Daily expenses for the month, ${activeDays} days with spending`}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartData} margin={{ top: 6, right: 6, left: 0, bottom: 0 }} barCategoryGap="22%">
+                        <CartesianGrid stroke="rgba(28,25,23,0.06)" strokeDasharray="3 5" vertical={false} />
+                        <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#78716c", fontSize: 11 }} interval="preserveStartEnd" />
+                        <YAxis
+                          tickLine={false}
+                          axisLine={false}
+                          width={44}
+                          tick={{ fill: "#a8a29e", fontSize: 11 }}
+                          tickFormatter={(v: number) => compact(v)}
+                        />
+                        <Tooltip
+                          cursor={{ fill: "rgba(201,162,39,0.08)" }}
+                          contentStyle={{
+                            borderRadius: 12,
+                            border: "none",
+                            background: "#0c0a09",
+                            color: "#fff",
+                            fontSize: 12,
+                            boxShadow: "0 20px 40px -16px rgba(0,0,0,0.5)",
+                          }}
+                          labelStyle={{ color: "#E7C65A", fontWeight: 600, marginBottom: 4 }}
+                          itemStyle={{ color: "#fafaf9" }}
+                          labelFormatter={(_, pl) => (pl?.[0]?.payload?.date ? dayLabel(pl[0].payload.date) : "")}
+                          formatter={(v) => `LKR ${Number(v ?? 0).toLocaleString("en-US")}`}
+                        />
+                        <Bar dataKey="posted" name="Posted" stackId="a" fill="#C9A227" radius={[0, 0, 0, 0]} />
+                        <Bar dataKey="pending" name="Awaiting approval" stackId="a" fill="#E7C65A" fillOpacity={0.45} radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
+                )}
+              </>
+            )}
+          </div>
+        </Card>
+
+        <section className="relative overflow-hidden rounded-2xl bg-void text-paper shadow-4 lg:col-span-2">
+          <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-50" />
+          <div className="pointer-events-none absolute -right-20 -top-20 size-64 rounded-full bg-gold/20 blur-[90px]" />
+          <CardHead
+            dark
+            icon={BookOpenIcon}
+            title="Where the money went"
+            sub="This month, by expense category"
+          />
+          <div className="relative px-5 pb-5 sm:px-6">
+            {summary.isLoading ? (
+              <div className="space-y-3">
+                {[0, 1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-12 rounded-xl bg-paper/10" />
                 ))}
               </div>
-              {activeDays === 0 ? (
-                <EmptyBlock title="No expenses this month" description="Recorded expenses will chart here day by day." />
-              ) : (
-                <div className="h-60" role="img" aria-label={`Daily expenses for the month, ${activeDays} days with spending`}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 6, right: 6, left: 0, bottom: 0 }} barCategoryGap="22%">
-                      <CartesianGrid stroke="rgba(28,25,23,0.06)" strokeDasharray="3 5" vertical={false} />
-                      <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#78716c", fontSize: 11 }} interval="preserveStartEnd" />
-                      <YAxis
-                        tickLine={false}
-                        axisLine={false}
-                        width={44}
-                        tick={{ fill: "#a8a29e", fontSize: 11 }}
-                        tickFormatter={(v: number) => compact(v)}
-                      />
-                      <Tooltip
-                        cursor={{ fill: "rgba(201,162,39,0.08)" }}
-                        contentStyle={{
-                          borderRadius: 12,
-                          border: "none",
-                          background: "#0c0a09",
-                          color: "#fff",
-                          fontSize: 12,
-                          boxShadow: "0 20px 40px -16px rgba(0,0,0,0.5)",
-                        }}
-                        labelStyle={{ color: "#E7C65A", fontWeight: 600, marginBottom: 4 }}
-                        itemStyle={{ color: "#fafaf9" }}
-                        labelFormatter={(_, pl) => (pl?.[0]?.payload?.date ? dayLabel(pl[0].payload.date) : "")}
-                        formatter={(v) => `LKR ${Number(v ?? 0).toLocaleString("en-US")}`}
-                      />
-                      <Bar dataKey="posted" name="Posted" stackId="a" fill="#C9A227" radius={[0, 0, 0, 0]} />
-                      <Bar dataKey="pending" name="Awaiting approval" stackId="a" fill="#E7C65A" fillOpacity={0.45} radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </>
-          )}
-        </Panel>
-
-        <Panel
-          className="lg:col-span-2"
-          title="Where the money went"
-          icon={<BookOpenIcon size={17} />}
-          description="This month, by expense category"
-          footer={<CardLinkRow href="/expenses?range=month">See every expense</CardLinkRow>}
-        >
-          {summary.isLoading ? (
-            <Skeleton className="h-48 w-full" />
-          ) : categories.length === 0 ? (
-            <EmptyBlock title="No spending yet" description="Categories appear once expenses are recorded." />
-          ) : (
-            <BarList
-              tone="light"
-              items={categories.slice(0, 7).map((c) => ({
-                key: c.id,
-                label: c.name,
-                value: c.posted_cents + c.pending_cents,
-                secondary: monthPosted + monthPending > 0 ? `${Math.round(((c.posted_cents + c.pending_cents) / (monthPosted + monthPending)) * 100)}% of spend · ${c.account_code}` : c.account_code,
-              }))}
-              format={(n) => lkr(n)}
-            />
-          )}
-        </Panel>
+            ) : categories.length === 0 ? (
+              <Empty dark icon={BookOpenIcon} title="No spending yet" desc="Categories appear once expenses are recorded." />
+            ) : (
+              <BarList
+                tone="dark"
+                items={categories.slice(0, 7).map((c) => ({
+                  key: c.id,
+                  label: c.name,
+                  value: c.posted_cents + c.pending_cents,
+                  secondary:
+                    monthPosted + monthPending > 0
+                      ? `${Math.round(((c.posted_cents + c.pending_cents) / (monthPosted + monthPending)) * 100)}% of spend · ${c.account_code}`
+                      : c.account_code,
+                }))}
+                format={(n) => lkr(n)}
+              />
+            )}
+            <Link
+              href="/expenses?range=month"
+              className="group mt-4 flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-medium text-paper/60 ring-1 ring-paper/10 transition-colors hover:bg-gold hover:text-void hover:ring-gold"
+            >
+              See every expense
+              <ArrowRightIcon size={12} className="transition-transform group-hover:translate-x-0.5" />
+            </Link>
+          </div>
+        </section>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Panel
-          title="Profit & loss"
-          icon={<TrendingUpIcon size={17} />}
-          description={r ? r.profit.basis : "Ledger-posted"}
-          footer={<CardLinkRow href={monthReportHref}>Open the full monthly report</CardLinkRow>}
-        >
-          {report.isLoading ? (
-            <Skeleton className="h-44 w-full" />
-          ) : r ? (
-            <div className="divide-y divide-ink/[0.05]">
-              <StatementRow label="Revenue" cents={r.profit.revenueCents} />
-              <StatementRow label="Cost of goods sold" cents={-r.profit.cogsCents} indent />
-              <StatementRow label="Gross profit" cents={r.profit.grossProfitCents} />
-              <StatementRow label="Operating expenses" cents={-r.profit.operatingExpensesCents} indent />
-              <StatementRow label="Net profit" cents={r.profit.netProfitCents} strong />
-            </div>
-          ) : (
-            <p className="text-sm text-ink-3">Report unavailable for this period.</p>
-          )}
-        </Panel>
-
-        <Panel
-          title="Cash flow"
-          icon={<BanknoteIcon size={17} />}
-          description="Drawer + bank movement"
-          footer={<CardLinkRow href={monthReportHref}>See where cash moved</CardLinkRow>}
-        >
-          {report.isLoading ? (
-            <Skeleton className="h-44 w-full" />
-          ) : r ? (
-            <div className="divide-y divide-ink/[0.05]">
-              <StatementRow label="Opening cash" cents={r.cashflow.openingCents} />
-              <StatementRow label="Cash in" cents={r.cashflow.inflowsCents} indent />
-              <StatementRow label="Cash out" cents={-r.cashflow.outflowsCents} indent />
-              <StatementRow label="Closing cash" cents={r.cashflow.closingCents} strong />
-            </div>
-          ) : (
-            <p className="text-sm text-ink-3">Report unavailable for this period.</p>
-          )}
-        </Panel>
-
-        <Panel
-          title="Owed to & by the shop"
-          icon={<ScaleIcon size={17} />}
-          description="Outstanding right now"
-          footer={<CardLinkRow href={monthReportHref}>Receivables & payables detail</CardLinkRow>}
-        >
-          {report.isLoading ? (
-            <Skeleton className="h-44 w-full" />
-          ) : r ? (
-            <div className="space-y-4">
+        <Card>
+          <CardHead icon={TrendingUpIcon} title="Profit & loss" sub={r ? r.profit.basis : "Ledger-posted"} />
+          <div className="px-5 pb-5 sm:px-6">
+            {report.isLoading ? (
+              <Skeleton className="h-44 rounded-xl" />
+            ) : r ? (
               <div>
-                <div className="flex items-baseline justify-between">
-                  <span className="text-sm text-ink-3">Customers owe you</span>
-                  <Signed cents={r.receivables.totalCents} className="text-lg" />
-                </div>
-                <div className="mt-0.5 text-xs text-ink-4">{r.receivables.outstanding.length} open invoices</div>
+                <StatementRow label="Revenue" cents={r.profit.revenueCents} />
+                <StatementRow label="Cost of goods sold" cents={-r.profit.cogsCents} indent />
+                <StatementRow label="Gross profit" cents={r.profit.grossProfitCents} />
+                <StatementRow label="Operating expenses" cents={-r.profit.operatingExpensesCents} indent />
+                <StatementRow label="Net profit" cents={r.profit.netProfitCents} strong />
               </div>
-              <div className="border-t border-ink/[0.07] pt-4">
-                <div className="flex items-baseline justify-between">
-                  <span className="text-sm text-ink-3">You owe suppliers</span>
-                  <Signed cents={r.payables.totalCents} className="text-lg" />
-                </div>
-                <div className="mt-0.5 text-xs text-ink-4">{r.payables.outstanding.length} open bills</div>
+            ) : (
+              <Empty icon={TrendingUpIcon} title="No report" desc="Report unavailable for this period." />
+            )}
+          </div>
+          <div className="border-t border-ink/[0.06] px-5 py-3 sm:px-6">
+            <HeadLink href={monthReportHref}>Open the full monthly report</HeadLink>
+          </div>
+        </Card>
+
+        <Card>
+          <CardHead icon={BanknoteIcon} title="Cash flow" sub="Drawer + bank movement" />
+          <div className="px-5 pb-5 sm:px-6">
+            {report.isLoading ? (
+              <Skeleton className="h-44 rounded-xl" />
+            ) : r ? (
+              <div>
+                <StatementRow label="Opening cash" cents={r.cashflow.openingCents} />
+                <StatementRow label="Cash in" cents={r.cashflow.inflowsCents} indent />
+                <StatementRow label="Cash out" cents={-r.cashflow.outflowsCents} indent />
+                <StatementRow label="Closing cash" cents={r.cashflow.closingCents} strong />
               </div>
-            </div>
-          ) : (
-            <p className="text-sm text-ink-3">Report unavailable for this period.</p>
-          )}
-        </Panel>
+            ) : (
+              <Empty icon={BanknoteIcon} title="No report" desc="Report unavailable for this period." />
+            )}
+          </div>
+          <div className="border-t border-ink/[0.06] px-5 py-3 sm:px-6">
+            <HeadLink href={monthReportHref}>See where cash moved</HeadLink>
+          </div>
+        </Card>
+
+        <Card>
+          <CardHead icon={ScaleIcon} title="Owed to & by the shop" sub="Outstanding right now" />
+          <div className="px-5 pb-5 sm:px-6">
+            {report.isLoading ? (
+              <Skeleton className="h-44 rounded-xl" />
+            ) : r ? (
+              <div className="space-y-3">
+                <div className="rounded-xl bg-bone/70 p-4 ring-1 ring-ink/[0.05]">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-sm text-ink-3">Customers owe you</span>
+                    <Signed cents={r.receivables.totalCents} className="text-lg" />
+                  </div>
+                  <div className="mt-1 text-xs text-ink-4">{r.receivables.outstanding.length} open invoices</div>
+                </div>
+                <div className="rounded-xl bg-bone/70 p-4 ring-1 ring-ink/[0.05]">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-sm text-ink-3">You owe suppliers</span>
+                    <Signed cents={r.payables.totalCents} className="text-lg" />
+                  </div>
+                  <div className="mt-1 text-xs text-ink-4">{r.payables.outstanding.length} open bills</div>
+                </div>
+              </div>
+            ) : (
+              <Empty icon={ScaleIcon} title="No report" desc="Report unavailable for this period." />
+            )}
+          </div>
+          <div className="border-t border-ink/[0.06] px-5 py-3 sm:px-6">
+            <HeadLink href={monthReportHref}>Receivables & payables detail</HeadLink>
+          </div>
+        </Card>
       </div>
 
-      {/* ---- needs attention ---- */}
+      {/* ------------------------------------------------------ needs attention */}
       {(pending.data?.rows.length ?? 0) > 0 || (r?.warnings.length ?? 0) > 0 ? (
-        <Panel title="Needs your attention" icon={<AlertCircleIcon size={17} />} description="Resolve these before you close the day or the month">
-          <div className="grid gap-6 md:grid-cols-2">
+        <section className="relative overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(180,83,9,0.28),0_18px_40px_-28px_rgba(180,83,9,0.35)]">
+          <div className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full bg-amber-400/15 blur-3xl" />
+          <div className="relative flex items-center gap-3 px-5 pb-4 pt-5 sm:px-6">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-600/10 text-amber-700 shadow-[inset_0_0_0_1px_rgba(180,83,9,0.25)]">
+              <AlertCircleIcon size={16} />
+            </span>
+            <div>
+              <h2 className="font-sans text-[15px] font-semibold tracking-normal text-ink">Needs your attention</h2>
+              <p className="text-xs text-ink-4">Resolve these before you close the day or the month</p>
+            </div>
+          </div>
+          <div className="relative grid gap-6 px-5 pb-5 sm:px-6 md:grid-cols-2">
             {(pending.data?.rows.length ?? 0) > 0 ? (
               <div>
                 <SectionLabel className="mb-2">Expenses awaiting approval ({pending.data?.total})</SectionLabel>
                 <ul className="divide-y divide-ink/[0.06]">
                   {pending.data?.rows.map((e) => (
-                    <li key={e.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                      <span className="min-w-0 truncate text-ink-2">
+                    <li key={e.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                      <Link href={`/expenses/${e.id}`} className="min-w-0 truncate text-ink-2 transition-colors hover:text-gold-dark">
                         {e.description} <span className="text-ink-4">· {dayLabel(e.incurred_on)}</span>
-                      </span>
+                      </Link>
                       <span className="g-metric shrink-0 text-ink">{lkr(e.amount_cents)}</span>
                     </li>
                   ))}
                 </ul>
                 <div className="mt-3">
-                  <CardLinkRow href="/expenses">Review in the register</CardLinkRow>
+                  <HeadLink href="/expenses">Review in the register</HeadLink>
                 </div>
               </div>
             ) : null}
             {(r?.warnings.length ?? 0) > 0 ? (
               <div>
                 <SectionLabel className="mb-2">Monthly report warnings</SectionLabel>
-                <ul className="list-disc space-y-1.5 pl-5 text-sm text-ink-2">
+                <ul className="space-y-2">
                   {r?.warnings.map((w) => (
-                    <li key={w}>{w}</li>
+                    <li key={w} className="flex items-start gap-2.5 text-sm text-ink-2">
+                      <AlertCircleIcon size={14} className="mt-0.5 shrink-0 text-amber-600" />
+                      <span>{w}</span>
+                    </li>
                   ))}
                 </ul>
               </div>
             ) : null}
           </div>
-        </Panel>
+        </section>
       ) : null}
     </Page>
   );
