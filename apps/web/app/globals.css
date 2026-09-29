@@ -266,6 +266,22 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.02em;
   }
+
+  .g-sort-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    cursor: pointer;
+  }
+  .g-sort-btn:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1px #1c1917, 0 0 0 3px rgba(201, 162, 39, 0.3);
+    border-radius: 0.25rem;
+  }
 }
 
 /* Public home page — premium surfaces and motion */

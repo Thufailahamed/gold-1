@@ -1085,3 +1085,197 @@ export function MetricCard({
     </div>
   );
 }
+
+/* ---------------------------------------------------------------- Typed tables */
+
+export type DataColumn<R> = {
+  key: string;
+  label: ReactNode;
+  align?: Maybe<"left" | "right">;
+  width?: Maybe<string>;
+  render: (row: R) => ReactNode;
+  sortable?: Maybe<boolean>;
+  value?: (row: R) => number | string;
+};
+
+const ALIGN = { left: "!text-left", right: "!text-right" } as const;
+
+/**
+ * Typed table with a sticky header. Sort state is owned by the caller via
+ * `sort`/`onSort`, so the same component serves a client-sorted stock table
+ * and a server-paged movement ledger without change. Keeps `g-table` styling.
+ */
+export function DataTable<R>({
+  columns,
+  rows,
+  rowKey,
+  sort,
+  onSort,
+  totals,
+  onRowClick,
+  loading,
+  empty,
+  caption,
+}: {
+  columns: ReadonlyArray<DataColumn<R>>;
+  rows: ReadonlyArray<R>;
+  rowKey: (row: R) => string;
+  sort?: Maybe<{ key: string; dir: "asc" | "desc" }>;
+  onSort?: (key: string) => void;
+  totals?: ReactNode;
+  onRowClick?: (row: R) => void;
+  loading?: Maybe<boolean>;
+  empty?: ReactNode;
+  caption?: ReactNode;
+}) {
+  if (loading) return <TableSkeleton rows={6} cols={Math.min(columns.length, 6)} />;
+  if (rows.length === 0) return <>{empty ?? <EmptyBlock title="Nothing to show" />}</>;
+
+  return (
+    <div className="relative">
+      <div className="max-h-[32rem] overflow-auto scrollbar-thin">
+        <table className="g-table">
+          {caption ? <caption className="sr-only">{caption}</caption> : null}
+          <thead className="sticky top-0 z-10 bg-paper">
+            <tr>
+              {columns.map((c) => {
+                const active = sort?.key === c.key;
+                const head = (
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1",
+                      c.align === "right" && "flex-row-reverse"
+                    )}
+                  >
+                    {c.label}
+                    {c.sortable ? (
+                      <span className={cn("text-[9px]", active ? "text-gold-dark" : "text-ink-5")}>
+                        {active && sort?.dir === "asc" ? "▲" : "▼"}
+                      </span>
+                    ) : null}
+                  </span>
+                );
+                return (
+                  <th
+                    key={c.key}
+                    style={c.width ? { width: c.width } : undefined}
+                    className={ALIGN[c.align ?? "left"]}
+                    aria-sort={
+                      c.sortable
+                        ? active
+                          ? sort?.dir === "asc"
+                            ? "ascending"
+                            : "descending"
+                          : "none"
+                        : undefined
+                    }
+                  >
+                    {c.sortable && onSort ? (
+                      <button type="button" onClick={() => onSort(c.key)} className="g-sort-btn">
+                        {head}
+                      </button>
+                    ) : (
+                      head
+                    )}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr
+                key={rowKey(r)}
+                onClick={onRowClick ? () => onRowClick(r) : undefined}
+                className={cn(onRowClick && "cursor-pointer")}
+              >
+                {columns.map((c) => (
+                  <td key={c.key} className={c.align === "right" ? "num" : undefined}>
+                    {c.render(r)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {totals ? (
+        <div className="border-t border-ink/[0.07] bg-bone/60 px-5 py-3 text-sm sm:px-6">
+          {totals}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- Filter chips */
+
+export function FilterChips({
+  options,
+  value,
+  onChange,
+  ariaLabel = "Filters",
+}: {
+  options: ReadonlyArray<{ key: string; label: ReactNode; count?: Maybe<number> }>;
+  value: string;
+  onChange: (key: string) => void;
+  ariaLabel?: Maybe<string>;
+}) {
+  return (
+    <div role="tablist" aria-label={ariaLabel} className="flex flex-wrap gap-1.5">
+      {options.map((o) => {
+        const active = o.key === value;
+        return (
+          <button
+            key={o.key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(o.key)}
+            className={cn(
+              "g-btn h-8 px-3 text-xs transition-colors",
+              active ? "g-btn-primary" : "g-btn-secondary"
+            )}
+          >
+            {o.label}
+            {o.count != null ? <span className="ml-1 num-tabular opacity-70">{o.count}</span> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- Form field */
+
+export function Field({
+  label,
+  hint,
+  error,
+  htmlFor,
+  children,
+}: {
+  label: ReactNode;
+  hint?: ReactNode;
+  error?: ReactNode;
+  htmlFor: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <label htmlFor={htmlFor} className="mb-1.5 block text-xs font-medium text-ink-3">
+        {label}
+      </label>
+      {children}
+      {error ? (
+        <p id={`${htmlFor}-error`} role="alert" className="mt-1.5 text-xs text-rose-700">
+          {error}
+        </p>
+      ) : hint ? (
+        <p id={`${htmlFor}-hint`} className="mt-1.5 text-xs text-ink-4">
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
