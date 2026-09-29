@@ -488,7 +488,9 @@ export default function AccountsDashboardPage() {
               {todayRows.slice(0, 8).map((e) => (
                 <li key={e.id} className="flex items-center gap-3 px-5 py-3 sm:px-6">
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-ink">{e.description}</div>
+                    <Link href={`/expenses/${e.id}`} className="block truncate text-sm font-medium text-ink transition-colors hover:text-gold-dark">
+                      {e.description}
+                    </Link>
                     <div className="mt-0.5 truncate text-xs text-ink-4">
                       {e.category_name}
                       {e.vendor ? ` · ${e.vendor}` : ""} · <span className="font-mono">{e.number}</span>

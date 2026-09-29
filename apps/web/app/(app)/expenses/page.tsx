@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -260,10 +261,16 @@ function ExpensesView() {
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id}>
-                    <td className="g-metric text-xs">{r.number}</td>
+                    <td className="g-metric text-xs">
+                      <Link href={`/expenses/${r.id}`} className="text-gold-dark transition-colors hover:text-ink">
+                        {r.number}
+                      </Link>
+                    </td>
                     <td className="text-ink-3">{r.incurred_on}</td>
                     <td className="text-ink-2">
-                      {r.description}
+                      <Link href={`/expenses/${r.id}`} className="transition-colors hover:text-ink">
+                        {r.description}
+                      </Link>
                       {r.vendor ? <span className="text-ink-4"> — {r.vendor}</span> : null}
                     </td>
                     <td className="text-ink-3">{r.category_name}</td>
