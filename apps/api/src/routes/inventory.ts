@@ -4,7 +4,7 @@ import { PERMISSIONS } from "@goldos/shared";
 import type { Env } from "../db/client";
 import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
-import { listMovements, recordMovement, stockSummary } from "../services/inventory";
+import { inventoryInsights, listMovements, recordMovement, stockSummary } from "../services/inventory";
 import { pagination, serviceError } from "./http";
 
 const moveSchema = z.object({
@@ -43,6 +43,9 @@ export const inventory = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       type: c.req.query("type"),
     });
     return c.json({ success: true, data }, 200);
+  })
+  .get("/insights", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
+    return c.json({ success: true, data: await inventoryInsights(c.env.DB) }, 200);
   })
   .get("/stock", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
     const parsed = stockQuery.safeParse({ groupBy: c.req.query("groupBy") ?? undefined });
