@@ -1,6 +1,8 @@
-import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
+import { useEffect, useState, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/cn";
+import { useCountUp } from "@/lib/count-up";
+import { SpotlightCard } from "./home/motion";
 import {
   AlertCircleIcon,
   ArrowLeftIcon,
@@ -870,5 +872,216 @@ export function CardLink({ href, children }: { href: string; children: ReactNode
       {children}
       <ArrowRightIcon size={12} />
     </Link>
+  );
+}
+
+/* ---------------------------------------------------------------- Charts */
+
+const RAMP_FILL: Record<"gold" | "ink", string> = {
+  gold: "bg-gradient-to-r from-gold-deep via-gold to-gold-light",
+  ink: "bg-gradient-to-r from-ink-2 via-ink-3 to-gold-dark",
+};
+
+/**
+ * Horizontal bar rows scaled to the largest value in the set. Each fill
+ * animates in on mount with a per-row delay, and collapses instantly under
+ * prefers-reduced-motion. Values are formatted by the caller so this never
+ * hardcodes grams or currency.
+ */
+export function BarList({
+  items,
+  ramp = "gold",
+  format,
+  empty,
+}: {
+  items: ReadonlyArray<{
+    key: string;
+    label: ReactNode;
+    value: number;
+    secondary?: ReactNode;
+    href?: string;
+  }>;
+  ramp?: Maybe<"gold" | "ink">;
+  format: (n: number) => string;
+  empty?: ReactNode;
+}) {
+  if (items.length === 0) return <>{empty ?? null}</>;
+  const max = Math.max(...items.map((i) => i.value), 1);
+
+  return (
+    <ul className="space-y-2.5">
+      {items.map((it, i) => {
+        const pct = Math.max(0, Math.min(100, (it.value / max) * 100));
+        const inner = (
+          <>
+            <div className="flex items-center justify-between gap-3">
+              <span className="g-metric min-w-0 truncate text-xs font-semibold text-paper/85">
+                {it.label}
+              </span>
+              <span className="g-metric shrink-0 text-xs text-paper">{format(it.value)}</span>
+            </div>
+            <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-paper/[0.06]">
+              <div
+                className={cn("h-full rounded-full motion-reduce:transition-none", RAMP_FILL[ramp])}
+                style={{
+                  width: `${pct}%`,
+                  transition: `width 900ms cubic-bezier(0.16, 1, 0.3, 1) ${i * 60}ms`,
+                }}
+              />
+            </div>
+            {it.secondary ? (
+              <div className="mt-2 truncate text-[11px] text-paper/40">{it.secondary}</div>
+            ) : null}
+          </>
+        );
+        const cls =
+          "group block rounded-xl bg-paper/[0.03] p-3 ring-1 ring-paper/[0.06] transition-colors hover:bg-paper/[0.06]";
+        return (
+          <li key={it.key}>
+            {it.href ? (
+              <Link href={it.href} className={cls}>
+                {inner}
+              </Link>
+            ) : (
+              <div className={cls}>{inner}</div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
+ * SVG donut gauge with a gold-gradient arc. Decorative: it is aria-hidden and
+ * the value is always carried by `caption` as text, so the number is never
+ * chart-only.
+ */
+export function GaugeRing({
+  value,
+  max,
+  caption,
+  label,
+}: {
+  value: number;
+  max: number;
+  caption: ReactNode;
+  label?: ReactNode;
+}) {
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => setShown(value), 120);
+    return () => clearTimeout(t);
+  }, [value]);
+  const r = 70;
+  const len = 2 * Math.PI * r;
+  const pct = max > 0 ? Math.max(0, Math.min(1, shown / max)) : 0;
+  return (
+    <div className="relative size-full" aria-hidden>
+      <svg viewBox="0 0 200 200" className="size-full">
+        <defs>
+          <linearGradient id="gr-arc" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#FFF4C7" />
+            <stop offset="0.45" stopColor="#E7C65A" />
+            <stop offset="1" stopColor="#A8861B" />
+          </linearGradient>
+        </defs>
+        <circle
+          cx="100"
+          cy="100"
+          r="94"
+          fill="none"
+          stroke="rgba(231,198,90,0.3)"
+          strokeDasharray="1.5 6"
+        />
+        <circle cx="100" cy="100" r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="9" />
+        <circle
+          cx="100"
+          cy="100"
+          r={r}
+          fill="none"
+          stroke="url(#gr-arc)"
+          strokeWidth="9"
+          strokeLinecap="round"
+          strokeDasharray={len}
+          strokeDashoffset={len * (1 - pct)}
+          style={{
+            transform: "rotate(-90deg)",
+            transformOrigin: "100px 100px",
+            transition: "stroke-dashoffset 1400ms cubic-bezier(0.16, 1, 0.3, 1)",
+          }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+        <span className="text-[8px] font-semibold uppercase tracking-[0.16em] text-paper/40 sm:text-[9px]">
+          {label}
+        </span>
+        <span className="g-metric mt-1 text-lg text-paper sm:text-2xl">{caption}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Spotlight stat tile: gold-gradient icon chip, count-up value, and a gold
+ * underline that sweeps in on hover. `value === undefined` renders a dash
+ * without animating, so a failed query never shows a misleading 0.
+ */
+export function MetricCard({
+  label,
+  value,
+  format,
+  unit,
+  prefix,
+  sub,
+  icon,
+  href,
+  loading,
+}: {
+  label: ReactNode;
+  value: number | undefined;
+  format: (n: number) => string;
+  unit?: ReactNode;
+  prefix?: ReactNode;
+  sub?: ReactNode;
+  icon: ReactNode;
+  href?: Maybe<string>;
+  loading?: Maybe<boolean>;
+}) {
+  const shown = useCountUp(value);
+  const body = (
+    <div className="relative flex h-full flex-col p-5">
+      <div className="flex items-center gap-2.5 text-sm font-medium text-ink-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.2)] transition-all duration-320 group-hover:from-void group-hover:to-ink-2 group-hover:text-gold-light">
+          {icon}
+        </span>
+        <span className="truncate">{label}</span>
+      </div>
+      <div className="mt-6">
+        {loading || value === undefined ? (
+          <Skeleton className="h-9 w-28" />
+        ) : (
+          <div className="flex items-baseline gap-1.5">
+            {prefix ? <span className="text-xs font-medium text-ink-4">{prefix}</span> : null}
+            <span className="g-metric truncate text-3xl leading-none text-ink">{format(shown)}</span>
+            {unit ? <span className="text-sm font-medium text-ink-4">{unit}</span> : null}
+          </div>
+        )}
+        {sub ? <p className="mt-2 truncate text-xs text-ink-4">{sub}</p> : null}
+      </div>
+      <span className="absolute inset-x-5 bottom-0 h-0.5 origin-left scale-x-0 rounded-full bg-gradient-to-r from-gold-dark via-gold-light to-transparent transition-transform duration-500 ease-brand group-hover:scale-x-100" />
+    </div>
+  );
+  if (href) {
+    return (
+      <Link href={href} className="group block h-full rounded-[22px]">
+        <SpotlightCard tone="light">{body}</SpotlightCard>
+      </Link>
+    );
+  }
+  return (
+    <div className="group block h-full rounded-[22px]">
+      <SpotlightCard tone="light">{body}</SpotlightCard>
+    </div>
   );
 }
