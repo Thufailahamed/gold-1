@@ -7,6 +7,7 @@ import { Area, AreaChart, CartesianGrid, Line, ResponsiveContainer, Tooltip, XAx
 import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { useCountUp } from "@/lib/count-up";
 import { last12Months, type MonthlySummary } from "@/lib/monthly";
 import { Page, Skeleton, StatusPill } from "@/components/ui";
 import { SpotlightCard } from "@/components/home/motion";
@@ -60,27 +61,6 @@ function greeting(): string {
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
-}
-
-function useCountUp(target: number | undefined, ms = 1100): number {
-  const [v, setV] = useState(0);
-  useEffect(() => {
-    if (target === undefined) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setV(target);
-      return;
-    }
-    let raf = 0;
-    const start = performance.now();
-    const tick = (t: number) => {
-      const p = Math.min(1, (t - start) / ms);
-      setV(target * (1 - Math.pow(1 - p, 3)));
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [target, ms]);
-  return v;
 }
 
 /* ------------------------------------------------------------------ data */
