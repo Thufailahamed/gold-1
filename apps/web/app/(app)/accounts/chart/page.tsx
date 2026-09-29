@@ -58,6 +58,7 @@ export default function AccountsPage() {
           amountCents: Math.round(v.amountLkr * 100),
           memo: v.memo,
           reason: v.reason,
+          branchId: v.branchId,
         }),
       }),
     onSuccess: () => {
