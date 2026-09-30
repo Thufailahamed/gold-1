@@ -29,7 +29,7 @@ done
 cd "$ROOT"
 
 wrun() { # $1 = SQL single statement or file flag pair
-  pnpm --filter goldos-api exec wrangler d1 execute "$DB_NAME" --remote "$@" --json 2>/dev/null
+  pnpm --filter goldos-api exec wrangler d1 execute "$DB_NAME" --remote -y "$@" --json 2>/dev/null
 }
 
 query_one() { # $1 = SQL returning single row; $2 = column
@@ -64,7 +64,7 @@ if [ "$DO_DB" -eq 1 ]; then
       continue
     fi
     echo "    [$v] applying $(basename "$f")..."
-    pnpm --filter goldos-api exec wrangler d1 execute "$DB_NAME" --remote --file "$f"
+    pnpm --filter goldos-api exec wrangler d1 execute "$DB_NAME" --remote -y --file "$f"
     wrun --command "INSERT INTO schema_migrations (version, applied_at) VALUES ('$v', $(date +%s)000);" > /dev/null
     APPLIED=$((APPLIED + 1))
   done

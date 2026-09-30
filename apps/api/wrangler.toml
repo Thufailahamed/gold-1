@@ -24,7 +24,7 @@ database_id = "27c637f8-6a15-4012-bd7e-8b7b601df400"
 [[d1_databases]]
 binding = "PLATFORM_DB"
 database_name = "goldos-platform"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "4aa27d78-db29-42c8-b76f-295f30d48dc4"
 migrations_dir = "drizzle-platform"
 
 [[r2_buckets]]
