@@ -207,6 +207,7 @@ function MonthlyView() {
                 ["Revenue", r.profit.revenueCents],
                 ["Cost of goods sold", -r.profit.cogsCents, "indent"],
                 ["Gross profit", r.profit.grossProfitCents, "sub"],
+                ...(r.profit.otherIncomeCents ? [["Other income", r.profit.otherIncomeCents, "indent"] as [string, number, "indent"]] : []),
                 ["Operating expenses", -r.profit.operatingExpensesCents, "indent"],
                 ["Net profit", r.profit.netProfitCents, "total"],
               ]} />

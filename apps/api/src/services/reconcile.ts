@@ -77,10 +77,21 @@ async function firstRow<T>(db: D1Database, sql: string, vals: unknown[]): Promis
  */
 export async function heldGoldStages(db: D1Database, branchId?: string): Promise<{ products: number; oldGold: number; lots: number; wip: number; recovered: number; total: number }> {
   const bp = branchSql(branchId, "branch_id");
+  // A dispatched transfer moves the gold to the receiver in the ledger at
+  // once, while the piece stays TRANSFER_PENDING on the sender's books until
+  // it is scanned in. Per branch, an in-transit piece therefore belongs to
+  // the receiver — counting it at the sender failed this check (a close gate)
+  // for both branches whenever stock was on the road overnight.
+  const IN_TRANSIT_TO = `SELECT t.to_branch_id FROM transfer_lines l JOIN transfers t ON t.id = l.transfer_id
+     WHERE l.product_id = p.id AND l.status = 'IN_TRANSIT' LIMIT 1`;
   const products = await firstRow<{ fine_mg: number }>(
     db,
-    `SELECT COALESCE(SUM(fine_gold_mg), 0) AS fine_mg FROM products
-     WHERE status NOT IN ('SOLD','VOID','LOST','MELTED')${bp.sql}`,
+    branchId
+      ? `SELECT COALESCE(SUM(p.fine_gold_mg), 0) AS fine_mg FROM products p
+         WHERE p.status NOT IN ('SOLD','VOID','LOST','MELTED')
+           AND COALESCE((${IN_TRANSIT_TO}), p.branch_id) = ?`
+      : `SELECT COALESCE(SUM(fine_gold_mg), 0) AS fine_mg FROM products
+         WHERE status NOT IN ('SOLD','VOID','LOST','MELTED')`,
     bp.vals
   );
   const oldGold = await firstRow<{ fine_mg: number }>(
@@ -193,11 +204,17 @@ export async function reconcile(
   //    mutually exclusive (one is always zero), so the return's value is their
   //    sum. Two scalar sub-selects, not a JOIN: a second return against the
   //    same invoice would otherwise double the invoice total.
+  //    Repair collections credit 4000 too but have no sales document, so they
+  //    are kept off the journal side. Counted, every day with a repair
+  //    collection failed this check and — through the close gate — could
+  //    never be closed.
+  //    Documents are compared NET of output tax: the tax is on 2100, not 4000
+  //    (tax_crossfoot below checks that side).
   const salesJournal = await db
     .prepare(
       `SELECT COALESCE(SUM(l.credit_cents - l.debit_cents), 0) AS net
        FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
-       WHERE l.account_code = '4000' AND e.entry_date = ?${b.sql}`
+       WHERE l.account_code = '4000' AND COALESCE(e.ref_entity, '') <> 'repair' AND e.entry_date = ?${b.sql}`
     )
     .bind(day, ...b.vals)
     .first<{ net: number }>();
@@ -220,9 +237,9 @@ export async function reconcile(
   const salesDocs = await db
     .prepare(
       `SELECT
-         COALESCE((SELECT SUM(si.total_cents) FROM sales_invoices si
+         COALESCE((SELECT SUM(si.total_cents - si.tax_cents) FROM sales_invoices si
                    WHERE si.status <> 'VOID' AND ${LOCAL_DAY("si.created_at")} = ?${siB.sql}${NOT_REVERSED("si", "journal_entry_id")}), 0)
-       - COALESCE((SELECT SUM(sr.refund_cents + sr.credit_cents) FROM sales_returns sr
+       - COALESCE((SELECT SUM(sr.refund_cents + sr.credit_cents - sr.tax_cents) FROM sales_returns sr
                    JOIN sales_invoices si2 ON si2.id = sr.invoice_id
                    WHERE sr.status = 'COMPLETE' AND ${LOCAL_DAY("sr.created_at")} = ?${si2B.sql}), 0)
          AS net`
@@ -237,6 +254,33 @@ export async function reconcile(
       n(salesJournal?.net),
       "day"
     )
+  );
+
+  // 3b. Output tax: 2100's sale-side movement equals the tax on the day's
+  //     invoices less the tax refunded on the day's returns. Scoped by ref so
+  //     a tax payment or a manual correction never trips it.
+  const taxJournal = await db
+    .prepare(
+      `SELECT COALESCE(SUM(l.credit_cents - l.debit_cents), 0) AS net
+       FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+       WHERE l.account_code = '2100' AND e.ref_entity IN ('sale_invoice','sale_return') AND e.entry_date = ?${b.sql}`
+    )
+    .bind(day, ...b.vals)
+    .first<{ net: number }>();
+  const taxDocs = await db
+    .prepare(
+      `SELECT
+         COALESCE((SELECT SUM(si.tax_cents) FROM sales_invoices si
+                   WHERE si.status <> 'VOID' AND ${LOCAL_DAY("si.created_at")} = ?${siB.sql}${NOT_REVERSED("si", "journal_entry_id")}), 0)
+       - COALESCE((SELECT SUM(sr.tax_cents) FROM sales_returns sr
+                   JOIN sales_invoices si2 ON si2.id = sr.invoice_id
+                   WHERE sr.status = 'COMPLETE' AND ${LOCAL_DAY("sr.created_at")} = ?${si2B.sql}), 0)
+         AS net`
+    )
+    .bind(day, ...siB.vals, day, ...si2B.vals)
+    .first<{ net: number }>();
+  checks.push(
+    compareMoney("tax_crossfoot", "Output tax on the ledger matches the sales documents", n(taxDocs?.net), n(taxJournal?.net), "day")
   );
 
   // 4. Purchases: 1100 debits from purchase documents equal invoice totals.

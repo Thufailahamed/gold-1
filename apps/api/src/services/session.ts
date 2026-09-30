@@ -1,5 +1,6 @@
 export const SESSION_IDLE_MS = 1000 * 60 * 60 * 12; // 12h idle
 export const SESSION_ABSOLUTE_MS = 1000 * 60 * 60 * 24 * 7; // 7d absolute
+export const SESSION_TOUCH_MS = 1000 * 60 * 5; // idle deadline refreshed at most every 5 min
 
 export async function createSession(
   db: D1Database,

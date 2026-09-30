@@ -2,42 +2,40 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { centsToLkr, hasPermission, mgToG } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
-import { cn } from "@/lib/cn";
 import {
-  ButtonPrimary,
-  ButtonSecondary,
-  Callout,
-  controlClass,
   DataTable,
   EmptyBlock,
-  Field,
   Page,
   Pager,
-  Panel,
   TableCard,
   Tabs,
   type DataColumn,
 } from "@/components/ui";
 import {
+  AlertCircleIcon,
+  ArrowRightIcon,
   Building2Icon,
+  ClipboardCheckIcon,
   GemIcon,
+  TruckIcon,
+  HistoryIcon,
   PackageIcon,
-  RefreshCwIcon,
 } from "@/components/icons";
 import {
   AttentionCard,
   InventoryHero,
   MovementFilters,
   PieceDetail,
-  PiecePreview,
   StockByBranch,
   StockByKarat,
 } from "./panels";
+import { MovementComposer } from "./movement-composer";
 import {
+  humanize,
   movementColumns,
   stockColumns,
   type Insights,
@@ -52,9 +50,13 @@ const GROUP_LABEL: Record<"branch" | "purity" | "product", string> = {
   product: "product",
 };
 
-const g = (mg: number) => mgToG(mg).toLocaleString("en-US", { maximumFractionDigits: 3 });
+const GROUP_NOUN: Record<"branch" | "purity" | "product", [string, string]> = {
+  branch: ["branch", "branches"],
+  purity: ["purity", "purities"],
+  product: ["piece", "pieces"],
+};
 
-const MOVE_STATUSES = ["IN_STOCK", "RETURNED", "TRANSFER_PENDING"];
+const g = (mg: number) => mgToG(mg).toLocaleString("en-US", { maximumFractionDigits: 3 });
 
 function useDebounced<T>(value: T, ms = 350): T {
   const [v, setV] = useState(value);
@@ -70,9 +72,6 @@ export default function InventoryPage() {
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | undefined>(undefined);
 
   const [barcode, setBarcode] = useState("");
-  const [toStatus, setToStatus] = useState("RETURNED");
-  const [toBranch, setToBranch] = useState("");
-  const [reason, setReason] = useState("");
   const [detail, setDetail] = useState<Piece | null>(null);
   const [mType, setMType] = useState("");
   const [mBranch, setMBranch] = useState("");
@@ -116,15 +115,29 @@ export default function InventoryPage() {
   const labelFor = useMemo(() => {
     const bNames = new Map((branches.data?.rows ?? []).map((b) => [b.id, b.name]));
     const pKarat = new Map((purities.data?.rows ?? []).map((p) => [p.id, p.karat]));
-    return (key: string): ReactNode => {
-      if (groupBy === "branch") return <span className="font-medium text-ink">{bNames.get(key) ?? key.slice(0, 8)}</span>;
+    return (row: StockRow): ReactNode => {
+      const key = row.key;
+      if (groupBy === "branch")
+        return (
+          <span className="flex items-center gap-2.5">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-bone text-ink-4 ring-1 ring-ink/[0.06]">
+              <Building2Icon size={13} />
+            </span>
+            <span className="font-medium text-ink">{bNames.get(key) ?? row.name ?? key.slice(0, 8)}</span>
+          </span>
+        );
       if (groupBy === "purity")
         return (
           <span className="g-metric rounded-md bg-gold-pale px-2 py-0.5 text-xs font-semibold text-gold-deep ring-1 ring-gold-dark/15">
-            {pKarat.get(key) ?? key.slice(0, 8)}
+            {pKarat.get(key) ?? row.name ?? key.slice(0, 8)}
           </span>
         );
-      return <span className="font-mono text-xs text-ink">{key.slice(0, 10)}…</span>;
+      return (
+        <span className="block min-w-0">
+          <span className="block truncate font-medium text-ink">{row.name ?? "Unnamed piece"}</span>
+          <span className="block font-mono text-[11px] text-ink-4">{row.barcode ?? key.slice(0, 10)}</span>
+        </span>
+      );
     };
   }, [groupBy, branches.data, purities.data]);
 
@@ -140,36 +153,6 @@ export default function InventoryPage() {
     },
     enabled: canView,
   });
-
-  const qc = useQueryClient();
-  const move = useMutation({
-    mutationFn: async () => {
-      const found = await api<Piece>(
-        `/api/v1/products/barcode/${encodeURIComponent(barcode.trim())}`
-      );
-      return api("/api/v1/inventory/movements", {
-        method: "POST",
-        body: JSON.stringify({
-          productId: found.product.id,
-          toStatus,
-          toBranchId: toBranch || undefined,
-          reason: reason || undefined,
-        }),
-      });
-    },
-    onSuccess: () => {
-      toast.success("Movement recorded");
-      setBarcode("");
-      setReason("");
-      qc.invalidateQueries({ queryKey: ["moves"] });
-      qc.invalidateQueries({ queryKey: ["stock"] });
-      qc.invalidateQueries({ queryKey: ["inventory", "insights"] });
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Movement failed"),
-  });
-
-  const needsBranch = toStatus === "TRANSFER_PENDING";
-  const moveInvalid = !barcode.trim() || (needsBranch && !toBranch.trim());
 
   const columns = useMemo(() => stockColumns(groupBy, labelFor), [groupBy, labelFor]);
 
@@ -194,7 +177,7 @@ export default function InventoryPage() {
       net: base.reduce((s, r) => s + r.net_mg, 0),
       fine: base.reduce((s, r) => s + r.fine_mg, 0),
       value: base.reduce((s, r) => s + (r.value_cents ?? 0), 0),
-      hasValue: base.some((r) => r.value_cents !== null),
+      hasValue: base.some((r) => (r.value_cents ?? 0) > 0),
     };
   }, [stock.data]);
 
@@ -254,6 +237,8 @@ export default function InventoryPage() {
         }
       />
 
+      <WorkflowLinks />
+
       <div className="grid gap-4 lg:grid-cols-3">
         <StockByKarat
           data={insights.data}
@@ -278,7 +263,13 @@ export default function InventoryPage() {
 
       <TableCard
         title="Stock on hand"
-        description={`Grouped by ${GROUP_LABEL[groupBy]}`}
+        description={
+          stock.data
+            ? `${rows.length.toLocaleString("en-US")} ${GROUP_NOUN[groupBy][rows.length === 1 ? 0 : 1]} in stock${
+                groupBy === "product" ? " · click a row for details" : ""
+              }`
+            : `Grouped by ${GROUP_LABEL[groupBy]}`
+        }
         icon={<PackageIcon size={16} />}
         toolbar={
           <Tabs
@@ -304,127 +295,24 @@ export default function InventoryPage() {
         />
       </TableCard>
 
-      <div id="record-movement">
-        <Panel
-          title="Record movement"
-          description="Scan a barcode and post a status change."
-          icon={<RefreshCwIcon size={16} />}
-        >
-          <div className="grid gap-5 lg:grid-cols-2">
-            <div className="min-w-0 space-y-3">
-              <Field
-                label="Barcode"
-                htmlFor="mv-barcode"
-                hint="Press Enter to post. Scans are picked up automatically."
-              >
-                <input
-                  id="mv-barcode"
-                  ref={barcodeRef}
-                  autoFocus
-                  value={barcode}
-                  onChange={(e) => setBarcode(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !moveInvalid) move.mutate();
-                  }}
-                  placeholder="JW-XXXXXX"
-                  className={cn(controlClass, "font-mono")}
-                  aria-describedby="mv-barcode-hint"
-                />
-              </Field>
-              <PiecePreview
-                code={barcode}
-                branchName={(id) => branches.data?.rows.find((b) => b.id === id)?.name ?? id.slice(0, 8)}
-              />
-            </div>
-
-            <div className="min-w-0 space-y-3">
-              <Field label="To status" htmlFor="mv-status">
-                <select
-                  id="mv-status"
-                  value={toStatus}
-                  onChange={(e) => setToStatus(e.target.value)}
-                  className={controlClass}
-                >
-                  {MOVE_STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s.replace(/_/g, " ")}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              <Field
-                label="To branch"
-                htmlFor="mv-branch"
-                hint={needsBranch ? "Required for a transfer." : "Only used for transfers."}
-                error={
-                  needsBranch && !toBranch.trim() ? "Pick a branch to transfer to" : undefined
-                }
-              >
-                <select
-                  id="mv-branch"
-                  value={toBranch}
-                  onChange={(e) => setToBranch(e.target.value)}
-                  className={controlClass}
-                  aria-invalid={needsBranch && !toBranch.trim()}
-                  aria-describedby="mv-branch-hint"
-                >
-                  <option value="">No change</option>
-                  {(branches.data?.rows ?? []).map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              <Field
-                label="Reason"
-                htmlFor="mv-reason"
-                hint="Optional, kept on the movement record."
-              >
-                <input
-                  id="mv-reason"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Customer return, workshop move…"
-                  className={controlClass}
-                />
-              </Field>
-
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <ButtonPrimary
-                  type="button"
-                  onClick={() => move.mutate()}
-                  disabled={move.isPending || moveInvalid}
-                >
-                  {move.isPending ? "Recording…" : "Record movement"}
-                </ButtonPrimary>
-                <ButtonSecondary
-                  type="button"
-                  onClick={() => {
-                    setBarcode("");
-                    setToBranch("");
-                    setReason("");
-                  }}
-                >
-                  Clear
-                </ButtonSecondary>
-              </div>
-            </div>
-          </div>
-
-          <Callout tone="info" className="mt-5">
-            Sales go through the POS, shortages through counts, and voids through the product page.
-            This panel handles restocks and same-branch moves.
-          </Callout>
-        </Panel>
-      </div>
+      <MovementComposer
+        barcode={barcode}
+        onBarcode={setBarcode}
+        inputRef={barcodeRef}
+        branchName={(id) => branches.data?.rows.find((b) => b.id === id)?.name ?? id.slice(0, 8)}
+      />
 
       <div id="movement-history">
         <TableCard
           title="Movement history"
-          description={mType ? `Filtered to ${mType.replace(/_/g, " ")}` : "Latest movements"}
+          description={
+            moves.data
+              ? `${moves.data.total.toLocaleString("en-US")} ${mType ? humanize(mType).toLowerCase() : ""} movements${
+                  mBranch ? ` at ${branches.data?.rows.find((b) => b.id === mBranch)?.name ?? "this branch"}` : ""
+                }`.replace(/\s+/g, " ")
+              : "Latest movements"
+          }
+          icon={<HistoryIcon size={16} />}
           toolbar={
             <MovementFilters
               type={mType}
@@ -439,6 +327,12 @@ export default function InventoryPage() {
                 setMPage(1);
               }}
               onSearch={setMSearch}
+              onClear={() => {
+                setMType("");
+                setMBranch("");
+                setMSearch("");
+                setMPage(1);
+              }}
               branches={branches.data?.rows ?? []}
             />
           }
@@ -522,18 +416,72 @@ function StockTableBody({
         />
       }
       totals={
-        <div className="flex flex-wrap items-baseline justify-between gap-3 text-xs text-ink-3">
-          <span className="font-semibold uppercase tracking-[0.14em] text-ink-4">Total</span>
-          <span className="num-tabular">{totals.pieces.toLocaleString("en-US")} pieces</span>
-          <span className="num-tabular">{g(totals.net)} g net</span>
-          <span className="num-tabular">{g(totals.fine)} g fine</span>
-          <span className="num-tabular">
-            {totals.hasValue
-              ? `LKR ${centsToLkr(totals.value).toLocaleString("en-US", { maximumFractionDigits: 0 })}`
-              : "—"}
-          </span>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-ink-4">
+          <span className="font-semibold uppercase tracking-[0.14em]">Total</span>
+          {[
+            ["Pieces", totals.pieces.toLocaleString("en-US")],
+            ["Net", `${g(totals.net)} g`],
+            ["Fine", `${g(totals.fine)} g`],
+            [
+              "Value",
+              totals.hasValue
+                ? `LKR ${centsToLkr(totals.value).toLocaleString("en-US", { maximumFractionDigits: 0 })}`
+                : "—",
+            ],
+          ].map(([k, v]) => (
+            <span key={k} className="inline-flex items-baseline gap-1.5">
+              {k}
+              <span className="g-metric text-sm text-ink">{v}</span>
+            </span>
+          ))}
         </div>
       }
     />
+  );
+}
+
+const WORKFLOWS = [
+  {
+    href: "/inventory/counts",
+    title: "Stock counts",
+    body: "Scan the shelf against a frozen snapshot; approve write-offs with a second person.",
+    icon: ClipboardCheckIcon,
+  },
+  {
+    href: "/inventory/transfers",
+    title: "Branch transfers",
+    body: "Request, approve, dispatch and receive pieces between branches by scan.",
+    icon: TruckIcon,
+  },
+  {
+    href: "/inventory/discrepancies",
+    title: "Discrepancies",
+    body: "Missing and unexpected pieces, overdue transfers and gold consistency.",
+    icon: AlertCircleIcon,
+  },
+] as const;
+
+function WorkflowLinks() {
+  return (
+    <nav aria-label="Inventory workflows" className="grid gap-3 sm:grid-cols-3">
+      {WORKFLOWS.map(({ href, title, body, icon: Icon }) => (
+        <Link
+          key={href}
+          href={href}
+          className="group flex items-start gap-3 rounded-xl bg-paper p-4 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.08)] transition-shadow hover:shadow-[inset_0_0_0_1px_rgba(28,25,23,0.2)]"
+        >
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gold-pale text-gold-deep ring-1 ring-gold-dark/15">
+            <Icon size={16} />
+          </span>
+          <span className="min-w-0">
+            <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+              {title}
+              <ArrowRightIcon size={13} className="text-ink-4 transition-transform group-hover:translate-x-0.5" />
+            </span>
+            <span className="mt-0.5 block text-xs leading-relaxed text-ink-4">{body}</span>
+          </span>
+        </Link>
+      ))}
+    </nav>
   );
 }

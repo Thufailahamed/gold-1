@@ -26,6 +26,10 @@ import {
   TrendingUpIcon,
   LogOutIcon,
   XIcon,
+  AlertCircleIcon,
+  LifeBuoyIcon,
+  GaugeIcon,
+  HammerIcon,
 } from "./icons";
 
 type IconCmp = (props: { size?: number | string; className?: string }) => React.ReactNode;
@@ -37,6 +41,8 @@ interface NavItem {
   perm: string | null;
   anyPerm?: string[];
   tag?: string;
+  /** Other route prefixes that belong to this entry, e.g. /pos for the sales dashboard. */
+  also?: string[];
 }
 
 interface NavSection {
@@ -57,6 +63,9 @@ const SECTIONS: NavSection[] = [
       { href: "/products", label: "Products", icon: PackageIcon, perm: "products:view" },
       { href: "/scan", label: "Scan", icon: ScanBarcodeIcon, perm: "products:view", tag: "New" },
       { href: "/inventory", label: "Inventory", icon: ArchiveIcon, perm: "products:view" },
+      { href: "/inventory/counts", label: "Stock Counts", icon: ClipboardCheckIcon, perm: "products:view" },
+      { href: "/inventory/transfers", label: "Transfers", icon: TruckIcon, perm: "products:view" },
+      { href: "/inventory/discrepancies", label: "Discrepancies", icon: AlertCircleIcon, perm: "products:view" },
     ],
   },
   {
@@ -74,46 +83,50 @@ const SECTIONS: NavSection[] = [
     title: "Purchasing",
     tag: "Trade",
     items: [
-      { href: "/purchases/orders", label: "Orders", icon: TruckIcon, perm: "purchases:view" },
-      { href: "/purchases/invoices", label: "Invoices", icon: CoinsIcon, perm: "purchases:view" },
-      { href: "/purchases/reports", label: "Reports", icon: HistoryIcon, perm: "purchases:view" },
+      { href: "/purchases", label: "Purchasing Dashboard", icon: GaugeIcon, perm: "purchases:view" },
     ],
   },
   {
     title: "Sales",
     tag: "Counter",
     items: [
-      { href: "/pos", label: "POS", icon: ScanBarcodeIcon, perm: "sales:create" },
-      { href: "/sales/invoices", label: "Invoices", icon: CoinsIcon, perm: "sales:view" },
-      { href: "/sales/returns", label: "Returns", icon: HistoryIcon, perm: "sales:view" },
-      { href: "/sales/reports", label: "Reports", icon: TrendingUpIcon, perm: "sales:view" },
+      {
+        href: "/sales",
+        label: "Sales Dashboard",
+        icon: GaugeIcon,
+        perm: "sales:view",
+        anyPerm: ["sales:create"],
+        also: ["/pos"],
+      },
+      { href: "/repairs", label: "Repairs", icon: HammerIcon, perm: "sales:view" },
     ],
   },
   {
     title: "Gold",
     tag: "Vault",
     items: [
-      { href: "/gold/ledger", label: "Ledger", icon: HistoryIcon, perm: "gold:view" },
-      { href: "/gold/melting", label: "Melting", icon: GemIcon, perm: "gold:view" },
-      { href: "/gold/stock", label: "Stock", icon: CoinsIcon, perm: "gold:view" },
+      { href: "/gold", label: "Gold Dashboard", icon: GaugeIcon, perm: "gold:view" },
     ],
   },
   {
     title: "Manufacturing",
     tag: "Workshop",
     items: [
-      { href: "/manufacturing/orders", label: "Orders", icon: PackageIcon, perm: "mfg:view" },
-      { href: "/manufacturing/reports", label: "Reports", icon: TrendingUpIcon, perm: "mfg:view" },
+      { href: "/manufacturing", label: "Manufacturing Dashboard", icon: GaugeIcon, perm: "mfg:view" },
+      { href: "/custom-orders", label: "Custom Orders", icon: GemIcon, perm: "mfg:view" },
     ],
   },
   {
     title: "Old Gold",
     tag: "Counter",
     items: [
-      { href: "/old-gold/intake", label: "Intake", icon: ScanBarcodeIcon, perm: "oldgold:create" },
-      { href: "/old-gold/testing", label: "Testing", icon: GemIcon, perm: "oldgold:edit" },
-      { href: "/old-gold/items", label: "Items", icon: ArchiveIcon, perm: "oldgold:view" },
-      { href: "/old-gold/reports", label: "Reports", icon: TrendingUpIcon, perm: "oldgold:view" },
+      {
+        href: "/old-gold",
+        label: "Old Gold Dashboard",
+        icon: GaugeIcon,
+        perm: "oldgold:view",
+        anyPerm: ["oldgold:create", "oldgold:edit"],
+      },
     ],
   },
   {
@@ -126,6 +139,7 @@ const SECTIONS: NavSection[] = [
     tag: "Org",
     items: [
       { href: "/branches", label: "Branches", icon: Building2Icon, perm: "branches:view" },
+      { href: "/branches/overview", label: "Branch Overview", icon: GaugeIcon, perm: "branches:view" },
       { href: "/users", label: "Users", icon: UsersIcon, perm: "users:view" },
     ],
   },
@@ -149,6 +163,7 @@ const SECTIONS: NavSection[] = [
         perm: null,
         anyPerm: ["sales:approve", "oldgold:approve", "mfg:approve", "users:approve", "branches:approve", "accounts:manage", "gold:manage", "products:cancel", "purchases:cancel"],
       },
+      { href: "/support", label: "Help & support", icon: LifeBuoyIcon, perm: null },
     ],
   },
 ];
@@ -225,6 +240,11 @@ export function AppSidebar({
 }) {
   const pathname = usePathname();
   const initial = (me.user.name || me.user.email || "G").charAt(0).toUpperCase();
+  // Nested routes (/inventory and /inventory/counts) both prefix-match; only
+  // the most specific entry is the current page.
+  const activeHref = SECTIONS.flatMap((s) => s.items.flatMap((i) => [i.href, ...(i.also ?? [])].map((p) => ({ p, href: i.href }))))
+    .filter(({ p }) => pathname === p || pathname.startsWith(`${p}/`))
+    .sort((a, b) => b.p.length - a.p.length)[0]?.href;
 
   async function onSignOut() {
     await logout().catch(() => undefined);
@@ -271,7 +291,7 @@ export function AppSidebar({
               </div>
               <div className="space-y-0.5">
                 {visible.map((item) => {
-                  const active = pathname.startsWith(item.href);
+                  const active = item.href === activeHref;
                   return (
                     <Link
                       key={item.href}

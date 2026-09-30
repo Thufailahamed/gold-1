@@ -7,6 +7,16 @@ Auth: `session` httpOnly Secure cookie; 401 when missing/expired/inactive.
 
 Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 
+Sessions: 12h idle (sliding on activity), 7d absolute.
+Login throttling: 5 failures / 15 min per email, 30 per IP → `429 RATE_LIMITED`
+with `Retry-After` (seconds).
+
+Idempotent writes: any POST/PATCH/PUT/DELETE may send `Idempotency-Key`
+(8–128 of `A-Za-z0-9_-`). A retry with the same key and body replays the first
+response (header `Idempotent-Replayed: true`) for 24h; same key with a
+different request → 422; a retry while the first is still running → 409.
+Keys are per session. 5xx outcomes and multipart uploads are never stored.
+
 | Method | Path | Perm | Notes |
 |---|---|---|---|
 | GET | /health | — | liveness |
@@ -74,6 +84,30 @@ Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 | POST | /cash/transfers/:id/receive | accounts:manage | {receivedOn?, note?} |
 | GET | /card-settlements | accounts:view | paginated; ?bankAccountId= |
 | POST | /card-settlements | accounts:manage | {bankAccountId, grossCents, feeCents?, settledOn?, acquirerRef?, note?}; DR bank net / CR 1020 gross / CR 6060 fee |
+| GET | /cash/entries | accounts:view | paginated; ?branchId=&from=&to= |
+| POST | /cash/entries | accounts:manage | {branchId, kind, amountCents, method: cash\|bank, bankAccountId?, entryDate?, note}; kind OWNER_CAPITAL (CR 3000), OWNER_DRAWING (DR 3200), OTHER_INCOME (CR 4900), CASH_OVER / CASH_SHORT (6090, drawer only) |
+| GET | /receipts/receivables | accounts:view | customers with a positive 1200 balance, open bills and aging; ?branchId=&asOf= |
+| GET | /receipts/customers/:id/open | accounts:view | open credit bills for a customer; with ?branchId= also the balance owed there |
+| GET | /receipts | accounts:view | paginated customer receipts; ?branchId=&customerId=&from=&to=; totalCents counts POSTED only |
+| POST | /receipts | accounts:manage | {customerId, branchId, amountCents, method: cash\|bank\|card, bankAccountId?, receiptDate?, note?}; DR money / CR 1200 (customer); applied oldest bill first; refused above what the customer owes at that branch |
+| GET | /receipts/:id | accounts:view | receipt with the bills it cleared |
+| POST | /receipts/:id/void | accounts:manage | {reason}; reverses the entry (dated today) and marks VOID; the debt returns |
+| GET | /accounts/statements/pnl | accounts:view | ?from=&to=&branchId=; income, cost of sales (5xxx), running costs, gross and net profit |
+| GET | /accounts/statements/balance-sheet | accounts:view | ?date=&branchId=; assets, liabilities, equity split into retained earnings (before the current financial year) and current year profit; `balanced` proves the books agree |
+| GET | /accounts/statements/cash-daily | accounts:view | ?from=&to=&branchId=; money in/out per day across drawer and banks, deposits/withdrawals excluded |
+| GET | /accounts/payables | accounts:view | ?branchId=&asOf=; what the shop owes each supplier (2000, credit positive) with unpaid bills aged 0-30/31-60/61-90/90+ |
+| GET | /accounts/payables/suppliers/:id/open | accounts:view | ?branchId=; one supplier's unpaid purchase invoices |
+| GET | /accounts/tax/config | accounts:view | {rateBp, label, registrationNo}; rateBp 0 = tax off |
+| PUT | /accounts/tax/config | accounts:manage | {rateBp (0-5000), label, registrationNo?}; applies to sales made after saving |
+| GET | /accounts/tax/report | accounts:view | ?from=&to=&branchId=; VAT return from 2100: opening, charged, refunded, paid, closing, taxable turnover, by-day, payments |
+| GET | /accounts/tax/payments | accounts:view | ?from=&to=&branchId= |
+| POST | /accounts/tax/payments | accounts:manage | {branchId, periodFrom, periodTo, amountCents, method cash/bank, bankAccountId?, paidOn?, reference?}; DR 2100 / CR money; 409 over the amount owed |
+| GET | /accounts/fiscal-years | accounts:view | start month, current year, every year back to the first posting with its close state |
+| GET | /accounts/fiscal-years/:yearEnd | accounts:view | a close with its frozen P&L and balance sheet |
+| POST | /accounts/fiscal-years/close | accounts:manage | {yearEnd}; must be a real year end, in the past, with balanced books; locks postings dated on/before it |
+| POST | /accounts/fiscal-years/:yearEnd/reopen | accounts:manage | {reason, approvedBy}; approver ≠ requester ≠ closer, holds accounts:manage; latest closed year only |
+| POST | /accounts/opening-stock/backfill | accounts:manage | posts DR 1100 / CR 3100 for direct-intake products whose cost is not yet on the books; idempotent |
+| GET | /sales/tax-config | sales:create | read-only tax rate for the POS |
 | GET | /expense-categories | accounts:view | each with its account and lifetime spend |
 | POST | /expense-categories | accounts:manage | allocates the account code (6090-6199) and creates the ledger account |
 | PATCH | /expense-categories/:id/status | accounts:manage | refuses when the category has expenses |
@@ -87,9 +121,14 @@ Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 | GET | /expenses/reports/summary | accounts:view | by category; registered BEFORE /expenses/:id |
 | GET | /day-closings | accounts:view | ?branchId&from&to&page&limit |
 | GET | /day-closings/preview | accounts:view | ?branchId&date; the rendered screen plus each check's state. Registered BEFORE /day-closings/:id |
+| GET | /day-closings/investigate | accounts:view | ?branchId&date&actualCents?; failing checks, mis-posted documents, every drawer movement, pending items, late entries, and movements whose size matches the difference. Read-only |
+| GET | /day-closings/unclosed | accounts:view | ?branchId&from&to (default last 60 days to yesterday); days with activity not closed, or reopened |
+| GET | /day-closings/variance | accounts:view | ?from&to&branchId; shortages/overages per closed day, by branch and by closer |
+| GET | /day-closings/summary | accounts:view | ?date; one line per branch: status, cash, sales, card, checks, gold held |
+| GET | /day-closings/report.csv | accounts:view | ?branchId&date; the day's report as CSV (frozen if closed, labelled preview if not) |
 | GET | /day-closings/:id | accounts:view | the frozen report plus the re-open trail |
 | GET | /day-closings/:id/report | accounts:view | the frozen report, for printing or export |
-| POST | /day-closings | accounts:manage | {branchId, date, actualCents, differenceReason?}; 409 if a check fails, 409 on unrecognised cash, 409 if already closed, 400 on a difference with no reason |
+| POST | /day-closings | accounts:manage | {branchId, date, actualCents, differenceReason?, denominations?, cardTerminalCents?, postDifference?}; the note sheet must equal actualCents; a card difference needs a reason; postDifference posts the cash difference to 6090; 409 if a check fails, 409 on unrecognised cash, 409 if already closed, 400 on a difference with no reason |
 | POST | /day-closings/:id/reopen | accounts:manage | {reason, approvedBy}; the approver must hold accounts:manage and be neither the requester nor whoever closed the day |
 | GET | /accounts | accounts:view | 24 accounts + balance_cents, entry_count, is_system, is_editable; optional ?branchId= |
 | POST | /accounts | accounts:manage | create account; code /\d{4}/, unique, is_system=0 |
@@ -100,7 +139,7 @@ Lists accept `?search=&page=&limit=&sort=` and return `{ rows, total }`.
 | GET | /accounts/journal/:id | accounts:view | one entry with ordered lines |
 | POST | /accounts/journal/reverse | accounts:manage | {entryId, reason, entryDate?}; mirror + reverses_entry_id, original becomes REVERSED |
 | GET | /accounts/trial-balance | accounts:view | ?date&branchId; as of a date |
-| GET | /accounts/reconciliation | accounts:view | ?date&branchId; 15 cross-foot checks, passed + per-check expected/actual/difference/detail. A failing check is a 200 with passed:false, not an error |
+| GET | /accounts/reconciliation | accounts:view | ?date&branchId; 19 cross-foot checks, passed + per-check expected/actual/difference/detail. A failing check is a 200 with passed:false, not an error |
 | GET | /accounts/:code/statement | accounts:view | ?from&to&branchId; running balance from an opening |
 | GET | /customers/:id | masters:view | profile incl. code + notes |
 | GET | /customers/:id/ledger | masters:view | opening + journal lines + balance |

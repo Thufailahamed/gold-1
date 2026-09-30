@@ -3,9 +3,19 @@ import { z } from "zod";
 import {
   accountStatusSchema,
   createAccountSchema,
+  fiscalCloseSchema,
+  fiscalReopenSchema,
+  isBusinessDate,
   PERMISSIONS,
+  taxConfigSchema,
+  taxPaymentSchema,
   updateAccountSchema,
 } from "@goldos/shared";
+import { closeFiscalYear, getFiscalClose, listFiscalYears, reopenFiscalYear } from "../services/fiscal";
+import { backfillOpeningStock } from "../services/openingstock";
+import { listPayables, supplierOpenInvoices } from "../services/payables";
+import { createTaxPayment, getTaxConfig, listTaxPayments, setTaxConfig, taxReport } from "../services/taxes";
+import { balanceSheet, dailyCashSummary, profitAndLoss } from "../services/statements";
 import type { Env } from "../db/client";
 import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
@@ -25,6 +35,8 @@ import {
   updateAccount,
 } from "../services/journal";
 import { pagination, serviceError } from "./http";
+
+const validDate = (v: string | undefined) => (v && isBusinessDate(v) ? v : undefined);
 
 const reverseSchema = z.object({
   entryId: z.string().min(1),
@@ -53,6 +65,92 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   // Literal paths are registered before the /:code handlers below. Hono
   // matches in registration order, so GET /journal reaching /:code first
   // would be read as an account code of "journal".
+  // ── Accounts payable ────────────────────────────────────────────────
+  .get("/payables", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    const asOf = validDate(c.req.query("asOf")) ?? (await businessDateFor(c.env.DB, Date.now()));
+    const data = await listPayables(c.env.DB, { branchId: c.req.query("branchId") || undefined, asOf });
+    return c.json({ success: true, data: { asOf, ...data } }, 200);
+  })
+  .get("/payables/suppliers/:id/open", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    const data = await supplierOpenInvoices(c.env.DB, c.req.param("id"), c.req.query("branchId") || undefined);
+    return c.json({ success: true, data }, 200);
+  })
+  // ── Output tax (VAT) ────────────────────────────────────────────────
+  .get("/tax/config", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    return c.json({ success: true, data: await getTaxConfig(c.env.DB) }, 200);
+  })
+  .put("/tax/config", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
+    const parsed = taxConfigSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ success: false, error: { code: "VALIDATION", message: "Invalid tax setting" } }, 400);
+    return c.json({ success: true, data: await setTaxConfig(c.env.DB, parsed.data, c.get("userId")) }, 200);
+  })
+  .get("/tax/report", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    const to = validDate(c.req.query("to")) ?? (await businessDateFor(c.env.DB, Date.now()));
+    const from = validDate(c.req.query("from")) ?? `${to.slice(0, 8)}01`;
+    if (from > to)
+      return c.json({ success: false, error: { code: "VALIDATION", message: "From must be on or before to" } }, 400);
+    const data = await taxReport(c.env.DB, { from, to, branchId: c.req.query("branchId") || undefined });
+    return c.json({ success: true, data }, 200);
+  })
+  .get("/tax/payments", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    const data = await listTaxPayments(c.env.DB, {
+      from: validDate(c.req.query("from")),
+      to: validDate(c.req.query("to")),
+      branchId: c.req.query("branchId") || undefined,
+    });
+    return c.json({ success: true, data }, 200);
+  })
+  .post("/tax/payments", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
+    const parsed = taxPaymentSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ success: false, error: { code: "VALIDATION", message: "Invalid tax payment" } }, 400);
+    try {
+      return c.json({ success: true, data: await createTaxPayment(c.env.DB, parsed.data, c.get("userId")) }, 201);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  // ── Financial year ──────────────────────────────────────────────────
+  .get("/fiscal-years", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    return c.json({ success: true, data: await listFiscalYears(c.env.DB) }, 200);
+  })
+  .get("/fiscal-years/:yearEnd", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    try {
+      return c.json({ success: true, data: await getFiscalClose(c.env.DB, c.req.param("yearEnd")) }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  .post("/fiscal-years/close", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
+    const parsed = fiscalCloseSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ success: false, error: { code: "VALIDATION", message: "Invalid year end" } }, 400);
+    try {
+      return c.json({ success: true, data: await closeFiscalYear(c.env.DB, parsed.data, c.get("userId")) }, 201);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  .post("/fiscal-years/:yearEnd/reopen", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
+    const parsed = fiscalReopenSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ success: false, error: { code: "VALIDATION", message: "Reason and approver required" } }, 400);
+    try {
+      await reopenFiscalYear(c.env.DB, c.req.param("yearEnd"), parsed.data, c.get("userId"));
+      return c.json({ success: true, data: { ok: true } }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  // ── Opening stock ───────────────────────────────────────────────────
+  .post("/opening-stock/backfill", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
+    try {
+      return c.json({ success: true, data: await backfillOpeningStock(c.env.DB, c.get("userId")) }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
   .get("/journal", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     const q = (k: string) => c.req.query(k) ?? undefined;
     const data = await listJournalEntries(c.env.DB, {
@@ -92,6 +190,25 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     } catch (err) {
       return serviceError(c, err);
     }
+  })
+  .get("/statements/pnl", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    const to = validDate(c.req.query("to")) ?? (await businessDateFor(c.env.DB, Date.now()));
+    const from = validDate(c.req.query("from")) ?? `${to.slice(0, 8)}01`;
+    if (from > to)
+      return c.json({ success: false, error: { code: "VALIDATION", message: "From must be on or before to" } }, 400);
+    const data = await profitAndLoss(c.env.DB, { from, to, branchId: c.req.query("branchId") || undefined });
+    return c.json({ success: true, data }, 200);
+  })
+  .get("/statements/balance-sheet", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    const date = validDate(c.req.query("date")) ?? (await businessDateFor(c.env.DB, Date.now()));
+    const data = await balanceSheet(c.env.DB, { date, branchId: c.req.query("branchId") || undefined });
+    return c.json({ success: true, data }, 200);
+  })
+  .get("/statements/cash-daily", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    const to = validDate(c.req.query("to")) ?? (await businessDateFor(c.env.DB, Date.now()));
+    const from = validDate(c.req.query("from")) ?? `${to.slice(0, 8)}01`;
+    const data = await dailyCashSummary(c.env.DB, { from, to, branchId: c.req.query("branchId") || undefined });
+    return c.json({ success: true, data }, 200);
   })
   .get("/:code/statement", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     const to = c.req.query("to") ?? (await businessDateFor(c.env.DB, Date.now()));

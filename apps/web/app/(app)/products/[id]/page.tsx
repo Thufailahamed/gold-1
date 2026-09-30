@@ -3,9 +3,10 @@
 import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { centsToLkr, mgToG } from "@goldos/shared";
-import { api } from "@/lib/api";
+import { api, formApi } from "@/lib/api";
 import { LineageChain, type LineageNode, type LineageEdge } from "@/components/lineage-chain";
 import {
   Page,
@@ -21,7 +22,7 @@ import {
   Skeleton,
   controlClass,
 } from "@/components/ui";
-import { EditIcon, GemIcon, PrinterIcon, RefreshCwIcon } from "@/components/icons";
+import { EditIcon, GemIcon, PrinterIcon, RefreshCwIcon, TrashIcon } from "@/components/icons";
 
 type Detail = {
   product: {
@@ -45,6 +46,11 @@ type Detail = {
     image_keys: string[];
     status: string;
     branch_id: string;
+    reserved_customer_id: string | null;
+    reserved_customer_name: string | null;
+    reserved_note: string | null;
+    reserved_until: number | null;
+    reserved_at: number | null;
   };
   livePrice: { amount_cents: number; rate_cents_per_g: number; rate_effective_from: number } | null;
   noRate: boolean;
@@ -67,6 +73,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const qc = useQueryClient();
   const [tab, setTab] = useState<"specs" | "moves">("specs");
   const [editing, setEditing] = useState(false);
+  const [reserving, setReserving] = useState(false);
   const detail = useQuery({
     queryKey: ["product", id],
     queryFn: () => api<Detail>(`/api/v1/products/${id}`),
@@ -88,6 +95,50 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
       qc.invalidateQueries({ queryKey: ["products"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Void failed"),
+  });
+
+  const refreshProduct = () => {
+    qc.invalidateQueries({ queryKey: ["product", id] });
+    qc.invalidateQueries({ queryKey: ["product-moves", id] });
+    qc.invalidateQueries({ queryKey: ["products"] });
+  };
+
+  const release = useMutation({
+    mutationFn: (reason: string) =>
+      api(`/api/v1/products/${id}/release`, { method: "POST", body: JSON.stringify({ reason: reason || undefined }) }),
+    onSuccess: () => {
+      toast.success("Hold released — piece is back on the shelf");
+      refreshProduct();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Release failed"),
+  });
+
+  function onRelease() {
+    const reason = window.prompt("Why is the hold ending? (optional)");
+    if (reason === null) return;
+    release.mutate(reason);
+  }
+
+  const upload = useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      return formApi(`/api/v1/products/${id}/images`, form);
+    },
+    onSuccess: () => {
+      toast.success("Image added");
+      refreshProduct();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Upload failed"),
+  });
+
+  const removeImage = useMutation({
+    mutationFn: (img: string) => api(`/api/v1/products/${id}/images/${img}`, { method: "DELETE" }),
+    onSuccess: () => {
+      toast.success("Image removed");
+      refreshProduct();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Remove failed"),
   });
 
   function onVoid() {
@@ -124,6 +175,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
       </Page>
     );
   const { product, livePrice, noRate } = detail.data;
+  const holdExpired = product.reserved_until !== null && product.reserved_until < Date.now();
 
   return (
     <Page>
@@ -151,6 +203,26 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                 <EditIcon size={14} />
                 Edit
               </button>
+            ) : null}
+            {product.status === "IN_STOCK" || product.status === "RESERVED" ? (
+              <Link href={`/pos?add=${encodeURIComponent(product.barcode)}`} className={heroBtnGhost}>
+                Sell at POS
+              </Link>
+            ) : null}
+            {product.status === "IN_STOCK" ? (
+              <button onClick={() => setReserving(true)} className={heroBtnGhost}>
+                Reserve
+              </button>
+            ) : null}
+            {product.status === "RESERVED" ? (
+              <button onClick={onRelease} disabled={release.isPending} className={heroBtnGhost}>
+                Release hold
+              </button>
+            ) : null}
+            {product.status === "SOLD" || product.status === "RETURNED" ? (
+              <Link href={`/sales/invoices/lookup/${encodeURIComponent(product.barcode)}`} className={heroBtnGhost}>
+                Find sale
+              </Link>
             ) : null}
             {product.status === "IN_STOCK" ? (
               <button
@@ -182,6 +254,20 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             : "Publish a board rate to enable live pricing for this piece"
         }
       />
+
+      {product.status === "RESERVED" ? (
+        <Callout
+          tone={holdExpired ? "danger" : "warning"}
+          title={`Held for ${product.reserved_customer_name ?? "a customer"}${holdExpired ? " — hold expired" : ""}`}
+        >
+          {product.reserved_note ?? ""}
+          {product.reserved_until !== null
+            ? ` · until ${new Date(product.reserved_until).toLocaleDateString()}`
+            : " · no end date"}
+          {product.reserved_at !== null ? ` · since ${new Date(product.reserved_at).toLocaleDateString()}` : ""}
+          . Only this customer can buy it at the POS; release the hold to sell it to anyone else.
+        </Callout>
+      ) : null}
 
       {noRate || !livePrice ? (
         <Callout tone="warning" title="Price unavailable">
@@ -268,19 +354,60 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         </TableCard>
       )}
 
-      {product.image_keys.length > 0 ? (
-        <Panel title="Images" description={`${product.image_keys.length} attached`}>
-          <div className="flex flex-wrap gap-3">
-            {product.image_keys.map((k) => (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                key={k}
-                src={`${API}/api/v1/products/${id}/images/${k.split("/").pop()}`}
-                alt={product.barcode}
-                className="h-32 w-32 rounded-lg object-cover shadow-[inset_0_0_0_1px_rgba(28,25,23,0.1)]"
-              />
-            ))}
-          </div>
+      {product.image_keys.length > 0 || product.status !== "VOID" ? (
+        <Panel
+          title="Images"
+          description={`${product.image_keys.length} of 10 attached`}
+          actions={
+            product.status !== "VOID" && product.image_keys.length < 10 ? (
+              <label className="g-btn g-btn-secondary h-8 cursor-pointer px-3 text-xs">
+                {upload.isPending ? "Uploading…" : "Add image"}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="sr-only"
+                  disabled={upload.isPending}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) upload.mutate(file);
+                  }}
+                />
+              </label>
+            ) : null
+          }
+        >
+          {product.image_keys.length === 0 ? (
+            <p className="text-sm text-ink-4">No images yet. JPEG, PNG or WebP, up to 5 MB each.</p>
+          ) : (
+            <div className="flex flex-wrap gap-3">
+              {product.image_keys.map((k) => {
+                const img = k.split("/").pop()!;
+                return (
+                  <div key={k} className="group relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`${API}/api/v1/products/${id}/images/${img}`}
+                      alt={product.barcode}
+                      className="h-32 w-32 rounded-lg object-cover shadow-[inset_0_0_0_1px_rgba(28,25,23,0.1)]"
+                    />
+                    {product.status !== "VOID" ? (
+                      <button
+                        onClick={() => {
+                          if (window.confirm("Remove this image?")) removeImage.mutate(img);
+                        }}
+                        disabled={removeImage.isPending}
+                        aria-label="Remove image"
+                        className="absolute right-1.5 top-1.5 inline-flex size-7 items-center justify-center rounded-md bg-paper/90 text-rose-600 shadow transition-colors hover:bg-rose-50"
+                      >
+                        <TrashIcon size={14} />
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </Panel>
       ) : null}
 
@@ -306,6 +433,16 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
       <Panel title="Gold lineage" description="Backwards and forwards through every transformation">
         <LineageSection refEntity="product" refId={id} />
       </Panel>
+
+      {reserving ? (
+        <ReserveDialog
+          id={id}
+          onClose={(saved) => {
+            setReserving(false);
+            if (saved) refreshProduct();
+          }}
+        />
+      ) : null}
 
       {editing ? (
         <EditDialog
@@ -388,6 +525,114 @@ function EditDialog({ id, onClose }: { id: string; onClose: () => void }) {
           <label className="mb-1.5 block text-xs font-medium text-ink-3">Notes</label>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} className={cls} />
         </div>
+    </Modal>
+  );
+}
+
+type CustomerHit = { id: string; name: string; phone?: string | null };
+
+function ReserveDialog({ id, onClose }: { id: string; onClose: (saved: boolean) => void }) {
+  const [search, setSearch] = useState("");
+  const [customer, setCustomer] = useState<CustomerHit | null>(null);
+  const [note, setNote] = useState("");
+  const [untilDate, setUntilDate] = useState("");
+  const [pending, setPending] = useState(false);
+  const hits = useQuery({
+    queryKey: ["reserve-customers", search],
+    queryFn: () =>
+      api<{ rows: CustomerHit[]; total: number }>(`/api/v1/customers?search=${encodeURIComponent(search)}&limit=8`),
+    enabled: search.trim().length > 0 && !customer,
+  });
+
+  async function save() {
+    if (!customer || !note.trim()) {
+      toast.error("Pick a customer and add a note");
+      return;
+    }
+    setPending(true);
+    try {
+      await api(`/api/v1/products/${id}/reserve`, {
+        method: "POST",
+        body: JSON.stringify({ customerId: customer.id, note: note.trim(), untilDate: untilDate || undefined }),
+      });
+      toast.success(`Held for ${customer.name}`);
+      onClose(true);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Reserve failed");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  const cls = controlClass;
+  return (
+    <Modal
+      title="Reserve for a customer"
+      kicker="Hold"
+      onClose={() => onClose(false)}
+      onSubmit={save}
+      pending={pending}
+      submitDisabled={!customer || !note.trim()}
+      submitLabel="Reserve"
+    >
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-ink-3">Customer</label>
+        {customer ? (
+          <div className="flex items-center justify-between rounded-lg bg-bone px-3 py-2 text-sm">
+            <span className="font-medium text-ink">
+              {customer.name}
+              {customer.phone ? <span className="text-ink-4"> · {customer.phone}</span> : null}
+            </span>
+            <button type="button" onClick={() => setCustomer(null)} className="text-xs font-medium underline">
+              Change
+            </button>
+          </div>
+        ) : (
+          <>
+            <input
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name or phone…"
+              className={cls}
+            />
+            {(hits.data?.rows ?? []).length > 0 ? (
+              <ul className="mt-1.5 divide-y divide-mist rounded-lg shadow-[inset_0_0_0_1px_rgba(28,25,23,0.1)]">
+                {hits.data!.rows.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => setCustomer(c)}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-bone"
+                    >
+                      {c.name}
+                      {c.phone ? <span className="text-ink-4"> · {c.phone}</span> : null}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : search.trim() && !hits.isLoading ? (
+              <p className="mt-1.5 text-xs text-ink-4">
+                No match. <Link href="/customers" className="underline">Add the customer</Link> first.
+              </p>
+            ) : null}
+          </>
+        )}
+      </div>
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-ink-3">Note (required)</label>
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="e.g. Resizing to 7, collecting Friday"
+          maxLength={500}
+          className={cls}
+        />
+      </div>
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-ink-3">Hold until (optional)</label>
+        <input type="date" value={untilDate} onChange={(e) => setUntilDate(e.target.value)} className={cls} />
+      </div>
     </Modal>
   );
 }

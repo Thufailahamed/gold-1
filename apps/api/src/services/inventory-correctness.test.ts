@@ -77,10 +77,9 @@ describe("inventory correctness RED", () => {
               if (sql.includes("FROM products")) return { id: "p1", status: "SOLD", branch_id: "b1", net_mg: 5000, fine_gold_mg: 4580, cost_cents: 10000, purity_id: "pu1" };
               if (sql.includes("JOIN purities") || sql.includes("FROM products JOIN")) return { fine_gold_mg: 4580, purity_permille: 916, net_mg: 5000, permille: 916 };
               if (sql.includes("FROM purities")) return { permille: 916 };
-              if (sql.includes("SELECT next FROM counters")) return { next: 1 };
               if (sql.includes("FROM stock_counts")) return null;
               if (sql.includes("FROM chart_of_accounts")) return { code: "4000" };
-              if (sql.includes("UPDATE counters SET next = next + 1 WHERE name = 'JE'")) return { allocated: 1 };
+              if (sql.includes("UPDATE counters SET next = next + 1")) return { allocated: 1 };
               if (sql.includes("FROM journal_entries")) return null;
               if (sql.includes("FROM day_closings")) return null;
               return null;

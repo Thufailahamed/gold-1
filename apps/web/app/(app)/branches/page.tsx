@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,6 +14,7 @@ import {
   Page,
   Hero,
   heroBtnPrimary,
+  heroBtnGhost,
   TableCard,
   TableSkeleton,
   Pager,
@@ -21,7 +23,7 @@ import {
   Modal,
   controlClass,
 } from "@/components/ui";
-import { ArrowRightIcon, PlusIcon, SearchIcon } from "@/components/icons";
+import { ArrowRightIcon, LayoutGridIcon, PlusIcon, SearchIcon } from "@/components/icons";
 
 type Branch = { id: string; name: string; code: string; address: string | null; is_active: number };
 
@@ -88,13 +90,19 @@ export default function BranchesPage() {
         title="Branches"
         description="Shops in the network."
         actions={
-          canCreate ? (
-            <button onClick={() => setDialog(true)} className={heroBtnPrimary}>
-              <PlusIcon size={15} />
-              New branch
-              <ArrowRightIcon size={14} className="g-btn-arrow" />
-            </button>
-          ) : undefined
+          <>
+            <Link href="/branches/overview" className={heroBtnGhost}>
+              <LayoutGridIcon size={14} />
+              Overview
+            </Link>
+            {canCreate ? (
+              <button onClick={() => setDialog(true)} className={heroBtnPrimary}>
+                <PlusIcon size={15} />
+                New branch
+                <ArrowRightIcon size={14} className="g-btn-arrow" />
+              </button>
+            ) : null}
+          </>
         }
         stats={[
           { label: "Branches", value: list.isLoading ? "—" : (list.data?.total ?? 0) },

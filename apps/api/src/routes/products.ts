@@ -21,9 +21,34 @@ import {
   priceFor,
   voidProduct,
 } from "../services/products";
+import { releaseReservation, reserveProduct } from "../services/inventory";
+import { branchScope, inScope } from "../services/branchAccess";
 import { pagination, serviceError } from "./http";
 
 const voidSchema = z.object({ reason: z.string().min(1).max(500) });
+const reserveSchema = z.object({
+  customerId: z.string().min(1),
+  note: z.string().trim().min(1).max(500),
+  untilDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+const releaseSchema = z.object({ reason: z.string().max(500).optional() });
+
+type Ctx = { env: Env; get: (k: "userId" | "permissions") => unknown };
+
+/** Branch staff act only on pieces at their own branches (as /inventory/movements). */
+async function outOfScope(c: Ctx, productId: string): Promise<boolean> {
+  const prod = await c.env.DB.prepare("SELECT branch_id FROM products WHERE id = ?")
+    .bind(productId)
+    .first<{ branch_id: string }>();
+  if (!prod) return false;
+  const scope = await branchScope(c.env.DB, c.get("userId") as string, c.get("permissions") as string[]);
+  return !inScope(scope, prod.branch_id);
+}
+
+const forbiddenBranch = {
+  success: false as const,
+  error: { code: "FORBIDDEN", message: "You are not a member of that branch" },
+};
 
 export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
@@ -102,6 +127,22 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         product.net_mg,
         product.making_cents
       );
+      // The tag must show what the till charges: POS and createSale price a
+      // piece at its selling-price override when one is set, live rate otherwise.
+      const tagPrice =
+        product.selling_price_cents !== null
+          ? {
+              amount: centsToLkr(product.selling_price_cents),
+              ratePerGram: livePrice ? centsToLkr(livePrice.rate_cents_per_g) : 0,
+              rateEffectiveFrom: livePrice?.rate_effective_from ?? 0,
+            }
+          : livePrice
+            ? {
+                amount: centsToLkr(livePrice.amount_cents),
+                ratePerGram: centsToLkr(livePrice.rate_cents_per_g),
+                rateEffectiveFrom: livePrice.rate_effective_from,
+              }
+            : null;
       const svg = buildLabelSvg(
         {
           barcode: product.barcode,
@@ -110,15 +151,14 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
           net_weight: mgToG(product.net_mg),
           karat: product.karat,
         },
-        livePrice
-          ? {
-              amount: centsToLkr(livePrice.amount_cents),
-              ratePerGram: centsToLkr(livePrice.rate_cents_per_g),
-              rateEffectiveFrom: livePrice.rate_effective_from,
-            }
-          : null
+        tagPrice,
+        // Tags carry a QR beside the bars by default, so a phone camera or a
+        // 2D scanner can bill the piece; ?qr=0 prints the bars-only tag.
+        { qr: c.req.query("qr") !== "0" }
       );
       c.header("Content-Type", "image/svg+xml");
+      // Price moves with the rate; never serve a stale tag from cache.
+      c.header("Cache-Control", "no-store");
       return c.body(svg, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -189,6 +229,70 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     c.header("Content-Type", obj.httpMetadata?.contentType ?? "application/octet-stream");
     return c.body(await obj.arrayBuffer(), 200);
+  })
+  .delete("/:id/images/:img", requirePerm(PERMISSIONS.PRODUCTS_EDIT), async (c) => {
+    const id = c.req.param("id");
+    const key = `products/${id}/${c.req.param("img")}`;
+    const prev = await c.env.DB.prepare("SELECT image_keys, branch_id FROM products WHERE id = ?")
+      .bind(id)
+      .first<{ image_keys: string; branch_id: string }>();
+    if (!prev)
+      return c.json(
+        { success: false, error: { code: "NOT_FOUND", message: "Product not found" } },
+        404
+      );
+    const keys = JSON.parse(prev.image_keys) as string[];
+    if (!keys.includes(key))
+      return c.json(
+        { success: false, error: { code: "NOT_FOUND", message: "Image not found" } },
+        404
+      );
+    const next = keys.filter((k) => k !== key);
+    // Row first: an orphaned object in R2 is harmless, a row pointing at a
+    // deleted object is a broken image on every screen.
+    await c.env.DB.batch([
+      c.env.DB.prepare("UPDATE products SET image_keys = ? WHERE id = ?").bind(JSON.stringify(next), id),
+      buildAuditStmt(c.env.DB, {
+        userId: c.get("userId"),
+        action: "product.image_remove",
+        entity: "product",
+        entityId: id,
+        prev: { key },
+        branchId: prev.branch_id,
+      }),
+    ]);
+    await c.env.R2.delete(key);
+    return c.json({ success: true, data: { image_keys: next } }, 200);
+  })
+  .post("/:id/reserve", requirePerm(PERMISSIONS.PRODUCTS_EDIT), async (c) => {
+    const parsed = reserveSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json(
+        { success: false, error: { code: "VALIDATION", message: "Customer and note are required" } },
+        400
+      );
+    try {
+      if (await outOfScope(c, c.req.param("id"))) return c.json(forbiddenBranch, 403);
+      const data = await reserveProduct(c.env.DB, c.req.param("id"), parsed.data, c.get("userId"));
+      return c.json({ success: true, data }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  .post("/:id/release", requirePerm(PERMISSIONS.PRODUCTS_EDIT), async (c) => {
+    const parsed = releaseSchema.safeParse((await c.req.json().catch(() => null)) ?? {});
+    if (!parsed.success)
+      return c.json(
+        { success: false, error: { code: "VALIDATION", message: "Invalid release" } },
+        400
+      );
+    try {
+      if (await outOfScope(c, c.req.param("id"))) return c.json(forbiddenBranch, 403);
+      await releaseReservation(c.env.DB, c.req.param("id"), parsed.data.reason, c.get("userId"));
+      return c.json({ success: true, data: { ok: true } }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
   })
   .patch("/:id/void", requirePerm(PERMISSIONS.PRODUCTS_CANCEL), async (c) => {
     const body = await c.req.json().catch(() => null);

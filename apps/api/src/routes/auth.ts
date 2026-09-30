@@ -10,10 +10,15 @@ import type { Env } from "../db/client";
 import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
 import { writeAudit } from "../middleware/audit";
-import { createSession, destroySession } from "../services/session";
+import { createSession, destroySession, SESSION_ABSOLUTE_MS } from "../services/session";
 import { verifyPassword } from "../services/hash";
 import { changePassword, confirmReset, requestReset } from "../services/password";
+import { clearFailures, lockedFor, loginKeys, recordFailure } from "../services/throttle";
 import { serviceError } from "./http";
+
+// Well-formed but matches no password: lets a failed lookup cost the same
+// scrypt run as a real check.
+const DUMMY_HASH = `${"0".repeat(32)}:${"0".repeat(128)}`;
 
 type SessionRow = {
   user_id: string;
@@ -24,7 +29,7 @@ type SessionRow = {
 
 const SESSION_RE = /(?:^|;\s*)session=([^;]+)/;
 
-function sessionCookie(id: string, maxAge: number): string {
+export function sessionCookie(id: string, maxAge: number): string {
   // SameSite=None so the browser sends the cookie cross-site (web app on a
   // different origin than the API). Requires Secure; localhost is a secure
   // context so local development keeps working.
@@ -41,33 +46,44 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     }
+    const ip = c.req.header("cf-connecting-ip") ?? undefined;
+    const keys = loginKeys(parsed.data.email, ip);
+    const wait = await lockedFor(c.env.DB, keys);
+    if (wait > 0) {
+      c.header("Retry-After", String(Math.ceil(wait / 1000)));
+      return c.json(
+        {
+          success: false,
+          error: { code: "RATE_LIMITED", message: "Too many failed attempts. Try again in a few minutes." },
+        },
+        429
+      );
+    }
     const user = await c.env.DB.prepare(
       "SELECT id, email, name, password_hash, is_active FROM users WHERE email = ?"
     )
       .bind(parsed.data.email)
       .first<{ id: string; email: string; name: string; password_hash: string; is_active: number }>();
-    if (!user || !user.is_active) {
+    // Unknown and inactive users still pay for one scrypt run, so response
+    // time does not reveal which emails have accounts.
+    const ok = await verifyPassword(parsed.data.password, user?.password_hash ?? DUMMY_HASH);
+    if (!user || !user.is_active || !ok) {
+      await recordFailure(c.env.DB, keys);
       return c.json(
         { success: false, error: { code: "UNAUTHORIZED", message: "Invalid credentials" } },
         401
       );
     }
-    const ok = await verifyPassword(parsed.data.password, user.password_hash);
-    if (!ok) {
-      return c.json(
-        { success: false, error: { code: "UNAUTHORIZED", message: "Invalid credentials" } },
-        401
-      );
-    }
+    await clearFailures(c.env.DB, parsed.data.email);
     const session = await createSession(c.env.DB, user.id);
     await writeAudit(c.env.DB, {
       userId: user.id,
       action: "auth.login",
       entity: "session",
       entityId: session.id,
-      ip: c.req.header("cf-connecting-ip") ?? undefined,
+      ip,
     });
-    c.header("Set-Cookie", sessionCookie(session.id, 12 * 60 * 60));
+    c.header("Set-Cookie", sessionCookie(session.id, SESSION_ABSOLUTE_MS / 1000));
     return c.json(
       {
         success: true,

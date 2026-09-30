@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import {
   cardSettlementSchema,
+  cashEntrySchema,
   cashMoveSchema,
   createBankAccountSchema,
   openingBalanceSchema,
@@ -28,6 +29,7 @@ import {
   updateBankAccount,
   withdrawCash,
 } from "../services/cashbank";
+import { createCashEntry, listCashEntries } from "../services/cashentries";
 import { pagination, serviceError } from "./http";
 
 type Ctx = Context<{ Bindings: Env; Variables: AppVariables }>;
@@ -93,6 +95,28 @@ export const bankAccounts = new Hono<{ Bindings: Env; Variables: AppVariables }>
 
 export const cash = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
+  .get("/entries", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    const d = (v: string | undefined) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+    const { page, limit } = pagination(c);
+    const data = await listCashEntries(c.env.DB, {
+      page,
+      limit,
+      branchId: c.req.query("branchId") || undefined,
+      from: d(c.req.query("from")),
+      to: d(c.req.query("to")),
+    });
+    return c.json({ success: true, data }, 200);
+  })
+  .post("/entries", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
+    const parsed = cashEntrySchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return invalid(c, "Invalid cash entry");
+    try {
+      const data = await createCashEntry(c.env.DB, parsed.data, c.get("userId"));
+      return c.json({ success: true, data }, 201);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
   .post("/deposits", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
     const parsed = cashMoveSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return invalid(c, "Invalid deposit");

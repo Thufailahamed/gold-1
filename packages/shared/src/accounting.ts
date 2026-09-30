@@ -93,7 +93,7 @@ export function computePartyLedger(
     const cr = l.creditCents;
     if (kind === "customer") {
       if (l.refEntity === OPENING) t.opening += dr - cr;
-      else if (l.refEntity === "sale_payment") t.creditPayments += cr - dr;
+      else if (l.refEntity === "sale_payment" || l.refEntity === "customer_receipt") t.creditPayments += cr - dr;
       else if (l.refEntity === "sale_return") t.creditReturns += cr - dr;
       else t.debitSales += dr - cr;
     } else {
@@ -222,6 +222,54 @@ export function closingArithmetic(
   return { expectedCents: openingCents + cashInCents - cashOutCents };
 }
 
+/** Sri Lankan notes and coins in circulation, largest first, in rupees. */
+export const LKR_DENOMINATIONS = [5000, 2000, 1000, 500, 100, 50, 20, 10, 5, 2, 1] as const;
+
+/**
+ * A cash count sheet's total in cents. Unknown face values are refused, not
+ * ignored: a typo on the sheet must not silently drop money from the count.
+ */
+export function denominationTotalCents(counts: Record<string, number>): number {
+  let total = 0;
+  for (const [face, pieces] of Object.entries(counts)) {
+    const value = Number(face);
+    if (!(LKR_DENOMINATIONS as readonly number[]).includes(value))
+      throw Object.assign(new Error(`Unknown denomination: ${face}`), { code: "VALIDATION" });
+    if (!Number.isInteger(pieces) || pieces < 0)
+      throw Object.assign(new Error(`Invalid count for ${face}`), { code: "VALIDATION" });
+    total += value * 100 * pieces;
+  }
+  return total;
+}
+
+/**
+ * Which recorded amounts could explain a cash difference by themselves: any
+ * single movement whose size equals the difference (a double-keyed or
+ * missing entry), and any pair that sums to it. Amounts are cents; returns
+ * indexes into `amounts`. Capped so a busy day stays readable.
+ */
+export function explainingAmounts(differenceCents: number, amounts: number[], maxPairs = 10): { singles: number[]; pairs: [number, number][] } {
+  const target = Math.abs(differenceCents);
+  if (target === 0) return { singles: [], pairs: [] };
+  const singles: number[] = [];
+  amounts.forEach((a, i) => {
+    if (Math.abs(a) === target) singles.push(i);
+  });
+  const pairs: [number, number][] = [];
+  const seen = new Map<number, number[]>();
+  for (let j = 0; j < amounts.length && pairs.length < maxPairs; j++) {
+    const need = target - Math.abs(amounts[j]!);
+    for (const i of seen.get(need) ?? []) {
+      pairs.push([i, j]);
+      if (pairs.length >= maxPairs) break;
+    }
+    const list = seen.get(Math.abs(amounts[j]!)) ?? [];
+    list.push(j);
+    seen.set(Math.abs(amounts[j]!), list);
+  }
+  return { singles, pairs };
+}
+
 export function closingDifference(
   expectedCents: number,
   actualCents: number,
@@ -252,8 +300,246 @@ export const KNOWN_CASH_REFS = [
   "old_gold_purchase",
   "repair",
   "custom_advance",
+  // A cancelled custom order hands the cash advance back out of the drawer.
+  // Missing from this list, every such refund blocked that day's close.
+  "custom_advance_refund",
   "opening_balance",
+  "customer_receipt",
+  "owner_capital",
+  "owner_drawing",
+  "other_income",
+  "cash_correction",
+  // VAT paid to the revenue authority from the drawer.
+  "tax_payment",
 ] as const;
+
+/**
+ * Cash the shop takes in or pays out that is not a sale, purchase or expense.
+ * Each kind posts against exactly one counter account, so the drawer always
+ * has a named reason for moving — the day-close unclassified guard never has
+ * to see a manual journal for an owner topping up the till.
+ *
+ * `direction` is from the drawer's point of view: "in" debits cash/bank.
+ */
+export const CASH_ENTRY_KINDS = {
+  OWNER_CAPITAL: { direction: "in", counterAccount: "3000", refEntity: "owner_capital", label: "Owner put money in" },
+  OWNER_DRAWING: { direction: "out", counterAccount: "3200", refEntity: "owner_drawing", label: "Owner took money out" },
+  OTHER_INCOME: { direction: "in", counterAccount: "4900", refEntity: "other_income", label: "Other income" },
+  CASH_OVER: { direction: "in", counterAccount: "6090", refEntity: "cash_correction", label: "Cash over (found extra)" },
+  CASH_SHORT: { direction: "out", counterAccount: "6090", refEntity: "cash_correction", label: "Cash short (missing)" },
+} as const;
+
+export type CashEntryKind = keyof typeof CASH_ENTRY_KINDS;
+
+export function cashEntryLines(
+  kind: CashEntryKind,
+  moneyAccount: string,
+  amountCents: number
+): { account: string; debitCents: number; creditCents: number }[] {
+  if (!Number.isInteger(amountCents) || amountCents <= 0)
+    throw Object.assign(new Error("Amount must be a positive whole amount"), { code: "VALIDATION" });
+  const k = CASH_ENTRY_KINDS[kind];
+  if (!k) throw Object.assign(new Error(`Unknown cash entry kind: ${kind}`), { code: "VALIDATION" });
+  return k.direction === "in"
+    ? [
+        { account: moneyAccount, debitCents: amountCents, creditCents: 0 },
+        { account: k.counterAccount, debitCents: 0, creditCents: amountCents },
+      ]
+    : [
+        { account: k.counterAccount, debitCents: amountCents, creditCents: 0 },
+        { account: moneyAccount, debitCents: 0, creditCents: amountCents },
+      ];
+}
+
+export type OpenInvoice = { invoiceId: string; date: string; outstandingCents: number };
+
+/**
+ * Applies a customer receipt to their open invoices, oldest first — the order
+ * a shop owner expects ("clear the old bill before the new one") and the one
+ * that shrinks the 90+ aging bucket fastest.
+ *
+ * Money beyond the listed invoices is refused rather than left floating: an
+ * unallocated overpayment is exactly the unexplained customer credit that
+ * blocks day-close, so the cap lives here, before anything is posted.
+ */
+export function allocateReceipt(
+  amountCents: number,
+  invoices: OpenInvoice[],
+  capCents: number
+): { invoiceId: string; amountCents: number }[] {
+  if (!Number.isInteger(amountCents) || amountCents <= 0)
+    throw Object.assign(new Error("Receipt amount must be a positive whole amount"), { code: "VALIDATION" });
+  if (amountCents > capCents)
+    throw Object.assign(
+      new Error(
+        capCents <= 0
+          ? "This customer owes nothing at this branch"
+          : `Receipt exceeds what the customer owes at this branch (${(capCents / 100).toFixed(2)})`
+      ),
+      { code: "VALIDATION" }
+    );
+  const sorted = [...invoices]
+    .filter((i) => i.outstandingCents > 0)
+    .sort((a, b) => (a.date === b.date ? a.invoiceId.localeCompare(b.invoiceId) : a.date < b.date ? -1 : 1));
+  const out: { invoiceId: string; amountCents: number }[] = [];
+  let left = amountCents;
+  for (const inv of sorted) {
+    if (left <= 0) break;
+    const take = Math.min(left, inv.outstandingCents);
+    out.push({ invoiceId: inv.invoiceId, amountCents: take });
+    left -= take;
+  }
+  // Anything left is owed on the ledger without an invoice behind it (an
+  // opening balance). It is still a valid receipt; it just has no invoice.
+  return out;
+}
+
+export type LedgerAccountTotal = { code: string; name: string; type: string; debitCents: number; creditCents: number };
+
+export type StatementLine = { code: string; name: string; cents: number };
+
+/**
+ * Profit & loss straight from account totals. Revenue is credit-positive,
+ * expenses debit-positive. Cost of sales (5xxx) sits above the gross line;
+ * everything else in EXPENSE is operating.
+ */
+export function buildProfitAndLoss(rows: LedgerAccountTotal[]): {
+  revenue: StatementLine[];
+  costOfSales: StatementLine[];
+  operating: StatementLine[];
+  totalRevenueCents: number;
+  totalCostOfSalesCents: number;
+  grossProfitCents: number;
+  totalOperatingCents: number;
+  netProfitCents: number;
+} {
+  const revenue: StatementLine[] = [];
+  const costOfSales: StatementLine[] = [];
+  const operating: StatementLine[] = [];
+  for (const r of rows) {
+    if (r.type === "REVENUE") {
+      const cents = r.creditCents - r.debitCents;
+      if (cents !== 0) revenue.push({ code: r.code, name: r.name, cents });
+    } else if (r.type === "EXPENSE") {
+      const cents = r.debitCents - r.creditCents;
+      if (cents === 0) continue;
+      (r.code.startsWith("5") ? costOfSales : operating).push({ code: r.code, name: r.name, cents });
+    }
+  }
+  const sum = (xs: StatementLine[]) => xs.reduce((s, x) => s + x.cents, 0);
+  const totalRevenueCents = sum(revenue);
+  const totalCostOfSalesCents = sum(costOfSales);
+  const totalOperatingCents = sum(operating);
+  const grossProfitCents = totalRevenueCents - totalCostOfSalesCents;
+  return {
+    revenue,
+    costOfSales,
+    operating,
+    totalRevenueCents,
+    totalCostOfSalesCents,
+    grossProfitCents,
+    totalOperatingCents,
+    netProfitCents: grossProfitCents - totalOperatingCents,
+  };
+}
+
+/**
+ * Balance sheet as of a date. Profit not yet closed into equity is shown as
+ * its own equity line ("Profit to date"), which is what makes the two sides
+ * agree without a year-end closing entry. `balanced` is the proof: if it is
+ * false, some posting is one-sided and the books need attention.
+ *
+ * With `priorYearsProfitCents` (profit of every entry dated before the
+ * current financial year) the single line splits into Retained earnings and
+ * Current year profit. The split is derived, never posted, so the total is
+ * identical either way and no P&L reader has to skip a closing entry.
+ */
+export function buildBalanceSheet(
+  rows: LedgerAccountTotal[],
+  opts?: { priorYearsProfitCents?: number }
+): {
+  assets: StatementLine[];
+  liabilities: StatementLine[];
+  equity: StatementLine[];
+  totalAssetsCents: number;
+  totalLiabilitiesCents: number;
+  totalEquityCents: number;
+  profitToDateCents: number;
+  retainedEarningsCents: number;
+  currentYearProfitCents: number;
+  balanced: boolean;
+} {
+  const assets: StatementLine[] = [];
+  const liabilities: StatementLine[] = [];
+  const equity: StatementLine[] = [];
+  let profitToDateCents = 0;
+  for (const r of rows) {
+    const dr = r.debitCents - r.creditCents;
+    if (r.type === "ASSET") {
+      if (dr !== 0) assets.push({ code: r.code, name: r.name, cents: dr });
+    } else if (r.type === "LIABILITY") {
+      if (dr !== 0) liabilities.push({ code: r.code, name: r.name, cents: -dr });
+    } else if (r.type === "EQUITY") {
+      if (dr !== 0) equity.push({ code: r.code, name: r.name, cents: -dr });
+    } else if (r.type === "REVENUE" || r.type === "EXPENSE") {
+      profitToDateCents -= dr;
+    }
+  }
+  const split = opts?.priorYearsProfitCents !== undefined;
+  const retainedEarningsCents = split ? opts!.priorYearsProfitCents! : 0;
+  const currentYearProfitCents = profitToDateCents - retainedEarningsCents;
+  if (split) {
+    if (retainedEarningsCents !== 0)
+      equity.push({ code: "RE", name: "Retained earnings", cents: retainedEarningsCents });
+    if (currentYearProfitCents !== 0)
+      equity.push({ code: "P&L", name: "Current year profit", cents: currentYearProfitCents });
+  } else if (profitToDateCents !== 0) {
+    equity.push({ code: "P&L", name: "Profit to date", cents: profitToDateCents });
+  }
+  const sum = (xs: StatementLine[]) => xs.reduce((s, x) => s + x.cents, 0);
+  const totalAssetsCents = sum(assets);
+  const totalLiabilitiesCents = sum(liabilities);
+  const totalEquityCents = sum(equity);
+  return {
+    assets,
+    liabilities,
+    equity,
+    totalAssetsCents,
+    totalLiabilitiesCents,
+    totalEquityCents,
+    profitToDateCents,
+    retainedEarningsCents,
+    currentYearProfitCents,
+    balanced: totalAssetsCents === totalLiabilitiesCents + totalEquityCents,
+  };
+}
+
+/**
+ * Output tax on a net (after-discount) amount, in basis points (1800 = 18%).
+ * Rounded per line, half away from zero, so a return refunds exactly the tax
+ * its line carried and the invoice total is the sum of its lines.
+ */
+export function salesTaxCents(netCents: number, rateBp: number): number {
+  if (!(rateBp > 0) || netCents === 0) return 0;
+  const raw = (Math.abs(netCents) * rateBp) / 10000;
+  return Math.sign(netCents) * Math.round(raw);
+}
+
+/**
+ * The financial year a business date falls in. `startMonth` is 1-12; with 4
+ * (April) the year 2026-04-01..2027-03-31 is labelled "2026/27". A January
+ * start is a calendar year, labelled "2026".
+ */
+export function fiscalYearFor(date: string, startMonth: number): { start: string; end: string; label: string } {
+  const m = Number.isInteger(startMonth) && startMonth >= 1 && startMonth <= 12 ? startMonth : 1;
+  const y = Number(date.slice(0, 4));
+  const month = Number(date.slice(5, 7));
+  const startYear = month >= m ? y : y - 1;
+  const start = `${startYear}-${String(m).padStart(2, "0")}-01`;
+  const end = addDays(`${startYear + 1}-${String(m).padStart(2, "0")}-01`, -1);
+  const label = m === 1 ? String(startYear) : `${startYear}/${String((startYear + 1) % 100).padStart(2, "0")}`;
+  return { start, end, label };
+}
 
 /**
  * The guard that makes the breakdown believable: a movement the screen cannot
@@ -304,9 +590,9 @@ export function monthBounds(year: number, month: number): { from: string; to: st
   return { from, to, label };
 }
 
-export function monthlyPnl(input: { revenueCents: number; cogsCents: number; opexCents: number; meltLossCents: number; mfgLossCents: number; adjNetCents: number }): { grossProfitCents: number; netProfitCents: number } {
+export function monthlyPnl(input: { revenueCents: number; cogsCents: number; opexCents: number; meltLossCents: number; mfgLossCents: number; adjNetCents: number; otherIncomeCents?: number }): { grossProfitCents: number; netProfitCents: number } {
   const grossProfitCents = input.revenueCents - input.cogsCents;
-  const netProfitCents = grossProfitCents - input.opexCents - input.meltLossCents - input.mfgLossCents - input.adjNetCents;
+  const netProfitCents = grossProfitCents + (input.otherIncomeCents ?? 0) - input.opexCents - input.meltLossCents - input.mfgLossCents - input.adjNetCents;
   return { grossProfitCents, netProfitCents };
 }
 

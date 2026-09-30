@@ -14,6 +14,7 @@ import { currentGoldRatesCents } from "./rates";
 import { getSetting } from "./settings";
 import { consumeApproval, pendingApproval, requestApproval } from "./approvals";
 import { postGoldStmts } from "./gold";
+import { allocateNumber } from "./counters";
 
 export function valuateOldGold(args: {
   netMg: number;
@@ -80,13 +81,7 @@ async function loadItem(db: D1Database, id: string): Promise<ItemRow> {
 }
 
 async function nextOG(db: D1Database, stmts: D1PreparedStatement[]): Promise<string> {
-  const row = await db
-    .prepare("SELECT next FROM counters WHERE name = 'OG'")
-    .bind()
-    .first<{ next: number }>();
-  if (!row) throw Object.assign(new Error("Counter missing"), { code: "INTERNAL" });
-  stmts.push(db.prepare("UPDATE counters SET next = ? WHERE name = 'OG'").bind(row.next + 1));
-  return `OG-${String(row.next).padStart(6, "0")}`;
+  return allocateNumber(db, "OG", "OG", 6, "old_gold_items");
 }
 
 async function requireApprover(db: D1Database, approverId: string, actorId: string): Promise<void> {

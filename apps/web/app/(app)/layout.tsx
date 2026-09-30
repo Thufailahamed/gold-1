@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { BranchSwitcher } from "@/components/branch-switcher";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { PlatformBanner } from "@/components/platform-banner";
 import { Providers } from "@/components/providers";
 import { UserMenu } from "@/components/user-menu";
 import { ScanField } from "@/components/scan-field";
@@ -161,6 +162,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </header>
 
           <main id="main-content" className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+            <PlatformBanner />
             <Breadcrumbs />
             {children}
           </main>

@@ -12,7 +12,6 @@ import {
   controlSmClass,
   Field,
   FilterChips,
-  GaugeRing,
   Skeleton,
   StatusPill,
 } from "@/components/ui";
@@ -32,6 +31,7 @@ import {
   SearchIcon,
   TruckIcon,
   UserCheckIcon,
+  XIcon,
 } from "@/components/icons";
 import { MOVEMENT_TYPES, type Insights, type Piece } from "./columns";
 
@@ -58,147 +58,109 @@ export function InventoryHero({
 }) {
   const t = insights?.totals;
   const value = t?.value_cents ?? 0;
-  const topKarat = insights?.byKarat[0];
-  const target = topKarat?.value_cents ?? 0;
   const hasValue = value > 0;
   const shown = useCountUp(hasValue ? centsToLkr(value) : 0);
+  const [today, setToday] = useState("");
+  // Render the date after mount so server and client timezones cannot disagree.
+  useEffect(() => {
+    setToday(
+      new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    );
+  }, []);
 
   // An error must not render as "0 pieces" — that reads as a real, wrong
   // number to whoever is looking for their gold.
   const dash = loading || !!error;
-  const strip: Array<{ label: string; value: string; icon: ReactNode }> = [
+  const avgPurity = t && t.net_mg > 0 ? (t.fine_mg / t.net_mg) * 100 : 0;
+  const strip: Array<{ label: string; value: string; sub?: ReactNode; icon: ReactNode }> = [
     {
       label: "Pieces on hand",
       value: dash ? "—" : (t?.pieces ?? 0).toLocaleString("en-US"),
+      sub: dash ? undefined : `${insights?.byBranch.length ?? 0} branches`,
       icon: <PackageIcon size={14} />,
     },
     {
       label: "Net weight",
       value: dash ? "—" : `${grams(t?.net_mg ?? 0)} g`,
+      sub: dash ? undefined : `${insights?.byKarat.length ?? 0} purities`,
       icon: <ScaleIcon size={14} />,
     },
     {
       label: "Fine gold",
       value: dash ? "—" : `${grams(t?.fine_mg ?? 0)} g`,
+      sub: dash || avgPurity === 0 ? undefined : `${avgPurity.toFixed(1)}% average purity`,
       icon: <GemIcon size={14} />,
     },
     {
       label: "Stock value",
-      value: dash ? "—" : hasValue ? rupees(value) : "No priced stock",
+      value: dash ? "—" : hasValue ? `LKR ${Math.round(shown).toLocaleString("en-US")}` : "Not priced",
+      sub: dash ? undefined : hasValue ? (
+        "At today's board rates"
+      ) : (
+        <Link href="/gold-rates" className="inline-flex items-center gap-1 text-gold-light hover:text-paper">
+          Set board rates <ArrowRightIcon size={11} />
+        </Link>
+      ),
       icon: <ArchiveIcon size={14} />,
     },
   ];
 
   return (
-    <section className="relative overflow-hidden rounded-3xl bg-void text-paper shadow-5">
-      <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-70" aria-hidden />
+    <section className="relative overflow-hidden rounded-2xl bg-void text-paper shadow-4">
+      <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-50" aria-hidden />
       <div
-        className="home-drift pointer-events-none absolute -right-32 -top-40 size-[30rem] rounded-full bg-gold/20 blur-[120px]"
+        className="home-drift pointer-events-none absolute -right-24 -top-32 size-72 rounded-full bg-gold/20 blur-[100px]"
         aria-hidden
       />
-      <div
-        className="home-drift pointer-events-none absolute -bottom-48 left-10 size-[26rem] rounded-full bg-gold-deep/25 blur-[120px]"
-        style={{ animationDelay: "-8s" }}
-        aria-hidden
-      />
+      <div className="home-noise pointer-events-none absolute inset-0" aria-hidden />
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent"
         aria-hidden
       />
 
-      <div className="relative grid grid-cols-1 items-center gap-8 p-5 sm:p-8 lg:grid-cols-[1.35fr_1fr] lg:p-10">
+      <div className="relative flex flex-col gap-4 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full border border-gold/25 bg-gold/[0.08] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">
-              <span
-                className={cn(
-                  "size-1.5 rounded-full",
-                  error ? "bg-rose-400" : "animate-pulse-soft bg-gold"
-                )}
-              />
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em]",
+                error ? "border-rose-400/30 bg-rose-400/10 text-rose-200" : "border-gold/25 bg-gold/[0.08] text-gold-light"
+              )}
+            >
+              <span className={cn("size-1.5 rounded-full", error ? "bg-rose-400" : "animate-pulse-soft bg-gold")} />
               {error ? "Data unavailable" : "Inventory"}
             </span>
-            <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-paper/40">
-              {new Date().toLocaleDateString("en-GB", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-            </span>
+            {today ? (
+              <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-paper/40">{today}</span>
+            ) : null}
           </div>
-
-          <h1 className="g-display mt-5 text-4xl text-paper text-balance sm:text-5xl">
+          <h1 className="g-display mt-2 text-2xl leading-tight text-paper sm:text-[28px]">
             Every gram, <span className="home-gold-text">accounted for.</span>
           </h1>
-          <p className="mt-3 max-w-lg text-sm leading-relaxed text-paper/60 sm:text-[15px]">
-            Stock on hand, where it sits, what it is worth, and what still needs a decision.
-          </p>
-
-          <div className="mt-7 flex flex-wrap gap-2.5">
-            <Link href="/scan" className="home-btn-gold h-11 px-5 text-sm">
-              <ScanBarcodeIcon size={15} />
-              Scan to move stock
-            </Link>
-            <button type="button" onClick={onRecord} className="home-btn-ghost h-11 px-5 text-sm">
-              Record movement
-              <ArrowRightIcon size={14} />
-            </button>
-          </div>
-        </div>
-
-        <div className="home-glass relative flex min-w-0 items-center gap-4 p-4 sm:gap-5 sm:p-6">
-          <div className="relative size-24 shrink-0 sm:size-36">
-            {loading ? (
-              <Skeleton className="size-full rounded-full bg-paper/10" />
-            ) : (
-              <GaugeRing
-                value={hasValue ? centsToLkr(value) : 0}
-                max={target > 0 ? centsToLkr(target) : 0}
-                label={hasValue ? `Top ${topKarat?.karat}` : "Unpriced"}
-                caption={hasValue ? compactLkr(Math.round(shown)) : "—"}
-              />
-            )}
-          </div>
-          <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light/80">
-              Stock on hand
-            </div>
-            {loading ? (
-              <Skeleton className="mt-2 h-9 w-36 bg-paper/10" />
-            ) : (
-              <div className="mt-1.5 flex items-baseline gap-1.5">
-                <span className="text-xs text-paper/50">LKR</span>
-                <span className="g-metric text-2xl text-paper sm:text-3xl">
-                  {hasValue ? Math.round(shown).toLocaleString("en-US") : "—"}
-                </span>
-              </div>
-            )}
-            <p className="mt-3 text-xs text-paper/55">
-              {error
-                ? error
-                : hasValue
-                  ? `${grams(t?.fine_mg ?? 0)} g of fine gold across ${(t?.pieces ?? 0).toLocaleString("en-US")} pieces`
-                  : "Publish board rates to value your stock."}
-            </p>
-            {error ? (
+          {error ? (
+            <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-paper/60">
+              {error}
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-gold-light transition-colors hover:text-paper"
+                className="inline-flex items-center gap-1.5 font-medium text-gold-light transition-colors hover:text-paper"
               >
                 <RefreshCwIcon size={12} />
                 Reload
               </button>
-            ) : !hasValue && !loading ? (
-              <Link
-                href="/gold-rates"
-                className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-gold-light transition-colors hover:text-paper"
-              >
-                Set rates <ArrowRightIcon size={12} />
-              </Link>
-            ) : null}
-          </div>
+            </p>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/scan" className="home-btn-gold h-10 px-4 text-sm">
+            <ScanBarcodeIcon size={15} />
+            Scan to move stock
+          </Link>
+          <button type="button" onClick={onRecord} className="home-btn-ghost h-10 px-4 text-sm">
+            Record movement
+            <ArrowRightIcon size={14} />
+          </button>
         </div>
       </div>
 
@@ -207,20 +169,25 @@ export function InventoryHero({
           <div
             key={s.label}
             className={cn(
-              "group flex min-w-0 items-center gap-3 px-4 py-4 transition-colors hover:bg-paper/[0.03] sm:px-6 lg:px-8",
+              "flex min-w-0 items-center gap-3 px-4 py-3 sm:px-6",
               i % 2 === 1 && "border-l border-paper/[0.08]",
               i >= 2 && "border-t border-paper/[0.08] lg:border-t-0",
               i === 2 && "lg:border-l"
             )}
           >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-paper/[0.05] text-gold-light ring-1 ring-paper/[0.08] transition-colors group-hover:bg-gold group-hover:text-void">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-paper/[0.05] text-gold-light ring-1 ring-paper/[0.08]">
               {s.icon}
             </span>
             <span className="min-w-0">
               <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-paper/40">
                 {s.label}
               </span>
-              <span className="g-metric mt-0.5 block truncate text-base text-paper">{s.value}</span>
+              {loading ? (
+                <Skeleton className="mt-1 h-5 w-24 bg-paper/10" />
+              ) : (
+                <span className="g-metric mt-0.5 block truncate text-[15px] text-paper">{s.value}</span>
+              )}
+              {s.sub ? <span className="mt-0.5 block truncate text-[11px] text-paper/45">{s.sub}</span> : null}
             </span>
           </div>
         ))}
@@ -356,7 +323,7 @@ export function StockByKarat({
       />
     ) : null;
   return (
-    <section className="relative flex flex-col overflow-hidden rounded-2xl bg-void p-5 text-paper shadow-4 sm:p-6">
+    <section className="relative flex flex-col overflow-hidden rounded-2xl bg-void p-5 text-paper shadow-4 sm:p-6" aria-label="Stock by karat">
       <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-50" aria-hidden />
       <div
         className="home-drift pointer-events-none absolute -right-20 -top-20 size-64 rounded-full bg-gold/20 blur-[90px]"
@@ -477,8 +444,8 @@ export function StockByBranch({
   const hidden = all.length - rows.length;
   const totalNet = all.reduce((s, r) => s + r.net_mg, 0);
   return (
-    <section className="relative flex flex-col overflow-hidden rounded-2xl p-5 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.07),0_18px_40px_-28px_rgba(28,25,23,0.25)] sm:p-6">
-      <SpotlightCard tone="light" className="flex flex-1 flex-col">
+    <section className="flex flex-col">
+      <SpotlightCard tone="light" className="flex flex-1 flex-col rounded-2xl p-5 sm:p-6">
         <div className="flex items-center gap-3">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.2)]">
             <Building2Icon size={16} />
@@ -514,10 +481,7 @@ export function StockByBranch({
                 const share = totalNet > 0 ? (r.net_mg / totalNet) * 100 : 0;
                 return (
                   <li key={r.branch_id}>
-                    <Link
-                      href="/products"
-                      className="group block rounded-xl bg-bone/70 p-3 ring-1 ring-ink/[0.06] transition-colors hover:bg-gold-pale/60 hover:ring-gold-dark/20"
-                    >
+                    <div className="group block rounded-xl bg-bone/70 p-3 ring-1 ring-ink/[0.06] transition-colors hover:bg-gold-pale/60 hover:ring-gold-dark/20">
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-3">
                           <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.08)] transition-colors group-hover:bg-gold group-hover:text-void">
@@ -547,7 +511,7 @@ export function StockByBranch({
                           }}
                         />
                       </div>
-                    </Link>
+                    </div>
                   </li>
                 );
               })}
@@ -556,7 +520,7 @@ export function StockByBranch({
         </div>
 
         {hidden > 0 && !loading && !error ? (
-          <p className="mt-4 text-xs text-ink-4">and {hidden} more branches</p>
+          <p className="mt-3 text-center text-xs text-ink-4">+ {hidden} more {hidden === 1 ? "branch" : "branches"}</p>
         ) : null}
       </SpotlightCard>
     </section>
@@ -653,11 +617,11 @@ export function AttentionCard({
     });
 
   return (
-    <section className="relative overflow-hidden rounded-2xl p-5 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.07),0_18px_40px_-28px_rgba(28,25,23,0.25)] sm:p-6">
-      <SpotlightCard tone="light" className="flex h-full flex-col">
+    <section className="flex flex-col">
+      <SpotlightCard tone="light" className="flex flex-1 flex-col rounded-2xl p-5 sm:p-6">
         <div className="flex items-center gap-3">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.2)]">
-            <ScanBarcodeIcon size={16} />
+            <AlertCircleIcon size={16} />
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="font-sans text-[15px] font-semibold tracking-normal text-ink">
@@ -713,7 +677,14 @@ export function AttentionCard({
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium text-ink">
-                        {r.count > 0 ? `${r.count} ${r.label}` : r.label}
+                        {r.count > 0 ? (
+                          <>
+                            <span className="g-metric mr-1 font-semibold">{r.count.toLocaleString("en-US")}</span>
+                            {r.label}
+                          </>
+                        ) : (
+                          r.label.charAt(0).toUpperCase() + r.label.slice(1)
+                        )}
                       </span>
                       <span className="block truncate text-xs text-ink-4">{r.desc}</span>
                     </span>
@@ -834,8 +805,10 @@ export function MovementFilters({
   onType,
   onBranch,
   onSearch,
+  onClear,
   branches,
 }: {
+  onClear: () => void;
   type: string;
   branch: string;
   search: string;
@@ -845,7 +818,7 @@ export function MovementFilters({
   branches: Array<{ id: string; name: string }>;
 }) {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex w-full flex-col gap-3">
       <FilterChips
         options={MOVEMENT_TYPES}
         value={type}
@@ -853,7 +826,7 @@ export function MovementFilters({
         ariaLabel="Movement type"
       />
       <div className="flex flex-wrap items-center gap-2">
-        <label className="relative">
+        <label className="relative w-full sm:w-auto">
           <SearchIcon
             size={14}
             className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-5"
@@ -863,15 +836,15 @@ export function MovementFilters({
             value={search}
             onChange={(e) => onSearch(e.target.value)}
             placeholder="Search barcode or reason"
-            className={cn(controlSmClass, "w-64 pl-9")}
+            className={cn(controlSmClass, "w-full pl-9 sm:w-64")}
           />
         </label>
-        <label>
+        <label className="w-full sm:w-auto">
           <span className="sr-only">Filter by branch</span>
           <select
             value={branch}
             onChange={(e) => onBranch(e.target.value)}
-            className={cn(controlSmClass, "w-auto")}
+            className={cn(controlSmClass, "w-full sm:w-auto")}
           >
             <option value="">All branches</option>
             {branches.map((b) => (
@@ -881,6 +854,16 @@ export function MovementFilters({
             ))}
           </select>
         </label>
+        {type || branch || search ? (
+          <button
+            type="button"
+            onClick={onClear}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-ink-4 transition-colors hover:bg-ink/[0.05] hover:text-ink"
+          >
+            <XIcon size={13} />
+            Clear filters
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -900,54 +883,82 @@ export function PieceDetail({
   branchName?: (id: string) => string;
 }) {
   const p = piece.product;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const purity = p.net_mg > 0 ? (p.fine_gold_mg / p.net_mg) * 100 : 0;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 p-4 backdrop-blur-sm sm:items-center"
       onClick={onClose}
     >
       <div
-        className="g-floating w-full max-w-md animate-fade-in space-y-4 p-6"
+        className="g-floating w-full max-w-md animate-fade-in overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label="Piece detail"
+        aria-labelledby="piece-detail-title"
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="g-kicker">{p.karat}</div>
-            <h2 className="mt-1 truncate font-display text-lg font-bold tracking-tight text-ink">
-              {p.name}
-            </h2>
-            <div className="mt-1 font-mono text-xs text-ink-4">{p.barcode}</div>
-          </div>
-          <StatusPill status={p.status} />
-        </div>
-
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 border-y border-ink/[0.07] py-4 text-sm">
-          {[
-            ["Branch", branchName ? branchName(p.branch_id) : p.branch_id.slice(0, 8)],
-            ["Net weight", `${grams(p.net_mg)} g`],
-            ["Fine gold", `${grams(p.fine_gold_mg)} g`],
-            ["Cost", rupees(p.cost_cents)],
-          ].map(([k, v]) => (
-            <div key={k} className="min-w-0">
-              <dt className="text-xs text-ink-4">{k}</dt>
-              <dd className="mt-0.5 truncate font-medium text-ink">{v}</dd>
-            </div>
-          ))}
-        </dl>
-
-        <div className="flex flex-wrap justify-end gap-2">
-          <Link href={`/products/${p.id}`} className="g-btn g-btn-secondary h-10 px-4 text-sm">
-            View product
-          </Link>
+        <div className="relative bg-void px-6 pb-5 pt-6 text-paper">
+          <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-40" aria-hidden />
           <button
             type="button"
-            className="g-btn g-btn-primary h-10 px-4 text-sm"
-            onClick={() => onMove(p.barcode)}
+            onClick={onClose}
+            aria-label="Close"
+            className="absolute right-4 top-4 flex size-8 items-center justify-center rounded-lg text-paper/50 transition-colors hover:bg-paper/10 hover:text-paper"
           >
-            Record movement
+            <XIcon size={16} />
           </button>
+          <div className="relative flex items-center gap-3">
+            <span className="g-metric flex h-11 min-w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-light to-gold px-2 text-sm font-bold text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+              {p.karat}
+            </span>
+            <div className="min-w-0 pr-8">
+              <h2 id="piece-detail-title" className="truncate font-display text-lg font-bold tracking-tight text-paper">
+                {p.name}
+              </h2>
+              <div className="mt-0.5 font-mono text-xs text-paper/50">{p.barcode}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4 p-6">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-ink-4">Status</span>
+            <StatusPill status={p.status} />
+          </div>
+          <dl className="grid grid-cols-2 gap-3 text-sm">
+            {[
+              ["Branch", branchName ? branchName(p.branch_id) : p.branch_id.slice(0, 8)],
+              ["Cost", rupees(p.cost_cents)],
+              ["Net weight", `${grams(p.net_mg)} g`],
+              ["Fine gold", `${grams(p.fine_gold_mg)} g · ${purity.toFixed(1)}%`],
+            ].map(([k, v]) => (
+              <div key={k} className="min-w-0 rounded-xl bg-bone/70 p-3 ring-1 ring-ink/[0.05]">
+                <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-4">{k}</dt>
+                <dd className="g-metric mt-1 truncate text-ink">{v}</dd>
+              </div>
+            ))}
+          </dl>
+
+          <div className="flex flex-wrap justify-end gap-2 pt-1">
+            <Link href={`/products/${p.id}`} className="g-btn g-btn-secondary h-10 px-4 text-sm">
+              View product
+            </Link>
+            <button
+              type="button"
+              className="g-btn g-btn-primary h-10 px-4 text-sm"
+              onClick={() => onMove(p.barcode)}
+            >
+              Record movement
+              <ArrowRightIcon size={14} />
+            </button>
+          </div>
         </div>
       </div>
     </div>

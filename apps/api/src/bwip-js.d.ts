@@ -4,6 +4,9 @@ declare module "bwip-js" {
     text: string;
     scale?: number;
     height?: number;
+    paddingwidth?: number;
+    paddingheight?: number;
+    eclevel?: "L" | "M" | "Q" | "H";
     includetext?: boolean;
     textxalign?: string;
   };

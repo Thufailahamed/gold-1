@@ -14,7 +14,111 @@ import {
 } from "@/components/ui";
 import { SettingsIcon } from "@/components/icons";
 
-const KNOWN_KEYS = ["shop_name", "receipt_header", "receipt_footer", "discount_limit_pct"];
+const KNOWN_KEYS = [
+  "shop_name",
+  "receipt_header",
+  "receipt_footer",
+  "shop_address",
+  "shop_phone",
+  "shop_email",
+  "invoice_terms",
+  "discount_limit_pct",
+];
+
+/** What the printed invoice and receipt read, edited as one form. */
+const PROFILE_FIELDS: { key: string; label: string; hint?: string; multiline?: boolean }[] = [
+  { key: "shop_name", label: "Shop name", hint: "Large on the letterhead" },
+  { key: "receipt_header", label: "Tagline", hint: "e.g. Fine 22K jewellery since 1985" },
+  { key: "shop_address", label: "Address", multiline: true },
+  { key: "shop_phone", label: "Phone" },
+  { key: "shop_email", label: "Email" },
+  { key: "receipt_footer", label: "Thank-you line", hint: "Bottom of the invoice and receipt" },
+  { key: "invoice_terms", label: "Terms & conditions", multiline: true, hint: "Exchange / return policy printed on every bill" },
+];
+
+function InvoiceProfilePanel({ canEdit }: { canEdit: boolean }) {
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState<Record<string, string> | null>(null);
+  const current = useQuery({
+    queryKey: ["settings-invoice-profile"],
+    queryFn: async () => {
+      const out: Record<string, string> = {};
+      for (const f of PROFILE_FIELDS) {
+        try {
+          const s = await api<{ value: unknown }>(`/api/v1/settings/${f.key}`);
+          out[f.key] = typeof s.value === "string" ? s.value : s.value == null ? "" : String(s.value);
+        } catch {
+          out[f.key] = "";
+        }
+      }
+      return out;
+    },
+  });
+  const values = draft ?? current.data ?? {};
+  const dirty = draft !== null && PROFILE_FIELDS.some((f) => (draft[f.key] ?? "") !== (current.data?.[f.key] ?? ""));
+  const save = useMutation({
+    mutationFn: async () => {
+      for (const f of PROFILE_FIELDS) {
+        const v = (draft?.[f.key] ?? "").trim();
+        if (v === (current.data?.[f.key] ?? "")) continue;
+        await api(`/api/v1/settings/${f.key}`, { method: "PUT", body: JSON.stringify({ value: v, type: "string" }) });
+      }
+    },
+    onSuccess: () => {
+      toast.success("Invoice letterhead saved");
+      setDraft(null);
+      qc.invalidateQueries({ queryKey: ["settings-invoice-profile"] });
+      qc.invalidateQueries({ queryKey: ["invoice-profile"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Save failed"),
+  });
+
+  return (
+    <Panel
+      title="Invoice letterhead"
+      description="Printed on every A4 invoice and 80mm receipt"
+      icon={<SettingsIcon size={16} />}
+      className="lg:col-span-3"
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        {PROFILE_FIELDS.map((f) => (
+          <label key={f.key} className={`block text-sm text-ink-2 ${f.multiline ? "sm:col-span-2" : ""}`}>
+            {f.label}
+            {f.multiline ? (
+              <textarea
+                rows={2}
+                disabled={!canEdit}
+                value={values[f.key] ?? ""}
+                onChange={(e) => setDraft({ ...values, [f.key]: e.target.value })}
+                className={`${controlClass} mt-1 !h-auto w-full resize-y py-2`}
+              />
+            ) : (
+              <input
+                disabled={!canEdit}
+                value={values[f.key] ?? ""}
+                onChange={(e) => setDraft({ ...values, [f.key]: e.target.value })}
+                className={`${controlClass} mt-1 w-full`}
+              />
+            )}
+            {f.hint ? <span className="mt-0.5 block text-xs text-ink-4">{f.hint}</span> : null}
+          </label>
+        ))}
+      </div>
+      {canEdit ? (
+        <div className="mt-4 flex items-center justify-end gap-2">
+          {dirty ? (
+            <button onClick={() => setDraft(null)} className="g-btn g-btn-secondary h-10 px-4 text-sm">
+              Discard
+            </button>
+          ) : null}
+          <button onClick={() => save.mutate()} disabled={!dirty || save.isPending} className="g-btn g-btn-primary h-10 px-4 text-sm">
+            {save.isPending ? "Saving…" : "Save letterhead"}
+          </button>
+        </div>
+      ) : null}
+    </Panel>
+  );
+}
 
 export default function SettingsPage() {
   const qc = useQueryClient();
@@ -59,6 +163,7 @@ export default function SettingsPage() {
       />
 
       <div className="grid gap-4 lg:grid-cols-3">
+        <InvoiceProfilePanel canEdit={canEdit} />
         <Panel
           title="Known keys"
           description="Select a key to inspect or edit"

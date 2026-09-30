@@ -3,6 +3,8 @@ import {
   fineGoldMg,
   gToMg,
   lkrToCents,
+  extractScanCode,
+  normalizeCode,
   priceCents,
   type CreateProductInput,
   type EditProductInput,
@@ -12,6 +14,8 @@ import type { PageOpts } from "./catalog";
 import { currentGoldRatesCents } from "./rates";
 import { consumeApproval, pendingApproval, requestApproval } from "./approvals";
 import { postGoldStmts } from "./gold";
+import { buildOpeningStockStmts, carriedOpeningValue, isDirectIntake } from "./openingstock";
+import { assertCountLock } from "./counts";
 
 export type ProductRow = {
   id: string;
@@ -42,6 +46,11 @@ export type ProductRow = {
   image_keys: string[];
   status: string;
   branch_id: string;
+  reserved_customer_id: string | null;
+  reserved_customer_name: string | null;
+  reserved_note: string | null;
+  reserved_until: number | null;
+  reserved_at: number | null;
   created_at: number;
 };
 
@@ -56,7 +65,7 @@ export type ProductDetail = { product: ProductRow; livePrice: LivePrice; noRate:
 type RawRow = Omit<ProductRow, "image_keys"> & { image_keys: string };
 
 const WITH_NAMES =
-  "SELECT p.id, p.barcode, p.sku, p.category_id, c.name AS category_name, p.subcategory_id, p.design_id, p.product_type_id, p.metal_type_id, m.name AS metal_name, p.stone_type_id, p.purity_id, pu.karat, pu.permille, p.name, p.gross_mg, p.stone_mg, p.net_mg, p.fine_gold_mg, p.making_cents, p.wastage_mg, p.cost_cents, p.selling_price_cents, p.location, p.notes, p.image_keys, p.status, p.branch_id, p.created_at FROM products p JOIN categories c ON c.id = p.category_id JOIN metal_types m ON m.id = p.metal_type_id JOIN purities pu ON pu.id = p.purity_id";
+  "SELECT p.id, p.barcode, p.sku, p.category_id, c.name AS category_name, p.subcategory_id, p.design_id, p.product_type_id, p.metal_type_id, m.name AS metal_name, p.stone_type_id, p.purity_id, pu.karat, pu.permille, p.name, p.gross_mg, p.stone_mg, p.net_mg, p.fine_gold_mg, p.making_cents, p.wastage_mg, p.cost_cents, p.selling_price_cents, p.location, p.notes, p.image_keys, p.status, p.branch_id, p.reserved_customer_id, rc.name AS reserved_customer_name, p.reserved_note, p.reserved_until, p.reserved_at, p.created_at FROM products p JOIN categories c ON c.id = p.category_id JOIN metal_types m ON m.id = p.metal_type_id JOIN purities pu ON pu.id = p.purity_id LEFT JOIN customers rc ON rc.id = p.reserved_customer_id";
 
 function parseRow(r: RawRow): ProductRow {
   return { ...r, image_keys: JSON.parse(r.image_keys) as string[] };
@@ -218,9 +227,8 @@ export async function createProduct(
   // this row the metal sits in held stock with no ledger inflow and
   // gold_stock_consistency fails by exactly its weight. Type OPENING is
   // deliberately excluded from the day-scoped PURCHASE cross-foot (that query
-  // matches invoice documents only). No journal is posted here: money never
-  // moved. A full financial opening-balance flow is a separate, larger piece
-  // of work — see the system audit.
+  // matches invoice documents only). The book cost, when known, enters 1100
+  // against 3100 Opening Balances in the same batch (see openingstock.ts).
   const purity = await db
     .prepare("SELECT permille FROM purities WHERE id = ?")
     .bind(input.purityId)
@@ -244,7 +252,15 @@ export async function createProduct(
     ],
     { actorId, auditAction: "product.intake.gold", auditEntity: "product", auditEntityId: built.id, branchId: input.branchId }
   );
-  await db.batch([...built.stmts, ...goldStmts]);
+  const opening = await buildOpeningStockStmts(db, {
+    productId: built.id,
+    barcode: built.barcode,
+    branchId: input.branchId,
+    deltaCents: input.costLkr !== undefined ? lkrToCents(input.costLkr) : 0,
+    actorId,
+    reason: "direct intake",
+  });
+  await db.batch([...built.stmts, ...goldStmts, ...(opening?.stmts ?? [])]);
   const created = await db.prepare(`${WITH_NAMES} WHERE p.id = ?`).bind(built.id).first<RawRow>();
   if (!created) throw new Error("Product insert failed");
   return parseRow(created);
@@ -351,8 +367,25 @@ export async function editProduct(
     sets.push("notes = ?");
     vals.push(patch.notes);
   }
+  // A cost correction on a direct-intake piece still on the shelf moves its
+  // carried value on 1100 by the difference. A sold piece's COGS is already
+  // booked at the old cost, so its cost is history and is not re-posted.
+  let costStmts: D1PreparedStatement[] = [];
+  if (patch.costLkr !== undefined && !["SOLD", "VOID"].includes(prev.status) && (await isDirectIntake(db, id))) {
+    const barcodeRow = await db.prepare("SELECT barcode FROM products WHERE id = ?").bind(id).first<{ barcode: string }>();
+    const opening = await buildOpeningStockStmts(db, {
+      productId: id,
+      barcode: barcodeRow?.barcode ?? id,
+      branchId: prev.branch_id,
+      deltaCents: lkrToCents(patch.costLkr) - (await carriedOpeningValue(db, id)),
+      actorId,
+      reason: "cost correction",
+    });
+    costStmts = opening?.stmts ?? [];
+  }
   if (sets.length > 0) {
     await db.batch([
+      ...costStmts,
       db.prepare(`UPDATE products SET ${sets.join(", ")} WHERE id = ?`).bind(...vals, id),
       buildAuditStmt(db, {
         userId: actorId,
@@ -449,11 +482,16 @@ export async function getProduct(db: D1Database, id: string): Promise<ProductDet
 }
 
 export async function findByBarcode(db: D1Database, code: string): Promise<ProductDetail> {
+  // A QR tag may carry a link or JSON around the code.
+  const norm = extractScanCode(code);
+  if (!norm) throw Object.assign(new Error("Product not found"), { code: "NOT_FOUND" });
+  // Barcode (JW-/PRD-) and SKU (SKU-) prefixes are disjoint, so at most one
+  // row matches; SKU scans come from stock sheets and older tags.
   return withPrice(
     db,
     await db
-      .prepare(`${WITH_NAMES} WHERE UPPER(p.barcode) = UPPER(?)`)
-      .bind(code.trim())
+      .prepare(`${WITH_NAMES} WHERE p.barcode = ? OR p.sku = ?`)
+      .bind(norm, norm)
       .first<RawRow>()
   );
 }
@@ -472,6 +510,12 @@ export async function buildVoidProductStmts(
   if (!prev) throw Object.assign(new Error("Product not found"), { code: "NOT_FOUND" });
   if (prev.status === "VOID")
     throw Object.assign(new Error("Product already void"), { code: "CONFLICT" });
+  // A customer is waiting on a held piece; the hold is ended on purpose first.
+  if (prev.status === "RESERVED")
+    throw Object.assign(new Error("Release the reservation before voiding"), { code: "CONFLICT" });
+  // A piece frozen in an open count cannot leave stock under the counter's
+  // feet — the same lock sales, transfers and movements honour.
+  await assertCountLock(db, id);
   const stmts = [
     db.prepare("UPDATE products SET status = 'VOID' WHERE id = ?").bind(id),
     db
@@ -509,6 +553,51 @@ export async function voidProduct(
   actorId: string,
   reason: string
 ): Promise<void> {
+  const before = await db
+    .prepare("SELECT p.status, p.barcode, p.net_mg, pu.permille FROM products p JOIN purities pu ON pu.id = p.purity_id WHERE p.id = ?")
+    .bind(id)
+    .first<{ status: string; barcode: string; net_mg: number; permille: number }>();
   const built = await buildVoidProductStmts(db, id, actorId, reason, Date.now());
-  await db.batch(built.stmts);
+  // A voided direct-intake piece still on the shelf un-does its intake: the
+  // metal leaves the gold ledger the way it came in (an OPENING row, branch →
+  // opening), and its opening value comes back off 1100. Without the gold row
+  // the piece left stock on hand while its OPENING inflow stayed, and
+  // gold_stock_consistency — a close gate — failed by its weight for good.
+  // A piece that already left (sold, lost, melted) left through that flow's
+  // own postings, so nothing is reversed twice. Purchased pieces are voided
+  // through their invoice, which reverses the receive.
+  const stmts: D1PreparedStatement[] = [...built.stmts];
+  if (before && !["SOLD", "LOST", "MELTED"].includes(before.status) && (await isDirectIntake(db, id))) {
+    if (before.net_mg > 0)
+      stmts.push(
+        ...(await postGoldStmts(
+          db,
+          [
+            {
+              branchId: built.branchId,
+              source: `branch:${built.branchId}`,
+              destination: "opening",
+              type: "OPENING",
+              weightMg: before.net_mg,
+              permille: before.permille,
+              refEntity: "product_intake",
+              refId: id,
+              productId: id,
+              notes: `Void of direct intake ${before.barcode}: ${reason}`,
+            },
+          ],
+          { actorId, auditAction: "product.void.gold", auditEntity: "product", auditEntityId: id, branchId: built.branchId }
+        ))
+      );
+    const opening = await buildOpeningStockStmts(db, {
+      productId: id,
+      barcode: before.barcode,
+      branchId: built.branchId,
+      deltaCents: -(await carriedOpeningValue(db, id)),
+      actorId,
+      reason: `void: ${reason}`,
+    });
+    stmts.push(...(opening?.stmts ?? []));
+  }
+  await db.batch(stmts);
 }

@@ -3,6 +3,7 @@ import type { Env } from "./db/client";
 import { errorHandler } from "./middleware/error";
 import { cors } from "./middleware/cors";
 import { csrf } from "./middleware/csrf";
+import { idempotency, purgeIdempotencyKeys } from "./middleware/idempotency";
 import { accounts } from "./routes/accounts";
 import { audit } from "./routes/audit";
 import { approvals } from "./routes/approvals";
@@ -30,14 +31,29 @@ import { products } from "./routes/products";
 import { purchases } from "./routes/purchases";
 import { sales } from "./routes/sales";
 import { rates } from "./routes/rates";
+import { receipts } from "./routes/receipts";
 import { roles } from "./routes/roles";
 import { settings } from "./routes/settings";
 import { users } from "./routes/users";
+import { platform, platformScheduled } from "./platform";
+import { enforcePlanLimit, platformBridge, tenantGate } from "./platform/bridge";
 
 const app = new Hono<{ Bindings: Env }>();
 app.onError(errorHandler);
 app.use("/api/*", cors);
 app.use("/api/*", csrf);
+app.use("/platform/*", cors);
+app.use("/platform/*", csrf);
+// Control plane: the SaaS operator's admin portal API.
+app.route("/platform/v1", platform);
+// Data plane: every shop request passes the account gate first.
+app.use("/api/v1/*", tenantGate);
+app.use("/api/v1/*", idempotency);
+app.route("/api/v1/platform", platformBridge);
+app.post("/api/v1/users", enforcePlanLimit("users"));
+app.patch("/api/v1/users/:id/activate", enforcePlanLimit("users"));
+app.post("/api/v1/branches", enforcePlanLimit("branches"));
+app.post("/api/v1/products", enforcePlanLimit("products"));
 app.route("/api/v1/health", health);
 app.route("/api/v1/auth", auth);
 app.route("/api/v1/users", users);
@@ -62,6 +78,7 @@ app.route("/api/v1/day-closings", dayClosings);
 app.route("/api/v1/bank-accounts", bankAccounts);
 app.route("/api/v1/cash", cash);
 app.route("/api/v1/card-settlements", settlements);
+app.route("/api/v1/receipts", receipts);
 app.route("/api/v1/purchases", purchases);
 app.route("/api/v1/sales", sales);
 app.route("/api/v1/reports", monthly);
@@ -73,4 +90,12 @@ app.route("/api/v1/repairs", repairRoutes);
 app.route("/api/v1/custom-orders", customOrderRoutes);
 app.route("/api/v1/approvals", approvals);
 
-export default app;
+export default {
+  fetch: app.fetch,
+  scheduled: (event: ScheduledController, env: Env, ctx: ExecutionContext) => {
+    ctx.waitUntil(platformScheduled(event, env));
+    ctx.waitUntil(purgeIdempotencyKeys(env.DB));
+  },
+};
+
+export { app };

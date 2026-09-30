@@ -360,34 +360,34 @@ export default function ProductsPage() {
   return (
     <Page className="space-y-5">
       {/* Hero */}
-      <section className="relative overflow-hidden rounded-3xl bg-void text-paper shadow-5">
+      <section className="relative overflow-hidden rounded-2xl bg-void text-paper shadow-4">
         <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-70" />
-        <div className="home-drift pointer-events-none absolute -right-32 -top-40 size-[28rem] rounded-full bg-gold/20 blur-[120px]" />
+        <div className="home-drift pointer-events-none absolute -right-24 -top-32 size-[22rem] rounded-full bg-gold/20 blur-[120px]" />
         <div className="home-noise pointer-events-none absolute inset-0" />
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
 
-        <div className="relative flex flex-col gap-8 p-5 sm:p-8 lg:flex-row lg:items-end lg:justify-between lg:p-10">
+        <div className="relative flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-end lg:justify-between lg:px-7 lg:py-6">
           <div className="min-w-0">
             <span className="inline-flex items-center gap-2 rounded-full border border-gold/25 bg-gold/[0.08] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">
               <GemIcon size={11} />
               Catalog
             </span>
-            <h1 className="g-display mt-5 text-4xl text-paper sm:text-5xl">
+            <h1 className="g-display mt-3 text-3xl text-paper sm:text-4xl">
               Every piece, <span className="home-gold-text">on show.</span>
             </h1>
-            <p className="mt-3 max-w-lg text-sm leading-relaxed text-paper/60 sm:text-[15px]">
+            <p className="mt-2 max-w-lg text-sm leading-relaxed text-paper/60">
               Unique pieces with barcodes, weights and live pricing. Scan to jump straight to a piece.
             </p>
-            <div className="mt-6">
+            <div className="mt-4">
               <HeroScan />
             </div>
           </div>
           <div className="flex flex-wrap gap-2.5">
-            <Link href="/products/new" className="home-btn-gold h-11 px-5 text-sm">
+            <Link href="/products/new" className="home-btn-gold h-10 px-4 text-sm">
               <PlusIcon size={15} />
               New product
             </Link>
-            <Link href="/scan" className="home-btn-ghost h-11 px-5 text-sm">
+            <Link href="/scan" className="home-btn-ghost h-10 px-4 text-sm">
               <ScanBarcodeIcon size={15} />
               Scan mode
             </Link>
@@ -399,7 +399,7 @@ export default function ProductsPage() {
             <div
               key={s.label}
               className={cn(
-                "flex min-w-0 items-center gap-3 px-4 py-4 sm:px-6 lg:px-8",
+                "flex min-w-0 items-center gap-3 px-4 py-3 sm:px-6",
                 i % 2 === 1 && "border-l border-paper/[0.08]",
                 i >= 2 && "border-t border-paper/[0.08] lg:border-t-0",
                 i === 2 && "lg:border-l"
@@ -410,7 +410,7 @@ export default function ProductsPage() {
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-paper/40">{s.label}</span>
-                <span className="g-metric mt-0.5 block text-lg text-paper">{s.value}</span>
+                <span className="g-metric mt-0.5 block text-base text-paper">{s.value}</span>
               </span>
             </div>
           ))}

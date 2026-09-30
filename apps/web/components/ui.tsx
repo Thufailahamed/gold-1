@@ -107,16 +107,16 @@ export function Hero({
 }) {
   return (
     <section
-      className={cn("relative overflow-hidden rounded-xl bg-void p-6 text-paper sm:p-8", className)}
+      className={cn("relative overflow-hidden rounded-xl bg-void p-5 text-paper sm:px-6 sm:py-5", className)}
     >
-      <div className="pointer-events-none absolute -right-16 -top-24 size-72 rounded-full bg-gold/15 blur-3xl" />
+      <div className="pointer-events-none absolute -right-16 -top-24 size-60 rounded-full bg-gold/15 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-24 left-1/3 size-56 rounded-full bg-gold/10 blur-3xl" />
-      <div className="relative flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+      <div className="relative flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0 max-w-2xl">
           {back && (
             <Link
               href={back.href}
-              className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-paper/50 transition-colors hover:text-paper"
+              className="mb-2 inline-flex items-center gap-1.5 text-xs font-medium text-paper/50 transition-colors hover:text-paper"
             >
               <ArrowLeftIcon size={13} />
               {back.label}
@@ -128,11 +128,11 @@ export function Hero({
               {kicker}
             </div>
           )}
-          <h1 className="g-display mt-3 text-3xl text-paper text-balance sm:text-4xl">{title}</h1>
+          <h1 className="g-display mt-2 text-2xl text-paper text-balance sm:text-3xl">{title}</h1>
           {description && (
-            <p className="mt-2.5 max-w-md text-sm text-paper/60 text-pretty">{description}</p>
+            <p className="mt-1.5 max-w-md text-sm text-paper/60 text-pretty">{description}</p>
           )}
-          {meta && <div className="mt-3.5 flex flex-wrap items-center gap-2">{meta}</div>}
+          {meta && <div className="mt-2.5 flex flex-wrap items-center gap-2">{meta}</div>}
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2 md:shrink-0">{actions}</div>}
       </div>
@@ -140,7 +140,7 @@ export function Hero({
       {stats && stats.length > 0 && (
         <div
           className={cn(
-            "relative mt-7 grid grid-cols-2 gap-3 border-t border-paper/10 pt-5",
+            "relative mt-5 grid grid-cols-2 gap-3 border-t border-paper/10 pt-4",
             HERO_STAT_COLS[Math.min(stats.length, 4)]
           )}
         >
@@ -149,13 +149,13 @@ export function Hero({
               <div className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-paper/40">
                 {s.label}
               </div>
-              <div className="g-metric mt-1.5 truncate text-lg text-paper">{s.value}</div>
+              <div className="g-metric mt-1 truncate text-base text-paper">{s.value}</div>
             </div>
           ))}
         </div>
       )}
       {note && (
-        <div className="relative mt-6 rounded-lg border border-dashed border-paper/15 px-4 py-3 text-center font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-paper/40">
+        <div className="relative mt-4 rounded-lg border border-dashed border-paper/15 px-4 py-2.5 text-center font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-paper/40">
           {note}
         </div>
       )}

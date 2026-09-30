@@ -42,7 +42,7 @@ export default function PrintPage({ params }: { params: Promise<{ id: string }> 
       <div className="print-area flex flex-wrap gap-4">
         {Array.from({ length: copies }).map((_, i) => (
           /* eslint-disable-next-line @next/next/no-img-element */
-          <img key={i} src={url} alt="Barcode label" className="max-w-sm" />
+          <img key={i} src={url} alt="Barcode label" className="label-img max-w-sm" />
         ))}
       </div>
     </Page>

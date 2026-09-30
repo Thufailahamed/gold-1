@@ -18,7 +18,11 @@ export type StockRow = {
   pieces: number;
   net_mg: number;
   fine_mg: number;
-  value_cents: number | null;
+  /** Missing on older API responses; treat absent the same as unpriced. */
+  value_cents?: number | null;
+  /** Product name, branch name or karat, by grouping. */
+  name?: string | null;
+  barcode?: string | null;
 };
 
 export type Movement = {
@@ -84,6 +88,10 @@ export const MOVEMENT_TYPES: ReadonlyArray<{ key: string; label: string }> = [
   { key: "TRANSFER_OUT", label: "Transfer out" },
   { key: "TRANSFER_IN", label: "Transfer in" },
   { key: "RETURN", label: "Return" },
+  { key: "RESTOCK", label: "Restock" },
+  { key: "SALE_OUT", label: "Sale" },
+  { key: "RESERVE", label: "Reserve" },
+  { key: "RELEASE", label: "Release" },
   { key: "LOSS", label: "Loss" },
   { key: "VOID", label: "Void" },
 ];
@@ -96,6 +104,9 @@ const TYPE_TONE: Record<string, string> = {
   LOSS: "bg-rose-700/10 text-rose-700",
   VOID: "bg-ink/[0.08] text-ink-3",
   SALE_OUT: "bg-indigo-700/10 text-indigo-700",
+  RESTOCK: "bg-emerald-700/10 text-emerald-700",
+  RESERVE: "bg-amber-700/10 text-amber-700",
+  RELEASE: "bg-emerald-700/10 text-emerald-700",
 };
 
 const TYPE_ICON: Record<string, ReactNode> = {
@@ -106,11 +117,20 @@ const TYPE_ICON: Record<string, ReactNode> = {
   LOSS: <CircleSlashIcon size={13} />,
   VOID: <ArrowLeftRightIcon size={13} />,
   SALE_OUT: <CheckCircleIcon size={13} />,
+  RESTOCK: <PackagePlusIcon size={13} />,
+  RESERVE: <ArrowLeftRightIcon size={13} />,
+  RELEASE: <ArrowUturnLeftIcon size={13} />,
 };
+
+/** "TRANSFER_OUT" -> "Transfer out". */
+export function humanize(code: string): string {
+  const s = code.replace(/_/g, " ").toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
 export function movementTypeMeta(type: string): { label: string; icon: ReactNode } {
   return {
-    label: type.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase()),
+    label: humanize(type),
     icon: TYPE_ICON[type] ?? <ArrowLeftRightIcon size={13} />,
   };
 }
@@ -137,7 +157,7 @@ const rupees = (cents: number) =>
 export function fineShareBar(ratio: number) {
   const pct = Math.max(0, Math.min(100, ratio * 100));
   return (
-    <span className="h-1 w-14 overflow-hidden rounded-full bg-ink/10">
+    <span className="hidden h-1 w-14 overflow-hidden rounded-full bg-ink/10 sm:block" title={`${Math.round(pct)}% fine`}>
       <span
         className="block h-full rounded-full bg-gradient-to-r from-gold-deep to-gold-light"
         style={{ width: `${pct}%` }}
@@ -148,7 +168,7 @@ export function fineShareBar(ratio: number) {
 
 export function stockColumns(
   groupBy: "branch" | "purity" | "product",
-  labelFor?: (key: string) => ReactNode
+  labelFor?: (row: StockRow) => ReactNode
 ): ReadonlyArray<DataColumn<StockRow>> {
   const firstLabel = groupBy === "branch" ? "Branch" : groupBy === "purity" ? "Purity" : "Product";
 
@@ -157,8 +177,8 @@ export function stockColumns(
       key: "key",
       label: firstLabel,
       sortable: true,
-      value: (r) => r.key,
-      render: (r) => (labelFor ? labelFor(r.key) : <span className="font-mono text-xs text-ink">{r.key}</span>),
+      value: (r) => r.name ?? r.key,
+      render: (r) => (labelFor ? labelFor(r) : <span className="font-mono text-xs text-ink">{r.key}</span>),
     },
     {
       key: "pieces",
@@ -174,7 +194,7 @@ export function stockColumns(
       align: "right",
       sortable: true,
       value: (r) => r.net_mg,
-      render: (r) => grams(r.net_mg),
+      render: (r) => <span className="g-metric">{grams(r.net_mg)}</span>,
     },
     {
       key: "fine_mg",
@@ -185,7 +205,7 @@ export function stockColumns(
       render: (r) => (
         <span className="flex items-center justify-end gap-2">
           {fineShareBar(r.net_mg > 0 ? r.fine_mg / r.net_mg : 0)}
-          <span>{grams(r.fine_mg)}</span>
+          <span className="g-metric">{grams(r.fine_mg)}</span>
         </span>
       ),
     },
@@ -196,7 +216,11 @@ export function stockColumns(
       sortable: true,
       value: (r) => r.value_cents ?? -1,
       render: (r) =>
-        r.value_cents === null ? <span className="text-ink-5">—</span> : rupees(r.value_cents),
+        r.value_cents == null || r.value_cents === 0 ? (
+          <span className="text-ink-5" title="No board rate for this purity">—</span>
+        ) : (
+          <span className="g-metric">{rupees(r.value_cents)}</span>
+        ),
     },
   ];
 }
@@ -224,7 +248,7 @@ export function movementColumns(
       sortable: true,
       value: (m) => m.barcode ?? m.product_id,
       render: (m) => (
-        <span className="font-mono text-xs text-ink-3">
+        <span className="rounded-md bg-bone px-1.5 py-0.5 font-mono text-[11px] text-ink-2 ring-1 ring-ink/[0.06]">
           {m.barcode ?? m.product_id.slice(0, 8)}
         </span>
       ),
@@ -234,9 +258,9 @@ export function movementColumns(
       label: "From → To",
       render: (m) => (
         <span className="flex items-center gap-2 text-xs text-ink-3">
-          <span>{m.from_status ? movementTypeMeta(m.from_status).label : "—"}</span>
-          <span className="text-ink-5">→</span>
-          <StatusPill status={m.to_status} label={movementTypeMeta(m.to_status).label} />
+          <span className="whitespace-nowrap">{m.from_status ? humanize(m.from_status) : "New"}</span>
+          <span className="text-ink-5" aria-hidden>→</span>
+          <StatusPill status={m.to_status} label={humanize(m.to_status)} />
         </span>
       ),
     },
@@ -253,12 +277,19 @@ export function movementColumns(
       align: "right",
       sortable: true,
       value: (m) => m.weight_mg,
-      render: (m) => grams(m.weight_mg),
+      render: (m) => <span className="g-metric">{grams(m.weight_mg)}</span>,
     },
     {
       key: "reason",
       label: "Reason",
-      render: (m) => <span className="text-ink-3">{m.reason ?? "—"}</span>,
+      render: (m) =>
+        m.reason ? (
+          <span className="line-clamp-1 max-w-[16rem] text-xs text-ink-3" title={m.reason}>
+            {m.reason}
+          </span>
+        ) : (
+          <span className="text-ink-5">—</span>
+        ),
     },
     {
       key: "created_at",
@@ -266,9 +297,19 @@ export function movementColumns(
       align: "right",
       sortable: true,
       value: (m) => m.created_at,
-      render: (m) => (
-        <span className="text-xs text-ink-4">{new Date(m.created_at).toLocaleString()}</span>
-      ),
+      render: (m) => {
+        const d = new Date(m.created_at);
+        return (
+          <span className="whitespace-nowrap text-right" title={d.toLocaleString()}>
+            <span className="block text-xs text-ink-2">
+              {d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+            </span>
+            <span className="block text-[11px] text-ink-4">
+              {d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          </span>
+        );
+      },
     },
   ];
 }

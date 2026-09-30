@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -44,6 +44,14 @@ export default function MeltingPage() {
   const [dialog, setDialog] = useState(false);
   const [notes, setNotes] = useState("");
   const qc = useQueryClient();
+
+  // The gold dashboard links here with ?status= or ?new=1.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const s = q.get("status");
+    if (s && STATUSES.includes(s)) setFStatus(s);
+    if (q.get("new") === "1") setDialog(true);
+  }, []);
 
   const list = useQuery({
     queryKey: ["melting", page, fStatus],

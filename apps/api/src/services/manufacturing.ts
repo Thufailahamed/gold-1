@@ -14,15 +14,10 @@ import { buildCreateProductStmts } from "./products";
 import { businessDateFor } from "./busdate";
 import { buildEntryStmts } from "./journal";
 import { consumeApproval, pendingApproval, recordInlineApproval, requestApproval } from "./approvals";
+import { allocateNumber } from "./counters";
 
 async function nextMO(db: D1Database, stmts: D1PreparedStatement[]): Promise<string> {
-  const row = await db
-    .prepare("SELECT next FROM counters WHERE name = 'MO'")
-    .bind()
-    .first<{ next: number }>();
-  if (!row) throw Object.assign(new Error("Counter missing"), { code: "INTERNAL" });
-  stmts.push(db.prepare("UPDATE counters SET next = ? WHERE name = 'MO'").bind(row.next + 1));
-  return `MO-${String(row.next).padStart(6, "0")}`;
+  return allocateNumber(db, "MO", "MO", 6, "manufacturing_orders");
 }
 
 async function requireMfgApprover(db: D1Database, approverId: string, actorId: string): Promise<void> {

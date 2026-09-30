@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
+import { lookupPath } from "@/lib/barcode";
+import { CameraScanButton } from "./camera-scan";
 import { ScanBarcodeIcon } from "./icons";
 
 /**
@@ -27,13 +29,17 @@ export function ScanField({ compact = false }: { compact?: boolean }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [compact]);
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = code.trim();
-    if (!trimmed) return;
+  function go(raw: string) {
+    const path = lookupPath(raw);
+    if (!path) return;
     setCode("");
     inputRef.current?.blur();
-    router.push(`/products/barcode/${encodeURIComponent(trimmed)}`);
+    router.push(path);
+  }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    go(code);
   }
 
   if (compact) {
@@ -65,13 +71,14 @@ export function ScanField({ compact = false }: { compact?: boolean }) {
         <ScanBarcodeIcon size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-4" />
         <input
           aria-label="Scan barcode"
-          placeholder="Scan or type barcode (PRD-…) + Enter"
+          placeholder="Scan or type barcode (JW-…, SKU-…, OG-…) + Enter"
           value={code}
           onChange={(e) => setCode(e.target.value)}
           autoComplete="off"
           className="h-10 w-full rounded-lg bg-paper pl-9 pr-3 font-mono text-sm text-ink shadow-[inset_0_0_0_1px_rgba(28,25,23,0.14)] transition-shadow placeholder:font-sans placeholder:text-ink-5 focus:outline-none focus:shadow-[inset_0_0_0_1px_#1c1917,0_0_0_3px_rgba(201,162,39,0.3)]"
         />
       </div>
+      <CameraScanButton onDetected={go} className="h-10" />
       <button type="submit" className="g-btn g-btn-secondary h-10 px-4 text-sm">
         Look up
       </button>

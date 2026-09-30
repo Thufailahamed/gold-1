@@ -13,6 +13,7 @@ import { businessDateFor } from "./busdate";
 import { getBankAccount } from "./cashbank";
 import { buildCreateProductStmts, buildVoidProductStmts } from "./products";
 import { consumeApproval, pendingApproval, requestApproval } from "./approvals";
+import { allocateNumber } from "./counters";
 
 /** @deprecated Use `allocateProportional` from @goldos/shared directly. */
 export const allocateCharges = allocateProportional;
@@ -23,14 +24,7 @@ async function nextNumber(
   name: string,
   prefix: string
 ): Promise<string> {
-  const row = await db
-    .prepare("SELECT next FROM counters WHERE name = ?")
-    .bind(name)
-    .first<{ next: number }>();
-  if (!row) throw Object.assign(new Error("Counter missing"), { code: "INTERNAL" });
-  const n = row.next;
-  stmts.push(db.prepare("UPDATE counters SET next = ? WHERE name = ?").bind(n + 1, name));
-  return `${prefix}-${String(n).padStart(4, "0")}`;
+  return allocateNumber(db, name, prefix, 4, name === "PO" ? "purchase_orders" : "purchase_invoices");
 }
 
 type IntakeItem = {

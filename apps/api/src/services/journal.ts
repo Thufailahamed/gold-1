@@ -178,6 +178,17 @@ export async function buildEntryStmts(
         code: "TRANSITION_LOCKED",
       });
   }
+  // A closed financial year rejects every posting dated inside it, at every
+  // branch — the year's statements have been frozen and filed. Same single
+  // choke point as the day lock, for the same reason.
+  const fiscal = await db
+    .prepare("SELECT MAX(year_end) AS year_end FROM fiscal_closes WHERE status = 'CLOSED'")
+    .first<{ year_end: string | null }>();
+  if (fiscal?.year_end && entryDate <= fiscal.year_end)
+    throw Object.assign(
+      new Error(`The financial year ending ${fiscal.year_end} is closed; post on a later date`),
+      { code: "TRANSITION_LOCKED" }
+    );
   await assertAccountsActive(db, post.lines);
 
   const stmts: D1PreparedStatement[] = [];
@@ -430,11 +441,15 @@ export async function trialBalance(
     conds.push("e.branch_id = ?");
     vals.push(opts.branchId);
   }
+  // The window lives in the entry join, so a line outside it still joins as
+  // NULL on the entry side. Summing only lines whose entry matched is what
+  // makes the date and branch filters real — summing l.* directly counted
+  // every line ever posted, whatever date or branch was asked for.
   const { results } = await db
     .prepare(
       `SELECT a.code, a.name, a.type,
-              COALESCE(SUM(l.debit_cents), 0) AS debitCents,
-              COALESCE(SUM(l.credit_cents), 0) AS creditCents
+              COALESCE(SUM(CASE WHEN e.id IS NOT NULL THEN l.debit_cents END), 0) AS debitCents,
+              COALESCE(SUM(CASE WHEN e.id IS NOT NULL THEN l.credit_cents END), 0) AS creditCents
        FROM chart_of_accounts a
        LEFT JOIN journal_lines l ON l.account_code = a.code
        LEFT JOIN journal_entries e ON e.id = l.entry_id AND ${conds.join(" AND ")}

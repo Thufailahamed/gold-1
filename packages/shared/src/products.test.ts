@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BARCODE_RE, createProductSchema } from "./schemas";
+import { BARCODE_RE, createProductSchema, normalizeCode } from "./schemas";
 
 describe("product schema", () => {
   const valid = {
@@ -26,5 +26,11 @@ describe("product schema", () => {
     expect(BARCODE_RE.test("JW-A3F9K2")).toBe(true);
     expect(BARCODE_RE.test("PRD-abc123")).toBe(false);
     expect(BARCODE_RE.test("OLD-ABC123")).toBe(false);
+  });
+  it("normalizes scanner input to the stored form", () => {
+    expect(normalizeCode(" jw-m2q39h\r\n")).toBe("JW-M2Q39H");
+    expect(normalizeCode("\x1dJW-M2Q39H\t")).toBe("JW-M2Q39H");
+    expect(normalizeCode("sku-abc123")).toBe("SKU-ABC123");
+    expect(normalizeCode("   ")).toBe("");
   });
 });

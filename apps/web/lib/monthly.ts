@@ -27,7 +27,7 @@ export type MonthlyReport = {
   purchases: { purchaseValueCents: number; oldGoldCents: number; goldFineMg: number; hasData: boolean };
   gold: { openingFineMg: number; inFineMg: number; outFineMg: number; closingFineMg: number; hasData: boolean };
   expenses: { totalCents: number; pendingCents: number; byCategory: { accountCode: string; name: string; cents: number }[]; hasData: boolean };
-  profit: { revenueCents: number; cogsCents: number; grossProfitCents: number; operatingExpensesCents: number; netProfitCents: number; basis: string };
+  profit: { revenueCents: number; cogsCents: number; grossProfitCents: number; otherIncomeCents?: number; operatingExpensesCents: number; netProfitCents: number; basis: string };
   cashflow: { openingCents: number; inflowsCents: number; outflowsCents: number; closingCents: number; unclassifiedCents: number; hasData: boolean };
   receivables: { totalCents: number; aging: Record<string, number>; outstanding: { id: string; number: string; outstandingCents: number }[]; hasData: boolean };
   payables: { totalCents: number; aging: Record<string, number>; outstanding: { id: string; number: string; outstandingCents: number }[]; hasData: boolean };

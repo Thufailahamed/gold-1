@@ -30,23 +30,23 @@ Date: 2026-09-28. Method: static traces of every service + route, live end-to-en
 
 ## 3. Completed modules
 
-Purchases (orders/receive/direct/void), POS sales + returns/exchanges, old gold (intake/test/value/purchase/release/convert), melting (batches/lock/melt/approve/void), manufacturing (orders/materials/produce/QC/finish/void), inventory (movements, counts + adjustments, transfers with lines, discrepancy reports, branch overview), repairs, custom orders, expenses + approvals, cash/bank/transfers/settlements, day closing + reopen, monthly reporting + snapshots + CSV/xlsx, approval engine + center, audit log + audit UI. UI gaps (API-complete, no screen yet): counts, transfers, discrepancies, branch overview, repairs, custom orders.
+Purchases (orders/receive/direct/void), POS sales + returns/exchanges, old gold (intake/test/value/purchase/release/convert), melting (batches/lock/melt/approve/void), manufacturing (orders/materials/produce/QC/finish/void), inventory (movements, counts + adjustments, transfers with lines, discrepancy reports, branch overview), repairs, custom orders, expenses + approvals, cash/bank/transfers/settlements, day closing + reopen, monthly reporting + snapshots + CSV/xlsx, approval engine + center, audit log + audit UI. ~~UI gaps (API-complete, no screen yet): counts, transfers, discrepancies, branch overview, repairs, custom orders.~~ **Resolved 2026-09-30:** every module has a screen (`/repairs`, `/custom-orders`, `/branches/overview` were the last three).
 
 ## 4. Known limitations (not changed; deliberate)
 
-- **No financial opening-balance flow for stock.** Direct-created products carry physical (`OPENING` gold) but no journal entry; 1100 understates until sold. Use purchases/manufacturing for fully-costed intake.
+- ~~No financial opening-balance flow for stock.~~ **Resolved 2026-09-29:** direct intake posts DR 1100 / CR 3100; `POST /accounts/opening-stock/backfill` covers earlier pieces.
 - **No cash-correction flow.** Genuine till corrections can only be manual journals (now visible, net-gated) — a typed correction flow with its own breakdown line is recommended (§7).
 - **Receivables total nets credits.** Net-credit customers fold into one figure; detail exists in outstanding/aging lists. Consider gross debit/credit split later.
 - **Valuation refuses unrated purities** (correct) and the nearest-purity fallback self-matches when the tested purity exists but is unrated — shops must post rates for every active purity (seed lacks 24K/21K).
-- **`idempotency_keys` table exists but is unwired.** Double-submitted writes can duplicate (mitigated for gated actions by single-use approval consumption only).
-- **Session "idle" expiry is absolute.** Docs promise 12h idle; code enforces 12h from login (plus 7d cap), never sliding. Either implement sliding refresh or correct the docs — flagged, not changed (perf implications).
+- ~~**`idempotency_keys` table exists but is unwired.**~~ **Resolved 2026-09-30:** `middleware/idempotency.ts` honours `Idempotency-Key` on every `/api/v1` mutation (session-scoped, body-hashed, 24h replay, 5xx never stored); the web client sends one per mutation and retries a dropped request once with the same key.
+- ~~**Session "idle" expiry is absolute.**~~ **Resolved 2026-09-30:** `requireAuth` slides the 12h idle deadline (written at most every 5 min), capped at 7d; the cookie lives to the cap and the server enforces idle.
 - **Seed data is hand-written and non-conserving** (melt output exceeded input; manual cash adjustments with empty memos). Local scratch only; production seeds must go through service flows.
 
 ## 5. Remaining risks
 
-- **Rate limiting: none.** No login throttling, no per-IP caps. Rely on Cloudflare WAF/rate-limiting rules operationally until in-app throttling lands. Login errors are generic (good), but scrypt only runs for existing users (minor timing oracle).
-- **Counter races.** Document-number counters are read-then-write; concurrent same-type submissions can collide on UNIQUE (fails loudly, no corruption — D1 serializes, but retry UX is unhandled).
-- **`uniqueCode` barcode race.** Check-then-insert; exact-race collision 500s instead of retrying. Low probability, loud failure.
+- **Rate limiting:** ~~none~~ **login throttling landed 2026-09-30** (`services/throttle.ts`, migration `0037`): 5 failures/15 min locks the account, 30/15 min locks the IP, both for 15 min, answered 429 + `Retry-After`. Unknown emails now pay one scrypt run (timing oracle closed). General per-IP API caps still belong in Cloudflare rate-limiting rules.
+- ~~**Counter races.**~~ **Resolved 2026-09-30:** every document counter allocates through `services/counters.ts` (atomic `UPDATE … RETURNING`, steps past taken numbers). Gaps on failed writes are accepted, as they already were for JE/EXP/RCPT.
+- **`uniqueCode` barcode race.** Check-then-insert over a 32^6 space: a collision needs two simultaneous requests drawing the same code (~1e-9). Accepted.
 - **Cross-month reversal asymmetry.** A reversal landing in a later month than its error nets in day-close (same-day scope) but appears solo in that month's snapshot window. Accepted: the month's books genuinely contain the mirror.
 - **NIC/phone PII** is visible to all `masters:view` holders (broad role set). Consider field-level redaction later.
 - **`seed.ts` builds SQL by string interpolation** (offline script, admin-supplied values) — keep it offline; never feed untrusted input.
@@ -79,3 +79,17 @@ Purchases (orders/receive/direct/void), POS sales + returns/exchanges, old gold 
 5. UI for the six API-complete modules (counts, transfers, discrepancies, branch overview, repairs, custom orders).
 6. Gross debit/credit split on receivables/payables totals; rates required for all active purities (seed them).
 7. Re-run this audit's live checklist on a fresh database before any AI-feature work (current scratch DB carries audit test rows; day left REOPENED intentionally).
+
+## 10. Follow-up pass (2026-09-30)
+
+Bugs found and fixed, each with a real-SQLite regression test (`race-guards`, `transit-gold`, `hardening` integration suites; 367 tests green, `tsc` clean in all packages, `next build` clean):
+
+1. **In-transit transfers failed the day-close gate for both branches.** Dispatch moves gold to the receiver in the ledger, but held stock counted the `TRANSFER_PENDING` piece at the sender, so branch-scoped `gold_stock_consistency` was off by the piece's fine weight in both branches until receipt. Held stock now attributes an in-transit piece to its receiver. Proven red without the fix.
+2. **Transfer recall never reversed the gold ledger.** The piece went back on the sender's shelf while the ledger kept its gold at the receiver permanently. `recallLines` now posts the reverse `TRANSFER` (`ref_entity = 'transfer_recall'`); migration `0038` backfills history by mirroring each recalled line's dispatch row; `reconcileTransfer` checks for it.
+3. **Repair collection could post revenue twice** (the journal was in the same batch as a status-guarded UPDATE that could match nothing). New `services/guard.ts` (`staleGuard` + `batchOrConflict`) aborts the whole batch when the guarded UPDATE lost the race → 409. Applied to every repair transition and every custom-order state change.
+4. **Concurrent custom-order advances lost money in the order row** (absolute `advance_cents = ?` overwrite while both journals posted). Now a relative, guarded update.
+5. **One old-gold item / melt lot could be earmarked to two live orders**, and any batch error was reported as "Already earmarked". Now an explicit cross-order check naming the holding order; earmarks on cancelled orders are released.
+6. **Repairs and custom orders ignored `search` and the branch-member rule.** Both lists now search (number, item/design, customer name/phone), return customer and branch names, and are scoped to the caller's branches; every `/:id` action checks membership.
+7. Web client: non-JSON error replies no longer throw a JSON parse error; `formApi` keeps the error code; `downloadCsv` surfaces the API's message. Branch-overview CSV permission is checked before the report is computed.
+
+Still open (unchanged): typed cash-correction flow (§9.1), gross debit/credit split on receivables (§4), post-production cancel needs an approver picker endpoint (UI takes a user id), shop-lot earmarks do not check remaining lot weight.

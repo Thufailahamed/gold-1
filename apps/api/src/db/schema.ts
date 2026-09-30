@@ -88,6 +88,19 @@ export const settings = sqliteTable("settings", {
 export const idempotencyKeys = sqliteTable("idempotency_keys", {
   key: text("key").primaryKey(),
   createdAt: integer("created_at").notNull(),
+  userId: text("user_id"),
+  method: text("method"),
+  path: text("path"),
+  requestHash: text("request_hash"),
+  status: integer("status"),
+  responseJson: text("response_json"),
+});
+
+export const loginAttempts = sqliteTable("login_attempts", {
+  key: text("key").primaryKey(),
+  failures: integer("failures").notNull().default(0),
+  windowStart: integer("window_start").notNull(),
+  lockedUntil: integer("locked_until"),
 });
 
 export const categories = sqliteTable("categories", {
@@ -186,6 +199,11 @@ export const products = sqliteTable("products", {
   imageKeys: text("image_keys").notNull().default("[]"),
   status: text("status").notNull().default("IN_STOCK"),
   branchId: text("branch_id").notNull(),
+  reservedCustomerId: text("reserved_customer_id"),
+  reservedNote: text("reserved_note"),
+  reservedUntil: integer("reserved_until"),
+  reservedAt: integer("reserved_at"),
+  reservedBy: text("reserved_by"),
   createdAt: integer("created_at").notNull(),
   createdBy: text("created_by"),
 });
@@ -325,6 +343,8 @@ export const salesInvoices = sqliteTable("sales_invoices", {
   salespersonId: text("salesperson_id"),
   subtotalCents: integer("subtotal_cents").notNull(),
   discountCents: integer("discount_cents").notNull().default(0),
+  taxCents: integer("tax_cents").notNull().default(0),
+  taxRateBp: integer("tax_rate_bp").notNull().default(0),
   totalCents: integer("total_cents").notNull(),
   paidCents: integer("paid_cents").notNull().default(0),
   status: text("status").notNull().default("UNPAID"),
@@ -339,6 +359,7 @@ export const salesItems = sqliteTable("sales_items", {
   productId: text("product_id").notNull(),
   priceCents: integer("price_cents").notNull(),
   discountCents: integer("discount_cents").notNull().default(0),
+  taxCents: integer("tax_cents").notNull().default(0),
   costCents: integer("cost_cents").notNull(),
 });
 
@@ -362,6 +383,7 @@ export const salesReturns = sqliteTable("sales_returns", {
   approvedBy: text("approved_by"),
   refundCents: integer("refund_cents").notNull().default(0),
   creditCents: integer("credit_cents").notNull().default(0),
+  taxCents: integer("tax_cents").notNull().default(0),
   exchangeSaleId: text("exchange_sale_id"),
   status: text("status").notNull().default("COMPLETE"),
   journalEntryId: text("journal_entry_id"),

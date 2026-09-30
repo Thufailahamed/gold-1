@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useCountUp } from "@/lib/count-up";
 import { businessToday, monthBounds, type MonthlyReport } from "@/lib/monthly";
-import { BarList, GaugeRing, Page, Pill, SectionLabel, Skeleton, StatusPill, controlClass } from "@/components/ui";
+import { BarList, Page, Pill, SectionLabel, Skeleton, StatusPill, controlClass } from "@/components/ui";
 import { SpotlightCard } from "@/components/home/motion";
 import {
   AlertCircleIcon,
@@ -20,9 +20,13 @@ import {
   ClipboardCheckIcon,
   CoinsIcon,
   CreditCardIcon,
+  FileTextIcon,
+  HistoryIcon,
   PlusIcon,
   ScaleIcon,
+  TagsIcon,
   TrendingUpIcon,
+  UsersIcon,
 } from "@/components/icons";
 
 /* ------------------------------------------------------------------ types */
@@ -224,7 +228,7 @@ function KpiTile({
           />
         ) : null}
       </div>
-      <div className="mt-6">
+      <div className="mt-4">
         {loading ? (
           <Skeleton className="h-9 w-32" />
         ) : (
@@ -232,7 +236,7 @@ function KpiTile({
             {cents !== undefined ? <span className="text-xs font-medium text-ink-4">LKR</span> : null}
             <span
               className={cn(
-                "g-metric truncate text-3xl leading-none",
+                "g-metric truncate text-[26px] leading-none",
                 tone === "good" && "text-emerald-700",
                 tone === "bad" && "text-rose-700",
                 tone === "neutral" && "text-ink"
@@ -260,7 +264,7 @@ function KpiTile({
   );
 }
 
-/** Dark spotlight tile that links to an accounts sub-page. */
+/** Compact hub cell linking to an accounts sub-page; laid out inside a shared Card. */
 function NavTile({
   href,
   index,
@@ -269,7 +273,6 @@ function NavTile({
   description,
   stat,
   statTone = "muted",
-  delay = 0,
 }: {
   href: string;
   index: string;
@@ -278,35 +281,33 @@ function NavTile({
   description: string;
   stat?: ReactNode;
   statTone?: "ok" | "warn" | "info" | "muted";
-  delay?: number;
 }) {
-  const dot = { ok: "bg-emerald-400", warn: "bg-amber-400", info: "bg-gold", muted: "bg-paper/30" }[statTone];
+  const dot = { ok: "bg-emerald-500", warn: "bg-amber-500", info: "bg-gold", muted: "bg-ink/25" }[statTone];
   return (
-    <Link href={href} className="group block h-full animate-fade-in rounded-[22px]" style={{ animationDelay: `${delay}ms` }}>
-      <SpotlightCard tone="dark" className="flex h-full flex-col p-5">
-        <div className="flex items-start justify-between gap-3">
-          <span className="flex size-10 items-center justify-center rounded-xl bg-paper/[0.06] text-gold-light ring-1 ring-paper/[0.08] transition-colors duration-320 group-hover:bg-gold group-hover:text-void">
-            <Icon size={17} />
-          </span>
-          <span className="flex items-center gap-2.5">
-            <span className="g-metric text-[10px] tracking-[0.22em] text-paper/25">{index}</span>
-            <ArrowRightIcon
-              size={14}
-              className="-translate-x-1 text-paper/30 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-gold-light group-hover:opacity-100"
-            />
-          </span>
-        </div>
-        <div className="mt-5">
-          <div className="text-[15px] font-semibold text-paper">{title}</div>
-          <p className="mt-1 text-xs leading-relaxed text-paper/50">{description}</p>
-        </div>
+    <Link
+      href={href}
+      className="group relative flex min-w-0 items-center gap-3.5 bg-paper px-5 py-4 transition-colors hover:bg-gold-pale/50"
+    >
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.2)] transition-all duration-320 group-hover:from-void group-hover:to-ink-2 group-hover:text-gold-light">
+        <Icon size={17} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className="truncate text-sm font-semibold text-ink transition-colors group-hover:text-gold-dark">{title}</span>
+          <span className="g-metric text-[9px] tracking-[0.2em] text-ink-5">{index}</span>
+        </span>
+        <span className="mt-0.5 block truncate text-xs text-ink-4">{description}</span>
         {stat ? (
-          <div className="mt-auto flex items-center gap-2 border-t border-paper/[0.08] pt-3 text-[11px] text-paper/55">
+          <span className="mt-1.5 flex items-center gap-1.5 text-[11px] font-medium text-ink-3">
             <span className={cn("size-1.5 shrink-0 rounded-full", dot)} />
             <span className="truncate">{stat}</span>
-          </div>
+          </span>
         ) : null}
-      </SpotlightCard>
+      </span>
+      <ArrowRightIcon
+        size={14}
+        className="shrink-0 -translate-x-1 text-ink-5 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-gold-dark group-hover:opacity-100"
+      />
     </Link>
   );
 }
@@ -345,7 +346,7 @@ function StatementRow({
 /* ------------------------------------------------------------------- page */
 
 const heroSelectClass =
-  "h-11 rounded-full bg-paper/[0.07] px-4 pr-9 text-sm text-paper shadow-[inset_0_0_0_1px_rgba(250,250,249,0.18)] transition-shadow duration-200 hover:bg-paper/[0.1] focus:outline-none focus:shadow-[inset_0_0_0_1px_#E7C65A,0_0_0_3px_rgba(201,162,39,0.3)] [&>option]:bg-paper [&>option]:text-ink";
+  "h-10 rounded-full bg-paper/[0.07] px-4 pr-9 text-sm text-paper shadow-[inset_0_0_0_1px_rgba(250,250,249,0.18)] transition-shadow duration-200 hover:bg-paper/[0.1] focus:outline-none focus:shadow-[inset_0_0_0_1px_#E7C65A,0_0_0_3px_rgba(201,162,39,0.3)] [&>option]:bg-paper [&>option]:text-ink";
 
 export default function AccountsDashboardPage() {
   const today = businessToday();
@@ -426,6 +427,12 @@ export default function AccountsDashboardPage() {
     queryFn: () => api<BankAccount[]>(`/api/v1/bank-accounts${branchId ? `?branchId=${encodeURIComponent(branchId)}` : ""}`),
   });
 
+  const dues = useQuery({
+    ...opt,
+    queryKey: ["acct", "dues", branchId],
+    queryFn: () => api<{ totalCents: number; rows: unknown[] }>(`/api/v1/receipts/receivables${branchId ? `?branchId=${encodeURIComponent(branchId)}` : ""}`),
+  });
+
   const r = report.data;
   const p = preview.data;
 
@@ -473,100 +480,74 @@ export default function AccountsDashboardPage() {
   const monthQuery = `?month=${month}`;
   const monthReportHref = `/reports/monthly${monthQuery}${branchId ? `&branch=${encodeURIComponent(branchId)}` : ""}`;
 
-  const strip: { label: string; value: string; icon: IconCmp; href?: string }[] = [
+  const strip: { label: string; value: string; icon: IconCmp; href?: string; tone?: string; meter?: number }[] = [
     { label: "Spent today", value: todays.isLoading ? "—" : `${lkr(todayPosted)} LKR`, icon: CreditCardIcon, href: "/expenses?range=today" },
-    { label: "Cash expected in drawer", value: p ? `${lkr(p.closing.expectedCents)} LKR` : "—", icon: BanknoteIcon, href: "/day-closing" },
+    {
+      label: "Day closing",
+      value: !branchId ? "Pick a branch" : closedToday ? "Closed" : p ? `${checksPass}/${checksTotal} checks pass` : "—",
+      icon: ClipboardCheckIcon,
+      href: "/day-closing",
+      tone: closedToday ? "text-emerald-300" : undefined,
+      meter: branchId && p ? (closedToday ? 100 : checksPct) : undefined,
+    },
     { label: "Spent this month", value: summary.data ? `${lkr(monthPosted)} LKR` : "—", icon: TrendingUpIcon, href: "/expenses?range=month" },
-    { label: "Net profit this month", value: r ? `${lkrSigned(r.profit.netProfitCents)} LKR` : "—", icon: ScaleIcon, href: monthReportHref },
+    {
+      label: "Net profit this month",
+      value: r ? `${lkrSigned(r.profit.netProfitCents)} LKR` : "—",
+      icon: ScaleIcon,
+      href: monthReportHref,
+      tone: r && r.profit.netProfitCents < 0 ? "text-rose-300" : undefined,
+    },
   ];
 
   return (
     <Page>
       {/* ---------------------------------------------------------------- hero */}
-      <section className="relative overflow-hidden rounded-3xl bg-void text-paper shadow-5">
-        <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-70" />
-        <div className="home-drift pointer-events-none absolute -right-32 -top-40 size-[30rem] rounded-full bg-gold/20 blur-[120px]" />
-        <div
-          className="home-drift pointer-events-none absolute -bottom-48 left-10 size-[26rem] rounded-full bg-gold-deep/25 blur-[120px]"
-          style={{ animationDelay: "-8s" }}
-        />
+      <section className="relative overflow-hidden rounded-2xl bg-void text-paper shadow-4">
+        <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-50" />
+        <div className="home-drift pointer-events-none absolute -right-24 -top-32 size-72 rounded-full bg-gold/20 blur-[100px]" />
         <div className="home-noise pointer-events-none absolute inset-0" />
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
 
-        <div className="relative grid grid-cols-1 items-center gap-8 p-5 sm:p-8 lg:grid-cols-[1.35fr_1fr] lg:p-10">
+        <div className="relative flex flex-col gap-4 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-gold/25 bg-gold/[0.08] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/[0.08] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">
                 <span className="size-1.5 animate-pulse-soft rounded-full bg-gold" />
                 Accounts
               </span>
-              <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-paper/40">{longDate(today)}</span>
+              <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-paper/40">{longDate(today)}</span>
             </div>
-
-            <h1 className="g-display mt-5 text-4xl text-paper text-balance sm:text-5xl">
+            <h1 className="g-display mt-2 text-2xl leading-tight text-paper sm:text-[28px]">
               Every rupee, <span className="home-gold-text">accounted for.</span>
             </h1>
-            <p className="mt-3 max-w-lg text-sm leading-relaxed text-paper/60 sm:text-[15px]">
-              Today&apos;s spending, the drawer and the month&apos;s books — figures come straight from the ledger.
-            </p>
-
-            <div className="mt-7 flex flex-wrap items-center gap-2.5">
-              <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={heroSelectClass} aria-label="Branch">
-                {canShop ? <option value="">All branches</option> : null}
-                {visibleBranches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
-              {canManage ? (
-                <Link href="/expenses?new=1" className="home-btn-gold h-11 px-5 text-sm">
-                  <PlusIcon size={15} />
-                  Record expense
-                </Link>
-              ) : null}
-              <Link href="/day-closing" className="home-btn-ghost h-11 px-5 text-sm">
-                <ClipboardCheckIcon size={15} />
-                Close the day
-              </Link>
-            </div>
           </div>
 
-          <div className="home-glass relative flex min-w-0 items-center gap-4 p-4 sm:gap-5 sm:p-6">
-            <div className="relative size-24 shrink-0 sm:size-32">
-              {preview.isLoading && branchId ? (
-                <Skeleton className="size-full rounded-full bg-paper/10" />
-              ) : (
-                <GaugeRing
-                  value={closedToday ? Math.max(checksTotal, 1) : checksPass}
-                  max={Math.max(checksTotal, 1)}
-                  caption={p ? (closedToday ? "Done" : `${checksPass}/${checksTotal}`) : "—"}
-                  label={closedToday ? "day closed" : "checks pass"}
-                />
-              )}
-            </div>
-            <div className="min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light/80">Cash expected in drawer</div>
-              {preview.isLoading && branchId ? (
-                <Skeleton className="mt-2 h-9 w-36 bg-paper/10" />
-              ) : (
-                <div className="mt-1.5 flex items-baseline gap-1.5">
-                  <span className="text-xs text-paper/50">LKR</span>
-                  <span className="g-metric truncate text-2xl text-paper sm:text-4xl">{p ? lkr(p.closing.expectedCents) : "—"}</span>
-                </div>
-              )}
-              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-paper/55">
-                <span>
-                  <span className="g-metric text-paper/85">{p ? lkr(p.openingCents) : "—"}</span> opening
-                </span>
-                <span>
-                  <span className="g-metric text-paper/85">{p ? lkr(p.cashIn.totalCents) : "—"}</span> in
-                </span>
-                <span>
-                  <span className="g-metric text-paper/85">{p ? lkr(p.cashOut.totalCents) : "—"}</span> out
-                </span>
-              </div>
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={heroSelectClass} aria-label="Branch">
+              {canShop ? <option value="">All branches</option> : null}
+              {visibleBranches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            {canManage ? (
+              <Link href="/expenses?new=1" className="home-btn-gold h-10 px-4 text-sm">
+                <PlusIcon size={15} />
+                Record expense
+              </Link>
+            ) : null}
+            {canManage ? (
+              <Link href="/accounts/receivables" className="home-btn-ghost h-10 px-4 text-sm">
+                <UsersIcon size={15} />
+                Collect dues
+              </Link>
+            ) : null}
+            <Link href="/day-closing" className="home-btn-ghost h-10 px-4 text-sm">
+              <ClipboardCheckIcon size={15} />
+              Close the day
+            </Link>
           </div>
         </div>
 
@@ -577,18 +558,28 @@ export default function AccountsDashboardPage() {
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-paper/[0.05] text-gold-light ring-1 ring-paper/[0.08] transition-colors group-hover:bg-gold group-hover:text-void">
                   <s.icon size={14} />
                 </span>
-                <span className="min-w-0">
+                <span className="min-w-0 flex-1">
                   <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-paper/40">{s.label}</span>
-                  <span className="g-metric mt-0.5 block truncate text-base text-paper">{s.value}</span>
+                  <span className={cn("g-metric mt-0.5 block truncate text-[15px]", s.tone ?? "text-paper")}>{s.value}</span>
+                  {s.meter !== undefined ? (
+                    <span className="mt-1.5 block h-1 overflow-hidden rounded-full bg-paper/10">
+                      <span
+                        className={cn(
+                          "block h-full rounded-full transition-[width] duration-700 ease-brand",
+                          s.meter >= 100 ? "bg-emerald-400" : "bg-gradient-to-r from-gold-deep to-gold-light"
+                        )}
+                        style={{ width: `${s.meter}%` }}
+                      />
+                    </span>
+                  ) : null}
                 </span>
               </>
             );
             const cls = cn(
-              "group flex min-w-0 items-center gap-3 px-4 py-4 transition-colors hover:bg-paper/[0.03] sm:px-6 lg:px-8",
+              "group flex min-w-0 items-center gap-3 px-4 py-3 transition-colors hover:bg-paper/[0.04] sm:px-6",
               i % 2 === 1 && "border-l border-paper/[0.08]",
               i >= 2 && "border-t border-paper/[0.08] lg:border-t-0",
-              i === 2 && "lg:border-l",
-              i === 3 && "lg:border-l"
+              i === 2 && "lg:border-l"
             );
             return s.href ? (
               <Link key={s.label} href={s.href} className={cls}>
@@ -604,46 +595,98 @@ export default function AccountsDashboardPage() {
       </section>
 
       {/* ----------------------------------------------------------- jump to */}
-      <section aria-label="Accounts pages" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <NavTile
-          href="/expenses"
-          index="01"
-          icon={BanknoteIcon}
-          title="Expenses"
-          description="Record and review every rupee the shop spends."
-          stat={pending.data?.total ? `${pending.data.total} awaiting approval` : "Nothing waiting for approval"}
-          statTone={pending.data?.total ? "warn" : "ok"}
-        />
-        <NavTile
-          href="/day-closing"
-          index="02"
-          icon={ClipboardCheckIcon}
-          title="Day closing"
-          description="Count the drawer, explain differences, lock the day."
-          stat={branchId ? (closedToday ? "Today is closed" : "Today is still open") : "Pick a branch to see status"}
-          statTone={branchId ? (closedToday ? "ok" : "warn") : "muted"}
-          delay={60}
-        />
-        <NavTile
-          href={monthReportHref}
-          index="03"
-          icon={TrendingUpIcon}
-          title="Monthly report"
-          description="Sales, profit, cash flow, receivables and stock for any month."
-          stat={r ? `Net profit ${lkrSigned(r.profit.netProfitCents)} LKR` : "Open the full report"}
-          statTone="info"
-          delay={120}
-        />
-        <NavTile
-          href="/accounts/chart"
-          index="04"
-          icon={BookOpenIcon}
-          title="Chart of accounts"
-          description="Every ledger balance, plus manual adjustments."
-          stat="Double-entry books"
-          delay={180}
-        />
-      </section>
+      <Card>
+        {/* 1px gaps over a tinted background draw the hairlines, so the grid
+            stays ruled correctly at any column count and any tile count. */}
+        <nav aria-label="Accounts pages" className="grid gap-px bg-ink/[0.06] sm:grid-cols-2 lg:grid-cols-4">
+          <NavTile
+            href="/expenses"
+            index="01"
+            icon={BanknoteIcon}
+            title="Expenses"
+            description="Record and review spending"
+            stat={pending.data?.total ? `${pending.data.total} awaiting approval` : "Nothing waiting"}
+            statTone={pending.data?.total ? "warn" : "ok"}
+          />
+          <NavTile
+            href="/accounts/cash"
+            index="02"
+            icon={CoinsIcon}
+            title="Cash & bank"
+            description="Balances, cash book, owner in/out"
+            stat={banks.data ? `Banks ${lkr(bankTotal)} LKR` : "Drawer & bank balances"}
+            statTone="info"
+          />
+          <NavTile
+            href="/accounts/receivables"
+            index="03"
+            icon={UsersIcon}
+            title="Customer dues"
+            description="Collect credit-sale payments"
+            stat={dues.data ? (dues.data.totalCents > 0 ? `${lkr(dues.data.totalCents)} LKR owed` : "Nobody owes the shop") : "Who owes the shop"}
+            statTone={dues.data?.totalCents ? "warn" : "ok"}
+          />
+          <NavTile
+            href="/day-closing"
+            index="04"
+            icon={ClipboardCheckIcon}
+            title="Day closing"
+            description="Count, explain, lock the day"
+            stat={branchId ? (closedToday ? "Today is closed" : "Today is open") : "Pick a branch"}
+            statTone={branchId ? (closedToday ? "ok" : "warn") : "muted"}
+          />
+          <NavTile
+            href="/accounts/payables"
+            index="05"
+            icon={FileTextIcon}
+            title="Supplier dues"
+            description="What the shop owes, aged by bill"
+            stat={r ? (r.payables.totalCents > 0 ? `${lkr(r.payables.totalCents)} LKR owed` : "Nothing owed") : "Open purchase bills"}
+            statTone={r?.payables.totalCents ? "warn" : "ok"}
+          />
+          <NavTile
+            href={monthReportHref}
+            index="06"
+            icon={TrendingUpIcon}
+            title="Monthly report"
+            description="Sales, profit, cash, stock"
+            stat={r ? `Net ${lkrSigned(r.profit.netProfitCents)} LKR` : "Open the full report"}
+            statTone="info"
+          />
+          <NavTile
+            href="/accounts/statements"
+            index="07"
+            icon={ScaleIcon}
+            title="Financial statements"
+            description="P&L, balance sheet, trial balance"
+            stat="Any period, live from the ledger"
+          />
+          <NavTile
+            href="/accounts/chart"
+            index="08"
+            icon={BookOpenIcon}
+            title="Chart of accounts"
+            description="Ledger balances & adjustments"
+            stat="Double-entry books"
+          />
+          <NavTile
+            href="/accounts/tax"
+            index="09"
+            icon={TagsIcon}
+            title="Sales tax"
+            description="VAT charged, refunded and paid"
+            stat="Tax return for any period"
+          />
+          <NavTile
+            href="/accounts/year-end"
+            index="10"
+            icon={HistoryIcon}
+            title="Financial year"
+            description="Close the year, lock the books"
+            stat="Retained earnings carried forward"
+          />
+        </nav>
+      </Card>
 
       {/* -------------------------------------------------------------- today */}
       <SectionHead index="T-01" title="Today" sub={longDate(today)} />
@@ -918,7 +961,7 @@ export default function AccountsDashboardPage() {
           <CardHead
             icon={CreditCardIcon}
             title="Daily expenses"
-            sub="Posted spending per day · lighter bars await approval"
+            sub="Posted spending per day"
             action={<HeadLink href="/expenses?range=month">This month</HeadLink>}
           />
           <div className="px-5 pb-5 sm:px-6">
@@ -943,38 +986,54 @@ export default function AccountsDashboardPage() {
                 {activeDays === 0 ? (
                   <Empty icon={CreditCardIcon} title="No expenses this month" desc="Recorded expenses will chart here day by day." />
                 ) : (
-                  <div className="h-60" role="img" aria-label={`Daily expenses for the month, ${activeDays} days with spending`}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData} margin={{ top: 6, right: 6, left: 0, bottom: 0 }} barCategoryGap="22%">
-                        <CartesianGrid stroke="rgba(28,25,23,0.06)" strokeDasharray="3 5" vertical={false} />
-                        <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#78716c", fontSize: 11 }} interval="preserveStartEnd" />
-                        <YAxis
-                          tickLine={false}
-                          axisLine={false}
-                          width={44}
-                          tick={{ fill: "#a8a29e", fontSize: 11 }}
-                          tickFormatter={(v: number) => compact(v)}
-                        />
-                        <Tooltip
-                          cursor={{ fill: "rgba(201,162,39,0.08)" }}
-                          contentStyle={{
-                            borderRadius: 12,
-                            border: "none",
-                            background: "#0c0a09",
-                            color: "#fff",
-                            fontSize: 12,
-                            boxShadow: "0 20px 40px -16px rgba(0,0,0,0.5)",
-                          }}
-                          labelStyle={{ color: "#E7C65A", fontWeight: 600, marginBottom: 4 }}
-                          itemStyle={{ color: "#fafaf9" }}
-                          labelFormatter={(_, pl) => (pl?.[0]?.payload?.date ? dayLabel(pl[0].payload.date) : "")}
-                          formatter={(v) => `LKR ${Number(v ?? 0).toLocaleString("en-US")}`}
-                        />
-                        <Bar dataKey="posted" name="Posted" stackId="a" fill="#C9A227" radius={[0, 0, 0, 0]} />
-                        <Bar dataKey="pending" name="Awaiting approval" stackId="a" fill="#E7C65A" fillOpacity={0.45} radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
+                  <>
+                    <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-4">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="size-2 rounded-sm bg-[#C9A227]" /> Posted
+                      </span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="size-2 rounded-sm bg-[#E7C65A]/45" /> Awaiting approval
+                      </span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-3 border-t border-dashed border-[#8C6D1F]" /> Daily average
+                      </span>
+                    </div>
+                    <div className="h-60" role="img" aria-label={`Daily expenses for the month, ${activeDays} days with spending`}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData} margin={{ top: 6, right: 6, left: 0, bottom: 0 }} barCategoryGap="22%">
+                          <CartesianGrid stroke="rgba(28,25,23,0.06)" strokeDasharray="3 5" vertical={false} />
+                          <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#78716c", fontSize: 11 }} interval="preserveStartEnd" />
+                          <YAxis
+                            tickLine={false}
+                            axisLine={false}
+                            width={44}
+                            tick={{ fill: "#a8a29e", fontSize: 11 }}
+                            tickFormatter={(v: number) => compact(v)}
+                          />
+                          <Tooltip
+                            cursor={{ fill: "rgba(201,162,39,0.08)" }}
+                            contentStyle={{
+                              borderRadius: 12,
+                              border: "none",
+                              background: "#0c0a09",
+                              color: "#fff",
+                              fontSize: 12,
+                              boxShadow: "0 20px 40px -16px rgba(0,0,0,0.5)",
+                            }}
+                            labelStyle={{ color: "#E7C65A", fontWeight: 600, marginBottom: 4 }}
+                            itemStyle={{ color: "#fafaf9" }}
+                            labelFormatter={(_, pl) => (pl?.[0]?.payload?.date ? dayLabel(pl[0].payload.date) : "")}
+                            formatter={(v) => `LKR ${Number(v ?? 0).toLocaleString("en-US")}`}
+                          />
+                          {avgPerDay > 0 ? (
+                            <ReferenceLine y={avgPerDay / 100} stroke="#8C6D1F" strokeDasharray="4 4" strokeOpacity={0.6} ifOverflow="extendDomain" />
+                          ) : null}
+                          <Bar dataKey="posted" name="Posted" stackId="a" fill="#C9A227" radius={[0, 0, 0, 0]} />
+                          <Bar dataKey="pending" name="Awaiting approval" stackId="a" fill="#E7C65A" fillOpacity={0.45} radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </>
                 )}
               </>
             )}
@@ -1036,6 +1095,9 @@ export default function AccountsDashboardPage() {
                 <StatementRow label="Revenue" cents={r.profit.revenueCents} />
                 <StatementRow label="Cost of goods sold" cents={-r.profit.cogsCents} indent />
                 <StatementRow label="Gross profit" cents={r.profit.grossProfitCents} />
+                {r.profit.otherIncomeCents ? (
+                  <StatementRow label="Other income" cents={r.profit.otherIncomeCents} indent />
+                ) : null}
                 <StatementRow label="Operating expenses" cents={-r.profit.operatingExpensesCents} indent />
                 <StatementRow label="Net profit" cents={r.profit.netProfitCents} strong />
               </div>

@@ -1,4 +1,5 @@
 import { agingBuckets, cashflowClose, goldClose, KNOWN_CASH_REFS, monthBounds, monthlyPnl } from "@goldos/shared";
+import { APPLIED_ADVANCE_SQL } from "./receipts";
 
 export type AgingBuckets = { "0-30": number; "31-60": number; "61-90": number; "90+": number };
 
@@ -27,7 +28,7 @@ export type MonthlyReport = {
   sales: { totalCents: number; invoiceCount: number; grossCents: number; returnsCents: number; netCents: number; hasData: boolean };
   purchases: { purchaseValueCents: number; oldGoldCents: number; goldFineMg: number; hasData: boolean };
   expenses: { totalCents: number; pendingCents: number; byCategory: { accountCode: string; name: string; cents: number }[]; hasData: boolean };
-  profit: { revenueCents: number; cogsCents: number; grossProfitCents: number; operatingExpensesCents: number; netProfitCents: number; basis: "ledger-posted-only" };
+  profit: { revenueCents: number; cogsCents: number; grossProfitCents: number; otherIncomeCents?: number; operatingExpensesCents: number; netProfitCents: number; basis: "ledger-posted-only" };
   gold: { openingFineMg: number; inFineMg: number; outFineMg: number; closingFineMg: number; hasData: boolean };
   cashflow: { openingCents: number; inflowsCents: number; outflowsCents: number; closingCents: number; unclassifiedCents: number; hasData: boolean };
   receivables: PartyAging;
@@ -113,16 +114,20 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
     `SELECT COALESCE(SUM(l.debit_cents - l.credit_cents),0) AS n FROM journal_lines l JOIN journal_entries e ON e.id=l.entry_id WHERE l.account_code='5200' AND e.entry_date>=? AND e.entry_date<=?${b}`, [from, to, ...bv]);
   const adjNetCents = await sumCents(db,
     `SELECT COALESCE(SUM(l.debit_cents - l.credit_cents),0) AS n FROM journal_lines l JOIN journal_entries e ON e.id=l.entry_id WHERE l.account_code='5300' AND e.entry_date>=? AND e.entry_date<=?${b}`, [from, to, ...bv]);
-  const { grossProfitCents, netProfitCents } = monthlyPnl({ revenueCents, cogsCents, opexCents, meltLossCents, mfgLossCents, adjNetCents });
+  // Revenue that is not a jewellery sale (4900 and any shop-added 4xxx other
+  // than sales). Kept out of revenueCents so gross margin stays about jewellery.
+  const otherIncomeCents = await sumCents(db,
+    `SELECT COALESCE(SUM(l.credit_cents - l.debit_cents),0) AS n FROM journal_lines l JOIN journal_entries e ON e.id=l.entry_id JOIN chart_of_accounts a ON a.code=l.account_code WHERE a.type='REVENUE' AND l.account_code<>'4000' AND e.entry_date>=? AND e.entry_date<=?${b}`, [from, to, ...bv]);
+  const { grossProfitCents, netProfitCents } = monthlyPnl({ revenueCents, cogsCents, opexCents, meltLossCents, mfgLossCents, adjNetCents, otherIncomeCents });
   const sib = opts.branchId ? " AND si.branch_id=?" : "";
   const sibv: unknown[] = opts.branchId ? [opts.branchId] : [];
   const staff = opts.staffId ? " AND si.salesperson_id=?" : "";
   const staffv: unknown[] = opts.staffId ? [opts.staffId] : [];
   const grossRow = await db.prepare(
-    `SELECT COALESCE(SUM(si.total_cents),0) AS g, COUNT(*) AS c FROM sales_invoices si WHERE si.status<>'VOID' AND date(si.created_at/1000,'unixepoch','+330 minutes')>=? AND date(si.created_at/1000,'unixepoch','+330 minutes')<=?${sib}${staff}`
+    `SELECT COALESCE(SUM(si.total_cents - si.tax_cents),0) AS g, COUNT(*) AS c FROM sales_invoices si WHERE si.status<>'VOID' AND date(si.created_at/1000,'unixepoch','+330 minutes')>=? AND date(si.created_at/1000,'unixepoch','+330 minutes')<=?${sib}${staff}`
   ).bind(from, to, ...sibv, ...staffv).first<{ g: number; c: number }>();
   const retRow = await db.prepare(
-    `SELECT COALESCE(SUM(sr.refund_cents+sr.credit_cents),0) AS r FROM sales_returns sr JOIN sales_invoices si2 ON si2.id=sr.invoice_id WHERE sr.status='COMPLETE' AND date(sr.created_at/1000,'unixepoch','+330 minutes')>=? AND date(sr.created_at/1000,'unixepoch','+330 minutes')<=?`
+    `SELECT COALESCE(SUM(sr.refund_cents+sr.credit_cents-sr.tax_cents),0) AS r FROM sales_returns sr JOIN sales_invoices si2 ON si2.id=sr.invoice_id WHERE sr.status='COMPLETE' AND date(sr.created_at/1000,'unixepoch','+330 minutes')>=? AND date(sr.created_at/1000,'unixepoch','+330 minutes')<=?`
   ).bind(from, to).first<{ r: number }>();
   const grossCents = grossRow?.g ?? 0;
   const returnsCents = retRow?.r ?? 0;
@@ -204,8 +209,11 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
   const bEqv: unknown[] = opts.branchId ? [opts.branchId] : [];
   // Balances as of `to`: every 1200/2000 line on or before month-end, opening
   // entries included (they are journal lines too — never a separate column).
+  // No status filter: a reversed entry is marked REVERSED while its mirror
+  // stays POSTED, so counting POSTED only would keep the mirror and drop the
+  // original — a voided receipt would read as the customer owing it twice.
   const custBal = await db.prepare(
-    `SELECT l.party_id AS partyId, COALESCE(SUM(l.debit_cents - l.credit_cents),0) AS balance FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id WHERE l.account_code = '1200' AND l.party_type = 'customer' AND e.entry_date <= ? AND e.status = 'POSTED'${bEq} GROUP BY l.party_id`
+    `SELECT l.party_id AS partyId, COALESCE(SUM(l.debit_cents - l.credit_cents),0) AS balance FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id WHERE l.account_code = '1200' AND l.party_type = 'customer' AND e.entry_date <= ?${bEq} GROUP BY l.party_id`
   ).bind(to, ...bEqv).all<{ partyId: string; balance: number }>();
   const custNames = new Map<string, string>();
   for (const row of custBal.results ?? []) {
@@ -218,14 +226,18 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
   const siB2v: unknown[] = opts.branchId ? [opts.branchId] : [];
   const { results: sinvs } = await db.prepare(
     `SELECT si.id, si.number, si.total_cents, date(si.created_at/1000,'unixepoch','+330 minutes') AS d,
-            COALESCE((SELECT SUM(sp.amount_cents) FROM sales_payments sp WHERE sp.invoice_id = si.id AND sp.method <> 'credit' AND date(sp.created_at/1000,'unixepoch','+330 minutes') <= ?), 0) AS paid
+            COALESCE((SELECT SUM(sp.amount_cents) FROM sales_payments sp WHERE sp.invoice_id = si.id AND sp.method <> 'credit' AND date(sp.created_at/1000,'unixepoch','+330 minutes') <= ?), 0)
+            + COALESCE((SELECT SUM(a.amount_cents) FROM customer_receipt_allocations a JOIN customer_receipts r ON r.id = a.receipt_id WHERE a.invoice_id = si.id AND r.status = 'POSTED' AND r.receipt_date <= ?), 0)
+            + ${APPLIED_ADVANCE_SQL}
+            + COALESCE((SELECT SUM(rl.credit_cents) FROM sales_returns sr JOIN journal_entries re ON re.id = sr.journal_entry_id JOIN journal_lines rl ON rl.entry_id = re.id AND rl.account_code = '1200' WHERE sr.invoice_id = si.id AND re.entry_date <= ?), 0)
+            + si.store_credit_cents AS paid
      FROM sales_invoices si WHERE si.status <> 'VOID' AND date(si.created_at/1000,'unixepoch','+330 minutes') <= ?${siB2}`
-  ).bind(to, to, ...siB2v).all<{ id: string; number: string; total_cents: number; d: string; paid: number }>();
+  ).bind(to, to, to, to, ...siB2v).all<{ id: string; number: string; total_cents: number; d: string; paid: number }>();
   const receivablesOut = (sinvs ?? []).map((r) => ({ id: r.id, number: r.number, date: r.d, totalCents: r.total_cents, outstandingCents: r.total_cents - r.paid })).filter((r) => r.outstandingCents > 0);
   const receivablesAging = agingBuckets(to, receivablesOut.map((r) => ({ id: r.id, date: r.date, outstandingCents: r.outstandingCents })));
   // Suppliers mirror: credit-positive (we owe = credit on 2000).
   const supBal = await db.prepare(
-    `SELECT l.party_id AS partyId, COALESCE(SUM(l.credit_cents - l.debit_cents),0) AS balance FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id WHERE l.account_code = '2000' AND l.party_type = 'supplier' AND e.entry_date <= ? AND e.status = 'POSTED'${bEq} GROUP BY l.party_id`
+    `SELECT l.party_id AS partyId, COALESCE(SUM(l.credit_cents - l.debit_cents),0) AS balance FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id WHERE l.account_code = '2000' AND l.party_type = 'supplier' AND e.entry_date <= ?${bEq} GROUP BY l.party_id`
   ).bind(to, ...bEqv).all<{ partyId: string; balance: number }>();
   const supNames = new Map<string, string>();
   for (const row of supBal.results ?? []) {
@@ -295,7 +307,7 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
     sales: { totalCents: grossCents, invoiceCount: grossRow?.c ?? 0, grossCents, returnsCents, netCents: revenueCents, hasData: (grossRow?.c ?? 0) > 0 },
     purchases: { purchaseValueCents: purchCents, oldGoldCents: ogCents, goldFineMg, hasData: purchCents !== 0 || ogCents !== 0 || goldFineMg !== 0 },
     expenses: { totalCents: expRow?.p ?? 0, pendingCents: expRow?.pend ?? 0, byCategory: expCat, hasData: (expRow?.p ?? 0) !== 0 },
-    profit: { revenueCents, cogsCents, grossProfitCents, operatingExpensesCents: opexCents, netProfitCents, basis: "ledger-posted-only" },
+    profit: { revenueCents, cogsCents, grossProfitCents, otherIncomeCents, operatingExpensesCents: opexCents, netProfitCents, basis: "ledger-posted-only" },
     gold: { openingFineMg, inFineMg: gIn, outFineMg: gOut, closingFineMg, hasData: gIn !== 0 || gOut !== 0 || openingFineMg !== 0 },
     cashflow: { openingCents, inflowsCents, outflowsCents, closingCents, unclassifiedCents, hasData: inflowsCents !== 0 || outflowsCents !== 0 || openingCents !== 0 },
     receivables: { lines: (custBal.results ?? []).map((r) => ({ partyId: r.partyId, name: custNames.get(r.partyId) ?? r.partyId, balanceCents: r.balance })), aging: receivablesAging, outstanding: receivablesOut, totalCents: (custBal.results ?? []).reduce((s, r) => s + r.balance, 0), hasData: receivablesOut.length > 0 },

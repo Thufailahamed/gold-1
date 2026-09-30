@@ -28,7 +28,7 @@ export async function branchOverview(db: D1Database, branchId: string, opts: { y
   const branch = await db.prepare("SELECT id, name FROM branches WHERE id = ? AND is_active = 1").bind(branchId).first<{ id: string; name: string }>();
   if (!branch) throw Object.assign(new Error("Branch not found"), { code: "NOT_FOUND" });
   const asOf = Date.now();
-  const jew = await db.prepare("SELECT COUNT(*) AS pieces, COALESCE(SUM(net_mg),0) AS netMg, COALESCE(SUM(fine_gold_mg),0) AS fineMg, COALESCE(SUM(cost_cents),0) AS costCents FROM products WHERE status = 'IN_STOCK' AND branch_id = ?").bind(branchId).first<{ pieces: number; netMg: number; fineMg: number; costCents: number }>();
+  const jew = await db.prepare("SELECT COUNT(*) AS pieces, COALESCE(SUM(net_mg),0) AS netMg, COALESCE(SUM(fine_gold_mg),0) AS fineMg, COALESCE(SUM(cost_cents),0) AS costCents FROM products WHERE status IN ('IN_STOCK', 'RESERVED') AND branch_id = ?").bind(branchId).first<{ pieces: number; netMg: number; fineMg: number; costCents: number }>();
   const stages = await heldGoldStages(db, branchId);
   const drawer = await accountBalance(db, "1000", branchId);
   const cardClearing = await accountBalance(db, "1020", branchId);

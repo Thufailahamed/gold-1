@@ -8,7 +8,9 @@
     "build": "tsc --noEmit",
     "test": "vitest run",
     "lint": "tsc --noEmit",
-    "db:migrate:local": "wrangler d1 execute DB --local --file ./drizzle/0001_core.sql"
+    "db:migrate:local": "wrangler d1 execute DB --local --file ./drizzle/0001_core.sql",
+    "platform:migrate:local": "wrangler d1 migrations apply PLATFORM_DB --local",
+    "platform:migrate:remote": "wrangler d1 migrations apply PLATFORM_DB --remote"
   },
   "dependencies": {
     "@goldos/shared": "workspace:*",

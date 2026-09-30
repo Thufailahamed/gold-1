@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -48,6 +48,14 @@ export default function InvoicesPage() {
   const [fStatus, setFStatus] = useState("");
   const [dialog, setDialog] = useState(false);
   const qc = useQueryClient();
+
+  // The purchasing dashboard links here with ?status= or ?new=1.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const s = q.get("status");
+    if (s && STATUSES.includes(s)) setFStatus(s);
+    if (q.get("new") === "1") setDialog(true);
+  }, []);
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
   const canCreate = hasPermission(me.data?.permissions ?? [], "purchases:create");
 

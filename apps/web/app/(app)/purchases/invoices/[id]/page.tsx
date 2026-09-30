@@ -11,6 +11,7 @@ import {
   Page,
   Hero,
   Panel,
+  CardLink,
   TableCard,
   StatusPill,
   Pill,
@@ -152,7 +153,20 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           </>
         }
       />
-      <TableCard title="Items" icon={<FileTextIcon size={17} />} description={`${items.length} received`}>
+      <TableCard
+        title="Items"
+        icon={<FileTextIcon size={17} />}
+        description={`${items.length} received`}
+        actions={
+          items.length > 0 ? (
+            <CardLink
+              href={`/products/labels?ids=${items.map((it) => it.product_id).join(",")}&back=${encodeURIComponent(`/purchases/invoices/${id}`)}`}
+            >
+              Print labels
+            </CardLink>
+          ) : null
+        }
+      >
         {items.length === 0 ? (
           <EmptyBlock title="No items" description="This invoice has no line items." />
         ) : (

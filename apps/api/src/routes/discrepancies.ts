@@ -4,6 +4,7 @@ import type { Env } from "../db/client";
 import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
 import { missingReport, scanFlagReport, summaryReport, toCsv, unreceivedReport } from "../services/discrepancies";
+import { assertBranchAccess } from "../services/branchAccess";
 import { serviceError } from "./http";
 
 function needBranch(branchId: string | undefined) {
@@ -22,7 +23,7 @@ function csvDenied(c: { get: (k: string) => unknown }) {
 const COLS = {
   missing: ["countId", "productId", "barcode", "productName", "daysOpen", "status", "posted"],
   scans: ["countId", "barcode", "scannedAt", "scannedBy"],
-  unreceived: ["transferId", "number", "barcode", "productId", "fromBranch", "toBranch", "ageDays"],
+  unreceived: ["transferId", "number", "barcode", "productId", "fromBranchName", "toBranchName", "ageDays"],
 };
 
 export const discrepancies = new Hono<{ Bindings: Env; Variables: AppVariables }>()
@@ -32,6 +33,7 @@ export const discrepancies = new Hono<{ Bindings: Env; Variables: AppVariables }
     const denied = needBranch(branchId);
     if (denied) return c.json({ success: false, error: denied.error }, 400);
     try {
+      await assertBranchAccess(c.env.DB, c.get("userId"), c.get("permissions") as string[], branchId as string);
       const data = await missingReport(c.env.DB, branchId as string);
       if (c.req.query("format") === "csv") {
         if (csvDenied(c)) return c.json({ success: false, error: { code: "FORBIDDEN", message: "CSV requires audit:export" } }, 403);
@@ -45,6 +47,7 @@ export const discrepancies = new Hono<{ Bindings: Env; Variables: AppVariables }
     const denied = needBranch(branchId);
     if (denied) return c.json({ success: false, error: denied.error }, 400);
     try {
+      await assertBranchAccess(c.env.DB, c.get("userId"), c.get("permissions") as string[], branchId as string);
       const data = await scanFlagReport(c.env.DB, branchId as string, "UNEXPECTED");
       if (c.req.query("format") === "csv") {
         if (csvDenied(c)) return c.json({ success: false, error: { code: "FORBIDDEN", message: "CSV requires audit:export" } }, 403);
@@ -58,6 +61,7 @@ export const discrepancies = new Hono<{ Bindings: Env; Variables: AppVariables }
     const denied = needBranch(branchId);
     if (denied) return c.json({ success: false, error: denied.error }, 400);
     try {
+      await assertBranchAccess(c.env.DB, c.get("userId"), c.get("permissions") as string[], branchId as string);
       const data = await scanFlagReport(c.env.DB, branchId as string, "DUPLICATE");
       if (c.req.query("format") === "csv") {
         if (csvDenied(c)) return c.json({ success: false, error: { code: "FORBIDDEN", message: "CSV requires audit:export" } }, 403);
@@ -71,6 +75,7 @@ export const discrepancies = new Hono<{ Bindings: Env; Variables: AppVariables }
     const denied = needBranch(branchId);
     if (denied) return c.json({ success: false, error: denied.error }, 400);
     try {
+      await assertBranchAccess(c.env.DB, c.get("userId"), c.get("permissions") as string[], branchId as string);
       const data = await unreceivedReport(c.env.DB, branchId as string);
       if (c.req.query("format") === "csv") {
         if (csvDenied(c)) return c.json({ success: false, error: { code: "FORBIDDEN", message: "CSV requires audit:export" } }, 403);
@@ -84,6 +89,7 @@ export const discrepancies = new Hono<{ Bindings: Env; Variables: AppVariables }
     const denied = needBranch(branchId);
     if (denied) return c.json({ success: false, error: denied.error }, 400);
     try {
+      await assertBranchAccess(c.env.DB, c.get("userId"), c.get("permissions") as string[], branchId as string);
       const data = await summaryReport(c.env.DB, branchId as string);
       return c.json({ success: true, data }, 200);
     } catch (err) { return serviceError(c, err); }

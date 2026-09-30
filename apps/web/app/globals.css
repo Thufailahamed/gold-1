@@ -728,6 +728,26 @@
     left: 0;
     top: 0;
     border: none;
+    /* Keep the invoice's tinted bands and status pill on paper. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* The app shell's tinted background must not print behind the bill. */
+  html,
+  body {
+    background: #fff !important;
+  }
+  .invoice-sheet {
+    width: 100%;
+  }
+  .invoice-sheet tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* A label cut across a page break is unscannable on both halves. */
+  .label-img {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }
 

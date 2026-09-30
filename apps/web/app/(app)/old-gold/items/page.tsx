@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -38,6 +38,12 @@ export default function OldGoldItemsPage() {
   const [page, setPage] = useState(1);
   const [fStatus, setFStatus] = useState("");
   const [scan, setScan] = useState("");
+
+  // The old-gold dashboard links here with ?status= to open a pipeline stage.
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get("status");
+    if (s && STATUSES.includes(s)) setFStatus(s);
+  }, []);
 
   const list = useQuery({
     queryKey: ["og-items", search, page, fStatus],

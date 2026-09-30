@@ -5,6 +5,7 @@ import { buildEntryStmts } from "./journal";
 import { currentGoldRatesCents } from "./rates";
 import type { PageOpts } from "./catalog";
 import { consumeApproval, pendingApproval, recordInlineApproval, requestApproval } from "./approvals";
+import { allocateNumber } from "./counters";
 
 export const GOLD_TYPES = [
   "PURCHASE",
@@ -363,7 +364,7 @@ export async function goldStock(db: D1Database, groupBy: "purity" | "branch" | "
       .bind()
       .first<{ m: number }>();
     const sale = await db
-      .prepare("SELECT COALESCE(SUM(fine_gold_mg), 0) AS m FROM products WHERE status = 'IN_STOCK'")
+      .prepare("SELECT COALESCE(SUM(fine_gold_mg), 0) AS m FROM products WHERE status IN ('IN_STOCK', 'RESERVED')")
       .bind()
       .first<{ m: number }>();
     return {
@@ -381,7 +382,7 @@ export async function goldStock(db: D1Database, groupBy: "purity" | "branch" | "
         `SELECT permille, SUM(fine_mg) AS fine_mg FROM (
            SELECT tested_permille AS permille, fine_mg FROM old_gold_items WHERE status IN ('PURCHASED', 'AVAILABLE') AND tested_permille IS NOT NULL
            UNION ALL
-           SELECT pu.permille AS permille, p.fine_gold_mg AS fine_mg FROM products p JOIN purities pu ON pu.id = p.purity_id WHERE p.status = 'IN_STOCK'
+           SELECT pu.permille AS permille, p.fine_gold_mg AS fine_mg FROM products p JOIN purities pu ON pu.id = p.purity_id WHERE p.status IN ('IN_STOCK', 'RESERVED')
            UNION ALL
            SELECT o.permille AS permille, o.fine_mg FROM melting_outputs o JOIN melting_batches b ON b.id = o.batch_id WHERE b.status = 'APPROVED'
          ) GROUP BY permille ORDER BY permille DESC`
@@ -398,7 +399,7 @@ export async function goldStock(db: D1Database, groupBy: "purity" | "branch" | "
          UNION ALL
          SELECT b.branch_id AS branch_id, o.fine_mg FROM melting_outputs o JOIN melting_batches b ON b.id = o.batch_id WHERE b.status = 'APPROVED'
          UNION ALL
-         SELECT branch_id, fine_gold_mg AS fine_mg FROM products WHERE status = 'IN_STOCK'
+         SELECT branch_id, fine_gold_mg AS fine_mg FROM products WHERE status IN ('IN_STOCK', 'RESERVED')
        ) GROUP BY branch_id`
     )
     .all();
@@ -501,12 +502,7 @@ export async function recordAdjustment(
     throw Object.assign(new Error("Adjustment has no value"), { code: "VALIDATION" });
 
   const id = crypto.randomUUID();
-  const counter = await db
-    .prepare("SELECT next FROM counters WHERE name = 'GADJ'")
-    .bind()
-    .first<{ next: number }>();
-  if (!counter) throw Object.assign(new Error("Counter GADJ missing"), { code: "INTERNAL" });
-  const refNo = `GADJ-${String(counter.next).padStart(6, "0")}`;
+  const refNo = await allocateNumber(db, "GADJ", "GADJ", 6);
   const now = Date.now();
   const stmts = await postGoldStmts(
     db,
@@ -559,7 +555,6 @@ export async function recordAdjustment(
     { entryDate: await businessDateFor(db, now) }
   );
   stmts.push(
-    db.prepare("UPDATE counters SET next = ? WHERE name = 'GADJ'").bind(counter.next + 1),
     ...entry.stmts
   );
   await db.batch(stmts);

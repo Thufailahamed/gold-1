@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Page, Hero, TableCard, TableSkeleton, Pager, EmptyBlock, Pill, controlClass, heroBtnGhost } from "@/components/ui";
@@ -38,6 +38,12 @@ export default function GoldLedgerPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [fType, setFType] = useState("");
+
+  // The gold dashboard links here with ?type= to open one movement type.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("type");
+    if (t && TYPES.includes(t)) setFType(t);
+  }, []);
 
   const list = useQuery({
     queryKey: ["gold-ledger", search, page, fType],

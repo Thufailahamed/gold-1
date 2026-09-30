@@ -75,6 +75,43 @@ export type CreatePartyInput = z.infer<typeof createPartySchema>;
 
 export const BARCODE_RE = /^(PRD|JW)-[A-Z0-9]{6}$/;
 
+/**
+ * Scanner input → the canonical stored form. Codes are minted uppercase, so
+ * normalising lets lookups hit the unique barcode/sku indexes instead of
+ * scanning with UPPER(). Scanners can also leak whitespace or control chars
+ * (CR/LF/Tab suffixes, GS1 FNC1 as \x1d) around the payload.
+ */
+export function normalizeCode(code: string): string {
+  // eslint-disable-next-line no-control-regex
+  return code.replace(/[\x00-\x20\x7f]/g, "").trim().toUpperCase();
+}
+
+/**
+ * The code inside whatever a scanner read. A Code128 tag gives the bare code;
+ * a QR tag may carry the bare code, a link to the piece
+ * (…/products/barcode/JW-XXXX, …?code=JW-XXXX) or a small JSON payload
+ * ({"barcode":"JW-XXXX"}). All of them come back as the normalized code.
+ */
+export function extractScanCode(raw: string): string {
+  const s = raw.trim();
+  if (s.startsWith("{")) {
+    try {
+      const j = JSON.parse(s) as Record<string, unknown>;
+      const v = j.barcode ?? j.code ?? j.sku ?? j.number;
+      if (typeof v === "string") return normalizeCode(v);
+    } catch {
+      // Not JSON after all: treat it as a plain code.
+    }
+  }
+  if (/^https?:\/\//i.test(s)) {
+    const q = s.match(/[?&](?:code|barcode|add)=([^&#]+)/i);
+    if (q?.[1]) return normalizeCode(decodeURIComponent(q[1]));
+    const seg = s.replace(/[?#].*$/, "").split("/").filter(Boolean).pop();
+    if (seg) return normalizeCode(decodeURIComponent(seg));
+  }
+  return normalizeCode(s);
+}
+
 export const createProductSchema = z.object({
   name: z.string().min(1).max(100),
   categoryId: z.string().min(1),
@@ -224,6 +261,8 @@ const saleItemSchema = z.object({
 const splitPaySchema = z.object({
   method: z.enum(["cash", "card", "bank", "credit", "other"]),
   amountLkr: z.number().gt(0),
+  /** The bank account a "bank" payment went into; without it, 1010. */
+  bankAccountId: z.string().min(1).optional(),
 });
 
 export const createSaleSchema = z.object({
@@ -236,6 +275,9 @@ export const createSaleSchema = z.object({
   approvalId: z.string().min(1).optional(),
   approvalEntityId: z.string().min(1).optional(),
   exchangeReturnId: z.string().min(1).optional(),
+  /** Cash handed over at the till, printed as tendered / change. */
+  tenderedLkr: z.number().min(0).optional(),
+  notes: z.string().max(500).optional(),
 });
 
 export const createReturnSchema = z.object({
@@ -244,6 +286,8 @@ export const createReturnSchema = z.object({
   type: z.enum(["FULL", "PARTIAL", "EXCHANGE"]),
   reason: z.string().min(1).max(500),
   refundMethod: z.enum(["original", "cash", "bank", "credit"]).optional().default("original"),
+  /** The bank account a "bank" refund leaves from; without it, 1010. */
+  refundBankAccountId: z.string().min(1).optional(),
   approvedBy: z.string().min(1).optional(),
   approvalId: z.string().min(1).optional(),
 });
@@ -497,6 +541,64 @@ export const rejectExpenseSchema = z.object({
   reason: z.string().min(1).max(500),
 });
 
+export const customerReceiptSchema = z.object({
+  customerId: z.string().min(1),
+  branchId: z.string().min(1),
+  amountCents: CENTS.positive(),
+  method: z.enum(["cash", "bank", "card"]),
+  bankAccountId: z.string().min(1).optional(),
+  receiptDate: BUSINESS_DATE.optional(),
+  note: z.string().max(500).optional(),
+});
+
+export const voidReceiptSchema = z.object({
+  reason: z.string().min(1).max(500),
+});
+
+export const cashEntrySchema = z.object({
+  branchId: z.string().min(1),
+  kind: z.enum(["OWNER_CAPITAL", "OWNER_DRAWING", "OTHER_INCOME", "CASH_OVER", "CASH_SHORT"]),
+  amountCents: CENTS.positive(),
+  method: z.enum(["cash", "bank"]),
+  bankAccountId: z.string().min(1).optional(),
+  entryDate: BUSINESS_DATE.optional(),
+  note: z.string().min(1).max(500),
+});
+
+export const taxConfigSchema = z.object({
+  // Basis points: 1800 = 18%. Zero switches sales tax off.
+  rateBp: z.number().int().min(0).max(5000),
+  label: z.string().min(1).max(20),
+  registrationNo: z.string().max(60).optional(),
+});
+
+export const taxPaymentSchema = z.object({
+  branchId: z.string().min(1),
+  periodFrom: BUSINESS_DATE,
+  periodTo: BUSINESS_DATE,
+  amountCents: CENTS.positive(),
+  method: z.enum(["cash", "bank"]),
+  bankAccountId: z.string().min(1).optional(),
+  paidOn: BUSINESS_DATE.optional(),
+  reference: z.string().max(100).optional(),
+  note: z.string().max(500).optional(),
+});
+
+export const fiscalCloseSchema = z.object({
+  yearEnd: BUSINESS_DATE,
+});
+
+export const fiscalReopenSchema = z.object({
+  reason: z.string().min(1).max(500),
+  approvedBy: z.string().min(1),
+});
+
+export type TaxConfigInput = z.infer<typeof taxConfigSchema>;
+export type TaxPaymentInput = z.infer<typeof taxPaymentSchema>;
+
+export type CustomerReceiptInput = z.infer<typeof customerReceiptSchema>;
+export type CashEntryInput = z.infer<typeof cashEntrySchema>;
+
 export type CreateExpenseCategoryInput = z.infer<typeof createExpenseCategorySchema>;
 export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
 
@@ -505,6 +607,14 @@ export const closeDaySchema = z.object({
   date: BUSINESS_DATE,
   actualCents: CENTS,
   differenceReason: z.string().max(500).optional(),
+  // Note-and-coin count, LKR face value → pieces. When given it must add up
+  // to actualCents, so the sheet and the total can never disagree.
+  denominations: z.record(z.string().regex(/^\d+$/), z.number().int().min(0).max(100000)).optional(),
+  // The card terminal's end-of-day total, compared with the ledger's card sales.
+  cardTerminalCents: CENTS.min(0).optional(),
+  // Post the difference to 6090 Cash Short & Over so tomorrow's ledger opening
+  // is what is actually in the drawer.
+  postDifference: z.boolean().optional(),
 });
 
 export const reopenDaySchema = z.object({

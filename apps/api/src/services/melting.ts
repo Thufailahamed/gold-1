@@ -5,15 +5,10 @@ import { postGoldStmts } from "./gold";
 import { businessDateFor } from "./busdate";
 import { buildEntryStmts } from "./journal";
 import { consumeApproval, pendingApproval, recordInlineApproval, requestApproval } from "./approvals";
+import { allocateNumber } from "./counters";
 
 async function nextMelt(db: D1Database, stmts: D1PreparedStatement[]): Promise<string> {
-  const row = await db
-    .prepare("SELECT next FROM counters WHERE name = 'MELT'")
-    .bind()
-    .first<{ next: number }>();
-  if (!row) throw Object.assign(new Error("Counter missing"), { code: "INTERNAL" });
-  stmts.push(db.prepare("UPDATE counters SET next = ? WHERE name = 'MELT'").bind(row.next + 1));
-  return `MELT-${String(row.next).padStart(6, "0")}`;
+  return allocateNumber(db, "MELT", "MELT", 6, "melting_batches");
 }
 
 async function requireGoldApprover(db: D1Database, approverId: string, actorId: string): Promise<void> {

@@ -11,14 +11,22 @@ import { requirePerm } from "../middleware/requirePerm";
 import { businessDateFor } from "../services/busdate";
 import {
   createReturn,
+  customerCredit,
   getSale,
+  invoiceProfile,
   linkExchange,
+  listApprovers,
   listReturns,
   listSales,
+  lookupSale,
+  posCatalog,
   receiveSale,
+  saleBankAccounts,
   salesBreakdown,
   salesSummary,
 } from "../services/sales";
+import { getTaxConfig } from "../services/taxes";
+import { buildCodeSvg, buildQrSvg } from "../services/label";
 import { pagination, serviceError } from "./http";
 
 /**
@@ -39,6 +47,11 @@ const linkSchema = z.object({ saleId: z.string().min(1) });
 
 export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
+  // The POS needs the rate to show the customer the right total before the
+  // sale posts. Read-only, and cashiers do not hold accounts:view.
+  .get("/tax-config", requirePerm(PERMISSIONS.SALES_CREATE), async (c) => {
+    return c.json({ success: true, data: await getTaxConfig(c.env.DB) }, 200);
+  })
   .post("/invoices", requirePerm(PERMISSIONS.SALES_CREATE), async (c) => {
     const body = await c.req.json().catch(() => null);
     const parsed = createSaleSchema.safeParse(body);
@@ -48,11 +61,77 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      const data = await receiveSale(c.env.DB, parsed.data, c.get("userId"));
+      const data = await receiveSale(c.env.DB, parsed.data, c.get("userId"), {
+        enforceShelfPrice: true,
+        enforceCreditLimit: true,
+      });
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
     }
+  })
+  // Type-to-find at the till: name, tag, SKU, category or karat.
+  .get("/catalog", requirePerm(PERMISSIONS.SALES_CREATE), async (c) => {
+    const branchId = c.req.query("branchId");
+    if (!branchId)
+      return c.json({ success: false, error: { code: "VALIDATION", message: "branchId required" } }, 400);
+    const data = await posCatalog(c.env.DB, {
+      q: c.req.query("q") ?? "",
+      branchId,
+      customerId: c.req.query("customerId"),
+      limit: Number(c.req.query("limit") ?? 12) || 12,
+    });
+    return c.json({ success: true, data }, 200);
+  })
+  // Which bank a "bank" payment went into, so it posts to that account.
+  .get("/bank-accounts", requirePerm(PERMISSIONS.SALES_CREATE), async (c) => {
+    return c.json({ success: true, data: await saleBankAccounts(c.env.DB, c.req.query("branchId")) }, 200);
+  })
+  // Balance, limit and open bills before a sale goes on credit.
+  .get("/customers/:id/credit", requirePerm(PERMISSIONS.SALES_CREATE), async (c) => {
+    try {
+      const data = await customerCredit(c.env.DB, c.req.param("id"), c.req.query("branchId") ?? "");
+      return c.json({ success: true, data }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  // Letterhead and terms for the printed invoice. Cashiers print bills but
+  // do not hold settings:view, so this is read under sales:view.
+  .get("/invoice-profile", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
+    return c.json({ success: true, data: await invoiceProfile(c.env.DB) }, 200);
+  })
+  // Counter sign-off list for over-limit discounts and returns.
+  .get("/approvers", requirePerm(PERMISSIONS.SALES_CREATE), async (c) => {
+    return c.json({ success: true, data: await listApprovers(c.env.DB, c.get("userId")) }, 200);
+  })
+  // Scan an invoice barcode or a sold piece's tag to find its sale.
+  .get("/lookup/:code", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
+    try {
+      return c.json({ success: true, data: await lookupSale(c.env.DB, c.req.param("code")) }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  .get("/invoices/:id/barcode", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
+    const inv = await c.env.DB.prepare("SELECT number FROM sales_invoices WHERE id = ?")
+      .bind(c.req.param("id"))
+      .first<{ number: string }>();
+    if (!inv)
+      return c.json({ success: false, error: { code: "NOT_FOUND", message: "Sale not found" } }, 404);
+    c.header("Content-Type", "image/svg+xml");
+    c.header("Cache-Control", "private, max-age=86400");
+    return c.body(buildCodeSvg(inv.number), 200);
+  })
+  .get("/invoices/:id/qr", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
+    const inv = await c.env.DB.prepare("SELECT number FROM sales_invoices WHERE id = ?")
+      .bind(c.req.param("id"))
+      .first<{ number: string }>();
+    if (!inv)
+      return c.json({ success: false, error: { code: "NOT_FOUND", message: "Sale not found" } }, 404);
+    c.header("Content-Type", "image/svg+xml");
+    c.header("Cache-Control", "private, max-age=86400");
+    return c.body(buildQrSvg(inv.number), 200);
   })
   .get("/invoices", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
     const perms = c.get("permissions") as string[];

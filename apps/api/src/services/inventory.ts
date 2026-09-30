@@ -2,6 +2,7 @@ import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
 import { currentGoldRatesCents } from "./rates";
 import { assertCountLock } from "./counts";
+import { tzOffsetMinutes } from "./busdate";
 
 export type MovementType =
   | "INTAKE"
@@ -10,15 +11,39 @@ export type MovementType =
   | "RETURN"
   | "LOSS"
   | "VOID"
-  | "SALE_OUT";
+  | "SALE_OUT"
+  | "RESTOCK"
+  | "RESERVE"
+  | "RELEASE";
+
+/**
+ * Statuses in which a finished piece is physically on hand at its branch and
+ * counts as stock: on the shelf, or set aside for a customer. Held-gold
+ * reconciliation already counts both (it excludes only the exits).
+ */
+export const ON_HAND_STATUSES = ["IN_STOCK", "RESERVED"] as const;
+export const ON_HAND_SQL = ON_HAND_STATUSES.map((s) => `'${s}'`).join(",");
+
+/** Nulls every reservation column; applied whenever a piece leaves RESERVED. */
+const CLEAR_RESERVATION =
+  "reserved_customer_id = NULL, reserved_note = NULL, reserved_until = NULL, reserved_at = NULL, reserved_by = NULL";
+
+/** SQL fragment + binds restricting a column to the caller's branches (null = all). */
+function scopeCond(col: string, scope: string[] | null): { sql: string; vals: string[] } {
+  if (scope === null) return { sql: "", vals: [] };
+  if (scope.length === 0) return { sql: " AND 1 = 0", vals: [] };
+  return { sql: ` AND ${col} IN (${scope.map(() => "?").join(",")})`, vals: scope };
+}
 
 const ALLOW: Record<string, string[]> = {
-  IN_STOCK: ["TRANSFER_PENDING", "RETURNED", "LOST", "VOID", "SOLD"],
+  IN_STOCK: ["TRANSFER_PENDING", "RETURNED", "LOST", "VOID", "SOLD", "RESERVED"],
   TRANSFER_PENDING: ["IN_STOCK"],
   RETURNED: ["IN_STOCK", "VOID"],
   LOST: [],
   VOID: [],
-  RESERVED: [],
+  // A hold ends one of two ways: released back to the shelf, or sold to the
+  // customer it was held for (receiveSale enforces who).
+  RESERVED: ["IN_STOCK", "SOLD"],
   SOLD: ["RETURNED"],
   IN_REPAIR: [],
   IN_MANUFACTURING: [],
@@ -91,9 +116,21 @@ export async function buildMoveStmts(
           ? "RETURN"
           : toStatus === "SOLD"
             ? "SALE_OUT"
-            : "TRANSFER_IN";
+            : toStatus === "RESERVED"
+              ? "RESERVE"
+              : toStatus === "IN_STOCK"
+                ? prev.status === "RESERVED"
+                  ? "RELEASE"
+                  : "RESTOCK"
+                : "TRANSFER_IN";
+  // Leaving RESERVED by any route (release, sale) ends the hold with it, so a
+  // sold or restocked piece never carries a stale "held for" customer.
+  const update =
+    prev.status === "RESERVED" && toStatus !== "RESERVED"
+      ? `UPDATE products SET status = ?, ${CLEAR_RESERVATION} WHERE id = ?`
+      : "UPDATE products SET status = ? WHERE id = ?";
   const stmts = [
-    db.prepare("UPDATE products SET status = ? WHERE id = ?").bind(toStatus, productId),
+    db.prepare(update).bind(toStatus, productId),
     moveStmt(
       db,
       crypto.randomUUID(),
@@ -151,6 +188,8 @@ export async function recordMovement(
     throw Object.assign(new Error("Voids must go through PATCH /products/:id/void"), { code: "CONFLICT" });
   if (prev.status === "SOLD")
     throw Object.assign(new Error("Sold returns must go through POST /sales/returns"), { code: "CONFLICT" });
+  if (input.toStatus === "RESERVED" || prev.status === "RESERVED")
+    throw Object.assign(new Error("Reservations must go through POST /products/:id/reserve and /release"), { code: "CONFLICT" });
   checkTransition(prev.status, input.toStatus);
   const now = Date.now();
 
@@ -223,9 +262,88 @@ export async function recordMovement(
   return { movementId: row?.id ?? "" };
 }
 
+export type ReserveInput = {
+  customerId: string;
+  note: string;
+  /** Last business day of the hold, YYYY-MM-DD in the shop's time zone. */
+  untilDate?: string;
+};
+
+/**
+ * Sets a shelf piece aside for one customer. The piece stays on hand (counts,
+ * stock value and held gold all still include it) but only that customer can
+ * buy it until the hold is released. No money moves: an advance against the
+ * piece is a customer receipt, not part of the hold.
+ */
+export async function reserveProduct(
+  db: D1Database,
+  productId: string,
+  input: ReserveInput,
+  actorId: string
+): Promise<{ reservedUntil: number | null }> {
+  const note = input.note.trim();
+  if (!note) throw Object.assign(new Error("A note is required"), { code: "VALIDATION" });
+  const customer = await db
+    .prepare("SELECT id, name FROM customers WHERE id = ? AND is_active = 1")
+    .bind(input.customerId)
+    .first<{ id: string; name: string }>();
+  if (!customer) throw Object.assign(new Error("Customer not found"), { code: "NOT_FOUND" });
+  const now = Date.now();
+  let until: number | null = null;
+  if (input.untilDate) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.untilDate);
+    if (!m) throw Object.assign(new Error("untilDate must be YYYY-MM-DD"), { code: "VALIDATION" });
+    // End of that business day, expressed in UTC epoch ms.
+    until =
+      Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 23, 59, 59, 999) -
+      (await tzOffsetMinutes(db)) * 60_000;
+    if (Number.isNaN(until) || until < now)
+      throw Object.assign(new Error("Hold date must be today or later"), { code: "VALIDATION" });
+  }
+  const reason = `Reserved for ${customer.name}: ${note}`;
+  const built = await buildMoveStmts(db, productId, "RESERVED", {
+    reason,
+    actorId,
+    now,
+    auditAction: "product.reserve",
+  });
+  await db.batch([
+    ...built.stmts,
+    db
+      .prepare(
+        "UPDATE products SET reserved_customer_id = ?, reserved_note = ?, reserved_until = ?, reserved_at = ?, reserved_by = ? WHERE id = ? AND status = 'RESERVED'"
+      )
+      .bind(customer.id, note, until, now, actorId, productId),
+  ]);
+  return { reservedUntil: until };
+}
+
+/** Ends a hold and puts the piece back on the shelf for anyone to buy. */
+export async function releaseReservation(
+  db: D1Database,
+  productId: string,
+  reason: string | undefined,
+  actorId: string
+): Promise<void> {
+  const prev = await db
+    .prepare("SELECT status FROM products WHERE id = ?")
+    .bind(productId)
+    .first<{ status: string }>();
+  if (!prev) throw Object.assign(new Error("Product not found"), { code: "NOT_FOUND" });
+  if (prev.status !== "RESERVED")
+    throw Object.assign(new Error("Product is not reserved"), { code: "CONFLICT" });
+  const built = await buildMoveStmts(db, productId, "IN_STOCK", {
+    reason: reason?.trim() || "Reservation released",
+    actorId,
+    now: Date.now(),
+    auditAction: "product.release",
+  });
+  await db.batch(built.stmts);
+}
+
 export async function listMovements(
   db: D1Database,
-  opts: PageOpts & { productId?: string; branchId?: string; type?: string }
+  opts: PageOpts & { productId?: string; branchId?: string; type?: string; scope?: string[] | null }
 ): Promise<{ rows: Record<string, unknown>[]; total: number }> {
   const like = `%${opts.search ?? ""}%`;
   const offset = (opts.page - 1) * opts.limit;
@@ -243,6 +361,14 @@ export async function listMovements(
     conds.push("m.type = ?");
     vals.push(opts.type);
   }
+  if (opts.scope !== undefined && opts.scope !== null) {
+    if (opts.scope.length === 0) conds.push("1 = 0");
+    else {
+      const qs = opts.scope.map(() => "?").join(",");
+      conds.push(`(m.from_branch IN (${qs}) OR m.to_branch IN (${qs}))`);
+      vals.push(...opts.scope, ...opts.scope);
+    }
+  }
   const where = `WHERE ${conds.join(" AND ")}`;
   const count = await db
     .prepare(`SELECT COUNT(*) AS total FROM stock_movements m ${where}`)
@@ -250,7 +376,7 @@ export async function listMovements(
     .first<{ total: number }>();
   const { results } = await db
     .prepare(
-      `SELECT m.id, m.product_id, p.barcode, m.type, m.from_status, m.to_status, m.from_branch, m.to_branch, m.weight_mg, m.reason, m.created_at, m.created_by FROM stock_movements m LEFT JOIN products p ON p.id = m.product_id ${where} ORDER BY m.created_at DESC LIMIT ? OFFSET ?`
+      `SELECT m.id, m.product_id, p.barcode, p.name AS product_name, m.type, m.from_status, m.to_status, m.from_branch, m.to_branch, m.weight_mg, m.reason, m.created_at, m.created_by FROM stock_movements m LEFT JOIN products p ON p.id = m.product_id ${where} ORDER BY m.created_at DESC LIMIT ? OFFSET ?`
     )
     .bind(...vals, opts.limit, offset)
     .all();
@@ -259,23 +385,39 @@ export async function listMovements(
 
 export async function stockSummary(
   db: D1Database,
-  groupBy: "branch" | "purity" | "product"
+  groupBy: "branch" | "purity" | "product",
+  scope: string[] | null = null,
+  branchId?: string
 ): Promise<Record<string, unknown>[]> {
   const col = groupBy === "branch" ? "p.branch_id" : groupBy === "purity" ? "p.purity_id" : "p.id";
+  // Grouping by product is one row per piece, so its name and barcode are
+  // well-defined and let the table show something a person can recognise.
+  // Branch and purity groups carry their display name so the table never has
+  // to show a raw id.
+  const extra =
+    groupBy === "product"
+      ? ", p.name AS name, p.barcode AS barcode"
+      : groupBy === "branch"
+        ? ", (SELECT b.name FROM branches b WHERE b.id = p.branch_id) AS name"
+        : ", (SELECT pu.karat FROM purities pu WHERE pu.id = p.purity_id) AS name";
+  const sc = scopeCond("p.branch_id", scope);
+  const bf = branchId ? " AND p.branch_id = ?" : "";
+  const binds = [...sc.vals, ...(branchId ? [branchId] : [])];
   const { results } = await db
     .prepare(
-      `SELECT ${col} AS key, COUNT(*) AS pieces, SUM(p.net_mg) AS net_mg, SUM(p.fine_gold_mg) AS fine_mg FROM products p WHERE p.status = 'IN_STOCK' GROUP BY ${col} ORDER BY net_mg DESC`
+      `SELECT ${col} AS key${extra}, COUNT(*) AS pieces, SUM(p.net_mg) AS net_mg, SUM(p.fine_gold_mg) AS fine_mg FROM products p WHERE p.status IN (${ON_HAND_SQL})${sc.sql}${bf} GROUP BY ${col} ORDER BY net_mg DESC`
     )
+    .bind(...binds)
     .all();
-  if (groupBy === "product") return results ?? [];
   const rates = await currentGoldRatesCents(db);
   const byPurity = new Map(rates.map((r) => [r.purity_id, r.rate_cents_per_g]));
   const { results: all } = await db
-    .prepare(`SELECT branch_id, purity_id, net_mg FROM products WHERE status = 'IN_STOCK'`)
-    .all<{ branch_id: string; purity_id: string; net_mg: number }>();
+    .prepare(`SELECT id, branch_id, purity_id, net_mg FROM products p WHERE status IN (${ON_HAND_SQL})${sc.sql}${bf}`)
+    .bind(...binds)
+    .all<{ id: string; branch_id: string; purity_id: string; net_mg: number }>();
   const valByKey = new Map<string, number>();
   for (const row of all ?? []) {
-    const k = groupBy === "branch" ? row.branch_id : row.purity_id;
+    const k = groupBy === "branch" ? row.branch_id : groupBy === "purity" ? row.purity_id : row.id;
     const rate = byPurity.get(row.purity_id) ?? 0;
     valByKey.set(k, (valByKey.get(k) ?? 0) + Math.round((row.net_mg * rate) / 1000));
   }
@@ -342,29 +484,34 @@ type InsightRow = {
 
 type AttentionCounts = { transfer_pending: number; in_repair: number; reserved: number };
 
-export async function inventoryInsights(db: D1Database): Promise<InventoryInsights> {
+export async function inventoryInsights(db: D1Database, scope: string[] | null = null): Promise<InventoryInsights> {
   const now = Date.now();
+  const sc = scopeCond("p.branch_id", scope);
+  const scP = scopeCond("branch_id", scope);
+  const scM = scope === null ? { sql: "", vals: [] as string[] } : scope.length === 0 ? { sql: " AND 1 = 0", vals: [] as string[] } : { sql: ` AND (from_branch IN (${scope.map(() => "?").join(",")}) OR to_branch IN (${scope.map(() => "?").join(",")}))`, vals: [...scope, ...scope] };
   const [{ results: rows }, counts, last, c24] = await Promise.all([
     // Value is rounded per product inside SQL, exactly as stockSummary does
     // in JS. Rounding after the GROUP BY would sum the aggregate weight first
     // and disagree with the stock table by a cent or two.
     db
       .prepare(
-        `SELECT p.purity_id AS group_key, p.branch_id, b.name AS branch_name, pu.karat, pu.permille, COUNT(*) AS pieces, SUM(p.net_mg) AS net_mg, SUM(p.fine_gold_mg) AS fine_mg, SUM(ROUND(p.net_mg * COALESCE((SELECT g.rate_cents_per_g FROM gold_rates g WHERE g.purity_id = p.purity_id AND g.effective_from <= ? ORDER BY g.effective_from DESC LIMIT 1), 0) / 1000)) AS value_cents FROM products p JOIN purities pu ON pu.id = p.purity_id LEFT JOIN branches b ON b.id = p.branch_id WHERE p.status = 'IN_STOCK' GROUP BY p.purity_id, p.branch_id, pu.karat, pu.permille, b.name`
+        `SELECT p.purity_id AS group_key, p.branch_id, b.name AS branch_name, pu.karat, pu.permille, COUNT(*) AS pieces, SUM(p.net_mg) AS net_mg, SUM(p.fine_gold_mg) AS fine_mg, SUM(ROUND(p.net_mg * COALESCE((SELECT g.rate_cents_per_g FROM gold_rates g WHERE g.purity_id = p.purity_id AND g.effective_from <= ? ORDER BY g.effective_from DESC LIMIT 1), 0) / 1000)) AS value_cents FROM products p JOIN purities pu ON pu.id = p.purity_id LEFT JOIN branches b ON b.id = p.branch_id WHERE p.status IN (${ON_HAND_SQL})${sc.sql} GROUP BY p.purity_id, p.branch_id, pu.karat, pu.permille, b.name`
       )
-      .bind(now)
+      .bind(now, ...sc.vals)
       .all<InsightRow>(),
     db
       .prepare(
-        `SELECT COUNT(*) FILTER (WHERE status = 'TRANSFER_PENDING') AS transfer_pending, COUNT(*) FILTER (WHERE status = 'IN_REPAIR') AS in_repair, COUNT(*) FILTER (WHERE status = 'RESERVED') AS reserved FROM products`
+        `SELECT COUNT(*) FILTER (WHERE status = 'TRANSFER_PENDING') AS transfer_pending, COUNT(*) FILTER (WHERE status = 'IN_REPAIR') AS in_repair, COUNT(*) FILTER (WHERE status = 'RESERVED') AS reserved FROM products WHERE 1 = 1${scP.sql}`
       )
+      .bind(...scP.vals)
       .first<AttentionCounts>(),
     db
-      .prepare(`SELECT MAX(created_at) AS last FROM stock_movements`)
+      .prepare(`SELECT MAX(created_at) AS last FROM stock_movements WHERE 1 = 1${scM.sql}`)
+      .bind(...scM.vals)
       .first<{ last: number | null }>(),
     db
-      .prepare(`SELECT COUNT(*) AS c24 FROM stock_movements WHERE created_at >= ?`)
-      .bind(now - 24 * 60 * 60 * 1000)
+      .prepare(`SELECT COUNT(*) AS c24 FROM stock_movements WHERE created_at >= ?${scM.sql}`)
+      .bind(now - 24 * 60 * 60 * 1000, ...scM.vals)
       .first<{ c24: number }>(),
   ]);
 

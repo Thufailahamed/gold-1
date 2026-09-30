@@ -10,6 +10,7 @@ import {
   Page,
   Hero,
   Panel,
+  CardLink,
   Pill,
   Modal,
   Skeleton,
@@ -163,7 +164,20 @@ export default function MfgOrderDetailPage({ params }: { params: Promise<{ id: s
           )}
         </Panel>
         {outputs.length > 0 ? (
-          <Panel title="Outputs" icon={<PackageIcon size={17} />} description={`${outputs.length} produced`}>
+          <Panel
+            title="Outputs"
+            icon={<PackageIcon size={17} />}
+            description={`${outputs.length} produced`}
+            actions={
+              outputs.some((o) => o.product_id) ? (
+                <CardLink
+                  href={`/products/labels?ids=${outputs.flatMap((o) => (o.product_id ? [o.product_id] : [])).join(",")}&back=${encodeURIComponent(`/manufacturing/orders/${id}`)}`}
+                >
+                  Print labels
+                </CardLink>
+              ) : null
+            }
+          >
             <ul className="space-y-2.5 text-sm">
               {outputs.map((o) => (
                 <li key={o.id} className="flex items-center justify-between gap-3">

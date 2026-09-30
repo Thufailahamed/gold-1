@@ -1,8 +1,10 @@
 import {
   cashBreakdownTotal,
   closingArithmetic,
+  denominationTotalCents,
   type CashLine,
 } from "@goldos/shared";
+import { buildEntryStmts } from "./journal";
 import type { CloseDayInput, ReopenDayInput } from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
 import { fail } from "./cashbank";
@@ -27,7 +29,14 @@ const CASH_LABELS: Record<string, string> = {
   old_gold_purchase: "Old gold purchases",
   repair: "Repair collections",
   custom_advance: "Customer advances",
+  custom_advance_refund: "Advance refunds",
   opening_balance: "Opening balances",
+  customer_receipt: "Customer payments on account",
+  owner_capital: "Owner put money in",
+  owner_drawing: "Owner took money out",
+  other_income: "Other income",
+  cash_correction: "Cash corrections",
+  tax_payment: "Tax paid",
 };
 
 const GOLD_LINES: { key: GoldKey; label: string; types: string[] }[] = [
@@ -72,6 +81,10 @@ export type ClosingReport = {
     bankTransactionsCents: number;
   };
   gold: GoldSummary;
+  /** Fine milligrams held at the branch: before the day, moved, and after. */
+  goldBalance: { openingMg: number; inMg: number; outMg: number; closingMg: number };
+  /** Card takings for the day as the ledger has them (1020 from sales, less card refunds). */
+  card: { salesCents: number; refundsCents: number; netCents: number };
   checks: { passed: boolean; failing: string[]; total: number };
   closing: {
     expectedCents: number;
@@ -124,6 +137,31 @@ async function cashGroups(
       .map((l) => ({ label: l.label, refEntity: l.refEntity, cents: l.cents })),
   });
   return { inGroup: group("in"), outGroup: group("out") };
+}
+
+/**
+ * The branch's fine gold, by the same direction rule as gold_stock_consistency:
+ * a row arrives when its destination is the branch and leaves when its source
+ * is. Not filtered by branch_id, so a transfer counts at both ends.
+ */
+async function goldBalance(db: D1Database, branchId: string, date: string): Promise<ClosingReport["goldBalance"]> {
+  const tgt = `branch:${branchId}`;
+  const d = LOCAL_DAY("occurred_at");
+  const row = await db
+    .prepare(
+      `SELECT
+         COALESCE(SUM(CASE WHEN ${d} < ? AND destination = ? THEN fine_mg ELSE 0 END), 0)
+       - COALESCE(SUM(CASE WHEN ${d} < ? AND source = ? THEN fine_mg ELSE 0 END), 0) AS opening,
+         COALESCE(SUM(CASE WHEN ${d} = ? AND destination = ? THEN fine_mg ELSE 0 END), 0) AS inMg,
+         COALESCE(SUM(CASE WHEN ${d} = ? AND source = ? THEN fine_mg ELSE 0 END), 0) AS outMg
+       FROM gold_ledger WHERE destination = ? OR source = ?`
+    )
+    .bind(date, tgt, date, tgt, date, tgt, date, tgt, tgt, tgt)
+    .first<{ opening: number; inMg: number; outMg: number }>();
+  const openingMg = row?.opening ?? 0;
+  const inMg = row?.inMg ?? 0;
+  const outMg = row?.outMg ?? 0;
+  return { openingMg, inMg, outMg, closingMg: openingMg + inMg - outMg };
 }
 
 async function goldSummary(db: D1Database, branchId: string, date: string): Promise<GoldSummary> {
@@ -230,7 +268,9 @@ export async function buildClosingReport(
       (async () => {
         const { results } = await db
           .prepare(
-            `SELECT b.account_code, COALESCE(SUM(l.debit_cents - l.credit_cents), 0) AS net
+            // Only lines whose entry matched the day count: the window is in the
+            // entry join, so unmatched lines still arrive with a NULL entry.
+            `SELECT b.account_code, COALESCE(SUM(CASE WHEN e.id IS NOT NULL THEN l.debit_cents - l.credit_cents END), 0) AS net
              FROM bank_accounts b
              LEFT JOIN journal_lines l ON l.account_code = b.account_code
              LEFT JOIN journal_entries e ON e.id = l.entry_id
@@ -254,6 +294,30 @@ export async function buildClosingReport(
     [CARD_CLEARING, branchId, date]
   );
 
+  const [cardSales, cardRefunds, goldBal] = await Promise.all([
+    sumOne(
+      db,
+      `SELECT COALESCE(SUM(l.debit_cents), 0) AS n FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+       WHERE l.account_code = '${CARD_CLEARING}' AND e.ref_entity = 'sale_invoice' AND e.branch_id = ? AND e.entry_date = ?`,
+      [branchId, date]
+    ),
+    sumOne(
+      db,
+      `SELECT COALESCE(SUM(l.credit_cents), 0) AS n FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+       WHERE l.account_code = '${CARD_CLEARING}' AND e.ref_entity = 'sale_return' AND e.branch_id = ? AND e.entry_date = ?`,
+      [branchId, date]
+    ),
+    goldBalance(db, branchId, date),
+  ]);
+
+  // Dues collected on account are customer payments too, just not at a sale.
+  const receipts = await sumOne(
+    db,
+    `SELECT COALESCE(SUM(amount_cents), 0) AS n FROM customer_receipts
+     WHERE branch_id = ? AND receipt_date = ? AND status = 'POSTED'`,
+    [branchId, date]
+  );
+
   const openingCents = openingRow?.n ?? 0;
   const { expectedCents } = closingArithmetic(
     openingCents,
@@ -272,11 +336,13 @@ export async function buildClosingReport(
       purchasesCents: purchases,
       oldGoldCents: oldGold,
       expensesCents: expenses,
-      customerPaymentsCents: custPay - refunds,
+      customerPaymentsCents: custPay + receipts - refunds,
       supplierPaymentsCents: purchPay + oldGoldPaid,
       bankTransactionsCents: bankTotal + cardRow,
     },
     gold,
+    goldBalance: goldBal,
+    card: { salesCents: cardSales, refundsCents: cardRefunds, netCents: cardSales - cardRefunds },
     checks: {
       passed: recon.passed,
       failing: recon.checks.filter((c) => !c.pass).map((c) => c.id),
@@ -310,6 +376,10 @@ export type ClosingRow = {
   closed_by: string | null;
   closed_at: number;
   created_at: number;
+  denominations_json: string | null;
+  card_expected_cents: number | null;
+  card_actual_cents: number | null;
+  correction_cents: number;
 };
 
 export async function closeDay(
@@ -335,10 +405,18 @@ export async function closeDay(
       `Cannot close: ${unclassified} net cents of cash movement is not categorised, so the breakdown would be wrong`
     );
 
+  if (input.denominations) {
+    const counted = denominationTotalCents(input.denominations);
+    if (counted !== input.actualCents)
+      fail("VALIDATION", `The note count adds up to ${counted}c, not the ${input.actualCents}c entered`);
+  }
   const { expectedCents } = report.closing;
   const differenceCents = input.actualCents - expectedCents;
   if (differenceCents !== 0 && !input.differenceReason?.trim())
     fail("VALIDATION", "A cash difference needs an explanation");
+  const cardDifference = input.cardTerminalCents !== undefined ? input.cardTerminalCents - report.card.netCents : 0;
+  if (cardDifference !== 0 && !input.differenceReason?.trim())
+    fail("VALIDATION", "A card terminal difference needs an explanation");
 
   const existing = await db
     .prepare(
@@ -350,6 +428,42 @@ export async function closeDay(
 
   const id = existing?.id ?? crypto.randomUUID();
   const now = Date.now();
+  // Posting the difference makes the ledger drawer equal the counted drawer,
+  // so tomorrow's opening (read from the ledger) is what is really there. On
+  // a re-close the earlier correction is already inside expectedCents — it is
+  // a cash movement of the day — so the new difference is only the change.
+  const correction =
+    input.postDifference && differenceCents !== 0
+      ? await buildEntryStmts(
+          db,
+          {
+            lines:
+              differenceCents > 0
+                ? [
+                    { account: CASH, debitCents: differenceCents, creditCents: 0 },
+                    { account: "6090", debitCents: 0, creditCents: differenceCents },
+                  ]
+                : [
+                    { account: "6090", debitCents: -differenceCents, creditCents: 0 },
+                    { account: CASH, debitCents: 0, creditCents: -differenceCents },
+                  ],
+            refEntity: "cash_correction",
+            refId: id,
+            memo: `Day close ${input.date}: cash ${differenceCents > 0 ? "over" : "short"} — ${input.differenceReason ?? ""}`,
+            branchId: input.branchId,
+            actorId,
+            auditAction: "dayclose.correction",
+            auditEntity: "day_closing",
+            auditEntityId: id,
+            sourceModule: "cash",
+          },
+          { entryDate: input.date }
+        )
+      : null;
+  const correctionCents = (existing ? await priorCorrection(db, id) : 0) + (correction ? differenceCents : 0);
+  const denominationsJson = input.denominations ? JSON.stringify(input.denominations) : null;
+  const cardExpected = input.cardTerminalCents !== undefined ? report.card.netCents : null;
+  const cardActual = input.cardTerminalCents ?? null;
   const frozen: ClosingReport = {
     ...report,
     closing: { ...report.closing, differenceCents, reasonRequired: differenceCents !== 0 },
@@ -360,7 +474,7 @@ export async function closeDay(
   const write = existing
     ? db
         .prepare(
-          "UPDATE day_closings SET opening_cents = ?, cash_in_cents = ?, cash_out_cents = ?, expected_cents = ?, actual_cents = ?, difference_cents = ?, difference_reason = ?, report_json = ?, checks_passed = ?, status = 'CLOSED', closed_by = ?, closed_at = ? WHERE id = ? AND status = 'REOPENED'"
+          "UPDATE day_closings SET opening_cents = ?, cash_in_cents = ?, cash_out_cents = ?, expected_cents = ?, actual_cents = ?, difference_cents = ?, difference_reason = ?, report_json = ?, checks_passed = ?, status = 'CLOSED', closed_by = ?, closed_at = ?, denominations_json = ?, card_expected_cents = ?, card_actual_cents = ?, correction_cents = ? WHERE id = ? AND status = 'REOPENED'"
         )
         .bind(
           report.openingCents,
@@ -374,11 +488,15 @@ export async function closeDay(
           report.checks.passed ? 1 : 0,
           actorId,
           now,
+          denominationsJson,
+          cardExpected,
+          cardActual,
+          correctionCents,
           id
         )
     : db
         .prepare(
-          "INSERT INTO day_closings (id, branch_id, close_date, opening_cents, cash_in_cents, cash_out_cents, expected_cents, actual_cents, difference_cents, difference_reason, report_json, checks_passed, status, closed_by, closed_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'CLOSED', ?, ?, ?)"
+          "INSERT INTO day_closings (id, branch_id, close_date, opening_cents, cash_in_cents, cash_out_cents, expected_cents, actual_cents, difference_cents, difference_reason, report_json, checks_passed, status, closed_by, closed_at, created_at, denominations_json, card_expected_cents, card_actual_cents, correction_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'CLOSED', ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(
           id,
@@ -395,9 +513,16 @@ export async function closeDay(
           report.checks.passed ? 1 : 0,
           actorId,
           now,
-          now
+          now,
+          denominationsJson,
+          cardExpected,
+          cardActual,
+          correctionCents
         );
+  // The correction goes first: it is dated the day being closed, and the
+  // day lock only bites once the close row says CLOSED.
   await db.batch([
+    ...(correction?.stmts ?? []),
     write,
     buildAuditStmt(db, {
       userId: actorId,
@@ -412,11 +537,21 @@ export async function closeDay(
         actualCents: input.actualCents,
         differenceCents,
         awaitingApprovalCents: report.closing.awaitingApprovalCents,
+        cardDifferenceCents: cardDifference,
+        correctionEntryNo: correction?.entryNo ?? null,
       },
       branchId: input.branchId,
     }),
   ]);
   return { id, report: frozen };
+}
+
+async function priorCorrection(db: D1Database, closingId: string): Promise<number> {
+  const row = await db
+    .prepare("SELECT correction_cents AS n FROM day_closings WHERE id = ?")
+    .bind(closingId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 export async function reopenDay(

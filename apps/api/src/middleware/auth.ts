@@ -1,5 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import type { Env } from "../db/client";
+import { SESSION_ABSOLUTE_MS, SESSION_IDLE_MS, SESSION_TOUCH_MS } from "../services/session";
 
 export type AppVariables = {
   userId: string;
@@ -23,17 +24,24 @@ export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   )
     .bind(sessionId)
     .first<{ user_id: string; expires_at: number; created_at: number; is_active: number }>();
-  const ABSOLUTE_MS = 1000 * 60 * 60 * 24 * 7; // 7d absolute
+  const now = Date.now();
   if (
     !row ||
-    row.expires_at < Date.now() ||
-    row.created_at + ABSOLUTE_MS < Date.now() ||
+    row.expires_at < now ||
+    row.created_at + SESSION_ABSOLUTE_MS < now ||
     !row.is_active
   ) {
     return c.json(
       { success: false, error: { code: "UNAUTHORIZED", message: "Session expired" } },
       401
     );
+  }
+  // Sliding idle expiry: activity pushes the 12h idle deadline forward, never
+  // past the 7d absolute cap. Written at most once per SESSION_TOUCH_MS so a
+  // busy POS does not turn every read into a write.
+  const slid = Math.min(now + SESSION_IDLE_MS, row.created_at + SESSION_ABSOLUTE_MS);
+  if (slid - row.expires_at >= SESSION_TOUCH_MS) {
+    await c.env.DB.prepare("UPDATE sessions SET expires_at = ? WHERE id = ?").bind(slid, sessionId).run();
   }
   const { results } = await c.env.DB.prepare(
     `SELECT p.name AS name FROM user_roles ur

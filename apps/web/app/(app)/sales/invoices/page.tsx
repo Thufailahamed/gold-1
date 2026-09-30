@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -22,6 +22,7 @@ type Invoice = {
   customer_name: string | null;
   total_cents: number;
   paid_cents: number;
+  balance_cents: number;
   status: string;
   created_at: number;
 };
@@ -34,6 +35,12 @@ export default function SalesInvoicesPage() {
   const [page, setPage] = useState(1);
   const [fStatus, setFStatus] = useState("");
 
+  // The sales dashboard links here with ?status= to open a settlement state.
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get("status");
+    if (s && STATUSES.includes(s)) setFStatus(s);
+  }, []);
+
   const list = useQuery({
     queryKey: ["sales", search, page, fStatus],
     queryFn: () =>
@@ -45,23 +52,25 @@ export default function SalesInvoicesPage() {
   const rows = list.data?.rows ?? [];
   const total = list.data?.total ?? 0;
   const value = rows.reduce((n, r) => n + (r.status === "VOID" ? 0 : r.total_cents), 0);
+  const due = rows.reduce((n, r) => n + (r.status === "VOID" ? 0 : Math.max(0, r.balance_cents ?? 0)), 0);
 
   return (
     <Page>
       <Hero
         kicker="Sales"
         title="Sales invoices"
-        description="Completed counter sales — every line linked to a physical piece."
+        description="Completed counter sales â€” every line linked to a physical piece."
         note="Credit balances sit on the customer ledger until fully settled."
         stats={[
           { label: "Invoices", value: total },
           { label: "On this page", value: rows.length },
           { label: "Page value", value: `${fmt(value)} LKR` },
+          { label: "Due on this page", value: `${fmt(due)} LKR` },
         ]}
       />
       <div className="flex flex-wrap gap-2">
         <input
-          placeholder="Search by number…"
+          placeholder="Search by numberâ€¦"
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
@@ -83,7 +92,7 @@ export default function SalesInvoicesPage() {
         footer={<Pager page={page} onChange={setPage} pageSize={20} count={rows.length} total={total} unit="invoices" />}
       >
         {list.isLoading ? (
-          <TableSkeleton rows={6} cols={5} />
+          <TableSkeleton rows={6} cols={7} />
         ) : list.isError ? (
           <EmptyBlock title="Failed to load" description="Check the API connection and retry." />
         ) : rows.length === 0 ? (
@@ -95,7 +104,9 @@ export default function SalesInvoicesPage() {
                 <th>Number</th>
                 <th>Customer</th>
                 <th className="!text-right">Total</th>
+                <th className="!text-right">Balance due</th>
                 <th>Status</th>
+                <th />
                 <th>Time</th>
               </tr>
             </thead>
@@ -109,7 +120,13 @@ export default function SalesInvoicesPage() {
                   </td>
                   <td>{r.customer_name ?? <span className="text-ink-4">Walk-in</span>}</td>
                   <td className="!text-right num-tabular font-medium text-ink">{fmt(r.total_cents)}</td>
+                  <td className={`!text-right num-tabular ${r.balance_cents > 0 && r.status !== "VOID" ? "font-medium text-rose-700" : "text-ink-4"}`}>
+                    {r.balance_cents > 0 && r.status !== "VOID" ? fmt(r.balance_cents) : "—"}
+                  </td>
                   <td><StatusPill status={r.status} /></td>
+                  <td>
+                    <Link href={`/sales/invoices/${r.id}/print`} className="text-xs font-medium text-ink-3 underline hover:text-ink">Print</Link>
+                  </td>
                   <td className="whitespace-nowrap text-ink-3">{new Date(r.created_at).toLocaleString()}</td>
                 </tr>
               ))}

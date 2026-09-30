@@ -37,8 +37,8 @@ Every transaction posts itself. Nothing is keyed twice:
 
 | Flow | Posting |
 |---|---|
-| Sale | DR 1000 cash · DR 1020 card · DR 1010 bank/other · DR 1200 credit *(customer)* · CR 4000 · DR 5000 cost · CR 1100 cost |
-| Sale return | the mirror; a card refund credits 1020 |
+| Sale | DR 1000 cash · DR 1020 card · DR 1010 bank/other · DR 1200 credit *(customer)* · CR 4000 net · CR 2100 output tax · DR 5000 cost · CR 1100 cost |
+| Sale return | the mirror, refunding exactly the tax each returned line carried (DR 2100); a card refund credits 1020 |
 | Purchase receive | DR 1100 / CR 2000 *(supplier)* |
 | Purchase payment | DR 2000 / CR 1000 or 1010 |
 | Purchase void | a **reversal** of the receive, linked, not a mirror |
@@ -46,6 +46,8 @@ Every transaction posts itself. Nothing is keyed twice:
 | Melting loss | DR 5100 / CR 1100, at book cost |
 | Manufacturing finish | DR 1100 extras / CR 2200 (or 1000/1010 when paid on the spot) · DR 5200 loss / CR 1100 |
 | Gold adjustment | DR 5300 / CR 1100 for a loss, the reverse for a surplus |
+| Direct stock intake | DR 1100 / CR 3100 at book cost; a cost correction posts the difference, a void the reverse |
+| Tax payment | DR 2100 / CR 1000 or the named bank account |
 | Manual adjustment | as entered, with a required reason |
 
 Party balances are derived, never stored: customer = opening + DR − CR on 1200;
@@ -199,7 +201,7 @@ run.
 
 ### The gate
 
-A day may be closed only when **all 18 reconciliation checks pass** for that
+A day may be closed only when **all 19 reconciliation checks pass** for that
 branch and date, no cash is unrecognised, and a difference carries an
 explanation. The close records which checks it saw and freezes the whole screen
 into `report_json`.
@@ -213,6 +215,47 @@ Re-opening needs a written reason and an approver who is **neither the
 requester nor whoever closed the day**. The close row is kept; a `day_reopens`
 row records who asked, who approved and why. A day reopened twice has two rows.
 
+### The count, the card terminal and the correction
+
+The count can be entered as a note-and-coin sheet (`denominations`, LKR face
+value → pieces); the sheet must add up to `actualCents` exactly and is kept
+on the close. The card terminal's end-of-day total (`cardTerminalCents`) is
+compared with the card sales the ledger recorded for the day; a card
+difference needs an explanation like a cash one. A cash difference and a card
+difference that cancel out are a sale keyed with the wrong payment method.
+
+With `postDifference`, the close posts the difference to **6090 Cash Short &
+Over** (`ref_entity` `cash_correction`, `ref_id` the closing) in the same
+batch, so the ledger drawer becomes the counted drawer and tomorrow's opening
+is what is really there. On a re-close the earlier correction is already a
+cash movement of the day, so only the change posts; `correction_cents` holds
+the total.
+
+### Finding missing amounts
+
+`GET /day-closings/investigate?branchId&date&actualCents` is read-only and
+answers "where did it go": failing checks with both figures, **every document
+of the day that is not posted the way it says** (no entry, revenue ≠ invoice
+net, money legs ≠ total, payments ≠ total, and the same for returns,
+purchases, supplier payments, expenses and receipts), every drawer movement
+with who keyed it and when, movements keyed on another day, expenses awaiting
+approval, transfers sent here but not received, and the single movements or
+pairs whose size equals the difference exactly. It never corrects anything.
+
+### Reports
+
+- `GET /day-closings/report.csv` — the day's report as a spreadsheet (frozen
+  when closed, a labelled live preview otherwise); the web app prints the same
+  report at `/day-closing/report`.
+- `GET /day-closings/unclosed` — days with activity nobody closed, or reopened
+  and not re-closed.
+- `GET /day-closings/variance` — shortages and overages over a window, by
+  branch and by who closed.
+- `GET /day-closings/summary?date` — every branch for one day.
+
+The report also carries the branch's fine-gold balance (opening, in, out,
+closing, by the stock-consistency direction rule) and the card takings.
+
 ### The awaiting-approval line
 
 **An unapproved expense has left the bank but is not in the ledger**, so the
@@ -221,6 +264,67 @@ awaiting approval* above the arithmetic for exactly this reason: without it,
 every evening after a large unapproved purchase looks like a till shortage.
 `expenses_crossfoot` is unaffected — a pending expense is on neither side, so
 the check stays true, and that is deliberate.
+
+## Sales tax (VAT)
+
+Off by default (`sales_tax_rate_bp` = 0). When the shop sets a rate, tax is
+**added on top** of each line's after-discount price, rounded per line, and
+the customer pays the gross. Revenue (4000) is always the net; the tax is the
+authority's money and goes to **2100 Tax Payable**. The line tax is stored on
+`sales_items.tax_cents` and the invoice keeps its rate in `tax_rate_bp`, so a
+return refunds exactly what that line carried — never a re-derived figure at
+today's rate — and a reprinted invoice still states the rate it was issued at.
+
+`sales_crossfoot` compares 4000 with the documents **net of tax**, and
+`tax_crossfoot` compares 2100's sale-side movement with the invoices' and
+returns' tax. Repair collections also credit 4000 but have no sales document,
+so they are kept off the journal side — counting them failed the check, and
+blocked the close, on every day with a repair collection. A custom-order
+delivery taxes the quote per piece, so the balance due is
+`quote + tax − advances`.
+
+The VAT return (`GET /accounts/tax/report`) reads 2100 directly: opening,
+charged, refunded, paid, closing. A payment (`POST /accounts/tax/payments`,
+ref `tax_payment`, a known cash ref for the day close) cannot exceed what 2100
+holds. Input tax on purchases is **not** modelled: gold bought from the public
+carries none, and the purchase cost chain stays tax-free.
+
+## Accounts payable
+
+`GET /accounts/payables` mirrors customer dues: supplier balances from 2000
+(credit positive) with the unpaid purchase invoices behind them aged. Voided
+invoices, and invoices whose receive entry was reversed, owe nothing. Payment
+stays on the purchase invoice.
+
+## Financial year
+
+The year starts in `fiscal_year_start_month` (default 4, April — Sri Lanka's
+year of assessment). **Closing posts nothing.** The balance sheet derives
+Retained earnings (profit of every entry before the current year) and Current
+year profit, so no P&L reader — monthly, day close, reconciliation, the
+statements — has to learn to skip a closing entry, and the equity total is
+identical either way.
+
+What a close does is **lock** every posting dated on or before the year end,
+at every branch (checked in `buildEntryStmts`, beside the day lock), and
+freeze the year's P&L and balance sheet into `fiscal_closes.report_json`. It
+is refused for a date that is not a year end, a year not yet over, or books
+that do not balance. Reopening needs a reason and a second person with
+`accounts:manage` who is neither the requester nor the closer; only the latest
+closed year can be reopened.
+
+## Opening stock
+
+A product taken in directly (`POST /products`, not a purchase or a
+manufacture) posts **DR 1100 / CR 3100 Opening Balances** at its book cost in
+the same batch as its OPENING gold row. Before this, 1100 understated by every
+such piece until it sold, then went negative by its COGS. A cost correction on
+a piece still on the shelf posts the difference; a void posts the reverse of
+the carried value **and an OPENING gold row out** (`branch → opening`) —
+without it a voided piece left stock on hand while its intake inflow stayed,
+and `gold_stock_consistency` failed for good. `POST
+/accounts/opening-stock/backfill` brings earlier direct intake onto the books,
+idempotently.
 
 ## Book cost chain
 
@@ -275,10 +379,10 @@ Gold direction is read from the ledger row: a `destination` of
 Summing every row instead would count a sale and a loss as stock still on the
 shelf.
 
-`GET /accounts/reconciliation` All 18 must pass for a branch and date before that day can close. They
+`GET /accounts/reconciliation` All 19 must pass for a branch and date before that day can close. They
 are branch-scopable, and a per-branch run exercises code paths the
-shop-wide run does not. `reconcile` runs 18 checks: per-entry balance, trial balance, and cross-foots
-for sales, purchases, payments, party ledgers, card clearing, cash in
+shop-wide run does not. `reconcile` runs 19 checks: per-entry balance, trial balance, and cross-foots
+for sales, output tax, purchases, payments, party ledgers, card clearing, cash in
 transit, expenses, each gold movement type, and cumulative stock on hand. A failing check is a `200` with
 `passed: false` and the offending figures, not an error — the caller needs the
 whole report to show the operator what is out.

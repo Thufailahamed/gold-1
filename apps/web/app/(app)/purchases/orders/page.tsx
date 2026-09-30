@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { hasPermission } from "@goldos/shared";
@@ -23,6 +23,8 @@ import { FileTextIcon } from "@/components/icons";
 type Order = { id: string; number: string; supplier_name: string; status: string; items: number; created_at: number };
 type Supplier = { id: string; name: string; code: string };
 
+const ORDER_STATUSES = ["DRAFT", "SENT", "RECEIVED", "CANCELLED"];
+
 function branchDefault(): string {
   if (typeof document === "undefined") return "";
   return (
@@ -33,18 +35,27 @@ function branchDefault(): string {
 export default function OrdersPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [fStatus, setFStatus] = useState("");
   const [dialog, setDialog] = useState(false);
   const [receiveId, setReceiveId] = useState<string | null>(null);
+
+  // The purchasing dashboard links here with ?status= or ?new=1.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const s = q.get("status");
+    if (s && ORDER_STATUSES.includes(s)) setFStatus(s);
+    if (q.get("new") === "1") setDialog(true);
+  }, []);
   const qc = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
   const canCreate = hasPermission(me.data?.permissions ?? [], "purchases:create");
   const canCancel = hasPermission(me.data?.permissions ?? [], "purchases:cancel");
 
   const list = useQuery({
-    queryKey: ["orders", search, page],
+    queryKey: ["orders", search, page, fStatus],
     queryFn: () =>
       api<{ rows: Order[]; total: number }>(
-        `/api/v1/purchases/orders?search=${encodeURIComponent(search)}&page=${page}&limit=20`
+        `/api/v1/purchases/orders?search=${encodeURIComponent(search)}&page=${page}&limit=20${fStatus ? `&status=${fStatus}` : ""}`
       ),
   });
   const suppliers = useQuery({
@@ -134,6 +145,12 @@ export default function OrdersPage() {
           }}
           className={controlClass}
         />
+        <select value={fStatus} onChange={(e) => { setFStatus(e.target.value); setPage(1); }} className={controlClass}>
+          <option value="">All statuses</option>
+          {ORDER_STATUSES.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
       </div>
       <TableCard
         title="Purchase orders"

@@ -24,10 +24,13 @@ export async function missingReport(db: D1Database, branchId: string): Promise<{
         rows.push({ countId: c.id, productId: pid, barcode: p?.barcode ?? "", productName: p?.name ?? null, daysOpen: Math.floor((Date.now() - c.created_at) / DAY_MS), status: "OPEN", posted: false });
       }
     } else {
-      const res = c.result_json ? (JSON.parse(c.result_json) as { missing?: string[]; posted?: number }) : null;
+      const res = c.result_json ? (JSON.parse(c.result_json) as { missing?: string[]; posted?: number; postedIds?: string[] }) : null;
+      // postedIds names exactly which lines were written off; counts closed
+      // before it existed only recorded a total, so fall back to that.
+      const postedIds = res?.postedIds ? new Set(res.postedIds) : null;
       for (const pid of res?.missing ?? []) {
         const p = await db.prepare("SELECT barcode, name FROM products WHERE id = ?").bind(pid).first<{ barcode: string; name: string }>();
-        rows.push({ countId: c.id, productId: pid, barcode: p?.barcode ?? "", productName: p?.name ?? null, daysOpen: Math.floor((Date.now() - c.created_at) / DAY_MS), status: "COMPLETE", posted: (res?.posted ?? 0) > 0 });
+        rows.push({ countId: c.id, productId: pid, barcode: p?.barcode ?? "", productName: p?.name ?? null, daysOpen: Math.floor((Date.now() - c.created_at) / DAY_MS), status: "COMPLETE", posted: postedIds ? postedIds.has(pid) : (res?.posted ?? 0) > 0 });
       }
     }
   }
@@ -42,7 +45,7 @@ export async function scanFlagReport(db: D1Database, branchId: string, flag: "UN
   return { rows, hasData: rows.length > 0 };
 }
 
-export type UnreceivedRow = { transferId: string; number: string; barcode: string; productId: string; fromBranch: string; toBranch: string; ageDays: number };
+export type UnreceivedRow = { transferId: string; number: string; barcode: string; productId: string; fromBranch: string; toBranch: string; fromBranchName: string | null; toBranchName: string | null; ageDays: number };
 
 export async function unreceivedDays(db: D1Database): Promise<number> {
   const s = await getSetting(db, "transfer_unreceived_days");
@@ -52,14 +55,14 @@ export async function unreceivedDays(db: D1Database): Promise<number> {
 export async function unreceivedReport(db: D1Database, branchId: string): Promise<{ rows: UnreceivedRow[]; hasData: boolean; thresholdDays: number }> {
   const thresholdDays = await unreceivedDays(db);
   const { results } = await db.prepare(
-    `SELECT l.transfer_id, t.number, l.product_id, l.barcode, t.from_branch_id, t.to_branch_id,
+    `SELECT l.transfer_id, t.number, l.product_id, l.barcode, t.from_branch_id, t.to_branch_id, (SELECT name FROM branches WHERE id = t.from_branch_id) AS from_branch_name, (SELECT name FROM branches WHERE id = t.to_branch_id) AS to_branch_name,
             (SELECT m.created_at FROM stock_movements m WHERE m.product_id = l.product_id AND m.type = 'TRANSFER_OUT' AND m.reason LIKE ('%' || t.number || '%') ORDER BY m.created_at DESC LIMIT 1) AS dispatched_at
      FROM transfer_lines l JOIN transfers t ON t.id = l.transfer_id
      WHERE l.status = 'IN_TRANSIT' AND (t.from_branch_id = ? OR t.to_branch_id = ?)`
-  ).bind(branchId, branchId).all<{ transfer_id: string; number: string; product_id: string; barcode: string; from_branch_id: string; to_branch_id: string; dispatched_at: number | null }>();
+  ).bind(branchId, branchId).all<{ transfer_id: string; number: string; product_id: string; barcode: string; from_branch_id: string; to_branch_id: string; from_branch_name: string | null; to_branch_name: string | null; dispatched_at: number | null }>();
   const now = Date.now();
   const rows = (results ?? [])
-    .map((r) => ({ transferId: r.transfer_id, number: r.number, barcode: r.barcode, productId: r.product_id, fromBranch: r.from_branch_id, toBranch: r.to_branch_id, ageDays: r.dispatched_at ? Math.floor((now - r.dispatched_at) / DAY_MS) : 0 }))
+    .map((r) => ({ transferId: r.transfer_id, number: r.number, barcode: r.barcode, productId: r.product_id, fromBranch: r.from_branch_id, toBranch: r.to_branch_id, fromBranchName: r.from_branch_name, toBranchName: r.to_branch_name, ageDays: r.dispatched_at ? Math.floor((now - r.dispatched_at) / DAY_MS) : 0 }))
     .filter((r) => r.ageDays >= thresholdDays);
   return { rows, hasData: rows.length > 0, thresholdDays };
 }
