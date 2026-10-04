@@ -73,6 +73,11 @@ const SECTIONS: NavSection[] = [
     tag: "Setup",
     items: [
       { href: "/categories", label: "Categories", icon: TagsIcon, perm: "masters:view" },
+      { href: "/subcategories", label: "Subcategories", icon: TagsIcon, perm: "masters:view" },
+      { href: "/designs", label: "Designs", icon: GemIcon, perm: "masters:view" },
+      { href: "/product-types", label: "Product Types", icon: PackageIcon, perm: "masters:view" },
+      { href: "/metal-types", label: "Metal Types", icon: CoinsIcon, perm: "masters:view" },
+      { href: "/stone-types", label: "Stone Types", icon: GemIcon, perm: "masters:view" },
       { href: "/purities", label: "Purities", icon: GemIcon, perm: "masters:view" },
       { href: "/gold-rates", label: "Gold Rates", icon: CoinsIcon, perm: "masters:view" },
       { href: "/suppliers", label: "Suppliers", icon: TruckIcon, perm: "masters:view" },
