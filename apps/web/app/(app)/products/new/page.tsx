@@ -289,9 +289,33 @@ export default function NewProductPage() {
 
   const create = useMutation({
     mutationFn: async (v: FormValues) => {
+      const payload: Record<string, unknown> = {
+        name: v.name,
+        categoryId: v.categoryId,
+        branchId: v.branchId,
+        metalTypeId: v.metalTypeId,
+        purityId: v.purityId,
+        grossG: Number(v.grossG),
+        stoneG: v.stoneG ? Number(v.stoneG) : 0,
+        makingLkr: v.makingLkr ? Number(v.makingLkr) : 0,
+        wastageG: v.wastageG ? Number(v.wastageG) : 0,
+      };
+      if (v.subcategoryId) payload.subcategoryId = v.subcategoryId;
+      if (v.designId) payload.designId = v.designId;
+      if (v.productTypeId) payload.productTypeId = v.productTypeId;
+      if (v.stoneTypeId) payload.stoneTypeId = v.stoneTypeId;
+      if (v.costLkr !== undefined && v.costLkr !== null && !Number.isNaN(Number(v.costLkr))) {
+        payload.costLkr = Number(v.costLkr);
+      }
+      if (v.sellingPriceLkr !== undefined && v.sellingPriceLkr !== null && !Number.isNaN(Number(v.sellingPriceLkr))) {
+        payload.sellingPriceLkr = Number(v.sellingPriceLkr);
+      }
+      if (v.location?.trim()) payload.location = v.location.trim();
+      if (v.notes?.trim()) payload.notes = v.notes.trim();
+
       const created = await api<{ id: string }>("/api/v1/products", {
         method: "POST",
-        body: JSON.stringify(v),
+        body: JSON.stringify(payload),
       });
       for (const f of images.slice(0, 10)) {
         const form = new FormData();
