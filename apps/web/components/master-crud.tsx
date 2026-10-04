@@ -25,7 +25,8 @@ import { ArrowRightIcon, PlusIcon, SearchIcon } from "./icons";
 export type CrudField = {
   name: string;
   label: string;
-  type: "text" | "number" | "datetime-local";
+  type: "text" | "number" | "datetime-local" | "select";
+  options?: { value: string; label: string }[];
   required?: boolean;
 };
 
@@ -37,7 +38,7 @@ type Props = {
   endpoint: string;
   columns: CrudColumn[];
   fields: CrudField[];
-  deactivateEndpoint: (id: string) => string;
+  deactivateEndpoint?: (id: string) => string;
   deactivateBody?: (reason: string) => Record<string, unknown>;
   defaults?: Record<string, string>;
   emptyHint: string;
@@ -118,8 +119,10 @@ export function MasterCrud({
   });
 
   const deactivate = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      api(deactivateEndpoint(id), { method: "PATCH", body: JSON.stringify(deactivateBody(reason)) }),
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => {
+      if (!deactivateEndpoint) throw new Error("Deactivation not supported");
+      return api(deactivateEndpoint(id), { method: "PATCH", body: JSON.stringify(deactivateBody(reason)) });
+    },
     onSuccess: () => {
       toast.success("Deactivated");
       qc.invalidateQueries({ queryKey: [endpoint] });
@@ -128,6 +131,7 @@ export function MasterCrud({
   });
 
   function onDeactivate(id: string) {
+    if (!deactivateEndpoint) return;
     const reason = window.prompt("Reason for deactivation (required):");
     if (!reason) return;
     deactivate.mutate({ id, reason });
@@ -189,7 +193,7 @@ export function MasterCrud({
         }
       >
         {list.isLoading ? (
-          <TableSkeleton rows={5} cols={columns.length + 2} />
+          <TableSkeleton rows={5} cols={columns.length + (deactivateEndpoint || renderActions ? 2 : 1)} />
         ) : list.isError ? (
           <EmptyBlock
             title="Failed to load"
@@ -205,7 +209,7 @@ export function MasterCrud({
                   <th key={c.key}>{c.label}</th>
                 ))}
                 <th>Status</th>
-                <th className="!text-right">Actions</th>
+                {deactivateEndpoint || renderActions ? <th className="!text-right">Actions</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -226,18 +230,20 @@ export function MasterCrud({
                   <td>
                     <StatusPill status={r.is_active ? "active" : "inactive"} label={r.is_active ? "Active" : "Inactive"} />
                   </td>
-                  <td className="text-right">
-                    {renderActions ? (
-                      renderActions(r, { onDeactivate })
-                    ) : r.is_active ? (
-                      <button
-                        onClick={() => onDeactivate(String(r.id))}
-                        className="text-xs font-medium text-rose-700 transition-colors hover:text-rose-800 hover:underline"
-                      >
-                        Deactivate
-                      </button>
-                    ) : null}
-                  </td>
+                  {deactivateEndpoint || renderActions ? (
+                    <td className="text-right">
+                      {renderActions ? (
+                        renderActions(r, { onDeactivate })
+                      ) : deactivateEndpoint && r.is_active ? (
+                        <button
+                          onClick={() => onDeactivate(String(r.id))}
+                          className="text-xs font-medium text-rose-700 transition-colors hover:text-rose-800 hover:underline"
+                        >
+                          Deactivate
+                        </button>
+                      ) : null}
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
@@ -254,12 +260,23 @@ export function MasterCrud({
                   {f.label}
                   {f.required ? <span className="ml-0.5 text-gold-dark">*</span> : null}
                 </label>
-                <input
-                  type={f.type === "datetime-local" ? "datetime-local" : f.type}
-                  step={f.type === "number" ? "any" : undefined}
-                  className={controlClass}
-                  {...register(f.name as keyof FormValues)}
-                />
+                {f.type === "select" ? (
+                  <select className={controlClass} {...register(f.name as keyof FormValues)}>
+                    <option value="">Select…</option>
+                    {(f.options ?? []).map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type={f.type === "datetime-local" ? "datetime-local" : f.type}
+                    step={f.type === "number" ? "any" : undefined}
+                    className={controlClass}
+                    {...register(f.name as keyof FormValues)}
+                  />
+                )}
                 {errors[f.name as keyof FormValues] ? (
                   <p className="mt-1 text-xs text-rose-700">Invalid value</p>
                 ) : null}
