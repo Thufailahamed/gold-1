@@ -112,15 +112,17 @@ export function extractScanCode(raw: string): string {
   return normalizeCode(s);
 }
 
+const optRef = z.string().min(1).optional().or(z.literal("")).transform((v) => v || undefined);
+
 export const createProductSchema = z.object({
   name: z.string().min(1).max(100),
   categoryId: z.string().min(1),
   branchId: z.string().min(1),
-  subcategoryId: z.string().min(1).optional(),
-  designId: z.string().min(1).optional(),
-  productTypeId: z.string().min(1).optional(),
+  subcategoryId: optRef,
+  designId: optRef,
+  productTypeId: optRef,
   metalTypeId: z.string().min(1),
-  stoneTypeId: z.string().min(1).optional(),
+  stoneTypeId: optRef,
   purityId: z.string().min(1),
   grossG: z.number().gt(0).max(100000),
   stoneG: z.number().min(0).max(100000).optional().default(0),
@@ -128,23 +130,23 @@ export const createProductSchema = z.object({
   wastageG: z.number().min(0).optional().default(0),
   costLkr: z.number().min(0).optional(),
   sellingPriceLkr: z.number().min(0).optional(),
-  location: z.string().max(100).optional(),
-  notes: z.string().max(2000).optional(),
+  location: z.string().max(100).optional().or(z.literal("")).transform((v) => v || undefined),
+  notes: z.string().max(2000).optional().or(z.literal("")).transform((v) => v || undefined),
 });
 
 export const editProductSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  subcategoryId: z.string().min(1).optional(),
-  designId: z.string().min(1).optional(),
-  productTypeId: z.string().min(1).optional(),
+  subcategoryId: optRef,
+  designId: optRef,
+  productTypeId: optRef,
   metalTypeId: z.string().min(1).optional(),
-  stoneTypeId: z.string().min(1).optional(),
+  stoneTypeId: optRef,
   makingLkr: z.number().min(0).optional(),
   wastageG: z.number().min(0).optional(),
   costLkr: z.number().min(0).optional(),
   sellingPriceLkr: z.number().min(0).optional(),
-  location: z.string().max(100).optional(),
-  notes: z.string().max(2000).optional(),
+  location: z.string().max(100).optional().or(z.literal("")).transform((v) => v || undefined),
+  notes: z.string().max(2000).optional().or(z.literal("")).transform((v) => v || undefined),
   approvalId: z.string().min(1).optional(),
 });
 
