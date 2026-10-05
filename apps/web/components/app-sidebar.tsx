@@ -69,6 +69,28 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: "Sales",
+    tag: "Counter",
+    items: [
+      {
+        href: "/sales",
+        label: "Sales Dashboard",
+        icon: GaugeIcon,
+        perm: "sales:view",
+        anyPerm: ["sales:create"],
+        also: ["/pos"],
+      },
+      { href: "/repairs", label: "Repairs", icon: HammerIcon, perm: "sales:view" },
+    ],
+  },
+  {
+    title: "Purchasing",
+    tag: "Trade",
+    items: [
+      { href: "/purchases", label: "Purchasing Dashboard", icon: GaugeIcon, perm: "purchases:view" },
+    ],
+  },
+  {
     title: "Masters",
     tag: "Setup",
     items: [
@@ -82,28 +104,6 @@ const SECTIONS: NavSection[] = [
       { href: "/gold-rates", label: "Gold Rates", icon: CoinsIcon, perm: "masters:view" },
       { href: "/suppliers", label: "Suppliers", icon: TruckIcon, perm: "masters:view" },
       { href: "/customers", label: "Customers", icon: UserCheckIcon, perm: "masters:view" },
-    ],
-  },
-  {
-    title: "Purchasing",
-    tag: "Trade",
-    items: [
-      { href: "/purchases", label: "Purchasing Dashboard", icon: GaugeIcon, perm: "purchases:view" },
-    ],
-  },
-  {
-    title: "Sales",
-    tag: "Counter",
-    items: [
-      {
-        href: "/sales",
-        label: "Sales Dashboard",
-        icon: GaugeIcon,
-        perm: "sales:view",
-        anyPerm: ["sales:create"],
-        also: ["/pos"],
-      },
-      { href: "/repairs", label: "Repairs", icon: HammerIcon, perm: "sales:view" },
     ],
   },
   {
