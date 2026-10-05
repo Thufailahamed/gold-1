@@ -43,6 +43,10 @@ type Detail = {
     selling_price_cents: number | null;
     location: string | null;
     notes: string | null;
+    subcategory_id?: string | null;
+    design_id?: string | null;
+    product_type_id?: string | null;
+    stone_type_id?: string | null;
     image_keys: string[];
     status: string;
     branch_id: string;
@@ -446,7 +450,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
 
       {editing ? (
         <EditDialog
-          id={id}
+          product={product}
           onClose={() => {
             setEditing(false);
             qc.invalidateQueries({ queryKey: ["product", id] });
@@ -458,29 +462,62 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   );
 }
 
-function EditDialog({ id, onClose }: { id: string; onClose: () => void }) {
-  const [makingLkr, setMakingLkr] = useState("");
-  const [wastageG, setWastageG] = useState("");
-  const [costLkr, setCostLkr] = useState("");
-  const [sellingPriceLkr, setSellingPriceLkr] = useState("");
-  const [location, setLocation] = useState("");
-  const [notes, setNotes] = useState("");
+function EditDialog({
+  product,
+  onClose,
+}: {
+  product: Detail["product"];
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(product.name);
+  const [makingLkr, setMakingLkr] = useState(String(centsToLkr(product.making_cents)));
+  const [wastageG, setWastageG] = useState(String(mgToG(product.wastage_mg)));
+  const [costLkr, setCostLkr] = useState(product.cost_cents !== null ? String(centsToLkr(product.cost_cents)) : "");
+  const [sellingPriceLkr, setSellingPriceLkr] = useState(product.selling_price_cents !== null ? String(centsToLkr(product.selling_price_cents)) : "");
+  const [location, setLocation] = useState(product.location ?? "");
+  const [notes, setNotes] = useState(product.notes ?? "");
+  const [subcategoryId, setSubcategoryId] = useState(product.subcategory_id ?? "");
+  const [designId, setDesignId] = useState(product.design_id ?? "");
+  const [productTypeId, setProductTypeId] = useState(product.product_type_id ?? "");
+  const [stoneTypeId, setStoneTypeId] = useState(product.stone_type_id ?? "");
   const [pending, setPending] = useState(false);
+
+  const subcats = useQuery({
+    queryKey: ["subcats-all"],
+    queryFn: () => api<{ rows: { id: string; name: string }[] }>("/api/v1/masters/subcategories?limit=100"),
+  });
+  const designs = useQuery({
+    queryKey: ["designs-all"],
+    queryFn: () => api<{ rows: { id: string; name: string }[] }>("/api/v1/masters/designs?limit=100"),
+  });
+  const ptypes = useQuery({
+    queryKey: ["ptypes-all"],
+    queryFn: () => api<{ rows: { id: string; name: string }[] }>("/api/v1/masters/product-types?limit=100"),
+  });
+  const stones = useQuery({
+    queryKey: ["stones-all"],
+    queryFn: () => api<{ rows: { id: string; name: string }[] }>("/api/v1/masters/stone-types?limit=100"),
+  });
 
   async function save() {
     setPending(true);
-    const body: Record<string, unknown> = {};
-    if (makingLkr !== "") body.makingLkr = Number(makingLkr);
-    if (wastageG !== "") body.wastageG = Number(wastageG);
+    const body: Record<string, unknown> = {
+      name: name.trim() || undefined,
+      makingLkr: makingLkr !== "" ? Number(makingLkr) : 0,
+      wastageG: wastageG !== "" ? Number(wastageG) : 0,
+      location: location.trim() || undefined,
+      notes: notes.trim() || undefined,
+      subcategoryId: subcategoryId || undefined,
+      designId: designId || undefined,
+      productTypeId: productTypeId || undefined,
+      stoneTypeId: stoneTypeId || undefined,
+    };
     if (costLkr !== "") body.costLkr = Number(costLkr);
     if (sellingPriceLkr !== "") body.sellingPriceLkr = Number(sellingPriceLkr);
-    if (location !== "") body.location = location;
-    if (notes !== "") body.notes = notes;
+
     try {
-      if (Object.keys(body).length > 0) {
-        await api(`/api/v1/products/${id}`, { method: "PATCH", body: JSON.stringify(body) });
-        toast.success("Product updated");
-      }
+      await api(`/api/v1/products/${product.id}`, { method: "PATCH", body: JSON.stringify(body) });
+      toast.success("Product updated");
       onClose();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Update failed");
@@ -492,39 +529,79 @@ function EditDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const cls = controlClass;
   return (
     <Modal
-      title={<>Edit product <span className="text-ink-4">(weights locked)</span></>}
-      kicker="Edit"
+      title={<>Edit piece <span className="text-ink-4">({product.barcode})</span></>}
+      kicker="Edit Product"
       onClose={onClose}
       onSubmit={save}
       pending={pending}
-      submitLabel="Save"
+      submitLabel="Save changes"
     >
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-ink-3">Making LKR</label>
-            <input type="number" step="any" value={makingLkr} onChange={(e) => setMakingLkr(e.target.value)} className={cls} />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-ink-3">Wastage g</label>
-            <input type="number" step="any" value={wastageG} onChange={(e) => setWastageG(e.target.value)} className={cls} />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-ink-3">Cost LKR</label>
-            <input type="number" step="any" value={costLkr} onChange={(e) => setCostLkr(e.target.value)} className={cls} />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-ink-3">Selling LKR</label>
-            <input type="number" step="any" value={sellingPriceLkr} onChange={(e) => setSellingPriceLkr(e.target.value)} className={cls} />
-          </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2">
+          <label className="mb-1.5 block text-xs font-medium text-ink-3">Product Name</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} required className={cls} />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-ink-3">Location</label>
-          <input value={location} onChange={(e) => setLocation(e.target.value)} className={cls} />
+          <label className="mb-1.5 block text-xs font-medium text-ink-3">Making charge (LKR)</label>
+          <input type="number" step="any" value={makingLkr} onChange={(e) => setMakingLkr(e.target.value)} className={cls} />
         </div>
         <div>
+          <label className="mb-1.5 block text-xs font-medium text-ink-3">Wastage (g)</label>
+          <input type="number" step="any" value={wastageG} onChange={(e) => setWastageG(e.target.value)} className={cls} />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-ink-3">Cost (LKR)</label>
+          <input type="number" step="any" value={costLkr} onChange={(e) => setCostLkr(e.target.value)} className={cls} />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-ink-3">Selling price (LKR, optional)</label>
+          <input type="number" step="any" value={sellingPriceLkr} onChange={(e) => setSellingPriceLkr(e.target.value)} placeholder="Live board rate" className={cls} />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-ink-3">Subcategory</label>
+          <select value={subcategoryId} onChange={(e) => setSubcategoryId(e.target.value)} className={cls}>
+            <option value="">None</option>
+            {(subcats.data?.rows ?? []).map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-ink-3">Design</label>
+          <select value={designId} onChange={(e) => setDesignId(e.target.value)} className={cls}>
+            <option value="">None</option>
+            {(designs.data?.rows ?? []).map((d) => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-ink-3">Product Type</label>
+          <select value={productTypeId} onChange={(e) => setProductTypeId(e.target.value)} className={cls}>
+            <option value="">None</option>
+            {(ptypes.data?.rows ?? []).map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-ink-3">Stone Type</label>
+          <select value={stoneTypeId} onChange={(e) => setStoneTypeId(e.target.value)} className={cls}>
+            <option value="">None</option>
+            {(stones.data?.rows ?? []).map((st) => (
+              <option key={st.id} value={st.id}>{st.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="col-span-2">
+          <label className="mb-1.5 block text-xs font-medium text-ink-3">Location / Showcase / Tray</label>
+          <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Showcase A, Tray 3" className={cls} />
+        </div>
+        <div className="col-span-2">
           <label className="mb-1.5 block text-xs font-medium text-ink-3">Notes</label>
-          <input value={notes} onChange={(e) => setNotes(e.target.value)} className={cls} />
+          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Internal notes or comments" className={cls} />
         </div>
+      </div>
     </Modal>
   );
 }
