@@ -166,7 +166,28 @@ export default function PosPage() {
   cartRef.current = cart;
   const customerRef = useRef(customer);
   customerRef.current = customer;
-  const [branchId] = useState(branchDefault);
+  const [branchId, setBranchId] = useState(branchDefault);
+
+  useEffect(() => {
+    if (!branchId) {
+      api<{ rows: { id: string }[] }>("/api/v1/branches?limit=100")
+        .then((d) => {
+          const first = d.rows[0]?.id;
+          if (first) {
+            setBranchId(first);
+            document.cookie = `goldos_branch=${first}; Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+          }
+        })
+        .catch(() => undefined);
+    }
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      if (detail) setBranchId(detail);
+      else setBranchId(branchDefault());
+    };
+    window.addEventListener("goldos-branch-changed", handler);
+    return () => window.removeEventListener("goldos-branch-changed", handler);
+  }, [branchId]);
 
   // Typed text that is not a scanner's code is a product search.
   const typed = scan.trim();

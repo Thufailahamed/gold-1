@@ -20,7 +20,12 @@ export function BranchSwitcher() {
           .split("; ")
           .find((c) => c.startsWith(`${COOKIE}=`))
           ?.split("=")[1];
-        setCurrent(saved ?? d.rows[0]?.id ?? "");
+        const active = saved && d.rows.some((b) => b.id === saved) ? saved : d.rows[0]?.id ?? "";
+        setCurrent(active);
+        if (active && (!saved || saved !== active)) {
+          document.cookie = `${COOKIE}=${active}; Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+          window.dispatchEvent(new CustomEvent("goldos-branch-changed", { detail: active }));
+        }
       })
       .catch(() => undefined);
   }, []);
@@ -28,6 +33,7 @@ export function BranchSwitcher() {
   function select(id: string) {
     setCurrent(id);
     document.cookie = `${COOKIE}=${id}; Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+    window.dispatchEvent(new CustomEvent("goldos-branch-changed", { detail: id }));
   }
 
   return (
