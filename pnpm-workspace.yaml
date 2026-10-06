@@ -1,3 +1,6 @@
 packages:
   - "apps/*"
   - "packages/*"
+  # The Expo app installs with npm on its own (Metro + pnpm symlinks is
+  # fragile); it consumes packages/shared through a Metro/TS alias instead.
+  - "!apps/mobile"
