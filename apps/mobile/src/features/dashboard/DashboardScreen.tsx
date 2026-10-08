@@ -1,33 +1,33 @@
-import { Pressable, StyleSheet, View } from "react-native";
+import { useState, type ReactNode } from "react";
+import { Platform, Pressable, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from "react-native";
 import { router, Stack, type Href } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { api, type MeData } from "@/lib/api";
 import { useCountUp } from "@/lib/count-up";
-import { ago, grams, greeting, humanize, lkr0 } from "@/lib/format";
+import { ago, compact, grams, greeting, humanize, lkr0 } from "@/lib/format";
 import { haptic } from "@/lib/haptics";
 import { last12Months, type MonthlySummary } from "@/lib/monthly";
-import { useSession } from "@/lib/session";
-import { GUTTER, radius, useTheme } from "@/theme";
+import { useBranch, useSession } from "@/lib/session";
+import { elevation, GUTTER, radius, squircle, useTheme } from "@/theme";
 import { PlatformNotices } from "@/features/platform/PlatformNotices";
 import {
   AreaChart,
   Avatar,
-  Card,
-  CardHeader,
   EmptyState,
   GoldGlow,
-  Grid,
   Icon,
   Kicker,
+  OptionSheet,
   PressableScale,
   Ring,
   Screen,
   Skeleton,
   SkeletonRows,
-  StatTile,
   StatusPill,
   Text,
+  toast,
   useRefresh,
   type IconName,
 } from "@/ui";
@@ -115,239 +115,601 @@ function useDashboard(me: MeData | null, can: (p: string) => boolean) {
 
 type D = ReturnType<typeof useDashboard>;
 
-/* ------------------------------------------------------------------ hero */
+/* ------------------------------------------------------------------ top header */
 
-function HeroCard({ me, d }: { me: MeData | null; d: D }) {
-  const firstName = me?.user.name?.split(" ")[0] ?? "there";
-  const today = d.salesToday.data;
-  const month = d.salesMonth.data;
-  const pct = today && month ? (month.value_cents > 0 ? (today.value_cents / month.value_cents) * 100 : 0) : undefined;
-  const todayValue = useCountUp(today ? today.value_cents / 100 : undefined);
-  const wipMg = d.wip.data?.reduce((s, w) => s + w.allocatedMg, 0);
+function HomeHeader({ me, d }: { me: MeData | null; d: D }) {
+  const { c } = useTheme();
+  const insets = useSafeAreaInsets();
+  const pendingCount = d.approvals.data?.total ?? 0;
+  const firstName = me?.user.name?.split(" ")[0] ?? "Team";
 
-  const strip: { label: string; value: string; icon: IconName; href: string }[] = [
-    { label: "Month to date", value: month ? `LKR ${lkr0(month.value_cents)}` : "—", icon: "trendUp", href: "/sales/reports" },
-    { label: "Invoices this month", value: month ? month.invoices.toLocaleString("en-US") : "—", icon: "inbox", href: "/sales/invoices" },
-    { label: "Gold in workshop", value: wipMg !== undefined ? `${grams(wipMg)} g` : "—", icon: "flask", href: "/manufacturing/orders" },
-    { label: "Pending approvals", value: d.approvals.data ? String(d.approvals.data.total) : "—", icon: "shield", href: "/approvals" },
-  ];
+  // On iOS the scroll view's automatic content inset already clears the status bar.
+  const top = Platform.OS === "ios" ? 8 : insets.top + 12;
 
   return (
-    <View style={styles.hero}>
-      <LinearGradient colors={["#2A2110", "#0C0A09", "#0C0A09"]} locations={[0, 0.6, 1]} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
-      <GoldGlow size={420} top={-220} right={-150} opacity={0.5} />
-      <LinearGradient colors={["transparent", "rgba(231,198,90,0.55)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.hairline} />
-
-      <View style={{ padding: 20 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <View style={styles.kickerPill}>
-            <View style={{ width: 6, height: 6, borderRadius: 3, borderCurve: "continuous", backgroundColor: "#E7C65A" }} />
-            <Kicker style={{ color: "#E7C65A" }}>Branch overview</Kicker>
-          </View>
+    <View style={[styles.topHeader, { paddingTop: top }]}>
+      <View style={styles.headerLeft}>
+        <View style={[styles.avatarRing, { borderColor: c.goldBright }]}>
+          <Avatar name={me?.user.name} size={44} gold />
         </View>
-        <Text variant="caption1" tone="onVault3" upper style={{ marginTop: 10, letterSpacing: 1 }}>
-          {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-        </Text>
-        <Text variant="title1" tone="onVault" style={{ marginTop: 4, letterSpacing: -0.5 }}>
-          {greeting()}, <Text variant="title1" color="#E7C65A">{firstName}.</Text>
-        </Text>
-        <Text variant="subhead" tone="onVault2" style={{ marginTop: 6 }}>
-          Here's how the counter, the vault and the workshop are moving today.
-        </Text>
-
-        {/* Today gauge */}
-        <View style={styles.glass}>
-          <Ring percent={pct ?? 0} size={104} stroke={9} dark>
-            <Text variant="headline" tone="onVault" num rounded>
-              {pct !== undefined ? `${Math.round(pct)}%` : "—"}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text variant="footnote" tone="secondary" weight="500">
+            {greeting()}
+          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Text variant="title1" weight="700" display numberOfLines={1} style={{ flexShrink: 1, lineHeight: 34 }}>
+              {firstName}
             </Text>
-            <Text variant="caption2" tone="onVault3" upper weight="600">
-              of month
-            </Text>
-          </Ring>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Kicker style={{ color: "rgba(231,198,90,0.8)" }}>Today's sales</Kicker>
-            {d.salesToday.isLoading ? (
-              <Skeleton width={130} height={30} style={{ marginTop: 8, backgroundColor: "rgba(255,255,255,0.1)" }} />
-            ) : (
-              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 5, marginTop: 4 }}>
-                <Text variant="caption1" tone="onVault3">
-                  LKR
-                </Text>
-                <Text variant="title1" tone="onVault" num rounded numberOfLines={1} adjustsFontSizeToFit style={{ flexShrink: 1 }}>
-                  {today ? Math.round(todayValue).toLocaleString("en-US") : "—"}
+            {d.can("branches:manage") ? (
+              <View style={[styles.roleBadge, { backgroundColor: c.goldSoft }]}>
+                <Icon name="crown" size={9} color={c.goldInk} weight="bold" />
+                <Text variant="caption2" weight="800" color={c.goldInk} upper style={{ fontSize: 9, letterSpacing: 0.8 }}>
+                  Admin
                 </Text>
               </View>
-            )}
-            <Text variant="caption1" tone="onVault2" style={{ marginTop: 6 }} num>
-              {today ? today.invoices : "—"} invoices · {today ? grams(today.gold_mg) : "—"} g sold
-            </Text>
+            ) : null}
           </View>
-        </View>
-
-        {/* Actions */}
-        <View style={{ flexDirection: "row", gap: 10, marginTop: 16 }}>
-          {d.can("sales:create") ? <HeroButton primary icon="creditCard" label="New sale" onPress={() => router.push("/pos")} /> : null}
-          <HeroButton icon="scan" label="Scan" onPress={() => router.push("/scanner")} />
-          {d.can("products:view") ? <HeroButton icon="gem" label="Catalog" onPress={() => router.push("/products")} /> : null}
         </View>
       </View>
 
-      {/* Strip */}
-      <View style={styles.strip}>
-        {strip.map((s, i) => (
-          <Pressable
-            key={s.label}
-            onPress={() => {
-              haptic.selection();
-              router.push(s.href as Href);
-            }}
-            style={({ pressed }) => [
-              styles.cell,
-              { borderLeftWidth: i % 2 === 1 ? StyleSheet.hairlineWidth : 0, borderTopWidth: StyleSheet.hairlineWidth, opacity: pressed ? 0.6 : 1 },
-            ]}
-          >
-            <View style={styles.cellIcon}>
-              <Icon name={s.icon} size={13} color="#E7C65A" />
+      <PressableScale
+        scaleTo={0.9}
+        accessibilityLabel={pendingCount > 0 ? `${pendingCount} pending approvals` : "Notifications"}
+        onPress={() => {
+          haptic.light();
+          router.push("/approvals");
+        }}
+        style={[styles.iconBtn, { backgroundColor: c.card }, elevation.low]}
+      >
+        <Icon name="bell" size={18} color={c.label} weight="medium" />
+        {pendingCount > 0 ? (
+          <View style={[styles.bellBadge, { backgroundColor: c.red, borderColor: c.card }]}>
+            <Text variant="caption2" weight="800" color="#FFFFFF" style={{ fontSize: 10, lineHeight: 12 }}>
+              {pendingCount > 9 ? "9+" : pendingCount}
+            </Text>
+          </View>
+        ) : null}
+      </PressableScale>
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ hero card */
+
+function BranchChip() {
+  const b = useBranch();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <PressableScale
+        scaleTo={0.95}
+        accessibilityLabel="Switch branch"
+        onPress={() => {
+          haptic.selection();
+          setOpen(true);
+        }}
+        style={styles.branchChip}
+      >
+        <View style={styles.liveDotHalo}>
+          <View style={styles.liveDot} />
+        </View>
+        <Text variant="caption1" weight="700" color="#FFFFFF" numberOfLines={1} style={{ maxWidth: 120 }}>
+          {b.branch?.name ?? "Branch"}
+        </Text>
+        <Icon name="chevronDown" size={9} color="rgba(255,255,255,0.55)" weight="bold" />
+      </PressableScale>
+      <OptionSheet
+        visible={open}
+        onClose={() => setOpen(false)}
+        title="Switch Branch"
+        value={b.branchId}
+        options={b.branches.map((br) => ({ value: br.id, label: br.name, subtitle: br.code }))}
+        onPick={(id) => {
+          if (id) {
+            b.setBranchId(id);
+            toast.success("Branch switched", b.branches.find((x) => x.id === id)?.name);
+          }
+          setOpen(false);
+        }}
+      />
+    </>
+  );
+}
+
+function HeroCard({ d }: { d: D }) {
+  const today = d.salesToday.data;
+  const month = d.salesMonth.data;
+  const pctValue = today && month && month.value_cents > 0 ? (today.value_cents / month.value_cents) * 100 : 0;
+  const animatedValue = useCountUp(today ? today.value_cents / 100 : 0);
+  const displaySales = today ? Math.round(animatedValue).toLocaleString("en-US") : "0";
+
+  const wipMg = d.wip.data?.reduce((s, w) => s + w.allocatedMg, 0);
+  const oldGold = d.oldGoldToday.data;
+  const purchases = d.purchasesToday.data;
+
+  const quickStats: { label: string; value: string; prefix?: string; unit?: string; icon: IconName; href: string }[] = [
+    { label: "Month to date", value: month ? lkr0(month.value_cents) : "—", prefix: month ? "LKR" : undefined, icon: "trendUp", href: "/sales/reports" },
+    { label: "Purchases today", value: purchases ? lkr0(purchases.value_cents) : "—", prefix: purchases ? "LKR" : undefined, icon: "truck", href: "/purchases/invoices" },
+    { label: "Old gold intake", value: oldGold ? grams(oldGold.fine_mg) : "—", unit: oldGold ? "g" : undefined, icon: "scale", href: "/old-gold" },
+    { label: "In workshop", value: wipMg !== undefined ? grams(wipMg) : "—", unit: wipMg !== undefined ? "g" : undefined, icon: "flask", href: "/gold/stock" },
+  ];
+
+  const todayStr = new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  const avgTicket = today && today.invoices > 0 ? compact(today.value_cents / 100 / today.invoices) : "—";
+
+  return (
+    <View style={styles.heroShadow}>
+      <View style={styles.hero}>
+        <LinearGradient
+          colors={["#3A2D0E", "#1A150C", "#0B0A08"]}
+          locations={[0, 0.5, 1]}
+          start={{ x: 1, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <GoldGlow size={420} top={-220} right={-170} opacity={0.55} />
+        <LinearGradient
+          colors={["transparent", "rgba(243,217,122,0.8)", "transparent"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.hairline}
+        />
+
+        <View style={{ padding: 20, paddingBottom: 20 }}>
+          {/* Meta row */}
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Icon name="calendar" size={12} color="rgba(243,217,122,0.8)" weight="semibold" />
+              <Text variant="caption1" tone="onVault2" weight="600" upper style={{ letterSpacing: 1.2 }}>
+                {todayStr}
+              </Text>
             </View>
+            <BranchChip />
+          </View>
+
+          {/* Revenue */}
+          <View style={styles.revenueRow}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text variant="caption2" tone="onVault3" weight="600" upper numberOfLines={1} style={{ letterSpacing: 0.6 }}>
-                {s.label}
-              </Text>
-              <Text variant="subhead" tone="onVault" weight="600" num numberOfLines={1} adjustsFontSizeToFit>
-                {s.value}
+              <Kicker style={{ color: "rgba(243,217,122,0.9)", letterSpacing: 1.4 }}>Today's revenue</Kicker>
+              {d.salesToday.isLoading ? (
+                <Skeleton width={150} height={44} style={{ backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 10, marginTop: 8 }} />
+              ) : (
+                <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 4 }}>
+                  <Text variant="callout" tone="onVault3" weight="700">
+                    LKR
+                  </Text>
+                  <Text
+                    tone="onVault"
+                    num
+                    display
+                    weight="700"
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    style={{ fontSize: 46, lineHeight: 56, flexShrink: 1 }}
+                  >
+                    {displaySales}
+                  </Text>
+                </View>
+              )}
+              <Text variant="footnote" tone="onVault2" numberOfLines={1} style={{ marginTop: 2 }}>
+                {today && today.invoices > 0 ? `From ${today.invoices} sale${today.invoices > 1 ? "s" : ""} so far today` : "No sales recorded yet today"}
               </Text>
             </View>
-          </Pressable>
-        ))}
+            <Ring percent={pctValue} size={76} stroke={6} dark>
+              <Text variant="headline" tone="onVault" display num weight="700" style={{ fontSize: 19, lineHeight: 22 }}>
+                {Math.round(pctValue)}%
+              </Text>
+              <Text variant="caption2" tone="onVault3" weight="600" upper style={{ fontSize: 8, letterSpacing: 0.8 }}>
+                of month
+              </Text>
+            </Ring>
+          </View>
+
+          {/* Today metrics */}
+          <View style={styles.metricsRow}>
+            <MiniMetric value={today ? today.invoices.toLocaleString("en-US") : "0"} label="Invoices" />
+            <View style={styles.miniSep} />
+            <MiniMetric value={today ? grams(today.gold_mg) : "0.000"} unit="g" label="Gold sold" />
+            <View style={styles.miniSep} />
+            <MiniMetric value={avgTicket} label="Avg ticket" />
+          </View>
+
+          {/* Actions */}
+          <View style={{ flexDirection: "row", gap: 10, marginTop: 16 }}>
+            {d.can("sales:create") ? (
+              <PressableScale
+                scaleTo={0.96}
+                onPress={() => {
+                  haptic.medium();
+                  router.push("/pos");
+                }}
+                style={[styles.primaryBtn, { flex: 1 }]}
+              >
+                <LinearGradient colors={["#F8E4A0", "#E2BC4A", "#B8901C"]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
+                <View style={styles.btnSheen} />
+                <Icon name="plus" size={16} color="#1C1917" weight="bold" />
+                <Text variant="headline" weight="700" color="#1C1917">
+                  New Sale
+                </Text>
+              </PressableScale>
+            ) : (
+              <View style={{ flex: 1 }} />
+            )}
+            <GlassIconButton icon="scan" label="Scan piece" onPress={() => router.push("/scanner")} />
+            {d.can("products:view") ? <GlassIconButton icon="package" label="Catalog" onPress={() => router.push("/products")} /> : null}
+          </View>
+        </View>
+
+        {/* 2×2 metric strip */}
+        <View style={styles.strip}>
+          {quickStats.map((s, i) => (
+            <Pressable
+              key={s.label}
+              onPress={() => {
+                haptic.selection();
+                router.push(s.href as Href);
+              }}
+              style={({ pressed }) => [
+                styles.cell,
+                {
+                  borderLeftWidth: i % 2 === 1 ? StyleSheet.hairlineWidth : 0,
+                  borderTopWidth: StyleSheet.hairlineWidth,
+                  backgroundColor: pressed ? "rgba(255,255,255,0.05)" : "transparent",
+                },
+              ]}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Icon name={s.icon} size={11} color="rgba(243,217,122,0.75)" weight="semibold" />
+                <Text variant="caption2" tone="onVault3" weight="700" upper numberOfLines={1} style={{ flex: 1, letterSpacing: 0.8, fontSize: 10 }}>
+                  {s.label}
+                </Text>
+                <Icon name="chevronRight" size={8} color="rgba(255,255,255,0.25)" weight="bold" />
+              </View>
+              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4, marginTop: 6 }}>
+                {s.prefix ? (
+                  <Text variant="caption2" tone="onVault3" weight="700">
+                    {s.prefix}
+                  </Text>
+                ) : null}
+                <Text variant="headline" tone="onVault" weight="700" num rounded numberOfLines={1} adjustsFontSizeToFit style={{ flexShrink: 1 }}>
+                  {s.value}
+                </Text>
+                {s.unit ? (
+                  <Text variant="caption1" tone="onVault3" weight="600">
+                    {s.unit}
+                  </Text>
+                ) : null}
+              </View>
+            </Pressable>
+          ))}
+        </View>
       </View>
     </View>
   );
 }
 
-function HeroButton({ label, icon, onPress, primary }: { label: string; icon: IconName; onPress: () => void; primary?: boolean }) {
+function MiniMetric({ value, unit, label }: { value: string; unit?: string; label: string }) {
+  return (
+    <View style={{ flex: 1, alignItems: "center", minWidth: 0 }}>
+      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 2 }}>
+        <Text variant="headline" tone="onVault" weight="700" num rounded numberOfLines={1} adjustsFontSizeToFit>
+          {value}
+        </Text>
+        {unit ? (
+          <Text variant="caption2" tone="onVault3" weight="600">
+            {unit}
+          </Text>
+        ) : null}
+      </View>
+      <Text variant="caption2" tone="onVault3" weight="600" upper numberOfLines={1} style={{ marginTop: 2, fontSize: 9, letterSpacing: 0.8 }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function GlassIconButton({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
   return (
     <PressableScale
-      scaleTo={0.95}
+      scaleTo={0.92}
+      accessibilityLabel={label}
       onPress={() => {
         haptic.light();
         onPress();
       }}
-      style={[
-        styles.heroBtn,
-        primary ? { backgroundColor: "#C9A227" } : { backgroundColor: "rgba(255,255,255,0.1)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.16)" },
-        { flex: primary ? 1.2 : 1 },
-      ]}
+      style={styles.glassBtn}
     >
-      <Icon name={icon} size={15} color={primary ? "#1C1917" : "#FFFFFF"} weight="semibold" />
-      <Text variant="subhead" weight="600" color={primary ? "#1C1917" : "#FFFFFF"} numberOfLines={1}>
-        {label}
-      </Text>
+      <Icon name={icon} size={20} color="#FFFFFF" weight="semibold" />
     </PressableScale>
   );
 }
 
-/* ------------------------------------------------------------------ KPIs */
+/* ------------------------------------------------------------------ section title */
 
-function Kpis({ d }: { d: D }) {
-  const wipMg = d.wip.data?.reduce((s, w) => s + w.allocatedMg, 0);
-  const denied = (perm: string, q: { isError: boolean }) => !d.can(perm) || q.isError;
-  const kpi = (
-    label: string,
-    icon: IconName,
-    value: number | undefined,
-    format: (n: number) => string,
-    sub: string,
-    href: string,
-    loading: boolean,
-    isDenied: boolean,
-    prefix?: string,
-    unit?: string
-  ) => (
-    <KpiTile key={label} label={label} icon={icon} value={value} format={format} sub={sub} href={href} loading={loading} denied={isDenied} prefix={prefix} unit={unit} />
-  );
+function SectionTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: { label: string; onPress: () => void } }) {
+  const { c } = useTheme();
   return (
-    <Grid style={{ marginTop: 16 }}>
-      {kpi(
-        "Today's sales",
-        "banknote",
-        d.salesToday.data ? d.salesToday.data.value_cents / 100 : undefined,
-        (n) => Math.round(n).toLocaleString("en-US"),
-        d.salesToday.data ? `${d.salesToday.data.invoices} invoices today` : "From sales invoices",
-        "/sales/invoices",
-        d.salesToday.isLoading,
-        denied("sales:view", d.salesToday),
-        "LKR"
-      )}
-      {kpi(
-        "Gold sold",
-        "gem",
-        d.salesToday.data ? d.salesToday.data.gold_mg / 1000 : undefined,
-        (n) => n.toFixed(3),
-        "Net weight across today's pieces",
-        "/sales/reports",
-        d.salesToday.isLoading,
-        denied("sales:view", d.salesToday),
-        undefined,
-        "g"
-      )}
-      {kpi(
-        "Old gold bought",
-        "scale",
-        d.oldGoldToday.data ? d.oldGoldToday.data.fine_mg / 1000 : undefined,
-        (n) => n.toFixed(3),
-        "Fine gold taken in today",
-        "/old-gold/items",
-        d.oldGoldToday.isLoading,
-        denied("oldgold:view", d.oldGoldToday),
-        undefined,
-        "g"
-      )}
-      {kpi(
-        "Purchases",
-        "truck",
-        d.purchasesToday.data ? d.purchasesToday.data.value_cents / 100 : undefined,
-        (n) => Math.round(n).toLocaleString("en-US"),
-        wipMg !== undefined ? `${grams(wipMg)} g in the workshop` : "Supplier invoices today",
-        "/purchases/invoices",
-        d.purchasesToday.isLoading,
-        denied("purchases:view", d.purchasesToday),
-        "LKR"
-      )}
-    </Grid>
+    <View style={styles.sectionTitle}>
+      <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "baseline", gap: 8 }}>
+        <Text variant="title2" weight="700" display numberOfLines={1}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text variant="footnote" tone="tertiary" weight="500" numberOfLines={1}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {action ? (
+        <Pressable hitSlop={8} onPress={action.onPress}>
+          {({ pressed }) => (
+            <View style={[styles.sectionAction, { backgroundColor: c.goldSoft, opacity: pressed ? 0.6 : 1 }]}>
+              <Text variant="footnote" weight="600" color={c.goldInk}>
+                {action.label}
+              </Text>
+              <Icon name="chevronRight" size={9} color={c.goldInk} weight="bold" />
+            </View>
+          )}
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
-function KpiTile(p: {
-  label: string;
-  icon: IconName;
-  value: number | undefined;
-  format: (n: number) => string;
-  sub: string;
-  href: string;
-  loading: boolean;
-  denied: boolean;
-  prefix?: string;
-  unit?: string;
-}) {
-  const n = useCountUp(p.value);
+/* ------------------------------------------------------------------ urgent alert */
+
+function UrgentAlert({ d }: { d: D }) {
+  const { c } = useTheme();
+  const pending = d.approvals.data?.total ?? 0;
+  const first = d.approvals.data?.rows?.[0];
+  if (pending === 0) return null;
+
   return (
-    <StatTile
-      label={p.label}
-      icon={p.icon}
-      href={p.href as Href}
-      loading={p.loading}
-      prefix={p.denied ? undefined : p.prefix}
-      unit={p.denied ? undefined : p.unit}
-      value={p.denied ? "—" : p.value !== undefined ? p.format(n) : "—"}
-      sub={p.denied ? "Not available for your role" : p.sub}
-    />
+    <PressableScale
+      scaleTo={0.98}
+      onPress={() => {
+        haptic.selection();
+        router.push("/approvals");
+      }}
+      style={[styles.urgentCard, { backgroundColor: c.card }, styles.surfaceLift]}
+    >
+      <View style={[styles.urgentAccent, { backgroundColor: c.orange }]} />
+      <View style={[styles.urgentIcon, { backgroundColor: `${c.orange}1F` }]}>
+        <Icon name="shieldAlert" size={20} color={c.orange} weight="bold" />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text variant="subhead" weight="700" numberOfLines={1}>
+          {pending} approval{pending > 1 ? "s" : ""} waiting
+        </Text>
+        <Text variant="footnote" tone="secondary" numberOfLines={1} style={{ marginTop: 1 }}>
+          {first ? `${humanize(first.action)} · ${humanize(first.entity)}` : "Decisions awaiting your review"}
+        </Text>
+      </View>
+      <View style={[styles.urgentActionBtn, { backgroundColor: c.orange }]}>
+        <Text variant="footnote" weight="700" color="#FFFFFF">
+          Review
+        </Text>
+      </View>
+    </PressableScale>
   );
 }
 
-/* ------------------------------------------------------------------ panels */
+/* ------------------------------------------------------------------ quick operations */
 
-function RevenuePanel({ d }: { d: D }) {
+const OP_ACTIONS: { label: string; href: string; icon: IconName; color: string; perm: string }[] = [
+  { label: "New Sale", href: "/pos", icon: "cart", color: "#C9A227", perm: "sales:create" },
+  { label: "Scan", href: "/scanner", icon: "scan", color: "#007AFF", perm: "products:view" },
+  { label: "Old Gold", href: "/old-gold", icon: "scale", color: "#FF9500", perm: "oldgold:view" },
+  { label: "Catalog", href: "/products", icon: "package", color: "#AF52DE", perm: "products:view" },
+  { label: "Purchases", href: "/purchases/invoices", icon: "truck", color: "#30B0C7", perm: "purchases:view" },
+  { label: "Melting", href: "/gold/melting", icon: "flame", color: "#FF6B3D", perm: "gold:view" },
+  { label: "Transfers", href: "/inventory/transfers", icon: "swap", color: "#5856D6", perm: "products:view" },
+  { label: "Day Close", href: "/day-closing", icon: "lock", color: "#34C759", perm: "accounts:view" },
+];
+
+const OP_COLS = 4;
+const OP_PAD = 8;
+
+function QuickOperations({ d }: { d: D }) {
+  const { c } = useTheme();
+  const { width } = useWindowDimensions();
+  const items = OP_ACTIONS.filter((a) => d.can(a.perm));
+  if (items.length === 0) return null;
+  const tile = Math.floor((width - GUTTER * 2 - OP_PAD * 2 - 2) / OP_COLS);
+
+  return (
+    <View style={{ marginTop: 28 }}>
+      <SectionTitle title="Quick Actions" />
+      <Surface style={styles.quickGrid}>
+        {items.map((item) => (
+          <PressableScale
+            key={item.href}
+            scaleTo={0.9}
+            onPress={() => {
+              haptic.light();
+              router.push(item.href as Href);
+            }}
+            style={{ width: tile, alignItems: "center", paddingVertical: 10 }}
+          >
+            <View style={[styles.quickIconWrap, { backgroundColor: `${item.color}1A` }]}>
+              <Icon name={item.icon} size={22} color={item.color} weight="semibold" />
+            </View>
+            <Text variant="caption1" weight="600" numberOfLines={1} style={{ marginTop: 7 }}>
+              {item.label}
+            </Text>
+          </PressableScale>
+        ))}
+      </Surface>
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ live rates */
+
+function LiveBoardRates({ d }: { d: D }) {
+  const rows = [...(d.rates.data ?? [])].sort((a, b) => b.rate_per_gram - a.rate_per_gram);
+  const updated = rows.reduce((m, r) => Math.max(m, r.effective_from), 0);
+
+  return (
+    <View style={{ marginTop: 28 }}>
+      <SectionTitle
+        title="Gold Board Rates"
+        action={d.can("masters:view") ? { label: "Edit", onPress: () => router.push("/gold-rates") } : undefined}
+      />
+      <View style={styles.ratesCard}>
+        <LinearGradient colors={["#241C0E", "#100E0B"]} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
+        <GoldGlow size={300} top={-170} right={-130} opacity={0.35} />
+
+        {!d.can("masters:view") ? (
+          <DarkEmpty title="Rates Hidden" desc="Board rates require masters view permission." />
+        ) : d.rates.isLoading ? (
+          <View style={{ gap: 10 }}>
+            {[0, 1].map((i) => (
+              <Skeleton key={i} height={52} r={12} style={{ backgroundColor: "rgba(255,255,255,0.08)" }} />
+            ))}
+          </View>
+        ) : rows.length === 0 ? (
+          <DarkEmpty title="No Rates Published" desc="Publish today's gold rates to price jewellery accurately." />
+        ) : (
+          <View>
+            {rows.map((r, i) => {
+              const sovereign = r.karat.includes("22") ? r.rate_per_gram * 8 : null;
+              return (
+                <View key={r.id} style={[styles.rateRow, i > 0 && styles.rateRowDivider]}>
+                  <LinearGradient colors={["#F8E4A0", "#C9A227"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.karatBadge}>
+                    <Text variant="footnote" weight="800" color="#1C1917" num>
+                      {r.karat}
+                    </Text>
+                  </LinearGradient>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text variant="subhead" tone="onVault" weight="600">
+                      Per gram
+                    </Text>
+                    <Text variant="caption1" tone="onVault3" numberOfLines={1}>
+                      {sovereign ? `Sovereign (8 g) · LKR ${Math.round(sovereign).toLocaleString("en-US")}` : "Fine gold"}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
+                    <Text variant="caption2" tone="onVault3" weight="700">
+                      LKR
+                    </Text>
+                    <Text variant="title2" tone="onVault" num display weight="700">
+                      {r.rate_per_gram.toLocaleString("en-US")}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+            <View style={styles.ratesFooter}>
+              <Icon name="clock" size={11} color="rgba(255,255,255,0.35)" />
+              <Text variant="caption1" tone="onVault3">
+                {updated ? `Updated ${ago(updated)}` : "Official per-gram prices"}
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function DarkEmpty({ title, desc }: { title: string; desc: string }) {
+  return (
+    <View style={styles.darkEmptyContainer}>
+      <Icon name="coins" size={20} color="#F3D97A" />
+      <Text variant="subhead" weight="600" tone="onVault" style={{ marginTop: 6 }}>
+        {title}
+      </Text>
+      <Text variant="caption1" tone="onVault2" center style={{ marginTop: 2, maxWidth: 220 }}>
+        {desc}
+      </Text>
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ surface */
+
+/** Card on the grouped background: soft shadow outside, hairline edge inside. */
+function Surface({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  const { c, dark } = useTheme();
+  return (
+    <View style={[styles.surfaceShadow, { backgroundColor: c.card }, dark ? null : styles.surfaceLift]}>
+      <View style={[styles.surface, { borderColor: dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }, style]}>{children}</View>
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ recent invoices */
+
+function RecentSalesCard({ d }: { d: D }) {
+  const { c } = useTheme();
+  const rows = d.invoices.data?.rows ?? [];
+
+  return (
+    <View style={{ marginTop: 28 }}>
+      <SectionTitle
+        title="Recent Sales"
+        subtitle={d.invoices.data ? `${d.invoices.data.total.toLocaleString("en-US")} invoices` : undefined}
+        action={d.can("sales:view") ? { label: "View all", onPress: () => router.push("/sales/invoices") } : undefined}
+      />
+      <Surface>
+        {!d.can("sales:view") ? (
+          <EmptyState compact icon="receipt" title="Sales Hidden" message="Recent transactions need sales permission." />
+        ) : d.invoices.isLoading ? (
+          <View style={{ padding: 16, gap: 10 }}>
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} height={48} r={12} />
+            ))}
+          </View>
+        ) : rows.length === 0 ? (
+          <EmptyState compact icon="cart" title="No Sales Yet" message="Invoices from the POS will appear here." />
+        ) : (
+          rows.map((inv, i) => (
+            <Pressable
+              key={inv.id}
+              onPress={() => {
+                haptic.selection();
+                router.push(`/sales/invoices/${inv.id}`);
+              }}
+            >
+              {({ pressed }) => (
+                <View style={[styles.saleRow, { backgroundColor: pressed ? c.highlight : "transparent" }]}>
+                  <Avatar name={inv.customer_name ?? "Walk-in"} size={40} />
+                  <View style={[styles.saleBody, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.hairline }]}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text variant="subhead" weight="600" numberOfLines={1}>
+                        {inv.customer_name ?? "Walk-in customer"}
+                      </Text>
+                      <Text variant="caption1" tone="secondary" numberOfLines={1} style={{ marginTop: 2 }}>
+                        {inv.number} · {ago(inv.created_at)}
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: "flex-end", gap: 4 }}>
+                      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 3 }}>
+                        <Text variant="caption2" tone="tertiary" weight="600">
+                          LKR
+                        </Text>
+                        <Text variant="subhead" num weight="700">
+                          {lkr0(inv.total_cents)}
+                        </Text>
+                      </View>
+                      <StatusPill status={inv.status} size="sm" />
+                    </View>
+                  </View>
+                </View>
+              )}
+            </Pressable>
+          ))
+        )}
+      </Surface>
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ revenue trend */
+
+function RevenueTrendCard({ d }: { d: D }) {
+  const { c } = useTheme();
   const denied = !d.can("accounts:view");
   const data = d.trend.map((t, i) => {
     const m = d.months[i]!;
@@ -360,412 +722,473 @@ function RevenuePanel({ d }: { d: D }) {
   const loading = d.trend.some((t) => t.isLoading);
   const hasData = data.some((p) => p.value !== null);
   const total = data.reduce((s, p) => s + (p.value ?? 0), 0);
-  return (
-    <Card style={{ marginTop: 22 }}>
-      <CardHeader icon="trendUp" title="Revenue trend" subtitle="Last six months · revenue and net profit" action={{ label: "Analytics", onPress: () => router.push("/analytics") }} />
-      {denied ? (
-        <EmptyState compact icon="trendUp" title="Accounts access needed" message="Revenue trends are visible to roles with accounts view." />
-      ) : loading ? (
-        <Skeleton height={190} r={12} />
-      ) : !hasData ? (
-        <EmptyState compact icon="trendUp" title="No trend data yet" message="Monthly figures appear once sales are posted." />
-      ) : (
-        <>
-          <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 12 }}>
-            <View>
-              <Kicker>6-month revenue</Kicker>
-              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 5, marginTop: 2 }}>
-                <Text variant="caption1" tone="secondary">
-                  LKR
-                </Text>
-                <Text variant="title2" num rounded>
-                  {Math.round(total).toLocaleString("en-US")}
-                </Text>
-              </View>
-            </View>
-            <View style={{ gap: 4 }}>
-              <Legend color="gold" label="Revenue" />
-              <Legend label="Net profit" dashed />
-            </View>
-          </View>
-          <AreaChart data={data} seriesLabels={["Revenue", "Net profit"]} format={(v) => Intl.NumberFormat("en-US", { notation: "compact" }).format(v)} />
-        </>
-      )}
-    </Card>
-  );
-}
+  const profit = data.reduce((s, p) => s + (p.value2 ?? 0), 0);
+  const margin = total > 0 ? Math.round((profit / total) * 100) : null;
 
-function Legend({ label, color, dashed }: { label: string; color?: "gold"; dashed?: boolean }) {
-  const { c } = useTheme();
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-      <View style={{ width: 14, height: dashed ? 2 : 6, borderRadius: 3, borderCurve: "continuous", backgroundColor: color ? c.gold : c.label, opacity: dashed ? 0.8 : 1 }} />
-      <Text variant="caption1" tone="secondary">
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-function RatesPanel({ d }: { d: D }) {
-  const rows = [...(d.rates.data ?? [])].sort((a, b) => b.rate_per_gram - a.rate_per_gram);
-  const max = rows[0]?.rate_per_gram ?? 1;
-  const updated = rows.reduce((m, r) => Math.max(m, r.effective_from), 0);
-  return (
-    <View style={[styles.rates]}>
-      <LinearGradient colors={["#1F1A10", "#0C0A09"]} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
-      <GoldGlow size={300} top={-150} right={-110} opacity={0.4} />
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-        <LinearGradient colors={["#E7C65A", "#8C6D1F"]} style={styles.rateIcon}>
-          <Icon name="coins" size={16} color="#0C0A09" />
-        </LinearGradient>
-        <View style={{ flex: 1 }}>
-          <Text variant="headline" tone="onVault">
-            Board rates
-          </Text>
-          <Text variant="caption1" tone="onVault2">
-            {updated ? `Updated ${ago(updated)}` : "Per gram, by karat"}
-          </Text>
-        </View>
-        <View style={styles.live}>
-          <View style={{ width: 6, height: 6, borderRadius: 3, borderCurve: "continuous", backgroundColor: "#30D158" }} />
-          <Text variant="caption2" weight="700" color="#7EE2A0" upper>
-            Live
-          </Text>
-        </View>
-      </View>
-      <View style={{ marginTop: 14, gap: 8 }}>
-        {!d.can("masters:view") ? (
-          <DarkEmpty title="Rates hidden" desc="Board rates need masters view." />
-        ) : d.rates.isLoading ? (
-          [0, 1, 2].map((i) => <Skeleton key={i} height={52} r={12} style={{ backgroundColor: "rgba(255,255,255,0.08)" }} />)
-        ) : rows.length === 0 ? (
-          <DarkEmpty title="No rates published" desc="Publish today's board rates to price every piece." />
+    <View style={{ marginTop: 28 }}>
+      <SectionTitle
+        title="Performance"
+        subtitle="Last 6 months"
+        action={denied ? undefined : { label: "Analytics", onPress: () => router.push("/analytics") }}
+      />
+      <Surface style={{ padding: 16 }}>
+        {denied ? (
+          <EmptyState compact icon="trendUp" title="Accounts Access Needed" message="Revenue trends are visible to accounts managers." />
+        ) : loading ? (
+          <Skeleton height={200} r={12} />
+        ) : !hasData ? (
+          <EmptyState compact icon="trendUp" title="No Trend Data Yet" message="Monthly figures appear once sales are posted." />
         ) : (
-          rows.map((r) => (
-            <View key={r.id} style={styles.rateRow}>
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                <View style={styles.karat}>
-                  <Text variant="caption1" weight="700" color="#E7C65A" mono>
-                    {r.karat}
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row", alignItems: "baseline", gap: 3 }}>
-                  <Text variant="caption2" tone="onVault3">
-                    LKR
-                  </Text>
-                  <Text variant="headline" tone="onVault" num>
-                    {r.rate_per_gram.toLocaleString("en-US")}
-                  </Text>
-                  <Text variant="caption2" tone="onVault3">
-                    /g
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.rateTrack}>
-                <LinearGradient colors={["#8C6D1F", "#C9A227", "#E7C65A"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ height: 4, borderRadius: 2, borderCurve: "continuous", width: `${(r.rate_per_gram / max) * 100}%` }} />
-              </View>
+          <>
+            <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
+              <TrendStat label="Revenue" value={compact(total)} swatch={c.gold} />
+              <TrendStat label="Net profit" value={compact(profit)} swatch={c.label} dashed />
+              {margin !== null ? <TrendStat label="Margin" value={`${margin}%`} /> : null}
             </View>
-          ))
+            <AreaChart data={data} seriesLabels={["Revenue", "Net profit"]} format={(v) => compact(v)} />
+          </>
         )}
-      </View>
-      <Pressable
-        onPress={() => {
-          haptic.selection();
-          router.push("/gold-rates");
-        }}
-        style={({ pressed }) => [styles.manage, { opacity: pressed ? 0.6 : 1 }]}
-      >
-        <Text variant="footnote" weight="600" tone="onVault2">
-          Manage rates
+      </Surface>
+    </View>
+  );
+}
+
+function TrendStat({ label, value, swatch, dashed }: { label: string; value: string; swatch?: string; dashed?: boolean }) {
+  const { c } = useTheme();
+  return (
+    <View style={[styles.trendStat, { backgroundColor: c.cardSecondary }]}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+        {swatch ? <View style={{ width: 10, height: dashed ? 2 : 4, borderRadius: 2, backgroundColor: swatch }} /> : null}
+        <Text variant="caption2" tone="secondary" weight="600" upper style={{ letterSpacing: 0.6, fontSize: 10 }}>
+          {label}
         </Text>
-        <Icon name="chevronRight" size={11} color="rgba(255,255,255,0.6)" weight="bold" />
-      </Pressable>
-    </View>
-  );
-}
-
-function DarkEmpty({ title, desc }: { title: string; desc: string }) {
-  return (
-    <View style={{ alignItems: "center", paddingVertical: 20, borderRadius: 12, borderCurve: "continuous", borderWidth: 1, borderStyle: "dashed", borderColor: "rgba(255,255,255,0.15)" }}>
-      <Icon name="coins" size={20} color="#F3D97A" />
-      <Text variant="subhead" weight="600" tone="onVault" style={{ marginTop: 8 }}>
-        {title}
-      </Text>
-      <Text variant="caption1" tone="onVault2" center style={{ marginTop: 2, maxWidth: 240 }}>
-        {desc}
-      </Text>
-    </View>
-  );
-}
-
-function RecentSales({ d }: { d: D }) {
-  const { c } = useTheme();
-  const rows = d.invoices.data?.rows ?? [];
-  return (
-    <Card padded={false} style={{ marginTop: 22 }}>
-      <View style={{ padding: 16, paddingBottom: 4 }}>
-        <CardHeader
-          icon="banknote"
-          title="Recent sales"
-          subtitle={d.invoices.data ? `${d.invoices.data.total.toLocaleString("en-US")} invoices on record` : "Latest invoices"}
-          action={{ label: "All", onPress: () => router.push("/sales/invoices") }}
-        />
       </View>
-      {!d.can("sales:view") ? (
-        <EmptyState compact icon="banknote" title="Sales hidden" message="Recent invoices need sales view." />
-      ) : d.invoices.isLoading ? (
-        <View style={{ padding: 16, gap: 10 }}>
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} height={44} r={10} />
-          ))}
-        </View>
-      ) : rows.length === 0 ? (
-        <EmptyState compact icon="banknote" title="No sales yet" message="Invoices from the POS will show up here." />
-      ) : (
-        rows.map((inv, i) => (
-          <Pressable
-            key={inv.id}
-            onPress={() => {
-              haptic.selection();
-              router.push(`/sales/invoices/${inv.id}`);
-            }}
-          >
-            {({ pressed }) => (
-              <View style={[styles.saleRow, { backgroundColor: pressed ? c.fill : "transparent", borderTopWidth: i === 0 ? 0 : StyleSheet.hairlineWidth, borderTopColor: c.separator }]}>
-                <Avatar name={inv.customer_name ?? "Walk-in"} size={38} />
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text variant="subhead" weight="600" numberOfLines={1}>
-                    {inv.customer_name ?? "Walk-in customer"}
-                  </Text>
-                  <Text variant="caption1" tone="secondary" mono numberOfLines={1}>
-                    {inv.number} · {ago(inv.created_at)}
-                  </Text>
-                </View>
-                <View style={{ alignItems: "flex-end", gap: 3 }}>
-                  <Text variant="subhead" num weight="600">
-                    {lkr0(inv.total_cents)}
-                  </Text>
-                  <StatusPill status={inv.status} size="sm" />
-                </View>
-              </View>
-            )}
-          </Pressable>
-        ))
-      )}
-      <View style={{ height: 6 }} />
-    </Card>
-  );
-}
-
-function Attention({ d }: { d: D }) {
-  const { c, dark } = useTheme();
-  const rows = d.approvals.data?.rows ?? [];
-  const total = d.approvals.data?.total ?? 0;
-  return (
-    <Card style={{ marginTop: 22 }}>
-      <CardHeader icon="shield" title="Needs attention" subtitle="Approvals waiting on a decision" action={total > 0 ? { label: `${total} open`, onPress: () => router.push("/approvals") } : undefined} />
-      {d.approvals.isLoading ? (
-        <View style={{ gap: 8 }}>
-          {[0, 1].map((i) => (
-            <Skeleton key={i} height={46} r={12} />
-          ))}
-        </View>
-      ) : d.approvals.isError || !d.approvals.data ? (
-        <EmptyState compact icon="shield" title="Approvals unavailable" message="Your role can't view the approval queue." />
-      ) : rows.length === 0 ? (
-        <View style={[styles.allClear, { backgroundColor: dark ? "rgba(48,209,88,0.12)" : "#EAF8EE" }]}>
-          <View style={styles.clearIcon}>
-            <Icon name="check" size={18} color="#FFFFFF" weight="bold" />
-          </View>
-          <Text variant="subhead" weight="600">
-            All clear
-          </Text>
-          <Text variant="caption1" tone="secondary">
-            No approvals are waiting on you.
-          </Text>
-        </View>
-      ) : (
-        <View style={{ gap: 8 }}>
-          {rows.map((a) => (
-            <Pressable
-              key={a.id}
-              onPress={() => {
-                haptic.selection();
-                router.push("/approvals");
-              }}
-              style={({ pressed }) => [styles.approval, { backgroundColor: "rgba(255,149,0,0.1)", opacity: pressed ? 0.7 : 1 }]}
-            >
-              <View style={{ width: 8, height: 8, borderRadius: 4, borderCurve: "continuous", backgroundColor: c.orange, marginTop: 6 }} />
-              <View style={{ flex: 1 }}>
-                <Text variant="subhead" weight="600" numberOfLines={1}>
-                  {humanize(a.action)}
-                </Text>
-                <Text variant="caption1" tone="secondary" numberOfLines={1}>
-                  {humanize(a.entity)} · {ago(a.createdAt)}
-                </Text>
-              </View>
-              <Icon name="chevronRight" size={12} color={c.label3} weight="bold" />
-            </Pressable>
-          ))}
-        </View>
-      )}
-    </Card>
-  );
-}
-
-const ACTIONS: { label: string; desc: string; href: string; icon: IconName; perm: string }[] = [
-  { label: "New sale", desc: "Open the POS", href: "/pos", icon: "creditCard", perm: "sales:create" },
-  { label: "Scan", desc: "Look up a piece", href: "/scanner", icon: "scan", perm: "products:view" },
-  { label: "Old gold", desc: "Weigh an intake", href: "/old-gold/intake", icon: "scale", perm: "oldgold:create" },
-  { label: "Purchase", desc: "Supplier invoice", href: "/purchases/invoices", icon: "truck", perm: "purchases:view" },
-  { label: "Melting", desc: "Batch old gold", href: "/gold/melting", icon: "flask", perm: "gold:view" },
-  { label: "Day closing", desc: "Reconcile & lock", href: "/day-closing", icon: "clipboardCheck", perm: "accounts:view" },
-  { label: "Catalog", desc: "Pieces & labels", href: "/products", icon: "package", perm: "products:view" },
-  { label: "Gold rates", desc: "Publish board", href: "/gold-rates", icon: "coins", perm: "masters:view" },
-];
-
-function QuickActions({ d }: { d: D }) {
-  const { c } = useTheme();
-  const items = ACTIONS.filter((a) => d.can(a.perm));
-  if (items.length === 0) return null;
-  return (
-    <View style={{ marginTop: 26 }}>
-      <Text variant="title3" style={{ marginHorizontal: GUTTER, marginBottom: 10 }}>
-        Quick actions
+      <Text variant="headline" weight="700" num numberOfLines={1} adjustsFontSizeToFit style={{ marginTop: 4 }}>
+        {value}
       </Text>
-      <Grid columns={4}>
-        {items.map((a) => (
-          <Pressable
-            key={a.href}
-            onPress={() => {
-              haptic.light();
-              router.push(a.href as Href);
-            }}
-            style={({ pressed }) => ({ flex: 1, alignItems: "center", gap: 6, opacity: pressed ? 0.6 : 1, transform: [{ scale: pressed ? 0.95 : 1 }] })}
-          >
-            <View style={[styles.action, { backgroundColor: c.card }]}>
-              <Icon name={a.icon} size={22} color={c.gold} />
-            </View>
-            <Text variant="caption1" weight="500" center numberOfLines={1}>
-              {a.label}
-            </Text>
-          </Pressable>
-        ))}
-      </Grid>
     </View>
   );
 }
 
-function Activity({ d }: { d: D }) {
+/* ------------------------------------------------------------------ activity feed */
+
+function activityStyle(action: string, c: ReturnType<typeof useTheme>["c"]): { icon: IconName; color: string } {
+  const a = action.toLowerCase();
+  if (a.includes("delete") || a.includes("cancel") || a.includes("void")) return { icon: "trash", color: c.red };
+  if (a.includes("approve")) return { icon: "check", color: c.green };
+  if (a.includes("create") || a.includes("add")) return { icon: "plus", color: c.green };
+  if (a.includes("update") || a.includes("edit")) return { icon: "edit", color: c.blue };
+  if (a.includes("login") || a.includes("auth")) return { icon: "key", color: c.indigo };
+  return { icon: "sparkles", color: c.gold };
+}
+
+function ActivityFeed({ d }: { d: D }) {
   const { c } = useTheme();
   const rows = d.audit.data?.rows ?? [];
+  if (!d.can("audit:view")) return null;
+
   return (
-    <Card style={{ marginTop: 22 }}>
-      <CardHeader icon="history" title="Activity" subtitle="Latest audited changes" action={d.can("audit:view") ? { label: "Audit", onPress: () => router.push("/audit") } : undefined} />
-      {!d.can("audit:view") ? (
-        <EmptyState compact icon="history" title="Audit hidden" message="The activity feed needs audit view." />
-      ) : d.audit.isLoading ? (
-        <View style={{ gap: 10 }}>
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} height={36} r={8} />
-          ))}
-        </View>
-      ) : rows.length === 0 ? (
-        <EmptyState compact icon="history" title="Quiet so far" message="Changes across the branch will stream in here." />
-      ) : (
-        <View>
-          {rows.map((r, i) => (
-            <View key={r.id} style={{ flexDirection: "row", gap: 12 }}>
-              <View style={{ alignItems: "center", width: 12 }}>
-                <View style={{ width: 11, height: 11, borderRadius: 6, borderCurve: "continuous", marginTop: 4, backgroundColor: i === 0 ? c.goldBright : c.fillStrong }} />
-                {i < rows.length - 1 ? <View style={{ width: 1.5, flex: 1, backgroundColor: c.hairline, marginVertical: 3 }} /> : null}
-              </View>
-              <View style={{ flex: 1, paddingBottom: i < rows.length - 1 ? 14 : 0 }}>
-                <Text variant="subhead" numberOfLines={1}>
-                  <Text variant="subhead" weight="600">
-                    {humanize(r.action)}
+    <View style={{ marginTop: 28 }}>
+      <SectionTitle title="Store Activity" action={{ label: "Audit log", onPress: () => router.push("/audit") }} />
+      <Surface style={{ paddingHorizontal: 16, paddingVertical: 14 }}>
+        {d.audit.isLoading ? (
+          <View style={{ gap: 10 }}>
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} height={40} r={10} />
+            ))}
+          </View>
+        ) : rows.length === 0 ? (
+          <EmptyState compact icon="history" title="No Recent Activity" message="System events and updates will appear here." />
+        ) : (
+          rows.map((r, i) => {
+            const s = activityStyle(r.action, c);
+            const last = i === rows.length - 1;
+            return (
+              <View key={r.id} style={{ flexDirection: "row", gap: 12 }}>
+                <View style={{ alignItems: "center", width: 30 }}>
+                  <View style={[styles.activityDot, { backgroundColor: `${s.color}1F` }]}>
+                    <Icon name={s.icon} size={12} color={s.color} weight="bold" />
+                  </View>
+                  {!last ? <View style={{ width: 1.5, flex: 1, backgroundColor: c.hairline, marginVertical: 4 }} /> : null}
+                </View>
+                <View style={{ flex: 1, minWidth: 0, paddingTop: 5, paddingBottom: last ? 0 : 16 }}>
+                  <Text variant="subhead" numberOfLines={1}>
+                    <Text variant="subhead" weight="600">
+                      {humanize(r.action)}
+                    </Text>
+                    <Text variant="subhead" tone="secondary">
+                      {"  ·  "}
+                      {humanize(r.entity)}
+                    </Text>
                   </Text>
-                  <Text variant="subhead" tone="secondary">
-                    {" "}
-                    · {humanize(r.entity)}
+                  <Text variant="caption1" tone="tertiary" numberOfLines={1} style={{ marginTop: 2 }}>
+                    {ago(r.created_at)} · #{r.entity_id.slice(0, 8)}
                   </Text>
-                </Text>
-                <Text variant="caption1" tone="tertiary" mono numberOfLines={1}>
-                  {r.entity_id.slice(0, 14)} · {ago(r.created_at)}
-                </Text>
+                </View>
               </View>
-            </View>
-          ))}
-        </View>
-      )}
-    </Card>
+            );
+          })
+        )}
+      </Surface>
+    </View>
   );
 }
 
-/* ------------------------------------------------------------------ screen */
+/* ------------------------------------------------------------------ main screen */
 
 export default function DashboardScreen() {
   const { me, can } = useSession();
   const d = useDashboard(me, can);
-  const refresh = useRefresh(d.salesToday, d.salesMonth, d.purchasesToday, d.oldGoldToday, d.wip, d.rates, d.invoices, d.approvals, d.audit, ...d.trend);
+  const refresh = useRefresh(
+    d.salesToday,
+    d.salesMonth,
+    d.purchasesToday,
+    d.oldGoldToday,
+    d.wip,
+    d.rates,
+    d.invoices,
+    d.approvals,
+    d.audit,
+    ...d.trend
+  );
 
   return (
-    <Screen {...refresh}>
-      <Stack.Screen options={{ title: "Today" }} />
+    <Screen {...refresh} contentStyle={{ paddingBottom: 120 }}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <HomeHeader me={me} d={d} />
       <PlatformNotices />
-      <HeroCard me={me} d={d} />
-      <Kpis d={d} />
-      <QuickActions d={d} />
-      <RevenuePanel d={d} />
-      <RatesPanel d={d} />
-      <RecentSales d={d} />
-      <Attention d={d} />
-      <Activity d={d} />
+      <HeroCard d={d} />
+      <UrgentAlert d={d} />
+      <QuickOperations d={d} />
+      <LiveBoardRates d={d} />
+      <RecentSalesCard d={d} />
+      <RevenueTrendCard d={d} />
+      <ActivityFeed d={d} />
       {!me ? <SkeletonRows /> : null}
     </Screen>
   );
 }
 
+/* ------------------------------------------------------------------ styles */
+
 const styles = StyleSheet.create({
-  hero: { marginHorizontal: GUTTER, marginTop: 8, borderRadius: radius.xxl - 4, borderCurve: "continuous", overflow: "hidden", backgroundColor: "#0C0A09" },
-  hairline: { height: 1, position: "absolute", top: 0, left: 0, right: 0 },
-  kickerPill: {
+  topHeader: {
+    paddingHorizontal: GUTTER,
+    paddingBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    minWidth: 0,
+  },
+  avatarRing: {
+    padding: 2,
+    borderRadius: 26,
+    borderWidth: 1.5,
+  },
+  roleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  iconBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bellBadge: {
+    position: "absolute",
+    top: -3,
+    right: -3,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+  },
+  heroShadow: {
+    marginHorizontal: GUTTER,
+    borderRadius: radius.xxl,
+    ...squircle,
+    backgroundColor: "#0C0A09",
+    shadowColor: "#3A2A05",
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 12,
+  },
+  hero: {
+    borderRadius: radius.xxl,
+    ...squircle,
+    overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(231,198,90,0.3)",
+  },
+  hairline: {
+    height: 1,
+    position: "absolute",
+    top: 0,
+    left: 32,
+    right: 32,
+  },
+  branchChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999, borderCurve: "continuous",
-    backgroundColor: "rgba(201,162,39,0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(201,162,39,0.25)",
+    paddingLeft: 8,
+    paddingRight: 10,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.16)",
   },
-  glass: {
-    marginTop: 18,
+  liveDotHalo: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "rgba(48,209,88,0.22)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#30D158",
+  },
+  revenueRow: {
+    marginTop: 22,
     flexDirection: "row",
     alignItems: "center",
     gap: 16,
-    padding: 14,
-    borderRadius: 20, borderCurve: "continuous",
+  },
+  metricsRow: {
+    marginTop: 20,
+    paddingVertical: 12,
+    borderRadius: 16,
+    ...squircle,
     backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: "rgba(255,255,255,0.09)",
+    flexDirection: "row",
+    alignItems: "center",
   },
-  heroBtn: { height: 42, borderRadius: 13, borderCurve: "continuous", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 10 },
-  strip: { flexDirection: "row", flexWrap: "wrap" },
-  cell: { width: "50%", flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 13, paddingHorizontal: 16, borderColor: "rgba(255,255,255,0.08)" },
-  cellIcon: { width: 28, height: 28, borderRadius: 8, borderCurve: "continuous", backgroundColor: "rgba(255,255,255,0.06)", alignItems: "center", justifyContent: "center" },
-  rates: { marginHorizontal: GUTTER, marginTop: 22, borderRadius: radius.xl - 2, borderCurve: "continuous", overflow: "hidden", padding: 16, backgroundColor: "#0C0A09" },
-  rateIcon: { width: 30, height: 30, borderRadius: 9, borderCurve: "continuous", alignItems: "center", justifyContent: "center" },
-  live: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(48,209,88,0.12)", paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 , borderCurve: "continuous"},
-  rateRow: { backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 12, borderCurve: "continuous", padding: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.08)" },
-  karat: { backgroundColor: "rgba(201,162,39,0.16)", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 , borderCurve: "continuous"},
-  rateTrack: { marginTop: 10, height: 4, borderRadius: 2, borderCurve: "continuous", backgroundColor: "rgba(255,255,255,0.06)", overflow: "hidden" },
-  manage: { marginTop: 14, height: 40, borderRadius: 12, borderCurve: "continuous", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
-  saleRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 11, marginHorizontal: 0 },
-  allClear: { alignItems: "center", paddingVertical: 22, borderRadius: 14, borderCurve: "continuous", gap: 4 },
-  clearIcon: { width: 40, height: 40, borderRadius: 20, borderCurve: "continuous", backgroundColor: "#34C759", alignItems: "center", justifyContent: "center", marginBottom: 6 },
-  approval: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 12, borderRadius: 12 , borderCurve: "continuous"},
-  action: { width: 58, height: 58, borderRadius: 18, borderCurve: "continuous", alignItems: "center", justifyContent: "center" },
+  miniSep: {
+    width: StyleSheet.hairlineWidth,
+    height: 28,
+    backgroundColor: "rgba(255,255,255,0.14)",
+  },
+  primaryBtn: {
+    height: 52,
+    borderRadius: 16,
+    ...squircle,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,244,199,0.7)",
+  },
+  btnSheen: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "48%",
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  glassBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    ...squircle,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.09)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.16)",
+  },
+  strip: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    backgroundColor: "rgba(0,0,0,0.28)",
+  },
+  cell: {
+    width: "50%",
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  sectionTitle: {
+    marginHorizontal: GUTTER,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  urgentCard: {
+    marginHorizontal: GUTTER,
+    marginTop: 14,
+    borderRadius: radius.xl - 2,
+    ...squircle,
+    paddingVertical: 14,
+    paddingLeft: 18,
+    paddingRight: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  urgentAccent: {
+    position: "absolute",
+    left: 6,
+    top: 16,
+    bottom: 16,
+    width: 3,
+    borderRadius: 2,
+  },
+  urgentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    ...squircle,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  urgentActionBtn: {
+    paddingHorizontal: 14,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    padding: OP_PAD,
+  },
+  quickIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    ...squircle,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ratesCard: {
+    marginHorizontal: GUTTER,
+    borderRadius: radius.xl,
+    ...squircle,
+    overflow: "hidden",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "#0C0A09",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(231,198,90,0.25)",
+  },
+  rateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+  },
+  rateRowDivider: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(255,255,255,0.1)",
+  },
+  karatBadge: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    ...squircle,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ratesFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingTop: 10,
+    paddingBottom: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(255,255,255,0.1)",
+  },
+  darkEmptyContainer: {
+    alignItems: "center",
+    paddingVertical: 18,
+    marginVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: "rgba(255,255,255,0.15)",
+  },
+  surfaceShadow: {
+    marginHorizontal: GUTTER,
+    borderRadius: radius.xl,
+    ...squircle,
+  },
+  surfaceLift: {
+    shadowColor: "#1C1408",
+    shadowOpacity: 0.07,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  surface: {
+    borderRadius: radius.xl,
+    ...squircle,
+    overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  sectionAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 10,
+    height: 26,
+    borderRadius: 13,
+  },
+  saleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingLeft: 16,
+  },
+  saleBody: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 13,
+    paddingRight: 16,
+  },
+  trendStat: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    ...squircle,
+  },
+  activityDot: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

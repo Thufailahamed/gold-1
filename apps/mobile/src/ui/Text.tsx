@@ -1,4 +1,4 @@
-import { Text as RNText, type TextProps, type TextStyle } from "react-native";
+import { Text as RNText, StyleSheet, type TextProps, type TextStyle } from "react-native";
 import { fonts, typeScale, useTheme, type Palette, type TypeVariant } from "@/theme";
 
 export type TextTone =
@@ -38,7 +38,8 @@ const toneColor = (c: Palette, tone: TextTone): string =>
 /**
  * Text in Apple's type scale. `tone` picks a semantic colour; `num` turns on
  * tabular figures (use for every amount, weight and count so columns align);
- * `rounded` uses SF Pro Rounded for hero numbers.
+ * `rounded` tightens tracking for hero numbers; `display` switches to the
+ * Playfair serif for headlines and brand moments.
  */
 export function Text({
   variant = "body",
@@ -48,6 +49,7 @@ export function Text({
   num,
   mono,
   rounded,
+  display,
   upper,
   center,
   right,
@@ -61,30 +63,37 @@ export function Text({
   num?: boolean;
   mono?: boolean;
   rounded?: boolean;
+  display?: boolean;
   upper?: boolean;
   center?: boolean;
   right?: boolean;
 }) {
   const { c } = useTheme();
   const base = typeScale[variant];
-  return (
-    <RNText
-      maxFontSizeMultiplier={1.6}
-      {...rest}
-      style={[
-        base,
-        { color: color ?? toneColor(c, tone) },
-        weight ? { fontWeight: weight } : null,
-        num || mono ? { fontVariant: ["tabular-nums"] } : null,
-        mono ? { fontFamily: fonts.mono, letterSpacing: 0 } : null,
-        rounded && fonts.rounded ? { fontFamily: fonts.rounded } : null,
-        upper ? { textTransform: "uppercase", letterSpacing: 0.6 } : null,
-        center ? { textAlign: "center" } : null,
-        right ? { textAlign: "right" } : null,
-        style,
-      ]}
-    />
-  );
+  const flat = StyleSheet.flatten([
+    base,
+    { color: color ?? toneColor(c, tone) },
+    weight ? { fontWeight: weight } : null,
+    // Playfair defaults to old-style figures; amounts must sit on the baseline.
+    display ? { fontVariant: num ? ["lining-nums", "tabular-nums"] : ["lining-nums"] } : num || mono ? { fontVariant: ["tabular-nums"] } : null,
+    rounded ? { letterSpacing: Math.min(base.letterSpacing, -0.3) } : null,
+    display ? { letterSpacing: Math.min(base.letterSpacing, 0) } : null,
+    upper ? { textTransform: "uppercase", letterSpacing: 0.6 } : null,
+    center ? { textAlign: "center" } : null,
+    right ? { textAlign: "right" } : null,
+    style,
+  ] as TextStyle[]);
+  // One font file per weight: resolve the family and drop fontWeight so iOS
+  // doesn't try to synthesise a bold of an already-bold face.
+  const { fontWeight, fontFamily, ...rest2 } = flat;
+  const family = mono
+    ? fonts.mono
+    : display
+      ? fonts.display(fontWeight)
+      : fontFamily && !fontFamily.startsWith("Inter_")
+        ? fontFamily
+        : fonts.sans(fontWeight);
+  return <RNText maxFontSizeMultiplier={1.6} {...rest} style={[rest2, { fontFamily: family }, mono ? { letterSpacing: 0 } : null]} />;
 }
 
 /** Small uppercase overline, like a section kicker. */

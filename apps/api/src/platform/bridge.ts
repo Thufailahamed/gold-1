@@ -3,7 +3,7 @@ import { createMiddleware } from "hono/factory";
 import { limitStatus, tenantTicketSchema, ticketReplySchema } from "@goldos/shared";
 import { z } from "zod";
 import type { Env } from "../db/client";
-import { requireAuth, type AppVariables } from "../middleware/auth";
+import { extractSessionId, requireAuth, type AppVariables } from "../middleware/auth";
 import { writeAudit } from "../middleware/audit";
 import { serviceError } from "../routes/http";
 import { sessionCookie } from "../routes/auth";
@@ -295,7 +295,7 @@ export const platformBridge = new Hono<TenantEnv>()
 
 /** Checks for a valid shop session without failing the request when there isn't one. */
 async function requireAuthProbe(c: { req: { header: (n: string) => string | undefined }; env: Env }): Promise<boolean> {
-  const sid = c.req.header("cookie")?.match(/(?:^|;\s*)session=([^;]+)/)?.[1];
+  const sid = extractSessionId(c);
   if (!sid) return false;
   const row = await c.env.DB.prepare("SELECT s.expires_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND u.is_active = 1")
     .bind(sid)

@@ -2,6 +2,18 @@ import { useEffect } from "react";
 import { AppState, Platform } from "react-native";
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import { useFonts } from "expo-font";
+import { Inter_300Light } from "@expo-google-fonts/inter/300Light";
+import { Inter_400Regular } from "@expo-google-fonts/inter/400Regular";
+import { Inter_500Medium } from "@expo-google-fonts/inter/500Medium";
+import { Inter_600SemiBold } from "@expo-google-fonts/inter/600SemiBold";
+import { Inter_700Bold } from "@expo-google-fonts/inter/700Bold";
+import { Inter_800ExtraBold } from "@expo-google-fonts/inter/800ExtraBold";
+import { Inter_900Black } from "@expo-google-fonts/inter/900Black";
+import { PlayfairDisplay_500Medium } from "@expo-google-fonts/playfair-display/500Medium";
+import { PlayfairDisplay_600SemiBold } from "@expo-google-fonts/playfair-display/600SemiBold";
+import { PlayfairDisplay_700Bold } from "@expo-google-fonts/playfair-display/700Bold";
+import { PlayfairDisplay_800ExtraBold } from "@expo-google-fonts/playfair-display/800ExtraBold";
 import { StatusBar } from "expo-status-bar";
 import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -38,11 +50,27 @@ function useAppFocus() {
 function Root() {
   const { c, dark } = useTheme();
   const { status } = useSession();
+  const [fontsLoaded, fontError] = useFonts({
+    Inter_300Light,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    Inter_800ExtraBold,
+    Inter_900Black,
+    PlayfairDisplay_500Medium,
+    PlayfairDisplay_600SemiBold,
+    PlayfairDisplay_700Bold,
+    PlayfairDisplay_800ExtraBold,
+  });
+  const fontsReady = fontsLoaded || !!fontError;
   useAppFocus();
 
   useEffect(() => {
-    if (status !== "loading") SplashScreen.hideAsync().catch(() => undefined);
-  }, [status]);
+    if (status !== "loading" && fontsReady) SplashScreen.hideAsync().catch(() => undefined);
+  }, [status, fontsReady]);
+
+  if (!fontsReady) return null;
 
   const nav = dark ? DarkTheme : DefaultTheme;
   return (

@@ -1,4 +1,4 @@
-import { View, type StyleProp, type ViewStyle } from "react-native";
+import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { type Href } from "expo-router";
 import { useBranch, useSession } from "@/lib/session";
 import { initials } from "@/lib/format";
@@ -96,15 +96,18 @@ export function Can({ perm, any, children }: { perm?: string; any?: string[]; ch
 export function SectionHeading({ index, title, subtitle }: { index?: string; title: string; subtitle?: string }) {
   const { c } = useTheme();
   return (
-    <View style={{ marginHorizontal: GUTTER, marginTop: 28, marginBottom: 2, gap: 2 }}>
-      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
-        {index ? (
-          <Text variant="caption1" weight="700" num color={c.gold} style={{ letterSpacing: 1.6 }}>
+    <View style={{ marginHorizontal: GUTTER, marginTop: 32, marginBottom: 0, gap: 3 }}>
+      {index ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 2 }}>
+          <Text variant="caption2" weight="700" num color={c.gold} style={{ letterSpacing: 1.6 }}>
             {index}
           </Text>
-        ) : null}
-        <Text variant="title3">{title}</Text>
-      </View>
+          <View style={{ width: 18, height: StyleSheet.hairlineWidth * 2, backgroundColor: c.gold, opacity: 0.6 }} />
+        </View>
+      ) : null}
+      <Text variant="title2" weight="700" display>
+        {title}
+      </Text>
       {subtitle ? (
         <Text variant="footnote" tone="secondary">
           {subtitle}

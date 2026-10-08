@@ -2,7 +2,7 @@ import { Children, Fragment, isValidElement, type ReactNode } from "react";
 import { Pressable, StyleSheet, Switch, View, type StyleProp, type ViewStyle } from "react-native";
 import { router, type Href } from "expo-router";
 import { haptic } from "@/lib/haptics";
-import { GUTTER, radius, squircle, useTheme } from "@/theme";
+import { elevation, GUTTER, radius, squircle, useTheme } from "@/theme";
 import { Icon, type IconName } from "./Icon";
 import { Text } from "./Text";
 
@@ -29,13 +29,14 @@ export function Section({
   style?: StyleProp<ViewStyle>;
   separators?: boolean;
 }) {
-  const { c } = useTheme();
+  const { c, dark } = useTheme();
   const items = Children.toArray(children).filter((ch) => isValidElement(ch));
+  const r = inset ? radius.xl - 4 : 0;
   return (
     <View style={[{ marginTop: title ? 22 : 18, marginHorizontal: inset ? GUTTER : 0 }, style]}>
       {title || action ? (
         <View style={styles.header}>
-          <Text variant="footnote" tone="secondary" weight="500" upper style={{ letterSpacing: 0.3, flex: 1 }} numberOfLines={1}>
+          <Text variant="caption1" tone="secondary" weight="600" upper style={{ letterSpacing: 0.9, flex: 1 }} numberOfLines={1}>
             {title ?? ""}
           </Text>
           {action ? (
@@ -50,13 +51,23 @@ export function Section({
         </View>
       ) : null}
       {items.length > 0 ? (
-        <View style={{ backgroundColor: c.card, borderRadius: inset ? radius.lg - 2 : 0, ...squircle, overflow: "hidden" }}>
-          {items.map((child, i) => (
-            <Fragment key={(isValidElement(child) && child.key) || i}>
-              {i > 0 && separators ? <Separator /> : null}
-              {child}
-            </Fragment>
-          ))}
+        <View style={[{ backgroundColor: c.card, borderRadius: r, ...squircle }, inset && !dark ? elevation.card : null]}>
+          <View
+            style={{
+              borderRadius: r,
+              ...squircle,
+              overflow: "hidden",
+              borderWidth: inset ? StyleSheet.hairlineWidth : 0,
+              borderColor: dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+            }}
+          >
+            {items.map((child, i) => (
+              <Fragment key={(isValidElement(child) && child.key) || i}>
+                {i > 0 && separators ? <Separator /> : null}
+                {child}
+              </Fragment>
+            ))}
+          </View>
         </View>
       ) : null}
       {footer ? (
@@ -171,6 +182,7 @@ export function Row({
             <Text
               variant="body"
               tone={valueTone ?? "secondary"}
+              weight={valueTone && valueTone !== "secondary" ? "600" : undefined}
               num
               numberOfLines={1}
               style={{ maxWidth: "55%", flexShrink: 1 }}

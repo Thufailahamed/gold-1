@@ -7,7 +7,7 @@ import {
   resetRequestSchema,
 } from "@goldos/shared";
 import type { Env } from "../db/client";
-import { requireAuth, type AppVariables } from "../middleware/auth";
+import { extractSessionId, requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
 import { writeAudit } from "../middleware/audit";
 import { createSession, destroySession, SESSION_ABSOLUTE_MS } from "../services/session";
@@ -84,16 +84,21 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       ip,
     });
     c.header("Set-Cookie", sessionCookie(session.id, SESSION_ABSOLUTE_MS / 1000));
+    c.header("X-Session-Id", session.id);
     return c.json(
       {
         success: true,
-        data: { user: { id: user.id, email: user.email, name: user.name } },
+        data: {
+          user: { id: user.id, email: user.email, name: user.name },
+          token: session.id,
+          sessionId: session.id,
+        },
       },
       200
     );
   })
   .post("/logout", requireAuth, async (c) => {
-    const sessionId = c.req.header("cookie")?.match(SESSION_RE)?.[1];
+    const sessionId = extractSessionId(c);
     if (sessionId) await destroySession(c.env.DB, sessionId);
     await writeAudit(c.env.DB, {
       userId: c.get("userId"),

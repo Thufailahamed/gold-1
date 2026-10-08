@@ -25,16 +25,26 @@ export function Card({
   onPress?: () => void;
   href?: Href;
 }) {
-  const { c } = useTheme();
-  const base: ViewStyle = {
-    backgroundColor: c.card,
-    borderRadius: radius.xl - 2,
-    ...squircle,
-    padding: padded ? 16 : 0,
-    marginHorizontal: inset ? GUTTER : 0,
-    overflow: "hidden",
-  };
-  if (!onPress && !href) return <View style={[base, style]}>{children}</View>;
+  const { c, dark } = useTheme();
+  const r = radius.xl - 2;
+  // Shadow lives on the outer view (a clipping view can't cast one); layout
+  // props from `style` go to the inner, clipped view.
+  const { outer, inner } = splitStyle(style);
+  const outerStyle: StyleProp<ViewStyle> = [
+    { backgroundColor: c.card, borderRadius: r, ...squircle, marginHorizontal: inset ? GUTTER : 0 },
+    dark ? null : elevation.card,
+    outer,
+  ];
+  const innerStyle: StyleProp<ViewStyle> = [
+    { borderRadius: r, ...squircle, overflow: "hidden", padding: padded ? 16 : 0, borderWidth: StyleSheet.hairlineWidth, borderColor: dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" },
+    inner,
+  ];
+  if (!onPress && !href)
+    return (
+      <View style={outerStyle}>
+        <View style={innerStyle}>{children}</View>
+      </View>
+    );
   return (
     <PressableScale
       scaleTo={0.98}
@@ -43,11 +53,24 @@ export function Card({
         if (onPress) onPress();
         else if (href) router.push(href);
       }}
-      style={[base, style]}
+      style={outerStyle}
     >
-      {children}
+      <View style={innerStyle}>{children}</View>
     </PressableScale>
   );
+}
+
+const INNER_KEYS = new Set([
+  "padding", "paddingTop", "paddingBottom", "paddingLeft", "paddingRight", "paddingHorizontal", "paddingVertical",
+  "gap", "rowGap", "columnGap", "flexDirection", "alignItems", "justifyContent", "flexWrap",
+]);
+
+function splitStyle(style: StyleProp<ViewStyle>) {
+  const flat = (StyleSheet.flatten(style) ?? {}) as Record<string, unknown>;
+  const outer: Record<string, unknown> = {};
+  const inner: Record<string, unknown> = {};
+  for (const k of Object.keys(flat)) (INNER_KEYS.has(k) ? inner : outer)[k] = flat[k];
+  return { outer: outer as ViewStyle, inner: inner as ViewStyle };
 }
 
 /** Card title row: icon chip + title/subtitle + optional action. */
@@ -83,7 +106,7 @@ export function CardHeader({
         </View>
       ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text variant="headline" tone={dark ? "onVault" : "label"} numberOfLines={1}>
+        <Text variant="headline" tone={dark ? "onVault" : "label"} weight="700" display numberOfLines={1} style={{ fontSize: 18 }}>
           {title}
         </Text>
         {subtitle ? (
@@ -139,15 +162,15 @@ export function Hero({
     <View style={[{ marginHorizontal: GUTTER, borderRadius: r, ...squircle, backgroundColor: c.vault }, dark ? null : elevation.mid, style]}>
     <View style={{ borderRadius: r, ...squircle, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.09)" }}>
       <LinearGradient
-        colors={["#2A2110", "#0C0A09", "#0C0A09"]}
-        locations={[0, 0.55, 1]}
+        colors={["#3A2D0E", "#1A150C", "#0B0A08"]}
+        locations={[0, 0.5, 1]}
         start={{ x: 1, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
-      <GoldGlow />
+      <GoldGlow size={420} top={-220} right={-170} opacity={0.55} />
       <LinearGradient
-        colors={["transparent", "rgba(231,198,90,0.55)", "transparent"]}
+        colors={["transparent", "rgba(243,217,122,0.8)", "transparent"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={{ height: 1, position: "absolute", top: 0, left: 0, right: 0 }}
@@ -161,7 +184,7 @@ export function Hero({
             </Kicker>
           </View>
         ) : null}
-        <Text variant="title1" tone="onVault" weight="800" style={{ letterSpacing: -0.6 }}>
+        <Text variant="title1" tone="onVault" weight="700" display style={{ fontSize: 30, lineHeight: 36, marginTop: 4 }}>
           {title}
         </Text>
         {subtitle ? (
@@ -232,7 +255,7 @@ export function StatTile({
   href?: Href;
   loading?: boolean;
 }) {
-  const { c } = useTheme();
+  const { c, dark } = useTheme();
   const accent = { default: c.label, success: c.greenText, danger: c.redText, warning: c.orangeText, gold: c.gold }[tone];
   const content = (
     <>
@@ -273,7 +296,17 @@ export function StatTile({
       ) : null}
     </>
   );
-  const style: ViewStyle = { flex: 1, backgroundColor: c.card, borderRadius: radius.lg + 2, ...squircle, padding: 14, minWidth: 0 };
+  const style: ViewStyle = {
+    flex: 1,
+    backgroundColor: c.card,
+    borderRadius: radius.xl - 4,
+    ...squircle,
+    padding: 14,
+    minWidth: 0,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+    ...(dark ? null : elevation.card),
+  };
   if (!onPress && !href) return <View style={style}>{content}</View>;
   return (
     <PressableScale

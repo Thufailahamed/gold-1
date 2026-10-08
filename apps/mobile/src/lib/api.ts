@@ -49,7 +49,12 @@ export function onUnauthorized(fn: () => void): () => void {
 }
 
 function authHeaders(): Record<string, string> {
-  return sessionId ? { Cookie: `session=${sessionId}` } : {};
+  if (!sessionId) return {};
+  return {
+    Cookie: `session=${sessionId}`,
+    Authorization: `Bearer ${sessionId}`,
+    "X-Session-Id": sessionId,
+  };
 }
 
 /** Headers for an authenticated image (expo-image `source={{ uri, headers }}`). */
@@ -69,13 +74,48 @@ async function readBody<T>(res: Response): Promise<ApiResponse<T>> {
   }
 }
 
-function captureSession(res: Response) {
+function captureSession(res: Response, jsonBody?: unknown) {
+  // 1. Response header: x-session-id
+  const xSession = res.headers.get("x-session-id");
+  if (xSession) {
+    void saveSession(xSession);
+    return;
+  }
+
+  // 2. Set-Cookie header if readable
   const raw = res.headers.get("set-cookie");
-  if (!raw) return;
-  const m = raw.match(/(?:^|[;,]\s*)session=([^;,]*)/);
-  if (!m) return;
-  const value = m[1] ?? "";
-  void saveSession(value ? value : null);
+  if (raw) {
+    const m = raw.match(/(?:^|[;,]\s*)session=([^;,]*)/);
+    if (m && m[1]) {
+      void saveSession(m[1]);
+      return;
+    }
+  }
+
+  // 3. getSetCookie method if available
+  const getSetCookie = (res.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie;
+  if (typeof getSetCookie === "function") {
+    try {
+      const cookies = getSetCookie.call(res.headers);
+      for (const cookie of cookies) {
+        const m = cookie.match(/(?:^|[;,]\s*)session=([^;,]*)/);
+        if (m && m[1]) {
+          void saveSession(m[1]);
+          return;
+        }
+      }
+    } catch {}
+  }
+
+  // 4. Response JSON data body: token, sessionId, session
+  if (jsonBody && typeof jsonBody === "object") {
+    const data = (jsonBody as { data?: { token?: string; sessionId?: string; session?: string } }).data;
+    const token = data?.token ?? data?.sessionId ?? data?.session;
+    if (token) {
+      void saveSession(token);
+      return;
+    }
+  }
 }
 
 function handleUnauthorized(path: string, code: string | undefined) {
@@ -117,6 +157,9 @@ export function errorCode(err: unknown): string | undefined {
 /** A human message for any thrown value. */
 export function errorMessage(err: unknown, fallback = "Something went wrong"): string {
   if (err instanceof Error && err.message) {
+    if (err.name === "CancelledError" || err.message === "CancelledError") {
+      return "Sign in request was interrupted. Please try again.";
+    }
     if (err.message === "Network request failed") return "No connection. Check your network and try again.";
     return err.message;
   }
@@ -145,8 +188,8 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     if (!mutation) throw err;
     res = await send();
   }
-  captureSession(res);
   const body = await readBody<T>(res);
+  captureSession(res, body);
   if (!body.success) {
     if (body.error.code === "PENDING") throw new PendingApprovalError(body.error.message, body.error);
     handleUnauthorized(path, body.error.code);
@@ -226,11 +269,22 @@ export type MeData = {
   branchIds: string[];
 };
 
+export type LoginData = {
+  user: MeData["user"];
+  token?: string;
+  sessionId?: string;
+};
+
 export async function login(email: string, password: string) {
-  const data = await api<{ user: MeData["user"] }>("/api/v1/auth/login", {
+  await clearSession();
+  const data = await api<LoginData>("/api/v1/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
+  const token = data?.token ?? data?.sessionId;
+  if (token) {
+    await saveSession(token);
+  }
   return data;
 }
 

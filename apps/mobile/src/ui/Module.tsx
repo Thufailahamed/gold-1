@@ -1,9 +1,9 @@
-import type { ReactNode } from "react";
+import { Children, cloneElement, Fragment, isValidElement, type ReactElement, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { router, type Href } from "expo-router";
 import { useCountUp } from "@/lib/count-up";
 import { haptic } from "@/lib/haptics";
-import { GUTTER, radius, squircle, useTheme } from "@/theme";
+import { elevation, GUTTER, radius, squircle, useTheme } from "@/theme";
 import { Hero } from "./Card";
 import { Icon, type IconName } from "./Icon";
 import { Separator } from "./List";
@@ -11,7 +11,7 @@ import { Skeleton } from "./States";
 import { PressableScale } from "./PressableScale";
 import { Kicker, Text } from "./Text";
 
-const today = () => new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+const today = () => new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
 
 export type HeroMetricDef = {
   label: string;
@@ -23,7 +23,56 @@ export type HeroMetricDef = {
 
 function Metric({ m }: { m: HeroMetricDef }) {
   const shown = useCountUp(m.value);
-  return <>{m.value === undefined ? "—" : `${m.format(shown)}${m.unit ? ` ${m.unit}` : ""}`}</>;
+  const currency = m.unit === "LKR";
+  return (
+    <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4, marginTop: 6 }}>
+      {currency && m.value !== undefined ? (
+        <Text variant="caption2" tone="onVault3" weight="700">
+          LKR
+        </Text>
+      ) : null}
+      <Text variant="title3" tone="onVault" weight="700" num rounded numberOfLines={1} adjustsFontSizeToFit style={{ flexShrink: 1 }}>
+        {m.value === undefined ? "—" : m.format(shown)}
+      </Text>
+      {!currency && m.unit && m.value !== undefined ? (
+        <Text variant="footnote" tone="onVault3" weight="600">
+          {m.unit}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+/** Flattens fragments so `actions={<>…</>}` yields its buttons. */
+function flatActions(node: ReactNode): ReactElement[] {
+  return Children.toArray(node).flatMap((ch) =>
+    isValidElement(ch) && ch.type === Fragment ? flatActions((ch.props as { children?: ReactNode }).children) : isValidElement(ch) ? [ch] : [],
+  );
+}
+
+/** First action spans the row; the rest share the next row equally. */
+function HeroActions({ actions }: { actions: ReactNode }) {
+  const items = flatActions(actions);
+  if (items.length === 0) return null;
+  const block = (el: ReactElement, i: number) => (
+    <View key={el.key ?? i} style={{ flex: 1 }}>
+      {cloneElement(el as ReactElement<{ block?: boolean }>, { block: true })}
+    </View>
+  );
+  const [first, ...rest] = items;
+  const together = items.length <= 2;
+  return (
+    <View style={{ gap: 10, marginTop: 16 }}>
+      {together ? (
+        <View style={{ flexDirection: "row", gap: 10 }}>{items.map(block)}</View>
+      ) : (
+        <>
+          <View style={{ flexDirection: "row" }}>{block(first!, 0)}</View>
+          <View style={{ flexDirection: "row", gap: 10 }}>{rest.map((el, i) => block(el, i + 1))}</View>
+        </>
+      )}
+    </View>
+  );
 }
 
 /**
@@ -45,7 +94,7 @@ export function ModuleHero({
 }) {
   return (
     <Hero kicker={`${kicker} · ${today()}`} title={title} subtitle={description} style={{ marginTop: 8 }}>
-      {actions ? <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 }}>{actions}</View> : null}
+      {actions ? <HeroActions actions={actions} /> : null}
       {metrics.length ? (
         <View style={styles.strip}>
           {metrics.map((m, i) => (
@@ -61,12 +110,13 @@ export function ModuleHero({
                 { borderLeftWidth: i % 2 === 1 ? StyleSheet.hairlineWidth : 0, borderTopWidth: i >= 2 ? StyleSheet.hairlineWidth : 0, opacity: pressed ? 0.6 : 1 },
               ]}
             >
-              <Text variant="caption2" tone="onVault3" weight="600" upper numberOfLines={1} style={{ letterSpacing: 0.9 }}>
-                {m.label}
-              </Text>
-              <Text variant="title3" tone="onVault" num rounded numberOfLines={1} adjustsFontSizeToFit style={{ marginTop: 4 }}>
-                <Metric m={m} />
-              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Text variant="caption2" tone="onVault3" weight="700" upper numberOfLines={1} style={{ letterSpacing: 0.9, fontSize: 10, flex: 1 }}>
+                  {m.label}
+                </Text>
+                {m.href ? <Icon name="chevronRight" size={8} color="rgba(255,255,255,0.28)" weight="bold" /> : null}
+              </View>
+              <Metric m={m} />
             </Pressable>
           ))}
         </View>
@@ -102,16 +152,19 @@ export function StatusBoard({
   format?: (n: number) => string;
   action?: { label: string; onPress: () => void };
 }) {
-  const { c } = useTheme();
+  const { c, dark } = useTheme();
   const total = counts.reduce<number>((a, n) => a + (n ?? 0), 0);
   return (
-    <View style={{ marginHorizontal: GUTTER, marginTop: 22, backgroundColor: c.card, borderRadius: radius.xl - 2, ...squircle, overflow: "hidden" }}>
+    <View style={[{ marginHorizontal: GUTTER, marginTop: 16, backgroundColor: c.card, borderRadius: radius.xl - 2, ...squircle }, dark ? null : elevation.card]}>
+    <View style={{ borderRadius: radius.xl - 2, ...squircle, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderColor: dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}>
       <View style={{ padding: 16, paddingBottom: 12, flexDirection: "row", alignItems: "center", gap: 10 }}>
         <View style={{ width: 30, height: 30, borderRadius: 9, ...squircle, backgroundColor: c.goldSoft, alignItems: "center", justifyContent: "center" }}>
           <Icon name={icon} size={15} color={c.goldInk} weight="semibold" />
         </View>
         <View style={{ flex: 1 }}>
-          <Text variant="headline">{title}</Text>
+          <Text variant="headline" weight="700" display style={{ fontSize: 18 }}>
+            {title}
+          </Text>
           {subtitle ? (
             <Text variant="footnote" tone="secondary" numberOfLines={1}>
               {subtitle}
@@ -126,7 +179,7 @@ export function StatusBoard({
           </Pressable>
         ) : null}
       </View>
-      <View style={{ marginHorizontal: 16, height: 8, borderRadius: 4, borderCurve: "continuous", backgroundColor: c.fill, flexDirection: "row", overflow: "hidden" }}>
+      <View style={{ marginHorizontal: 16, height: 10, borderRadius: 5, borderCurve: "continuous", backgroundColor: c.fill, flexDirection: "row", overflow: "hidden" }}>
         {total > 0
           ? states.map((s, i) => {
               const n = counts[i] ?? 0;
@@ -170,6 +223,7 @@ export function StatusBoard({
         ))}
       </View>
     </View>
+    </View>
   );
 }
 
@@ -193,7 +247,7 @@ export function ModuleCard({
   loading?: boolean;
   alert?: boolean;
 }) {
-  const { c } = useTheme();
+  const { c, dark } = useTheme();
   return (
     <PressableScale
       scaleTo={0.97}
@@ -201,29 +255,45 @@ export function ModuleCard({
         haptic.selection();
         router.push(href as Href);
       }}
-      style={{ flex: 1, backgroundColor: c.card, borderRadius: radius.xl - 4, ...squircle, padding: 14 }}
+      style={[
+        {
+          flex: 1,
+          backgroundColor: c.card,
+          borderRadius: radius.xl - 2,
+          ...squircle,
+          padding: 16,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+        },
+        dark ? null : elevation.card,
+      ]}
     >
-      <View style={{ width: 34, height: 34, borderRadius: 10, ...squircle, backgroundColor: c.goldSoft, alignItems: "center", justifyContent: "center" }}>
-        <Icon name={icon} size={17} color={c.goldInk} weight="semibold" />
+      <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" }}>
+        <View style={{ width: 40, height: 40, borderRadius: 12, ...squircle, backgroundColor: c.goldSoft, alignItems: "center", justifyContent: "center" }}>
+          <Icon name={icon} size={19} color={c.goldInk} weight="semibold" />
+        </View>
+        <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: c.fill, alignItems: "center", justifyContent: "center" }}>
+          <Icon name="arrowUpRight" size={11} color={c.label2} weight="bold" />
+        </View>
       </View>
-      <Text variant="headline" style={{ marginTop: 12 }} numberOfLines={1}>
+      <Text variant="headline" weight="700" style={{ marginTop: 14 }} numberOfLines={1}>
         {title}
       </Text>
-      <Text variant="caption1" tone="secondary" numberOfLines={2} style={{ marginTop: 2, minHeight: 32 }}>
+      <Text variant="caption1" tone="secondary" numberOfLines={2} style={{ marginTop: 3, minHeight: 32, lineHeight: 16 }}>
         {description}
       </Text>
-      <View style={{ marginTop: 12, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.separator }}>
+      <View style={{ marginTop: 14, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.hairline }}>
         {loading ? (
-          <Skeleton width={50} height={22} />
+          <Skeleton width={50} height={24} />
         ) : (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <Text variant="title3" num rounded numberOfLines={1} adjustsFontSizeToFit style={{ flexShrink: 1 }}>
+            <Text variant="title2" weight="700" num rounded numberOfLines={1} adjustsFontSizeToFit style={{ flexShrink: 1 }}>
               {metric}
             </Text>
             {alert ? <View style={{ width: 8, height: 8, borderRadius: 4, borderCurve: "continuous", backgroundColor: c.orange }} /> : null}
           </View>
         )}
-        <Kicker style={{ marginTop: 3 }}>{metricLabel}</Kicker>
+        <Kicker style={{ marginTop: 3, fontSize: 10 }}>{metricLabel}</Kicker>
       </View>
     </PressableScale>
   );

@@ -19,7 +19,12 @@ export const money = (cents: number | null | undefined) => (cents === null || ce
 /** "LKR 1,251" */
 export const money0 = (cents: number | null | undefined) => (cents === null || cents === undefined ? "—" : `LKR ${lkr0(cents)}`);
 /** Compact: "1.2M" */
-export const compact = (n: number) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(n);
+// Hand-rolled: Hermes ignores Intl's `notation: "compact"` and prints the full number.
+export const compact = (n: number) => {
+  const abs = Math.abs(n);
+  const [div, suffix] = abs >= 1e9 ? [1e9, "B"] : abs >= 1e6 ? [1e6, "M"] : abs >= 1e3 ? [1e3, "K"] : [1, ""];
+  return `${nf(0, 1).format(n / div)}${suffix}`;
+};
 
 /** Milligrams → "12.345" grams (3 dp). */
 export const grams = (mg: number) => nf3.format(mg / 1000);

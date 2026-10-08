@@ -110,26 +110,66 @@ export function useTheme() {
   return { c: isDark ? dark : light, dark: isDark };
 }
 
-/** Apple text styles (Dynamic Type "Large" sizes). */
+/**
+ * Type scale. Sizes follow Apple's Dynamic Type "Large" ladder; tracking is
+ * tuned for Inter (UI) — headings tighten, captions open up slightly.
+ */
 export const typeScale = {
-  largeTitle: { fontSize: 34, lineHeight: 41, fontWeight: "700", letterSpacing: 0.37 },
-  title1: { fontSize: 28, lineHeight: 34, fontWeight: "700", letterSpacing: 0.36 },
-  title2: { fontSize: 22, lineHeight: 28, fontWeight: "700", letterSpacing: 0.35 },
-  title3: { fontSize: 20, lineHeight: 25, fontWeight: "600", letterSpacing: 0.38 },
-  headline: { fontSize: 17, lineHeight: 22, fontWeight: "600", letterSpacing: -0.41 },
-  body: { fontSize: 17, lineHeight: 22, fontWeight: "400", letterSpacing: -0.41 },
-  callout: { fontSize: 16, lineHeight: 21, fontWeight: "400", letterSpacing: -0.32 },
-  subhead: { fontSize: 15, lineHeight: 20, fontWeight: "400", letterSpacing: -0.24 },
-  footnote: { fontSize: 13, lineHeight: 18, fontWeight: "400", letterSpacing: -0.08 },
-  caption1: { fontSize: 12, lineHeight: 16, fontWeight: "400", letterSpacing: 0 },
-  caption2: { fontSize: 11, lineHeight: 13, fontWeight: "400", letterSpacing: 0.07 },
+  largeTitle: { fontSize: 34, lineHeight: 41, fontWeight: "700", letterSpacing: -0.8, fontFamily: "Inter_700Bold" },
+  title1: { fontSize: 28, lineHeight: 34, fontWeight: "700", letterSpacing: -0.6, fontFamily: "Inter_700Bold" },
+  title2: { fontSize: 22, lineHeight: 28, fontWeight: "700", letterSpacing: -0.45, fontFamily: "Inter_700Bold" },
+  title3: { fontSize: 20, lineHeight: 25, fontWeight: "600", letterSpacing: -0.35, fontFamily: "Inter_600SemiBold" },
+  headline: { fontSize: 17, lineHeight: 22, fontWeight: "600", letterSpacing: -0.3, fontFamily: "Inter_600SemiBold" },
+  body: { fontSize: 17, lineHeight: 22, fontWeight: "400", letterSpacing: -0.25, fontFamily: "Inter_400Regular" },
+  callout: { fontSize: 16, lineHeight: 21, fontWeight: "400", letterSpacing: -0.2, fontFamily: "Inter_400Regular" },
+  subhead: { fontSize: 15, lineHeight: 20, fontWeight: "400", letterSpacing: -0.15, fontFamily: "Inter_400Regular" },
+  footnote: { fontSize: 13, lineHeight: 18, fontWeight: "400", letterSpacing: -0.05, fontFamily: "Inter_400Regular" },
+  caption1: { fontSize: 12, lineHeight: 16, fontWeight: "400", letterSpacing: 0, fontFamily: "Inter_400Regular" },
+  caption2: { fontSize: 11, lineHeight: 14, fontWeight: "400", letterSpacing: 0.1, fontFamily: "Inter_400Regular" },
 } satisfies Record<string, TextStyle>;
 
 export type TypeVariant = keyof typeof typeScale;
 
+type Weight = TextStyle["fontWeight"];
+
+const weightNum = (w: Weight): number => {
+  if (w === "bold") return 700;
+  if (w === "normal" || w === undefined) return 400;
+  const n = typeof w === "number" ? w : parseInt(w, 10);
+  return Number.isFinite(n) ? n : 400;
+};
+
+const INTER: Record<number, string> = {
+  300: "Inter_300Light",
+  400: "Inter_400Regular",
+  500: "Inter_500Medium",
+  600: "Inter_600SemiBold",
+  700: "Inter_700Bold",
+  800: "Inter_800ExtraBold",
+  900: "Inter_900Black",
+};
+const PLAYFAIR: Record<number, string> = {
+  400: "PlayfairDisplay_500Medium",
+  500: "PlayfairDisplay_500Medium",
+  600: "PlayfairDisplay_600SemiBold",
+  700: "PlayfairDisplay_700Bold",
+  800: "PlayfairDisplay_800ExtraBold",
+  900: "PlayfairDisplay_800ExtraBold",
+};
+
+const pick = (map: Record<number, string>, w: Weight) => {
+  const n = Math.min(900, Math.max(300, Math.round(weightNum(w) / 100) * 100));
+  return map[n] ?? map[700]!;
+};
+
+/**
+ * Brand typefaces (loaded in the root layout). Custom fonts ship one file per
+ * weight, so resolve the family from the weight instead of setting fontWeight.
+ * `display` is the serif used for headlines and hero figures.
+ */
 export const fonts = {
-  /** SF Pro Rounded on iOS — used for big hero numbers. */
-  rounded: Platform.select({ ios: "ui-rounded", default: undefined }),
+  sans: (w?: Weight) => pick(INTER, w),
+  display: (w?: Weight) => pick(PLAYFAIR, w),
   mono: Platform.select({ ios: "Menlo", default: "monospace" }),
 };
 
@@ -147,6 +187,8 @@ export const elevation = {
   low: { shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
   mid: { shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
   high: { shadowColor: "#000", shadowOpacity: 0.22, shadowRadius: 32, shadowOffset: { width: 0, height: 16 }, elevation: 12 },
+  /** Warm, very soft lift for content cards on the grouped background (light mode). */
+  card: { shadowColor: "#1C1408", shadowOpacity: 0.07, shadowRadius: 18, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
 } as const;
 
 /** Standard horizontal inset for grouped content (matches iOS inset-grouped lists). */

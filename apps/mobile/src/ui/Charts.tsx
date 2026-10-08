@@ -50,7 +50,8 @@ export function AreaChart({
   const vals = data.flatMap((d) => [d.value, d.value2]).filter((v): v is number => typeof v === "number");
   const max = Math.max(1, ...vals);
   const min = Math.min(0, ...vals);
-  const innerW = Math.max(1, w - padL - 6);
+  const padR = 16;
+  const innerW = Math.max(1, w - padL - padR);
   const innerH = height - padB - padT;
   const x = (i: number) => padL + (data.length <= 1 ? innerW / 2 : (i / (data.length - 1)) * innerW);
   const y = (v: number) => padT + innerH - ((v - min) / (max - min || 1)) * innerH;
@@ -76,8 +77,8 @@ export function AreaChart({
           </Defs>
           {ticks.map((t, i) => (
             <G key={i}>
-              <Line x1={padL} x2={w - 6} y1={y(t)} y2={y(t)} stroke={c.hairline} strokeDasharray="3 5" />
-              <SvgText x={padL - 6} y={y(t) + 4} fontSize={10} fill={c.label2} textAnchor="end">
+              <Line x1={padL} x2={w - padR} y1={y(t)} y2={y(t)} stroke={c.hairline} strokeDasharray="3 5" />
+              <SvgText x={padL - 6} y={y(t) + 4} fontSize={10} fontFamily="Inter_500Medium" fill={c.label2} textAnchor="end">
                 {format(t)}
               </SvgText>
             </G>
@@ -86,7 +87,7 @@ export function AreaChart({
           {line ? <Path d={line} stroke="url(#as)" strokeWidth={2.5} fill="none" strokeLinecap="round" /> : null}
           {p2.length > 1 ? <Path d={smooth(p2)} stroke={c.label} strokeWidth={1.5} strokeDasharray="4 4" fill="none" /> : null}
           {data.map((d, i) => (
-            <SvgText key={d.label + i} x={x(i)} y={height - 6} fontSize={10} fill={c.label2} textAnchor="middle">
+            <SvgText key={d.label + i} x={x(i)} y={height - 6} fontSize={10} fontFamily="Inter_500Medium" fill={c.label2} textAnchor="middle">
               {d.label}
             </SvgText>
           ))}

@@ -11,8 +11,29 @@ type AppEnv = { Bindings: Env; Variables: AppVariables };
 
 const SESSION_RE = /(?:^|;\s*)session=([^;]+)/;
 
+export function extractSessionId(c: { req: { header: (n: string) => string | undefined } }): string | undefined {
+  const authHeader = c.req.header("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7).trim();
+    if (token) return token;
+  }
+
+  const xSession = c.req.header("x-session-id");
+  if (xSession) return xSession;
+
+  const cookie = c.req.header("cookie");
+  if (cookie) {
+    const matches = [...cookie.matchAll(/(?:^|;\s*)session=([^;]+)/g)];
+    if (matches.length > 0) {
+      return matches[matches.length - 1]?.[1];
+    }
+  }
+
+  return undefined;
+}
+
 export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
-  const sessionId = c.req.header("cookie")?.match(SESSION_RE)?.[1];
+  const sessionId = extractSessionId(c);
   if (!sessionId) {
     return c.json(
       { success: false, error: { code: "UNAUTHORIZED", message: "Not authenticated" } },

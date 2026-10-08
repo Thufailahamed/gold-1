@@ -81,18 +81,25 @@ export function Screen({
       </View>
     );
   }
+  const scrollView = (
+    <ScrollView
+      style={footer ? undefined : [{ flex: 1, backgroundColor: bg }, style]}
+      contentInsetAdjustmentBehavior="automatic"
+      automaticallyAdjustKeyboardInsets
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
+      contentContainerStyle={[{ paddingBottom: footer ? 24 : 48 }, contentStyle]}
+      refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={c.gold} colors={[c.gold]} /> : undefined}
+    >
+      {children}
+    </ScrollView>
+  );
+  // iOS only collapses the large title when the scroll view is the screen's
+  // first native child, so skip the wrapper unless a footer needs a sibling.
+  if (!footer) return scrollView;
   return (
     <View style={[{ flex: 1, backgroundColor: bg }, style]}>
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        automaticallyAdjustKeyboardInsets
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
-        contentContainerStyle={[{ paddingBottom: footer ? 24 : 48 }, contentStyle]}
-        refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={c.gold} colors={[c.gold]} /> : undefined}
-      >
-        {children}
-      </ScrollView>
+      {scrollView}
       {footer}
     </View>
   );

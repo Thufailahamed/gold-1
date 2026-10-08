@@ -92,9 +92,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(
     async (email: string, password: string) => {
       await apiLogin(email, password);
-      qc.clear();
+      const data = await fetchMe();
+      qc.setQueryData(meQueryKey, data);
       setHasToken(true);
-      const data = await qc.fetchQuery({ queryKey: meQueryKey, queryFn: fetchMe });
       // Keep the saved branch only if this user may still work in it.
       if (savedBranchId && !hasPermission(data.permissions, "branches:manage") && !data.branchIds.includes(savedBranchId)) {
         setBranchId(data.branchIds[0] ?? "");

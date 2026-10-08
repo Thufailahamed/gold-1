@@ -19,8 +19,8 @@ export const cors = createMiddleware<{ Bindings: Env }>(async (c, next) => {
   }
   c.header("Access-Control-Allow-Credentials", "true");
   c.header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
-  c.header("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key");
-  c.header("Access-Control-Expose-Headers", "Idempotent-Replayed, Retry-After");
+  c.header("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key, Authorization, X-Session-Id");
+  c.header("Access-Control-Expose-Headers", "Idempotent-Replayed, Retry-After, X-Session-Id, Set-Cookie");
   c.header("Access-Control-Max-Age", "86400");
   if (c.req.method === "OPTIONS") return c.body(null, 204);
   await next();

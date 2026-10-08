@@ -6,7 +6,7 @@ export default function HomeTabLayout() {
   const { c, dark } = useTheme();
   return (
     <Stack screenOptions={stackOptions(c, dark)}>
-      <Stack.Screen name="index" options={{ title: "Home" }} />
+      <Stack.Screen name="index" options={{ headerShown: false }} />
     </Stack>
   );
 }
