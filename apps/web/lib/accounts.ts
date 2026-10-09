@@ -111,6 +111,21 @@ export function useAccountsScope() {
     const saved = readBranchCookie();
     setBranchId(visibleBranches.find((b) => b.id === saved)?.id ?? visibleBranches[0]?.id ?? "");
   }, [branchId, visibleBranches]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      if (detail && visibleBranches.some((b) => b.id === detail)) {
+        setBranchId(detail);
+      } else {
+        const saved = readBranchCookie();
+        if (saved && visibleBranches.some((b) => b.id === saved)) setBranchId(saved);
+      }
+    };
+    window.addEventListener("goldos-branch-changed", handler);
+    return () => window.removeEventListener("goldos-branch-changed", handler);
+  }, [visibleBranches]);
+
   const ready = !!me.data && (branchId !== "" || canShop);
   const branchName = (id: string | null) => visibleBranches.find((b) => b.id === id)?.name ?? branches.data?.rows.find((b) => b.id === id)?.name ?? "—";
   return { me, perms, canManage, canShop, visibleBranches, branchId, setBranchId, ready, branchName };
