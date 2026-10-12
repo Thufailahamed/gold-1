@@ -1,17 +1,19 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { centsToLkr, mgToG } from "@goldos/shared";
+import { centsToLkr } from "@goldos/shared";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { Page, StatusPill, Skeleton, EmptyBlock } from "@/components/ui";
+import { Page, Skeleton, EmptyBlock } from "@/components/ui";
+import { GoldHero, HeroBadge, heroGhost, heroGold, th, thead, tr } from "@/components/console-kit";
 import { Select } from "@/components/select";
 import {
   ArchiveIcon,
   ArrowLeftIcon,
+  PrinterIcon,
   ArrowRightIcon,
   BanknoteIcon,
   ChevronDownIcon,
@@ -70,9 +72,38 @@ const STATUS_DOT: Record<string, string> = {
   SOLD: "bg-sky-500",
   IN_REPAIR: "bg-rose-500",
   IN_MANUFACTURING: "bg-violet-500",
+  RETURNED: "bg-teal-500",
+  TRANSFER_PENDING: "bg-indigo-500",
+  MELTING: "bg-orange-500",
+  MELTED: "bg-ink/40",
+  LOST: "bg-rose-700",
+  VOID: "bg-ink/30",
 };
+const STATUS_CHIP: Record<string, string> = {
+  IN_STOCK: "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25",
+  RESERVED: "bg-amber-500/10 text-amber-800 ring-amber-500/25",
+  SOLD: "bg-sky-500/10 text-sky-800 ring-sky-500/25",
+  IN_REPAIR: "bg-rose-500/10 text-rose-800 ring-rose-500/25",
+  IN_MANUFACTURING: "bg-violet-500/10 text-violet-800 ring-violet-500/25",
+};
+
+/** Status chip; `solid` sits on photos so it stays legible. */
+function StatusChip({ status, solid }: { status: string; solid?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-px text-[10.5px] font-semibold ring-1 ring-inset",
+        solid ? "bg-paper/95 text-ink-2 shadow-2 ring-black/5 backdrop-blur" : (STATUS_CHIP[status] ?? "bg-ink/[0.05] text-ink-3 ring-ink/10")
+      )}
+    >
+      <span className={cn("size-1.5 rounded-full", STATUS_DOT[status] ?? "bg-ink/30")} />
+      {humanize(status)}
+    </span>
+  );
+}
 const PAGE_SIZE = 20;
 
+const g = (mg: number) => (mg / 1000).toLocaleString("en-US", { maximumFractionDigits: 3 });
 const humanize = (s: string) => s.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 
 /* ------------------------------------------------------------------ pieces */
@@ -122,76 +153,57 @@ function ProductCard({ p, index }: { p: Product; index: number }) {
     <Link
       href={`/products/${p.id}`}
       className={cn(
-        "group relative flex animate-fade-in flex-col overflow-hidden rounded-[22px] bg-paper transition-all duration-320 ease-brand",
-        "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]",
-        "hover:-translate-y-1 hover:shadow-[inset_0_0_0_1px_rgba(168,138,62,0.4),0_32px_64px_-30px_rgba(126,98,35,0.5)]"
+        "group relative flex animate-fade-in flex-col overflow-hidden rounded-2xl bg-paper transition-all duration-320 ease-brand",
+        "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-30px_rgba(16,32,27,0.35)]",
+        "hover:-translate-y-0.5 hover:shadow-[inset_0_0_0_1px_rgba(168,138,62,0.4),0_28px_56px_-30px_rgba(126,98,35,0.5)]"
       )}
-      style={{ animationDelay: `${Math.min(index, 12) * 35}ms` }}
+      style={{ animationDelay: `${Math.min(index, 12) * 30}ms` }}
     >
-      <div className="relative m-1.5 mb-0 aspect-[16/10] overflow-hidden rounded-[17px] sm:aspect-[4/3]">
+      <div className="relative m-1 mb-0 aspect-[4/3] overflow-hidden rounded-xl">
         <div className="size-full transition-transform duration-700 ease-cinematic group-hover:scale-[1.06]">
           <ProductMedia p={p} />
         </div>
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/55 to-transparent" />
-        <div className="pointer-events-none absolute inset-0 rounded-[17px] ring-1 ring-inset ring-black/10" />
-        <span className="g-metric absolute left-3 top-3 rounded-lg bg-gradient-to-b from-gold-light to-gold px-2 py-0.5 text-[11px] font-semibold text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_6px_14px_-6px_rgba(0,0,0,0.5)]">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-black/55 to-transparent" />
+        <span className="g-metric absolute left-2 top-2 rounded-md bg-gradient-to-b from-gold-light to-gold px-1.5 py-px text-[10.5px] font-bold text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_6px_14px_-6px_rgba(0,0,0,0.5)]">
           {p.karat}
         </span>
-        <span className="absolute right-3 top-3 rounded-full bg-paper/95 shadow-2 backdrop-blur">
-          <StatusPill status={p.status} label={humanize(p.status)} />
+        <span className="absolute right-2 top-2">
+          <StatusChip status={p.status} solid />
         </span>
-        <span className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-md bg-black/30 px-2 py-1 font-mono text-[11px] font-medium tracking-wider text-paper/95 backdrop-blur-sm">
-          <ScanBarcodeIcon size={12} className="text-gold-light" />
+        <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded bg-black/35 px-1.5 py-0.5 font-mono text-[10px] font-medium tracking-wider text-paper/95 backdrop-blur-sm">
+          <ScanBarcodeIcon size={10} className="text-gold-light" />
           {p.barcode}
         </span>
-        <span className="absolute bottom-3 right-3 flex size-8 translate-y-2 items-center justify-center rounded-full bg-gradient-to-b from-gold-light to-gold text-void opacity-0 shadow-[0_8px_18px_-8px_rgba(0,0,0,0.6)] transition-all duration-320 ease-brand group-hover:translate-y-0 group-hover:opacity-100">
-          <ArrowRightIcon size={14} />
-        </span>
+        {p.selling_price_cents === null ? (
+          <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-gold/90 px-1.5 py-px text-[9.5px] font-bold text-void">
+            <span className="size-1 animate-pulse-soft rounded-full bg-void" />
+            Live rate
+          </span>
+        ) : null}
       </div>
 
-      <div className="flex flex-1 flex-col px-4 pb-4 pt-3.5">
-        <h3 className="truncate font-sans text-[15px] font-semibold tracking-normal text-ink transition-colors group-hover:text-gold-deep">
-          {p.name}
-        </h3>
-        <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1">
-          {[p.category_name, p.metal_name].filter(Boolean).map((t) => (
-            <span key={t} className="truncate rounded-md bg-bone px-1.5 py-0.5 text-[10.5px] font-medium text-ink-3 ring-1 ring-ink/[0.05]">
-              {t}
+      <div className="flex flex-1 flex-col px-3 pb-3 pt-2.5">
+        <h3 className="truncate text-[13.5px] font-semibold text-ink transition-colors group-hover:text-gold-deep">{p.name}</h3>
+        <div className="mt-0.5 truncate text-[11px] text-ink-4">
+          {[p.category_name, p.metal_name, p.location ? `@ ${p.location}` : null].filter(Boolean).join(" · ")}
+        </div>
+        <div className="mt-2 flex items-end justify-between gap-2 border-t border-ink/[0.06] pt-2">
+          <div className="flex gap-3 leading-none">
+            <span>
+              <span className="block text-[8.5px] font-semibold uppercase tracking-[0.16em] text-ink-5">Net</span>
+              <span className="g-metric mt-1 block text-[12.5px] text-ink">{g(p.net_mg)}<span className="text-[9.5px] text-ink-5">g</span></span>
             </span>
-          ))}
-          {p.location ? (
-            <span className="truncate rounded-md px-1.5 py-0.5 text-[10.5px] text-ink-5">@ {p.location}</span>
-          ) : null}
-        </div>
-
-        <div className="mt-3.5 grid grid-cols-2 overflow-hidden rounded-xl bg-bone/70 ring-1 ring-ink/[0.05]">
-          {[
-            { l: "Net", v: mgToG(p.net_mg), c: "text-ink" },
-            { l: "Fine", v: mgToG(p.fine_gold_mg), c: "text-gold-deep" },
-          ].map((m, i) => (
-            <div key={m.l} className={cn("px-3 py-2", i === 1 && "border-l border-ink/[0.06]")}>
-              <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-ink-5">{m.l}</div>
-              <div className={cn("g-metric mt-0.5 text-sm", m.c)}>
-                {m.v}
-                <span className="ml-0.5 text-[10px] text-ink-4">g</span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-auto flex items-end justify-between pt-3.5">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-5">Price</span>
+            <span>
+              <span className="block text-[8.5px] font-semibold uppercase tracking-[0.16em] text-ink-5">Fine</span>
+              <span className="g-metric mt-1 block text-[12.5px] text-gold-deep">{g(p.fine_gold_mg)}<span className="text-[9.5px] text-ink-5">g</span></span>
+            </span>
+          </div>
           {p.selling_price_cents !== null ? (
-            <span className="flex items-baseline gap-1">
-              <span className="text-[10px] font-medium text-ink-4">LKR</span>
-              <span className="g-metric text-lg text-ink">{centsToLkr(p.selling_price_cents).toLocaleString("en-US")}</span>
+            <span className="text-right leading-none">
+              <span className="block text-[8.5px] font-semibold uppercase tracking-[0.16em] text-ink-5">LKR</span>
+              <span className="g-metric mt-1 block text-[14px] font-semibold text-ink">{centsToLkr(p.selling_price_cents).toLocaleString("en-US")}</span>
             </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-gold-pale px-2 py-0.5 text-[11px] font-semibold text-gold-deep ring-1 ring-gold-dark/15">
-              <span className="size-1.5 animate-pulse-soft rounded-full bg-gold" />
-              Live rate
-            </span>
-          )}
+          ) : null}
         </div>
       </div>
     </Link>
@@ -200,32 +212,34 @@ function ProductCard({ p, index }: { p: Product; index: number }) {
 
 function CardSkeleton() {
   return (
-    <div className="overflow-hidden rounded-[22px] bg-paper p-1.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
-      <Skeleton className="aspect-[4/3] rounded-[17px]" />
-      <div className="space-y-3 p-2.5 pt-3.5">
-        <Skeleton className="h-4 w-3/4" />
+    <div className="overflow-hidden rounded-2xl bg-paper p-1 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
+      <Skeleton className="aspect-[4/3] rounded-xl" />
+      <div className="space-y-2 p-2 pt-2.5">
+        <Skeleton className="h-3.5 w-3/4" />
         <Skeleton className="h-3 w-1/2" />
-        <Skeleton className="h-12 rounded-xl" />
-        <Skeleton className="h-6 w-full" />
+        <Skeleton className="h-8 rounded-lg" />
       </div>
     </div>
   );
 }
 
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+function Chip({ active, onClick, children, count }: { active: boolean; onClick: () => void; children: ReactNode; count?: number }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-xs font-medium transition-all duration-200 ease-brand",
+        "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[11.5px] font-medium transition-all duration-200 ease-brand",
         active
           ? "bg-void text-paper shadow-[inset_0_0_0_1px_rgba(205,168,83,0.35),0_8px_18px_-10px_rgba(6,42,34,0.8)]"
           : "bg-paper text-ink-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.1)] hover:-translate-y-px hover:text-ink hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.24)]"
       )}
     >
       {children}
+      {count !== undefined ? (
+        <span className={cn("g-metric rounded-full px-1.5 text-[10px]", active ? "bg-paper/10 text-paper/80" : "bg-ink/[0.05] text-ink-4")}>{count.toLocaleString("en-US")}</span>
+      ) : null}
     </button>
   );
 }
@@ -253,7 +267,7 @@ function RangeField({
   return (
     <div className="min-w-0">
       <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-4">{label}</span>
-      <div className="flex h-11 items-center rounded-xl bg-paper pl-2 pr-1.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow duration-200 focus-within:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)] hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)]">
+      <div className="flex h-9 items-center rounded-lg bg-paper pl-1.5 pr-1 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow duration-200 focus-within:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)] hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)]">
         <span
           className={cn(
             "flex size-6 shrink-0 items-center justify-center rounded-md transition-colors",
@@ -287,19 +301,19 @@ function HeroScan() {
         setCode("");
         router.push(`/products/barcode/${encodeURIComponent(c)}`);
       }}
-      className="group relative w-full max-w-md"
+      className="group relative w-full max-w-sm"
     >
-      <span className="pointer-events-none absolute -inset-px rounded-full bg-gradient-to-r from-gold/0 via-gold/40 to-gold/0 opacity-0 blur-sm transition-opacity duration-320 group-focus-within:opacity-100" />
-      <ScanBarcodeIcon size={16} className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-gold-light" />
+      <span className="pointer-events-none absolute -inset-px rounded-lg bg-gradient-to-r from-gold/0 via-gold/40 to-gold/0 opacity-0 blur-sm transition-opacity duration-320 group-focus-within:opacity-100" />
+      <ScanBarcodeIcon size={13} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-gold-light" />
       <input
         aria-label="Scan or type a barcode"
         placeholder="Scan or type a barcode…"
         value={code}
         onChange={(e) => setCode(e.target.value)}
         autoComplete="off"
-        className="relative h-12 w-full rounded-full bg-black/20 pl-11 pr-28 font-mono text-sm text-paper shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)] ring-1 ring-paper/15 backdrop-blur transition-all placeholder:font-sans placeholder:text-paper/35 focus:bg-black/30 focus:outline-none focus:ring-gold/60"
+        className="relative h-8 w-full rounded-lg bg-paper/[0.07] pl-8 pr-20 font-mono text-[12.5px] text-paper shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)] ring-1 ring-paper/15 backdrop-blur transition-all placeholder:font-sans placeholder:text-paper/35 focus:bg-black/30 focus:outline-none focus:ring-gold/60"
       />
-      <button type="submit" className="home-btn-gold absolute right-1.5 top-1.5 h-9 px-4 text-xs">
+      <button type="submit" className="home-btn-gold absolute right-1 top-1 h-6 px-2.5 text-[11px]">
         Look up
       </button>
     </form>
@@ -321,9 +335,9 @@ function PageNav({
   const to = (page - 1) * PAGE_SIZE + count;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const btn =
-    "flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-medium text-ink transition-all shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] hover:-translate-y-px hover:bg-void hover:text-paper hover:shadow-none disabled:pointer-events-none disabled:opacity-40";
+    "flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-ink transition-all shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] hover:-translate-y-px hover:bg-void hover:text-paper hover:shadow-none disabled:pointer-events-none disabled:opacity-40";
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] bg-paper px-4 py-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_16px_36px_-30px_rgba(16,32,27,0.3)] sm:px-5">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-paper px-4 py-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_16px_36px_-30px_rgba(16,32,27,0.3)] sm:px-5">
       <span className="text-xs text-ink-4">
         Showing <span className="g-metric font-medium text-ink">{from}–{to}</span> of{" "}
         <span className="g-metric font-medium text-ink">{total.toLocaleString("en-US")}</span> pieces
@@ -333,7 +347,7 @@ function PageNav({
           <ArrowLeftIcon size={12} />
           Prev
         </button>
-        <span className="g-metric flex h-9 min-w-[4.5rem] items-center justify-center rounded-xl bg-bone px-3 text-xs text-ink-3">
+        <span className="g-metric flex h-8 min-w-[4.5rem] items-center justify-center rounded-lg bg-bone px-3 text-xs text-ink-3">
           <span className="text-ink">{page}</span>
           <span className="mx-1 text-ink-5">/</span>
           {pages}
@@ -406,10 +420,14 @@ export default function ProductsPage() {
     queryKey: ["products-count", "all"],
     queryFn: () => api<{ rows: Product[]; total: number }>("/api/v1/products?limit=1&page=1"),
   });
-  const stockCount = useQuery({
-    queryKey: ["products-count", "IN_STOCK"],
-    queryFn: () => api<{ rows: Product[]; total: number }>("/api/v1/products?limit=1&page=1&status=IN_STOCK"),
+  // One `limit=1` read per quick status: the pill counts and header figures.
+  const statusCounts = useQueries({
+    queries: QUICK_STATUSES.map((st) => ({
+      queryKey: ["products-count", st],
+      queryFn: () => api<{ rows: Product[]; total: number }>(`/api/v1/products?limit=1&page=1&status=${st}`),
+    })),
   });
+  const countOf = (st: string) => statusCounts[QUICK_STATUSES.indexOf(st)]?.data?.total;
   const cats = useQuery({
     queryKey: ["categories-all"],
     queryFn: () => api<{ rows: Option[]; total: number }>("/api/v1/masters/categories?limit=100"),
@@ -465,95 +483,88 @@ export default function ProductsPage() {
   }
 
   const allN = allCount.data?.total;
-  const stockN = stockCount.data?.total;
+  const stockN = countOf("IN_STOCK");
   const stockShare = allN && stockN !== undefined ? stockN / allN : null;
-  const stats: { label: string; value: string; icon: typeof GemIcon; sub?: string; bar?: number | null }[] = [
-    { label: "Pieces", value: allN !== undefined ? allN.toLocaleString("en-US") : "—", icon: PackageIcon, sub: "Across all branches" },
-    {
-      label: "In stock",
-      value: stockN !== undefined ? stockN.toLocaleString("en-US") : "—",
-      icon: ArchiveIcon,
-      sub: stockShare !== null ? `${Math.round(stockShare * 100)}% of catalog` : undefined,
-      bar: stockShare,
-    },
-    { label: "Categories", value: cats.data ? String(cats.data.total) : "—", icon: TagsIcon, sub: "Ways to browse" },
-    { label: "Purities", value: purs.data ? String(purs.data.total) : "—", icon: GemIcon, sub: (purs.data?.rows ?? []).map((p) => p.karat).filter(Boolean).slice(0, 4).join(" · ") || undefined },
-  ];
+  const pageNet = rows.reduce((a, r) => a + r.net_mg, 0);
+  const pageFine = rows.reduce((a, r) => a + r.fine_gold_mg, 0);
+  const priced = rows.filter((r) => r.selling_price_cents !== null);
+  const pageValue = priced.reduce((a, r) => a + (r.selling_price_cents ?? 0), 0);
+  const counting = statusCounts.some((q) => q.isLoading);
 
   return (
-    <Page className="space-y-6">
-      {/* Hero */}
-      <section className="relative overflow-hidden rounded-[28px] bg-void text-paper shadow-5 ring-1 ring-gold/10">
-        <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-70" />
-        <div className="home-drift pointer-events-none absolute -right-24 -top-32 size-[22rem] rounded-full bg-gold/20 blur-[120px]" />
-        <div className="pointer-events-none absolute -bottom-40 -left-24 size-80 rounded-full bg-emerald-400/10 blur-[110px]" />
-        <div className="home-noise pointer-events-none absolute inset-0" />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
-
-        <div className="relative flex flex-col gap-6 p-5 sm:p-7 lg:flex-row lg:items-end lg:justify-between lg:px-8 lg:py-7">
-          <div className="min-w-0">
-            <span className="inline-flex items-center gap-2 rounded-full border border-gold/25 bg-gold/[0.08] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">
-              <GemIcon size={11} />
-              Catalog
-            </span>
-            <h1 className="g-display mt-3.5 text-3xl text-paper sm:text-[2.6rem]">
-              Every piece, <span className="home-gold-text">on show.</span>
-            </h1>
-            <p className="mt-2.5 max-w-lg text-sm leading-relaxed text-paper/60">
-              Unique pieces with barcodes, weights and live pricing. Scan to jump straight to a piece.
-            </p>
-            <div className="mt-5">
-              <HeroScan />
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2.5">
-            <Link href="/products/new" className="home-btn-gold h-11 px-5 text-sm">
-              <PlusIcon size={15} />
-              New product
-            </Link>
-            <Link href="/scan" className="home-btn-ghost h-11 px-5 text-sm">
-              <ScanBarcodeIcon size={15} />
+    <Page className="space-y-4">
+      <GoldHero
+        icon={PackageIcon}
+        title="Products"
+        accent="catalogue"
+        badge={<HeroBadge tone="gold">{allN !== undefined ? `${allN.toLocaleString("en-US")} pieces` : "Catalogue"}</HeroBadge>}
+        sub="Unique pieces with barcodes, weights and live pricing · scan to jump straight to a piece"
+        actions={
+          <>
+            <Link href="/scan" className={heroGhost}>
+              <ScanBarcodeIcon size={13} />
               Scan mode
             </Link>
-          </div>
-        </div>
-
-        <div className="relative grid grid-cols-2 gap-px border-t border-paper/[0.08] bg-paper/[0.06] lg:grid-cols-4">
-          {stats.map((s) => (
-            <div key={s.label} className="group flex min-w-0 items-center gap-3.5 bg-void/95 px-4 py-4 transition-colors hover:bg-void/80 sm:px-6">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-paper/[0.09] to-paper/[0.03] text-gold-light shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-paper/[0.09] transition-colors group-hover:text-gold">
-                <s.icon size={16} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-paper/40">{s.label}</span>
-                <span className="g-metric mt-0.5 block text-xl leading-tight text-paper">{s.value}</span>
-                {s.bar !== undefined && s.bar !== null ? (
-                  <span className="mt-1.5 block h-1 overflow-hidden rounded-full bg-paper/10">
-                    <span
-                      className="block h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 transition-[width] duration-700 ease-brand"
-                      style={{ width: `${Math.round(s.bar * 100)}%` }}
-                    />
-                  </span>
-                ) : null}
-                {s.sub ? <span className="mt-1 block truncate text-[10px] text-paper/35">{s.sub}</span> : null}
-              </span>
+            <Link href="/products/labels" className={heroGhost}>
+              <PrinterIcon size={13} />
+              Labels
+            </Link>
+            <Link href="/products/new" className={heroGold}>
+              <PlusIcon size={13} />
+              New product
+            </Link>
+          </>
+        }
+        stats={[
+          { label: "Pieces", value: allN, loading: allCount.isLoading, accent: true, sub: "all branches" },
+          {
+            label: "In stock",
+            value: stockN,
+            loading: counting,
+            tone: "good",
+            sub: stockShare !== null ? `${Math.round(stockShare * 100)}% of catalogue` : undefined,
+          },
+          { label: "Reserved", value: countOf("RESERVED"), loading: counting, tone: countOf("RESERVED") ? "warn" : undefined },
+          { label: "Sold", value: countOf("SOLD"), loading: counting },
+          { label: "In repair", value: countOf("IN_REPAIR"), loading: counting, tone: countOf("IN_REPAIR") ? "bad" : undefined, href: "/repairs" },
+          { label: "In workshop", value: countOf("IN_MANUFACTURING"), loading: counting, href: "/manufacturing" },
+          { label: "Categories", value: cats.data?.total, loading: cats.isLoading, href: "/categories" },
+          {
+            label: "Purities",
+            value: purs.data?.total,
+            loading: purs.isLoading,
+            sub: (purs.data?.rows ?? []).map((p) => p.karat).filter(Boolean).slice(0, 4).join(" · ") || undefined,
+          },
+        ]}
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <HeroScan />
+          {stockShare !== null ? (
+            <div className="flex min-w-[220px] flex-1 items-center gap-2.5 text-[10.5px] text-paper/45">
+              <span>Catalogue mix</span>
+              <div className="flex h-1.5 flex-1 overflow-hidden rounded-full bg-paper/10">
+                {QUICK_STATUSES.map((st) => {
+                  const n = countOf(st) ?? 0;
+                  return n && allN ? <div key={st} className={STATUS_DOT[st]} style={{ width: `${(n / allN) * 100}%` }} title={`${humanize(st)} · ${n}`} /> : null;
+                })}
+              </div>
             </div>
-          ))}
+          ) : null}
         </div>
-      </section>
+      </GoldHero>
 
       {/* Toolbar */}
-      <section className="sticky top-14 z-20 -mx-1 rounded-[24px] bg-bone/80 px-1 py-1 backdrop-blur-xl">
-        <div className="relative rounded-[22px] bg-paper p-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)] sm:p-4">
+      <section className="sticky top-14 z-20 -mx-1 rounded-[20px] bg-bone/80 px-1 py-1 backdrop-blur-xl">
+        <div className="relative rounded-2xl bg-paper p-2.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-30px_rgba(16,32,27,0.35)]">
           <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/40 to-transparent" />
-          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center">
             <div className="group relative flex-1">
-              <SearchIcon size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-5 transition-colors group-focus-within:text-gold-dark" />
+              <SearchIcon size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-5 transition-colors group-focus-within:text-gold-dark" />
               <input
                 placeholder="Search name, barcode, SKU…"
                 value={search}
                 onChange={(e) => set(setSearch)(e.target.value)}
-                className="h-11 w-full rounded-xl bg-bone/60 pl-11 pr-12 text-sm text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)] transition-all duration-200 placeholder:text-ink-5 hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] focus:bg-paper focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]"
+                className="h-9 w-full rounded-lg bg-bone/60 pl-9 pr-10 text-[13px] text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)] transition-all duration-200 placeholder:text-ink-5 hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] focus:bg-paper focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]"
               />
               {search ? (
                 <button
@@ -572,7 +583,7 @@ export default function ProductsPage() {
                 onClick={() => setMoreFilters((v) => !v)}
                 aria-expanded={moreFilters}
                 className={cn(
-                  "inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium transition-all duration-200 md:flex-none",
+                  "inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg px-3 text-[12.5px] font-medium transition-all duration-200 md:flex-none",
                   moreFilters
                     ? "bg-void text-paper shadow-[inset_0_0_0_1px_rgba(205,168,83,0.35),0_10px_22px_-12px_rgba(6,42,34,0.8)]"
                     : "bg-paper text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] hover:-translate-y-px hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)]"
@@ -587,12 +598,12 @@ export default function ProductsPage() {
                 ) : null}
                 <ChevronDownIcon size={14} className={cn("transition-transform duration-200", moreFilters && "rotate-180")} />
               </button>
-              <div className="relative flex h-11 items-center rounded-xl bg-bone p-1 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)]" role="group" aria-label="View">
+              <div className="relative flex h-9 items-center rounded-lg bg-bone p-0.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)]" role="group" aria-label="View">
                 <span
                   aria-hidden
                   className={cn(
-                    "absolute inset-y-1 left-1 w-10 rounded-lg bg-void shadow-[0_6px_14px_-6px_rgba(6,42,34,0.8)] transition-transform duration-320 ease-brand",
-                    view === "table" && "translate-x-10"
+                    "absolute inset-y-0.5 left-0.5 w-9 rounded-md bg-void shadow-[0_6px_14px_-6px_rgba(6,42,34,0.8)] transition-transform duration-320 ease-brand",
+                    view === "table" && "translate-x-9"
                   )}
                 />
                 {(
@@ -608,7 +619,7 @@ export default function ProductsPage() {
                     aria-pressed={view === o.v}
                     onClick={() => changeView(o.v)}
                     className={cn(
-                      "relative flex h-full w-10 items-center justify-center rounded-lg transition-colors duration-200",
+                      "relative flex h-full w-9 items-center justify-center rounded-md transition-colors duration-200",
                       view === o.v ? "text-gold-light" : "text-ink-4 hover:text-ink"
                     )}
                   >
@@ -619,12 +630,12 @@ export default function ProductsPage() {
             </div>
           </div>
 
-          <div className="scrollbar-thin -mx-1 mt-3 flex items-center gap-2 overflow-x-auto px-1 pb-0.5">
-            <Chip active={!fStatus} onClick={() => set(setFStatus)("")}>
+          <div className="scrollbar-thin -mx-1 mt-2 flex items-center gap-1.5 overflow-x-auto px-1 pb-0.5">
+            <Chip active={!fStatus} onClick={() => set(setFStatus)("")} count={allN}>
               All
             </Chip>
             {QUICK_STATUSES.map((s) => (
-              <Chip key={s} active={fStatus === s} onClick={() => set(setFStatus)(fStatus === s ? "" : s)}>
+              <Chip key={s} active={fStatus === s} onClick={() => set(setFStatus)(fStatus === s ? "" : s)} count={countOf(s)}>
                 <span className={cn("size-1.5 rounded-full", STATUS_DOT[s] ?? "bg-ink-5")} />
                 {humanize(s)}
               </Chip>
@@ -637,7 +648,7 @@ export default function ProductsPage() {
                 aria-pressed={fPur === p.id}
                 onClick={() => set(setFPur)(fPur === p.id ? "" : p.id)}
                 className={cn(
-                  "g-metric inline-flex h-8 shrink-0 items-center rounded-full px-3.5 text-xs font-semibold transition-all duration-200",
+                  "g-metric inline-flex h-7 shrink-0 items-center rounded-full px-2.5 text-[11.5px] font-semibold transition-all duration-200",
                   fPur === p.id
                     ? "bg-gradient-to-b from-gold-light to-gold text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_8px_18px_-10px_rgba(205,168,83,0.8)]"
                     : "bg-gold-pale text-gold-deep ring-1 ring-gold-dark/15 hover:-translate-y-px hover:ring-gold-dark/40"
@@ -649,7 +660,7 @@ export default function ProductsPage() {
           </div>
 
           {moreFilters ? (
-            <div className="mt-4 animate-fade-in border-t border-ink/[0.06] pt-4">
+            <div className="mt-3 animate-fade-in border-t border-ink/[0.06] pt-3">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="min-w-0">
                   <FilterLabel>Category</FilterLabel>
@@ -754,6 +765,22 @@ export default function ProductsPage() {
             </>
           )}
         </p>
+        {rows.length > 0 ? (
+          <div className="flex items-center gap-3 text-[11px] text-ink-4">
+            <span>
+              Net <span className="g-metric font-semibold text-ink">{g(pageNet)} g</span>
+            </span>
+            <span>
+              Fine <span className="g-metric font-semibold text-gold-deep">{g(pageFine)} g</span>
+            </span>
+            {priced.length ? (
+              <span>
+                Priced <span className="g-metric font-semibold text-ink">LKR {centsToLkr(pageValue).toLocaleString("en-US")}</span>
+                <span className="text-ink-5"> · {priced.length} of {rows.length}</span>
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         {active.length > 0 ? (
           <div className="flex flex-wrap items-center gap-1.5">
             {active.map((f) => (
@@ -808,90 +835,98 @@ export default function ProductsPage() {
           </div>
         </div>
       ) : view === "grid" ? (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {list.isLoading
-            ? Array.from({ length: 8 }).map((_, i) => <CardSkeleton key={i} />)
+            ? Array.from({ length: 10 }).map((_, i) => <CardSkeleton key={i} />)
             : rows.map((p, i) => <ProductCard key={p.id} p={p} index={i} />)}
         </div>
       ) : (
-        <section className="overflow-hidden rounded-[22px] bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]">
+        <section className="overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-30px_rgba(16,32,27,0.35)]">
           <div className="scrollbar-thin overflow-x-auto">
             {list.isLoading ? (
-              <div className="space-y-2 p-4">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <Skeleton key={i} className="h-14 rounded-xl" />
+              <div className="space-y-2 p-3">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <Skeleton key={i} className="h-9 rounded-lg" />
                 ))}
               </div>
             ) : (
-              <table className="g-table">
-                <thead>
+              <table className="w-full min-w-[880px] text-[12.5px]">
+                <thead className={thead}>
                   <tr>
-                    <th>Piece</th>
-                    <th>Barcode · SKU</th>
-                    <th>Karat</th>
-                    <th className="!text-right">Net g</th>
-                    <th className="!text-right">Fine g</th>
-                    <th className="!text-right">Price LKR</th>
-                    <th>Status</th>
-                    <th aria-label="Open" />
+                    <th className={cn(th, "pl-4")}>Piece</th>
+                    <th className={th}>Barcode · SKU</th>
+                    <th className={th}>Karat</th>
+                    <th className={cn(th, "text-right")}>Net g</th>
+                    <th className={cn(th, "text-right")}>Fine g</th>
+                    <th className={cn(th, "text-right")}>Price LKR</th>
+                    <th className={th}>Status</th>
+                    <th className={cn(th, "pr-4")} aria-label="Open" />
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((r) => (
-                    <tr key={r.id} className="group">
-                      <td>
-                        <Link href={`/products/${r.id}`} className="flex items-center gap-3">
-                          <span className="size-12 shrink-0 overflow-hidden rounded-xl shadow-[0_6px_14px_-8px_rgba(16,32,27,0.5)] ring-1 ring-ink/[0.08] transition-transform duration-320 group-hover:scale-105">
-                            <ProductMedia p={r} className="[&_svg]:size-6" />
+                    <tr key={r.id} className={cn(tr, "group")}>
+                      <td className="relative py-1.5 pl-4 pr-2">
+                        <span className={cn("absolute inset-y-1.5 left-0 w-[3px] rounded-r-full", STATUS_DOT[r.status] ?? "bg-ink/20")} aria-hidden />
+                        <Link href={`/products/${r.id}`} className="flex items-center gap-2.5">
+                          <span className="size-9 shrink-0 overflow-hidden rounded-lg ring-1 ring-ink/[0.08]">
+                            <ProductMedia p={r} className="[&_svg]:size-5" />
                           </span>
-                          <span className="min-w-0">
-                            <span className="block max-w-[16rem] truncate font-medium text-ink transition-colors group-hover:text-gold-deep">{r.name}</span>
-                            <span className="mt-0.5 block truncate text-xs text-ink-4">
+                          <span className="min-w-0 leading-tight">
+                            <span className="block max-w-[16rem] truncate font-semibold text-ink transition-colors group-hover:text-gold-deep">{r.name}</span>
+                            <span className="block truncate text-[10.5px] text-ink-4">
                               {r.category_name}
                               {r.metal_name ? ` · ${r.metal_name}` : ""}
+                              {r.location ? ` · @ ${r.location}` : ""}
                             </span>
                           </span>
                         </Link>
                       </td>
-                      <td>
-                        <span className="inline-flex items-center gap-1.5 font-mono text-xs font-medium text-gold-deep">
-                          <ScanBarcodeIcon size={11} className="text-gold-dark" />
-                          {r.barcode}
-                        </span>
-                        <span className="mt-0.5 block font-mono text-[11px] text-ink-5">{r.sku}</span>
+                      <td className="px-2 leading-tight">
+                        <span className="g-metric block text-[11.5px] font-semibold text-gold-deep">{r.barcode}</span>
+                        <span className="g-metric block text-[10.5px] text-ink-5">{r.sku}</span>
                       </td>
-                      <td>
-                        <span className="g-metric rounded-md bg-gradient-to-b from-gold-light to-gold px-2 py-0.5 text-xs font-semibold text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
-                          {r.karat}
-                        </span>
+                      <td className="px-2">
+                        <span className="g-metric rounded bg-gradient-to-b from-gold-light to-gold px-1.5 py-px text-[10px] font-bold text-void">{r.karat}</span>
                       </td>
-                      <td className="num">{mgToG(r.net_mg)}</td>
-                      <td className="num text-gold-deep">{mgToG(r.fine_gold_mg)}</td>
-                      <td className="num font-medium text-ink">
+                      <td className="g-metric px-2 text-right text-ink-2">{g(r.net_mg)}</td>
+                      <td className="g-metric px-2 text-right text-gold-deep">{g(r.fine_gold_mg)}</td>
+                      <td className="g-metric px-2 text-right font-semibold text-ink">
                         {r.selling_price_cents !== null ? (
                           centsToLkr(r.selling_price_cents).toLocaleString("en-US")
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-gold-pale px-2 py-0.5 text-[11px] font-semibold text-gold-deep">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-gold-pale px-1.5 py-px font-sans text-[10px] font-semibold text-gold-deep">
                             <span className="size-1.5 rounded-full bg-gold" />
                             Live
                           </span>
                         )}
                       </td>
-                      <td>
-                        <StatusPill status={r.status} label={humanize(r.status)} />
+                      <td className="px-2">
+                        <StatusChip status={r.status} />
                       </td>
-                      <td>
+                      <td className="py-1.5 pl-2 pr-4 text-right">
                         <Link
                           href={`/products/${r.id}`}
                           aria-label={`Open ${r.name}`}
-                          className="flex size-8 items-center justify-center rounded-full text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.1)] transition-all group-hover:bg-void group-hover:text-gold-light group-hover:shadow-none"
+                          className="inline-flex size-7 items-center justify-center rounded-full text-ink-5 ring-1 ring-inset ring-ink/10 transition-all group-hover:bg-void group-hover:text-gold-light group-hover:ring-0"
                         >
-                          <ArrowRightIcon size={13} />
+                          <ArrowRightIcon size={12} />
                         </Link>
                       </td>
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-ink/10 bg-bone/50 text-[12px] font-semibold">
+                    <td className="py-2 pl-4 pr-2 text-ink-3" colSpan={3}>
+                      Page total · {rows.length} pieces
+                    </td>
+                    <td className="g-metric px-2 text-right text-ink">{g(pageNet)}</td>
+                    <td className="g-metric px-2 text-right text-gold-deep">{g(pageFine)}</td>
+                    <td className="g-metric px-2 text-right text-ink">{priced.length ? centsToLkr(pageValue).toLocaleString("en-US") : "—"}</td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
               </table>
             )}
           </div>

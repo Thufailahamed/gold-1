@@ -11,10 +11,10 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { Page } from "@/components/ui";
+import { GoldHero, HeroBadge, heroGhost, heroGold } from "@/components/console-kit";
 import { Select, type SelectOption } from "@/components/select";
 import {
   AlertCircleIcon,
-  ArrowLeftIcon,
   ArrowRightIcon,
   CheckIcon,
   CoinsIcon,
@@ -66,7 +66,7 @@ function branchDefault(): Partial<FormValues> | undefined {
 
 /** Matches the trigger of the themed <Select> so every control reads as one family. */
 const inputCls = cn(
-  "h-11 w-full rounded-xl bg-paper px-3.5 text-sm text-ink placeholder:text-ink-5",
+  "h-9 w-full rounded-lg bg-paper px-3 text-[13px] text-ink placeholder:text-ink-5",
   "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-[box-shadow,background-color] duration-200",
   "hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26),0_1px_2px_rgba(16,32,27,0.04)]",
   "focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]",
@@ -100,8 +100,8 @@ function Field({
 }) {
   return (
     <div className={cn("block min-w-0", className)}>
-      <span className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-[12.5px] font-medium text-ink-2">
+      <span className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-4">
           {label}
           {required ? <span className="ml-0.5 text-gold-dark">*</span> : null}
         </span>
@@ -109,12 +109,12 @@ function Field({
       </span>
       {children}
       {error ? (
-        <span role="alert" className="mt-1.5 flex items-center gap-1 text-xs font-medium text-rose-700">
+        <span role="alert" className="mt-1 flex items-center gap-1 text-[11px] font-medium text-rose-700">
           <AlertCircleIcon size={12} />
           {error}
         </span>
       ) : hint ? (
-        <span className="mt-1.5 block text-xs text-ink-4">{hint}</span>
+        <span className="mt-1 block text-[10.5px] text-ink-5">{hint}</span>
       ) : null}
     </div>
   );
@@ -143,7 +143,7 @@ function FormSection({
     <fieldset
       id={id}
       className={cn(
-        "relative scroll-mt-24 rounded-[22px] bg-paper transition-shadow duration-320",
+        "relative scroll-mt-24 rounded-2xl bg-paper transition-shadow duration-320",
         "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]",
         "focus-within:shadow-[inset_0_0_0_1px_rgba(205,168,83,0.45),0_1px_2px_rgba(16,32,27,0.04),0_28px_56px_-34px_rgba(16,32,27,0.45)]"
       )}
@@ -156,16 +156,16 @@ function FormSection({
           done ? "via-gold opacity-100" : "via-gold/40 opacity-60"
         )}
       />
-      <header className="flex items-center gap-3.5 border-b border-ink/[0.06] px-5 py-4 sm:px-6">
-        <span className="relative flex size-10 shrink-0 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_8px_18px_-10px_rgba(6,42,34,0.7)]">
+      <header className="flex items-center gap-3 border-b border-ink/[0.06] px-4 py-2.5">
+        <span className="relative flex size-8 shrink-0 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_8px_18px_-10px_rgba(6,42,34,0.7)]">
           {icon}
           <span className="g-metric absolute -right-1.5 -top-1.5 flex size-[18px] items-center justify-center rounded-full bg-paper text-[9px] text-ink shadow-[0_0_0_1px_rgba(16,32,27,0.12)]">
             {n}
           </span>
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="font-sans tracking-normal truncate text-[15px] font-semibold text-ink">{title}</h2>
-          <p className="truncate text-xs text-ink-4">{description}</p>
+          <h2 className="truncate font-sans text-[13.5px] font-semibold tracking-normal text-ink">{title}</h2>
+          <p className="truncate text-[11px] text-ink-4">{description}</p>
         </div>
         {done ? (
           <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-b from-gold-light to-gold px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
@@ -178,7 +178,7 @@ function FormSection({
           </span>
         )}
       </header>
-      <div className="px-5 py-5 sm:px-6 sm:py-6">{children}</div>
+      <div className="px-4 py-4">{children}</div>
     </fieldset>
   );
 }
@@ -218,6 +218,7 @@ function SelectField({
           invalid={invalid}
           loading={loading}
           hintInTrigger={hintInTrigger}
+          size="sm"
         />
       )}
     />
@@ -237,9 +238,9 @@ function UnitInput({
         inputMode="decimal"
         placeholder="0.00"
         {...rest}
-        className={cn(inputCls, "g-metric pr-16 text-[15px]", className)}
+        className={cn(inputCls, "g-metric pr-14 text-[14px]", className)}
       />
-      <span className="pointer-events-none absolute inset-y-1.5 right-1.5 flex items-center rounded-lg bg-bone px-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-4 ring-1 ring-ink/[0.05] transition-colors group-focus-within:bg-void group-focus-within:text-gold-light">
+      <span className="pointer-events-none absolute inset-y-1 right-1 flex items-center rounded-md bg-bone px-2 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-ink-4 ring-1 ring-ink/[0.05] transition-colors group-focus-within:bg-void group-focus-within:text-gold-light">
         {unit}
       </span>
     </span>
@@ -251,10 +252,13 @@ function KaratPicker({
   control,
   rows,
   invalid,
+  rates,
 }: {
   control: Control<FormValues>;
   rows: Option[];
   invalid?: boolean;
+  /** Board rate (LKR/g) per purity id, shown under each chip. */
+  rates?: Record<string, number>;
 }) {
   return (
     <Controller
@@ -282,7 +286,7 @@ function KaratPicker({
                 onClick={() => field.onChange(p.id)}
                 onBlur={field.onBlur}
                 className={cn(
-                  "group relative flex min-w-[5.25rem] flex-col items-start rounded-xl px-3.5 py-2.5 text-left transition-all duration-200",
+                  "group relative flex min-w-[5.5rem] flex-col items-start rounded-lg px-3 py-2 text-left transition-all duration-200",
                   on
                     ? "bg-void text-paper shadow-[inset_0_0_0_1px_rgba(205,168,83,0.5),0_12px_24px_-14px_rgba(6,42,34,0.8)]"
                     : "bg-paper text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] hover:-translate-y-px hover:bg-gold-pale/50 hover:shadow-[inset_0_0_0_1px_rgba(168,138,62,0.45)]"
@@ -293,6 +297,11 @@ function KaratPicker({
                 </span>
                 {p.permille ? (
                   <span className={cn("g-metric text-[10px]", on ? "text-paper/55" : "text-ink-5")}>{p.permille}‰ fine</span>
+                ) : null}
+                {rates?.[p.id] ? (
+                  <span className={cn("g-metric mt-0.5 text-[10px] font-semibold", on ? "text-gold-light" : "text-gold-deep")}>
+                    {Math.round(rates[p.id]!).toLocaleString("en-US")}/g
+                  </span>
                 ) : null}
                 {on ? (
                   <span className="absolute right-2 top-2 flex size-4 items-center justify-center rounded-full bg-gold text-void">
@@ -506,6 +515,11 @@ export default function NewProductPage() {
   const stones = opt<Option>("stones-all", "/api/v1/masters/stone-types?limit=100");
   const purs = opt<Option>("purities-all", "/api/v1/masters/purities?limit=100");
   const branches = opt<Option>("branches", "/api/v1/branches?limit=100");
+  const board = useQuery({
+    queryKey: ["gold-rates-current"],
+    queryFn: () => api<{ purity_id: string; rate_per_gram: number }[]>("/api/v1/gold-rates/current"),
+  });
+  const rates = Object.fromEntries((board.data ?? []).map((r) => [r.purity_id, r.rate_per_gram]));
 
   const previews = useMemo(() => images.map((f) => URL.createObjectURL(f)), [images]);
   useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
@@ -575,6 +589,11 @@ export default function NewProductPage() {
   const costN = Number(vals.costLkr);
   const cost = Number.isFinite(costN) && costN > 0 ? costN : null;
   const margin = price !== null && cost !== null ? ((price - cost) / price) * 100 : null;
+  // What the till would charge on the live board: net × rate + making.
+  const rate = vals.purityId ? rates[vals.purityId] : undefined;
+  const makingN = Number(vals.makingLkr);
+  const estimate = net !== null && rate ? net * rate + (Number.isFinite(makingN) ? makingN : 0) : null;
+  const liveMargin = estimate !== null && cost !== null ? ((estimate - cost) / estimate) * 100 : null;
   const stoneShare = net !== null && grossN > 0 ? Math.min(Math.max((grossN - net) / grossN, 0), 1) : 0;
 
   const scrollTo = (id: string) =>
@@ -598,24 +617,51 @@ export default function NewProductPage() {
   const purityRows = purs.data?.rows ?? [];
 
   return (
-    <Page className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <Link
-          href="/products"
-          className="g-btn group h-10 rounded-xl bg-paper px-4 text-sm text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.05)] hover:-translate-y-px hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.24),0_8px_18px_-12px_rgba(16,32,27,0.35)]"
-        >
-          <ArrowLeftIcon size={14} className="transition-transform duration-200 group-hover:-translate-x-0.5" />
-          Catalog
-        </Link>
-        <span className="hidden items-center gap-2 rounded-full bg-paper px-3.5 py-1.5 text-xs text-ink-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)] sm:inline-flex">
-          <span className="flex size-5 items-center justify-center rounded-full bg-gold-pale text-gold-deep">
-            <ScanBarcodeIcon size={11} />
-          </span>
-          Barcode &amp; SKU are minted automatically on save
-        </span>
-      </div>
+    <Page className="space-y-4">
+      <GoldHero
+        icon={PackageIcon}
+        title="New"
+        accent="product"
+        badge={<HeroBadge tone={doneCount === steps.length ? "good" : "gold"}>{doneCount}/{steps.length} sections</HeroBadge>}
+        sub="Weigh it, tag it, shelve it · barcode and SKU are minted automatically on save"
+        back={{ href: "/products", label: "Products" }}
+        actions={
+          <>
+            <Link href="/products" className={heroGhost}>
+              Cancel
+            </Link>
+            <button type="submit" form="np-form" disabled={create.isPending} className={heroGold}>
+              {create.isPending ? "Saving…" : "Save product"}
+            </button>
+          </>
+        }
+        stats={[
+          { label: "Gross", value: grossN > 0 ? grossN : null, format: (n) => n.toFixed(3), unit: "g" },
+          { label: "Net", value: net, format: (n) => n.toFixed(3), unit: "g", sub: stoneShare ? `${(stoneShare * 100).toFixed(1)}% stones` : "no stones" },
+          { label: "Fine gold", value: fine, format: (n) => n.toFixed(3), unit: "g", sub: permille ? `${karat} · ${permille}‰` : "pick a purity" },
+          {
+            label: karat ? `Board · ${karat}` : "Board rate",
+            value: rate ?? null,
+            format: (n) => Math.round(n).toLocaleString("en-US"),
+            unit: "LKR/g",
+            sub: vals.purityId && !rate ? "not published" : undefined,
+            tone: vals.purityId && !rate ? "warn" : undefined,
+          },
+          { label: "Est. live price", value: estimate, format: (n) => Math.round(n).toLocaleString("en-US"), unit: "LKR", accent: true, sub: "net × board + making" },
+          { label: "Fixed price", value: price, format: (n) => Math.round(n).toLocaleString("en-US"), unit: "LKR", sub: price === null ? "uses live board" : undefined },
+          { label: "Cost", value: cost, format: (n) => Math.round(n).toLocaleString("en-US"), unit: "LKR" },
+          {
+            label: "Margin",
+            value: margin ?? liveMargin,
+            format: (n) => `${n.toFixed(1)}%`,
+            tone: (margin ?? liveMargin) == null ? undefined : (margin ?? liveMargin)! < 0 ? "bad" : "good",
+            sub: margin !== null ? "on fixed price" : liveMargin !== null ? "on live estimate" : "needs a cost",
+          },
+        ]}
+      />
 
       <form
+        id="np-form"
         noValidate
         onSubmit={handleSubmit(
           (v) => create.mutate(v),
@@ -625,28 +671,24 @@ export default function NewProductPage() {
             toast.error("A few required fields still need you");
           }
         )}
-        className="grid items-start gap-6 lg:grid-cols-[19rem_minmax(0,1fr)] xl:grid-cols-[21rem_minmax(0,1fr)]"
+        className="grid items-start gap-4 lg:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[19rem_minmax(0,1fr)]"
       >
         {/* Rail */}
-        <aside className="relative hidden overflow-hidden rounded-[28px] bg-void text-paper shadow-5 ring-1 ring-gold/10 lg:sticky lg:top-24 lg:block lg:max-h-[calc(100vh-8rem)]">
+        <aside className="relative hidden overflow-hidden rounded-[20px] bg-void text-paper shadow-5 ring-1 ring-gold/10 lg:sticky lg:top-24 lg:block lg:max-h-[calc(100vh-8rem)]">
           <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-70" />
           <div className="home-drift pointer-events-none absolute -left-24 -top-28 size-72 rounded-full bg-gold/20 blur-[100px]" />
           <div className="pointer-events-none absolute -bottom-32 -right-24 size-64 rounded-full bg-emerald-400/10 blur-[90px]" />
           <div className="home-noise pointer-events-none absolute inset-0" />
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
 
-          <div className="scrollbar-thin relative max-h-[calc(100vh-8rem)] overflow-y-auto p-5">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/[0.08] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">
-              <SparklesIcon size={11} />
-              Catalog
+          <div className="scrollbar-thin relative max-h-[calc(100vh-8rem)] overflow-y-auto p-4">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/[0.08] px-2.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-gold-light">
+              <SparklesIcon size={10} />
+              Card preview
             </span>
-            <h1 className="g-display mt-3 text-[1.75rem] text-paper">New product</h1>
-            <p className="mt-1.5 text-xs leading-relaxed text-paper/55">
-              Weigh it, tag it, shelve it — the barcode and SKU are minted on save.
-            </p>
 
             {/* Live preview */}
-            <div className="mt-5 rounded-[20px] bg-gradient-to-b from-paper/[0.08] to-paper/[0.03] p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-paper/10">
+            <div className="mt-3 rounded-[16px] bg-gradient-to-b from-paper/[0.08] to-paper/[0.03] p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-paper/10">
               <div className="relative aspect-[16/10] overflow-hidden rounded-[14px] ring-1 ring-black/20">
                 {previews[0] ? (
                   <img src={previews[0]} alt="" className="size-full object-cover" />
@@ -697,10 +739,10 @@ export default function NewProductPage() {
                 </div>
                 <div className="mt-3 flex items-end justify-between border-t border-paper/10 pt-3">
                   <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-paper/40">Price</span>
-                  {price !== null ? (
+                  {price !== null || estimate !== null ? (
                     <span className="flex items-baseline gap-1">
-                      <span className="text-[10px] text-paper/40">LKR</span>
-                      <span className="g-metric text-lg text-paper">{price.toLocaleString("en-US")}</span>
+                      <span className="text-[10px] text-paper/40">{price !== null ? "LKR" : "≈ LKR"}</span>
+                      <span className="g-metric text-lg text-paper">{Math.round(price ?? estimate!).toLocaleString("en-US")}</span>
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gold-light">
@@ -711,7 +753,7 @@ export default function NewProductPage() {
                 </div>
               </div>
             </div>
-            <p className="mt-2 text-center text-[10px] text-paper/35">Live preview of the catalog card</p>
+            <p className="mt-2 text-center text-[10px] text-paper/35">{price === null && estimate !== null ? "Price is today's live estimate" : "Live preview of the catalogue card"}</p>
 
             {/* Progress */}
             <div className="mt-6">
@@ -810,7 +852,7 @@ export default function NewProductPage() {
             done={steps[0]!.done}
             required
           >
-            <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
+            <div className="grid gap-x-3 gap-y-3.5 sm:grid-cols-2">
               <Field
                 label="Name"
                 required
@@ -878,7 +920,7 @@ export default function NewProductPage() {
             done={steps[1]!.done}
             required
           >
-            <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
+            <div className="grid gap-x-3 gap-y-3.5 sm:grid-cols-2">
               <Field label="Metal" required error={errors.metalTypeId ? "Pick a metal" : undefined}>
                 <SelectField
                   control={control}
@@ -914,7 +956,7 @@ export default function NewProductPage() {
                     ))}
                   </div>
                 ) : purityRows.length > 0 && purityRows.length <= 8 ? (
-                  <KaratPicker control={control} rows={purityRows} invalid={Boolean(errors.purityId)} />
+                  <KaratPicker control={control} rows={purityRows} invalid={Boolean(errors.purityId)} rates={rates} />
                 ) : (
                   <Controller
                     control={control}
@@ -931,6 +973,7 @@ export default function NewProductPage() {
                           hint: p.permille ? `${p.permille}‰` : undefined,
                         }))}
                         placeholder="Choose karat"
+                        size="sm"
                         icon={<SparklesIcon size={13} />}
                         invalid={Boolean(errors.purityId)}
                         hintInTrigger
@@ -957,7 +1000,7 @@ export default function NewProductPage() {
                   Weight
                   <span className="h-px flex-1 bg-gradient-to-r from-gold/30 to-transparent" />
                 </div>
-                <div className="grid gap-x-4 gap-y-5 sm:grid-cols-3">
+                <div className="grid gap-x-3 gap-y-3.5 sm:grid-cols-3">
                   <Field label="Gross" required error={errors.grossG ? "Must be more than 0" : undefined}>
                     <UnitInput unit="g" aria-invalid={errors.grossG ? true : undefined} {...register("grossG")} />
                   </Field>
@@ -1025,7 +1068,7 @@ export default function NewProductPage() {
                     </span>
                   ) : null}
                 </div>
-                <div className="grid gap-x-4 gap-y-5 sm:grid-cols-3">
+                <div className="grid gap-x-3 gap-y-3.5 sm:grid-cols-3">
                   <Field label="Making charge" optional>
                     <UnitInput unit="LKR" {...register("makingLkr")} />
                   </Field>
@@ -1049,7 +1092,7 @@ export default function NewProductPage() {
             done={steps[3]!.done}
             required
           >
-            <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
+            <div className="grid gap-x-3 gap-y-3.5 sm:grid-cols-2">
               <Field label="Branch" required error={errors.branchId ? "Pick a branch" : undefined}>
                 <SelectField
                   control={control}
@@ -1082,7 +1125,7 @@ export default function NewProductPage() {
           </FormSection>
 
           {/* Floating action bar */}
-          <div className="sticky bottom-4 z-20 flex items-center justify-between gap-3 rounded-[20px] bg-paper/90 px-3 py-3 shadow-[0_24px_48px_-20px_rgba(16,32,27,0.45),inset_0_0_0_1px_rgba(16,32,27,0.08)] backdrop-blur-xl sm:px-4">
+          <div className="sticky bottom-4 z-20 flex items-center justify-between gap-3 rounded-2xl bg-paper/90 px-3 py-2 shadow-[0_24px_48px_-20px_rgba(16,32,27,0.45),inset_0_0_0_1px_rgba(16,32,27,0.08)] backdrop-blur-xl sm:px-4">
             <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
             <div className="flex min-w-0 items-center gap-3">
               <ProgressRing value={doneCount} total={steps.length} />
@@ -1093,19 +1136,24 @@ export default function NewProductPage() {
                 <span className="rounded-lg bg-gold-pale px-2.5 py-1 text-xs text-gold-deep">
                   Fine <span className="g-metric font-medium">{fmtG(fine)} g</span>
                 </span>
+                {estimate !== null ? (
+                  <span className="rounded-lg bg-void px-2.5 py-1 text-xs text-paper/70">
+                    ≈ LKR <span className="g-metric font-medium text-gold-light">{Math.round(estimate).toLocaleString("en-US")}</span>
+                  </span>
+                ) : null}
               </div>
             </div>
             <div className="flex shrink-0 gap-2">
               <Link
                 href="/products"
-                className="g-btn h-11 rounded-xl px-4 text-sm text-ink-3 hover:bg-bone hover:text-ink"
+                className="g-btn h-9 rounded-lg px-4 text-sm text-ink-3 hover:bg-bone hover:text-ink"
               >
                 Cancel
               </Link>
               <button
                 type="submit"
                 disabled={create.isPending}
-                className="g-btn g-btn-primary h-11 rounded-xl px-5 text-sm"
+                className="g-btn g-btn-primary h-9 rounded-lg px-5 text-sm"
               >
                 {create.isPending ? (
                   <>

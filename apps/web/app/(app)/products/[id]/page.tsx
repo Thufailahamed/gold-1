@@ -10,21 +10,23 @@ import { api, formApi } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { Select } from "@/components/select";
 import { LineageChain, type LineageNode, type LineageEdge } from "@/components/lineage-chain";
+import { Page, Callout, Modal, Skeleton, controlClass } from "@/components/ui";
+import { Card, CardHead, Empty, GoldHero, HeroBadge, RowsSkeleton, ago, heroGhost, heroGold, stamp } from "@/components/console-kit";
 import {
-  Page,
-  Hero,
-  heroBtnGhost,
-  Panel,
-  Pill,
-  Tabs,
-  TableCard,
-  EmptyBlock,
-  Callout,
-  Modal,
-  Skeleton,
-  controlClass,
-} from "@/components/ui";
-import { EditIcon, GemIcon, PrinterIcon, RefreshCwIcon, TrashIcon } from "@/components/icons";
+  AlertCircleIcon,
+  BanknoteIcon,
+  CameraIcon,
+  EditIcon,
+  GemIcon,
+  HistoryIcon,
+  LayersIcon,
+  PlusIcon,
+  PrinterIcon,
+  ScaleIcon,
+  StoreIcon,
+  TagsIcon,
+  TrashIcon,
+} from "@/components/icons";
 
 type Detail = {
   product: {
@@ -73,53 +75,28 @@ type Movement = {
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
-const lkr = (cents: number | null) => (cents === null ? "—" : `${centsToLkr(cents).toLocaleString("en-US")} LKR`);
+const g = (mg: number) => (mg / 1000).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+const whole = (cents: number) => centsToLkr(cents).toLocaleString("en-US");
+const humanize = (s: string) => s.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+const STATUS_TONE: Record<string, "good" | "warn" | "bad" | "muted" | "gold"> = {
+  IN_STOCK: "good",
+  RESERVED: "warn",
+  SOLD: "gold",
+  IN_REPAIR: "bad",
+  LOST: "bad",
+  VOID: "muted",
+  MELTED: "muted",
+};
 
-function SpecGroup({ title, children }: { title: string; children: React.ReactNode }) {
+/** One labelled line in a breakdown, optionally the bold total. */
+function Line({ k, v, sub, total, tone }: { k: string; v: React.ReactNode; sub?: React.ReactNode; total?: boolean; tone?: string }) {
   return (
-    <section>
-      <div className="mb-3 flex items-center gap-3">
-        <span className="size-1.5 rounded-full bg-gold" />
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-dark">{title}</h3>
-        <span className="h-px flex-1 bg-gradient-to-r from-ink/[0.1] to-transparent" />
-      </div>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">{children}</div>
-    </section>
-  );
-}
-
-function SpecCard({
-  label,
-  value,
-  hint,
-  accent,
-  tone,
-}: {
-  label: string;
-  value: string;
-  hint?: string | undefined;
-  accent?: boolean;
-  tone?: "good" | "bad" | undefined;
-}) {
-  return (
-    <div
-      className={cn(
-        "g-surface relative overflow-hidden p-4 transition-transform duration-200 hover:-translate-y-0.5",
-        accent && "bg-gradient-to-br from-gold-pale/70 to-paper"
-      )}
-    >
-      {accent ? <span className="absolute inset-x-0 top-0 h-[2px] bg-gold" /> : null}
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">{label}</p>
-      <p
-        className={cn(
-          "num-tabular mt-2 break-words text-lg font-semibold tracking-tight text-ink",
-          tone === "good" && "text-emerald-700",
-          tone === "bad" && "text-rose-600"
-        )}
-      >
-        {value}
-      </p>
-      {hint ? <p className="mt-0.5 text-xs text-ink-4">{hint}</p> : null}
+    <div className={cn("flex items-baseline justify-between gap-3 px-4 py-1.5", total && "border-t border-ink/[0.08] bg-gold-pale/40 py-2")}>
+      <span className={cn("text-[12px]", total ? "font-semibold text-ink" : "text-ink-3")}>
+        {k}
+        {sub ? <span className="ml-1.5 text-[10.5px] text-ink-5">{sub}</span> : null}
+      </span>
+      <span className={cn("g-metric text-right", total ? "text-[15px] font-semibold" : "text-[12.5px]", tone ?? "text-ink")}>{v}</span>
     </div>
   );
 }
@@ -128,7 +105,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const { id } = use(params);
   const router = useRouter();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"specs" | "moves">("specs");
+  const [shot, setShot] = useState(0);
   const [editing, setEditing] = useState(false);
   const [reserving, setReserving] = useState(false);
   const detail = useQuery({
@@ -139,7 +116,6 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     queryKey: ["product-moves", id],
     queryFn: () =>
       api<{ rows: Movement[]; total: number }>(`/api/v1/inventory/movements?productId=${id}&limit=50`),
-    enabled: tab === "moves",
   });
   const branches = useQuery({
     queryKey: ["branches-names"],
@@ -211,10 +187,12 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
 
   if (detail.isLoading)
     return (
-      <Page>
-        <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-32 rounded-xl" />
-        <Skeleton className="h-64 rounded-xl" />
+      <Page className="space-y-4">
+        <Skeleton className="h-40 rounded-[20px]" />
+        <div className="grid gap-4 xl:grid-cols-12">
+          <Skeleton className="h-80 rounded-2xl xl:col-span-4" />
+          <Skeleton className="h-80 rounded-2xl xl:col-span-8" />
+        </div>
       </Page>
     );
   if (detail.isError || !detail.data)
@@ -224,10 +202,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
           tone="danger"
           title="Product not found"
           action={
-            <button
-              onClick={() => router.push("/products")}
-              className="g-btn g-btn-secondary h-8 px-3 text-xs"
-            >
+            <button onClick={() => router.push("/products")} className="g-btn g-btn-secondary h-8 px-3 text-xs">
               Back to list
             </button>
           }
@@ -242,271 +217,379 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const price = product.selling_price_cents ?? livePrice?.amount_cents ?? null;
   const margin = price !== null && product.cost_cents !== null ? price - product.cost_cents : null;
   const marginPct = margin !== null && price ? (margin / price) * 100 : null;
+  const metalValue = livePrice ? livePrice.amount_cents - product.making_cents : null;
+  const imgs = product.image_keys.map((k) => k.split("/").pop()!);
+  const current = imgs[Math.min(shot, imgs.length - 1)];
+  const editable = product.status !== "VOID";
+  const pct = (part: number) => (product.gross_mg > 0 ? (part / product.gross_mg) * 100 : 0);
+  const fixedVsLive =
+    product.selling_price_cents !== null && livePrice ? ((product.selling_price_cents - livePrice.amount_cents) / livePrice.amount_cents) * 100 : null;
+  const moveRows = moves.data?.rows ?? [];
 
   return (
-    <Page>
-      <Hero
-        back={{ href: "/products", label: "Products" }}
-        kicker="Catalog · Piece detail"
+    <Page className="space-y-4">
+      <GoldHero
+        icon={GemIcon}
         title={product.name}
-        meta={
-          <>
-            <Pill tone="ghost" className="font-mono normal-case tracking-normal">
-              {product.barcode}
-            </Pill>
-            <Pill tone="ghost" className="font-mono normal-case tracking-normal">
-              {product.sku}
-            </Pill>
-            <Pill tone="ghost" dot>
-              {product.status.replace(/_/g, " ")}
-            </Pill>
-          </>
+        badge={<HeroBadge tone={STATUS_TONE[product.status] ?? "muted"}>{humanize(product.status)}</HeroBadge>}
+        sub={
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="g-metric rounded bg-gold/15 px-1.5 text-gold-light">{product.barcode}</span>
+            <span className="g-metric">{product.sku}</span>
+            <span>·</span>
+            <span>{product.category_name}</span>
+            {branchName ? (
+              <>
+                <span>·</span>
+                <span>{branchName}</span>
+              </>
+            ) : null}
+            {product.location ? (
+              <>
+                <span>·</span>
+                <span>@ {product.location}</span>
+              </>
+            ) : null}
+          </span>
         }
+        back={{ href: "/products", label: "Products" }}
         actions={
           <>
-            {product.status !== "VOID" ? (
-              <button onClick={() => setEditing(true)} className={heroBtnGhost}>
-                <EditIcon size={14} />
+            {editable ? (
+              <button onClick={() => setEditing(true)} className={heroGhost}>
+                <EditIcon size={13} />
                 Edit
               </button>
             ) : null}
-            {product.status === "IN_STOCK" || product.status === "RESERVED" ? (
-              <Link href={`/pos?add=${encodeURIComponent(product.barcode)}`} className={heroBtnGhost}>
-                Sell at POS
-              </Link>
-            ) : null}
             {product.status === "IN_STOCK" ? (
-              <button onClick={() => setReserving(true)} className={heroBtnGhost}>
+              <button onClick={() => setReserving(true)} className={heroGhost}>
                 Reserve
               </button>
             ) : null}
             {product.status === "RESERVED" ? (
-              <button onClick={onRelease} disabled={release.isPending} className={heroBtnGhost}>
+              <button onClick={onRelease} disabled={release.isPending} className={heroGhost}>
                 Release hold
               </button>
             ) : null}
             {product.status === "SOLD" || product.status === "RETURNED" ? (
-              <Link href={`/sales/invoices/lookup/${encodeURIComponent(product.barcode)}`} className={heroBtnGhost}>
+              <Link href={`/sales/invoices/lookup/${encodeURIComponent(product.barcode)}`} className={heroGhost}>
                 Find sale
               </Link>
             ) : null}
             {product.status === "IN_STOCK" ? (
               <button
                 onClick={onVoid}
-                className="g-btn h-10 px-4 text-sm text-rose-300 shadow-[inset_0_0_0_1px_rgba(251,113,133,0.35)] transition-colors hover:bg-rose-600/20"
+                className="home-btn-ghost h-8 px-3 text-[12.5px] !text-rose-300 shadow-[inset_0_0_0_1px_rgba(251,113,133,0.35)] hover:!bg-rose-600/20"
               >
                 Void
               </button>
+            ) : null}
+            {product.status === "IN_STOCK" || product.status === "RESERVED" ? (
+              <Link href={`/pos?add=${encodeURIComponent(product.barcode)}`} className={heroGold}>
+                <BanknoteIcon size={13} />
+                Sell at POS
+              </Link>
             ) : null}
           </>
         }
         stats={[
           {
-            label: "Live price",
-            value: livePrice
-              ? `${centsToLkr(livePrice.amount_cents).toLocaleString("en-US")} LKR`
-              : "—",
+            label: product.selling_price_cents !== null ? "Fixed price" : "Live price",
+            value: price !== null ? centsToLkr(price) : null,
+            format: (n) => Math.round(n).toLocaleString("en-US"),
+            unit: "LKR",
+            accent: true,
+            sub: product.selling_price_cents !== null ? "manual override" : livePrice ? "net × board + making" : "no board rate",
           },
-          { label: "Net weight", value: `${mgToG(product.net_mg)} g` },
-          { label: "Karat", value: product.karat },
           {
-            label: "Making",
-            value: `${centsToLkr(product.making_cents).toLocaleString("en-US")} LKR`,
+            label: `Board · ${product.karat}`,
+            value: livePrice ? centsToLkr(livePrice.rate_cents_per_g) : null,
+            format: (n) => Math.round(n).toLocaleString("en-US"),
+            unit: "LKR/g",
+            sub: livePrice ? `set ${ago(livePrice.rate_effective_from)}` : undefined,
+          },
+          { label: "Gross", value: product.gross_mg, format: g, unit: "g" },
+          { label: "Net", value: product.net_mg, format: g, unit: "g", sub: product.stone_mg ? `${g(product.stone_mg)} g stones` : "no stones" },
+          { label: "Fine gold", value: product.fine_gold_mg, format: g, unit: "g", sub: `${product.permille}‰` },
+          { label: "Making", value: centsToLkr(product.making_cents), format: (n) => Math.round(n).toLocaleString("en-US"), unit: "LKR" },
+          {
+            label: "Book cost",
+            value: product.cost_cents !== null ? centsToLkr(product.cost_cents) : null,
+            format: (n) => Math.round(n).toLocaleString("en-US"),
+            unit: "LKR",
+          },
+          {
+            label: "Margin",
+            value: marginPct,
+            format: (n) => `${n.toFixed(1)}%`,
+            tone: margin === null ? undefined : margin < 0 ? "bad" : "good",
+            sub: margin !== null ? `LKR ${whole(margin)}` : "needs cost and price",
           },
         ]}
-        note={
-          livePrice
-            ? "Live price = net weight × board rate + making"
-            : "Publish a board rate to enable live pricing for this piece"
-        }
       />
 
       {product.status === "RESERVED" ? (
-        <Callout
-          tone={holdExpired ? "danger" : "warning"}
-          title={`Held for ${product.reserved_customer_name ?? "a customer"}${holdExpired ? " — hold expired" : ""}`}
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-4 py-2.5 text-[12px] ring-1 ring-inset",
+            holdExpired ? "bg-rose-500/10 text-rose-900 ring-rose-500/25" : "bg-amber-500/10 text-amber-900 ring-amber-500/25"
+          )}
         >
-          {product.reserved_note ?? ""}
-          {product.reserved_until !== null
-            ? ` · until ${new Date(product.reserved_until).toLocaleDateString()}`
-            : " · no end date"}
-          {product.reserved_at !== null ? ` · since ${new Date(product.reserved_at).toLocaleDateString()}` : ""}
-          . Only this customer can buy it at the POS; release the hold to sell it to anyone else.
-        </Callout>
+          <span className={cn("size-1.5 rounded-full", holdExpired ? "bg-rose-500" : "animate-pulse-soft bg-amber-500")} />
+          <span className="font-semibold">
+            Held for {product.reserved_customer_name ?? "a customer"}
+            {holdExpired ? " · hold expired" : ""}
+          </span>
+          {product.reserved_note ? <span>“{product.reserved_note}”</span> : null}
+          <span className="text-current/70">
+            {product.reserved_until !== null ? `until ${new Date(product.reserved_until).toLocaleDateString()}` : "no end date"}
+            {product.reserved_at !== null ? ` · since ${new Date(product.reserved_at).toLocaleDateString()}` : ""}
+          </span>
+          <span className="ml-auto text-[11px] opacity-75">Only this customer can buy it at the POS</span>
+        </div>
       ) : null}
-
       {noRate || !livePrice ? (
-        <Callout tone="warning" title="Price unavailable">
-          No rate published for {product.karat} — publish a board rate to enable live pricing.
-        </Callout>
+        <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 px-4 py-2.5 text-[12px] text-amber-900 ring-1 ring-inset ring-amber-500/25">
+          <AlertCircleIcon size={14} />
+          No board rate published for {product.karat}, so live pricing is off.
+          <Link href="/gold-rates" className="ml-auto rounded-md bg-void px-2.5 py-1 text-[11px] font-semibold text-gold-light">
+            Publish rate
+          </Link>
+        </div>
       ) : null}
 
-      <Tabs
-        ariaLabel="Product detail sections"
-        items={[
-          { key: "specs" as const, label: "Specs", icon: <GemIcon size={15} /> },
-          { key: "moves" as const, label: "Movements", icon: <RefreshCwIcon size={15} /> },
-        ]}
-        value={tab}
-        onChange={setTab}
-      />
-
-      {tab === "specs" ? (
-        <div className="space-y-6">
-          <SpecGroup title="Identity">
-            <SpecCard label="Category" value={product.category_name} />
-            <SpecCard label="Karat" value={`${product.karat} · ${product.permille}‰`} />
-            <SpecCard label="Branch" value={branchName ?? "—"} />
-            <SpecCard label="Location" value={product.location ?? "—"} />
-          </SpecGroup>
-          <SpecGroup title="Weight">
-            <SpecCard label="Gross" value={`${mgToG(product.gross_mg)} g`} />
-            <SpecCard label="Stone" value={`${mgToG(product.stone_mg)} g`} />
-            <SpecCard label="Net" value={`${mgToG(product.net_mg)} g`} />
-            <SpecCard label="Fine gold" value={`${mgToG(product.fine_gold_mg)} g`} accent />
-            <SpecCard label="Wastage" value={`${mgToG(product.wastage_mg)} g`} />
-          </SpecGroup>
-          <SpecGroup title="Pricing">
-            <SpecCard label="Making" value={lkr(product.making_cents)} />
-            <SpecCard label="Book cost" value={lkr(product.cost_cents)} />
-            <SpecCard
-              label="Selling price"
-              value={product.selling_price_cents !== null ? lkr(product.selling_price_cents) : "Live board rate"}
-              hint={product.selling_price_cents !== null ? "Manual override" : undefined}
-              accent
-            />
-            <SpecCard
-              label="Margin"
-              value={margin !== null ? lkr(margin) : "—"}
-              hint={marginPct !== null ? `${marginPct.toFixed(1)}% of price` : "Needs a cost and a price"}
-              tone={margin === null ? undefined : margin < 0 ? "bad" : "good"}
-            />
-          </SpecGroup>
-          {product.notes ? (
-            <div className="g-surface p-5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-dark">Notes</p>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ink-2">{product.notes}</p>
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        <TableCard title="Movement history" description="Every status change for this piece">
-          {(moves.data?.rows ?? []).length === 0 && !moves.isLoading ? (
-            <EmptyBlock title="No movements" description="This piece has no recorded movements yet." />
-          ) : (
-            <table className="g-table">
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>From → To</th>
-                  <th>Reason</th>
-                  <th>Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(moves.data?.rows ?? []).map((m) => (
-                  <tr key={m.id}>
-                    <td>
-                      <Pill tone="neutral" className="font-mono normal-case tracking-normal">
-                        {m.type}
-                      </Pill>
-                    </td>
-                    <td className="text-xs text-ink-3">
-                      {m.from_status ?? "—"} → {m.to_status}
-                    </td>
-                    <td className="text-ink-3">{m.reason ?? "—"}</td>
-                    <td className="num text-xs">{new Date(m.created_at).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </TableCard>
-      )}
-
-      {product.image_keys.length > 0 || product.status !== "VOID" ? (
-        <Panel
-          title="Images"
-          description={`${product.image_keys.length} of 10 attached`}
-          actions={
-            product.status !== "VOID" && product.image_keys.length < 10 ? (
-              <label className="g-btn g-btn-secondary h-8 cursor-pointer px-3 text-xs">
-                {upload.isPending ? "Uploading…" : "Add image"}
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="sr-only"
-                  disabled={upload.isPending}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = "";
-                    if (file) upload.mutate(file);
+      <div className="grid gap-4 xl:grid-cols-12">
+        {/* ---------------- left: photos + label */}
+        <div className="space-y-4 xl:col-span-4">
+          <Card>
+            <div className="relative m-1.5 aspect-square overflow-hidden rounded-xl bg-void">
+              {current ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={`${API}/api/v1/products/${id}/images/${current}`} alt={product.name} className="size-full object-cover" />
+              ) : (
+                <div className="relative flex size-full flex-col items-center justify-center text-center">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(226,194,122,0.3),transparent_60%)]" />
+                  <div className="home-grid-bg absolute inset-0 opacity-60" />
+                  <span className="g-display pointer-events-none absolute -bottom-4 -right-1 select-none text-[7rem] leading-none text-gold/[0.08]">{product.karat}</span>
+                  <GemIcon size={40} className="relative text-gold-light drop-shadow-[0_10px_20px_rgba(205,168,83,0.45)]" />
+                  <p className="relative mt-3 text-[12px] font-semibold text-paper/80">No photos yet</p>
+                  <p className="relative text-[10.5px] text-paper/40">JPEG, PNG or WebP · up to 5 MB</p>
+                </div>
+              )}
+              <span className="g-metric absolute left-2.5 top-2.5 rounded-md bg-gradient-to-b from-gold-light to-gold px-1.5 py-0.5 text-[11px] font-bold text-void">{product.karat}</span>
+              {current && editable ? (
+                <button
+                  onClick={() => {
+                    if (window.confirm("Remove this image?")) removeImage.mutate(current);
                   }}
+                  disabled={removeImage.isPending}
+                  aria-label="Remove image"
+                  className="absolute right-2.5 top-2.5 inline-flex size-7 items-center justify-center rounded-md bg-paper/90 text-rose-600 shadow transition-colors hover:bg-rose-50"
+                >
+                  <TrashIcon size={13} />
+                </button>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-1.5 px-2 pb-2 pt-1">
+              {imgs.map((img, i) => (
+                <button
+                  key={img}
+                  type="button"
+                  onClick={() => setShot(i)}
+                  className={cn(
+                    "size-12 shrink-0 overflow-hidden rounded-lg ring-2 transition-all",
+                    img === current ? "ring-gold" : "ring-transparent opacity-70 hover:opacity-100"
+                  )}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`${API}/api/v1/products/${id}/images/${img}`} alt="" className="size-full object-cover" />
+                </button>
+              ))}
+              {editable && imgs.length < 10 ? (
+                <label className="flex size-12 shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-ink/20 text-ink-4 transition-colors hover:border-gold hover:bg-gold-pale/40 hover:text-gold-deep">
+                  {upload.isPending ? <span className="size-3.5 animate-spin rounded-full border-2 border-gold/30 border-t-gold" /> : <PlusIcon size={14} />}
+                  <span className="text-[8.5px] font-semibold">Add</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    disabled={upload.isPending}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (file) upload.mutate(file);
+                    }}
+                  />
+                </label>
+              ) : null}
+              <span className="g-metric ml-auto pr-1 text-[10px] text-ink-5">
+                <CameraIcon size={11} className="mr-1 inline" />
+                {imgs.length}/10
+              </span>
+            </div>
+          </Card>
+
+          <Card>
+            <CardHead
+              icon={PrinterIcon}
+              title="Barcode label"
+              sub="Print-ready tag for this piece"
+              action={
+                <>
+                  <button onClick={() => router.push(`/products/${id}/print`)} className="rounded-md px-2 py-1 text-[11px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/10 hover:bg-bone">
+                    Print view
+                  </button>
+                  <button onClick={() => window.print()} className="inline-flex items-center gap-1 rounded-md bg-void px-2 py-1 text-[11px] font-semibold text-gold-light">
+                    <PrinterIcon size={11} />
+                    Print
+                  </button>
+                </>
+              }
+            />
+            <div className="print-area flex justify-center bg-[repeating-linear-gradient(45deg,rgba(16,32,27,0.025)_0_8px,transparent_8px_16px)] p-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={labelUrl} alt={`Label for ${product.barcode}`} className="max-w-full rounded-md bg-white shadow-[0_12px_28px_-18px_rgba(16,32,27,0.5)]" />
+            </div>
+          </Card>
+        </div>
+
+        {/* ---------------- right: the numbers */}
+        <div className="grid content-start gap-4 lg:grid-cols-2 xl:col-span-8">
+          <Card>
+            <CardHead icon={BanknoteIcon} title="Price build-up" sub={product.selling_price_cents !== null ? "Fixed price, with the live figure for comparison" : "How the till prices this piece"} />
+            <div className="py-1.5">
+              {livePrice ? (
+                <>
+                  <Line k="Net weight" v={`${g(product.net_mg)} g`} />
+                  <Line k={`× ${product.karat} board rate`} v={`${whole(livePrice.rate_cents_per_g)} /g`} />
+                  <Line k="= Metal value" v={metalValue !== null ? whole(metalValue) : "—"} />
+                  <Line k="+ Making charge" v={whole(product.making_cents)} />
+                  <Line k="Live price" v={`LKR ${whole(livePrice.amount_cents)}`} total tone="text-gold-deep" />
+                </>
+              ) : (
+                <Line k="Live price" v="No board rate" />
+              )}
+              {product.selling_price_cents !== null ? (
+                <Line
+                  k="Fixed price"
+                  sub={fixedVsLive !== null ? `${fixedVsLive > 0 ? "+" : ""}${fixedVsLive.toFixed(1)}% vs live` : undefined}
+                  v={`LKR ${whole(product.selling_price_cents)}`}
+                  total
                 />
-              </label>
-            ) : null
-          }
-        >
-          {product.image_keys.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-ink/15 bg-bone/50 px-4 py-8 text-center">
-              <GemIcon size={22} className="text-gold" />
-              <p className="mt-2 text-sm font-medium text-ink-2">No photos yet</p>
-              <p className="mt-0.5 text-xs text-ink-4">JPEG, PNG or WebP, up to 5 MB each.</p>
+              ) : null}
             </div>
-          ) : (
-            <div className="flex flex-wrap gap-3">
-              {product.image_keys.map((k) => {
-                const img = k.split("/").pop()!;
-                return (
-                  <div key={k} className="group relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={`${API}/api/v1/products/${id}/images/${img}`}
-                      alt={product.barcode}
-                      className="h-36 w-36 rounded-xl object-cover shadow-[0_10px_24px_-14px_rgba(16,32,27,0.45),inset_0_0_0_1px_rgba(16,32,27,0.1)] transition-transform duration-200 group-hover:scale-[1.02]"
-                    />
-                    {product.status !== "VOID" ? (
-                      <button
-                        onClick={() => {
-                          if (window.confirm("Remove this image?")) removeImage.mutate(img);
-                        }}
-                        disabled={removeImage.isPending}
-                        aria-label="Remove image"
-                        className="absolute right-1.5 top-1.5 inline-flex size-7 items-center justify-center rounded-md bg-paper/90 text-rose-600 shadow transition-colors hover:bg-rose-50"
-                      >
-                        <TrashIcon size={14} />
-                      </button>
-                    ) : null}
-                  </div>
-                );
-              })}
+            <div className="mt-auto border-t border-ink/[0.06] px-4 py-2.5">
+              <div className="flex items-baseline justify-between text-[11px]">
+                <span className="text-ink-4">
+                  Cost <span className="g-metric text-ink-2">{product.cost_cents !== null ? whole(product.cost_cents) : "—"}</span>
+                </span>
+                <span className={cn("g-metric font-semibold", margin === null ? "text-ink-5" : margin < 0 ? "text-rose-700" : "text-emerald-700")}>
+                  {margin !== null ? `${margin > 0 ? "+" : ""}${whole(margin)} · ${marginPct!.toFixed(1)}%` : "Margin needs a cost"}
+                </span>
+              </div>
+              {marginPct !== null ? (
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-ink/[0.06]">
+                  <div
+                    className={cn("h-full rounded-full", marginPct < 0 ? "bg-rose-500" : "bg-gradient-to-r from-emerald-600 to-emerald-400")}
+                    style={{ width: `${Math.min(100, Math.abs(marginPct))}%` }}
+                  />
+                </div>
+              ) : null}
             </div>
-          )}
-        </Panel>
-      ) : null}
+          </Card>
 
-      <Panel title="Barcode label" description="Print-ready label for this piece" icon={<PrinterIcon size={16} />}>
-        <div className="print-area inline-block rounded-xl bg-bone/60 p-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={labelUrl} alt={`Label for ${product.barcode}`} className="max-w-sm rounded-md bg-white shadow-sm" />
-        </div>
-        <div className="mt-4 flex gap-2 print:hidden">
-          <button
-            onClick={() => router.push(`/products/${id}/print`)}
-            className="g-btn g-btn-secondary h-10 rounded-xl px-4 text-sm"
-          >
-            Print view
-          </button>
-          <button onClick={() => window.print()} className="g-btn g-btn-primary h-10 rounded-xl px-4 text-sm">
-            <PrinterIcon size={14} />
-            Print label
-          </button>
-        </div>
-      </Panel>
+          <Card>
+            <CardHead icon={ScaleIcon} title="Weights" sub={`${product.karat} · ${product.permille}‰ fine`} />
+            <div className="px-4 pt-3">
+              <div className="flex h-3 overflow-hidden rounded-full bg-ink/[0.06]" title="Gross weight split">
+                <div className="bg-gradient-to-r from-gold-deep to-gold" style={{ width: `${pct(product.fine_gold_mg)}%` }} title="Fine gold" />
+                <div className="bg-gold-light/60" style={{ width: `${pct(product.net_mg - product.fine_gold_mg)}%` }} title="Alloy" />
+                <div className="bg-sky-400/70" style={{ width: `${pct(product.stone_mg)}%` }} title="Stones" />
+              </div>
+              <div className="mt-1.5 flex flex-wrap gap-x-3 text-[10px] text-ink-5">
+                <span className="flex items-center gap-1">
+                  <span className="size-2 rounded-sm bg-gold" /> Fine {pct(product.fine_gold_mg).toFixed(1)}%
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="size-2 rounded-sm bg-gold-light/60" /> Alloy
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="size-2 rounded-sm bg-sky-400/70" /> Stones {pct(product.stone_mg).toFixed(1)}%
+                </span>
+              </div>
+            </div>
+            <div className="py-1.5">
+              <Line k="Gross" v={`${g(product.gross_mg)} g`} />
+              <Line k="− Stones" v={`${g(product.stone_mg)} g`} tone="text-sky-700" />
+              <Line k="= Net" v={`${g(product.net_mg)} g`} />
+              <Line k="Wastage" sub="allowance" v={`${g(product.wastage_mg)} g`} tone="text-ink-3" />
+              <Line k="Fine gold" sub={`net × ${product.permille}‰`} v={`${g(product.fine_gold_mg)} g`} total tone="text-gold-deep" />
+            </div>
+          </Card>
 
-      <Panel title="Gold lineage" description="Backwards and forwards through every transformation">
-        <LineageSection refEntity="product" refId={id} />
-      </Panel>
+          <Card>
+            <CardHead icon={TagsIcon} title="Identity" sub="Where it sits in the catalogue" />
+            <dl className="grid grid-cols-2 gap-px bg-ink/[0.05]">
+              {[
+                { k: "Category", v: product.category_name },
+                { k: "Karat", v: `${product.karat} · ${product.permille}‰` },
+                { k: "Branch", v: branchName ?? "—", icon: StoreIcon },
+                { k: "Location", v: product.location ?? "—" },
+                { k: "Barcode", v: product.barcode, mono: true },
+                { k: "SKU", v: product.sku, mono: true },
+              ].map((f) => (
+                <div key={f.k} className="bg-paper px-4 py-2">
+                  <dt className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">{f.k}</dt>
+                  <dd className={cn("mt-0.5 truncate text-[12.5px] font-medium text-ink", f.mono && "g-metric")}>{f.v}</dd>
+                </div>
+              ))}
+            </dl>
+            {product.notes ? (
+              <div className="border-t border-ink/[0.06] bg-gold-pale/30 px-4 py-2.5">
+                <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-gold-dark">Notes</div>
+                <p className="mt-0.5 whitespace-pre-wrap text-[12px] leading-relaxed text-ink-2">{product.notes}</p>
+              </div>
+            ) : null}
+          </Card>
+
+          <Card>
+            <CardHead icon={HistoryIcon} title="Movements" sub={moves.data ? `${moves.data.total} status changes` : "Every status change"} />
+            {moves.isLoading ? (
+              <RowsSkeleton rows={3} />
+            ) : moveRows.length === 0 ? (
+              <Empty icon={HistoryIcon} title="No movements" desc="This piece has no recorded movements yet." />
+            ) : (
+              <ol className="max-h-[300px] space-y-0 overflow-y-auto px-4 py-2 scrollbar-thin">
+                {moveRows.map((m, i) => (
+                  <li key={m.id} className="relative flex gap-3 pb-3 last:pb-1">
+                    {i < moveRows.length - 1 ? <span className="absolute left-[5px] top-3 h-full w-px bg-ink/10" aria-hidden /> : null}
+                    <span className="relative mt-1.5 size-[11px] shrink-0 rounded-full bg-gold ring-2 ring-paper" />
+                    <div className="min-w-0 flex-1 leading-tight">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="g-metric text-[11.5px] font-semibold text-ink">{m.type}</span>
+                        <span className="text-[10.5px] text-ink-5" title={stamp(m.created_at)}>
+                          {ago(m.created_at)}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-ink-4">
+                        {m.from_status ? humanize(m.from_status) : "—"} → <span className="font-medium text-ink-2">{humanize(m.to_status)}</span>
+                      </div>
+                      {m.reason ? <div className="mt-0.5 truncate text-[10.5px] text-ink-5">{m.reason}</div> : null}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </Card>
+
+          <Card className="lg:col-span-2">
+            <CardHead icon={LayersIcon} title="Gold lineage" sub="Backwards and forwards through every transformation" />
+            <div className="p-4">
+              <LineageSection refEntity="product" refId={id} />
+            </div>
+          </Card>
+        </div>
+      </div>
 
       {reserving ? (
         <ReserveDialog
@@ -601,7 +684,7 @@ function EditDialog({
     }
   }
 
-  const cls = `${controlClass} w-full !h-11 !rounded-xl !px-3.5`;
+  const cls = `${controlClass} w-full !h-9 !rounded-lg !px-3`;
   return (
     <Modal
       title={<>Edit piece <span className="text-ink-4">({product.barcode})</span></>}
@@ -697,7 +780,7 @@ function ReserveDialog({ id, onClose }: { id: string; onClose: (saved: boolean) 
     }
   }
 
-  const cls = `${controlClass} w-full !h-11 !rounded-xl !px-3.5`;
+  const cls = `${controlClass} w-full !h-9 !rounded-lg !px-3`;
   return (
     <Modal
       title="Reserve for a customer"

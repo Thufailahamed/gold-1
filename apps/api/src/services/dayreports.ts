@@ -90,7 +90,7 @@ export async function investigateDay(
      FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
      LEFT JOIN users u ON u.id = e.created_by
      WHERE l.account_code = '1000' AND e.branch_id = ? AND e.entry_date = ?
-     GROUP BY e.id ORDER BY e.created_at`,
+     GROUP BY e.id ORDER BY e.created_at, e.entry_no`,
     [branchId, date]
   );
   const cashMovements: CashMovement[] = movements
@@ -135,7 +135,7 @@ export async function investigateDay(
             COALESCE(SUM(CASE WHEN l.account_code = '1000' THEN l.debit_cents - l.credit_cents ELSE 0 END), 0) AS cash
      FROM journal_entries e JOIN journal_lines l ON l.entry_id = e.id
      WHERE e.branch_id = ? AND ${LOCAL_DAY("e.created_at")} = ? AND e.entry_date < ?
-     GROUP BY e.id ORDER BY e.created_at`,
+     GROUP BY e.id ORDER BY e.created_at, e.entry_no`,
     [branchId, date, date]
   );
 
@@ -192,9 +192,9 @@ export async function investigateDay(
   const lastSettled = await db
     .prepare(
       `SELECT MAX(e.entry_date) AS d FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
-       WHERE l.account_code = '1020' AND e.ref_entity = 'card_settlement' AND e.entry_date <= ?`
+       WHERE l.account_code = '1020' AND e.ref_entity = 'card_settlement' AND e.entry_date <= ?${branchId ? " AND e.branch_id = ?" : ""}`
     )
-    .bind(date)
+    .bind(...(branchId ? [date, branchId] : [date]))
     .first<{ d: string | null }>();
   const oldestUnsettled = (card?.n ?? 0) > 0
     ? await db
@@ -345,6 +345,12 @@ export async function listUnclosedDays(
   db: D1Database,
   opts: { branchId: string; from: string; to: string }
 ): Promise<{ date: string; status: "NOT_CLOSED" | "REOPENED"; entries: number; cashMovementCents: number }[]> {
+  const branch = await db
+    .prepare("SELECT id FROM branches WHERE id = ? AND is_active = 1")
+    .bind(opts.branchId)
+    .first();
+  if (!branch)
+    throw Object.assign(new Error("Branch not found"), { code: "NOT_FOUND" });
   const rows = await all<{ d: string; entries: number; cash: number }>(
     db,
     `SELECT e.entry_date AS d, COUNT(DISTINCT e.id) AS entries,
@@ -390,6 +396,14 @@ export type VarianceReport = {
  * report that shows it.
  */
 export async function varianceReport(db: D1Database, opts: { from: string; to: string; branchId?: string }): Promise<VarianceReport> {
+  if (opts.branchId) {
+    const branch = await db
+      .prepare("SELECT id FROM branches WHERE id = ? AND is_active = 1")
+      .bind(opts.branchId)
+      .first();
+    if (!branch)
+      throw Object.assign(new Error("Branch not found"), { code: "NOT_FOUND" });
+  }
   const b = opts.branchId ? " AND d.branch_id = ?" : "";
   const rows = await all<{
     id: string; branch_id: string; close_date: string; expected_cents: number; actual_cents: number; difference_cents: number;

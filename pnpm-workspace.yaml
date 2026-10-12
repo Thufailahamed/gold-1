@@ -4,3 +4,6 @@ packages:
   # The Expo app installs with npm on its own (Metro + pnpm symlinks is
   # fragile); it consumes packages/shared through a Metro/TS alias instead.
   - "!apps/mobile"
+
+patchedDependencies:
+  "@opennextjs/cloudflare@1.20.10": patches/@opennextjs__cloudflare@1.20.10.patch

@@ -1,12 +1,13 @@
 "use client";
 
 import { Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Callout, Page, Skeleton } from "@/components/ui";
-import { ArrowLeftIcon, FileDownIcon, PrinterIcon } from "@/components/icons";
+import { GoldHero, HeroBadge, heroGhost, heroGold } from "@/components/console-kit";
+import { ClipboardCheckIcon, FileDownIcon, PrinterIcon } from "@/components/icons";
 import { api, downloadCsv } from "@/lib/api";
-import { fmt } from "../panels";
+import { fmt, signed } from "../panels";
 
 type Line = { label: string; refEntity: string; cents: number };
 type Report = {
@@ -55,7 +56,6 @@ function Row({ label, cents, strong }: { label: string; cents: number | null; st
 }
 
 function ReportView() {
-  const router = useRouter();
   const params = useSearchParams();
   const branchId = params.get("branchId") ?? "";
   const date = params.get("date") ?? "";
@@ -89,23 +89,49 @@ function ReportView() {
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <button onClick={() => router.back()} className="g-btn g-btn-secondary h-10 px-4 text-sm">
-          <ArrowLeftIcon size={15} /> Back
-        </button>
-        <div className="flex gap-2">
-          <button
-            onClick={() => downloadCsv(`/api/v1/day-closings/report.csv?branchId=${encodeURIComponent(branchId)}&date=${date}`, `day-close-${date}.csv`)}
-            className="g-btn g-btn-secondary h-10 px-4 text-sm"
-          >
-            <FileDownIcon size={15} /> CSV
-          </button>
-          <button onClick={() => window.print()} className="g-btn g-btn-primary h-10 px-4 text-sm">
-            <PrinterIcon size={15} /> Print
-          </button>
-        </div>
+      <div className="mb-4 print:hidden">
+        <GoldHero
+          icon={ClipboardCheckIcon}
+          title="Closing"
+          accent="report"
+          badge={<HeroBadge tone={closed ? "good" : "warn"}>{closed ? "Closed" : "Live preview"}</HeroBadge>}
+          sub={`${branch ? branch.name : branchId} · ${date}${closed ? ` · closed ${new Date(c!.closed_at).toLocaleString()}` : " · figures may still change"}`}
+          back={{ href: "/day-closing", label: "Day closing" }}
+          actions={
+            <>
+              <button
+                onClick={() => downloadCsv(`/api/v1/day-closings/report.csv?branchId=${encodeURIComponent(branchId)}&date=${date}`, `day-close-${date}.csv`)}
+                className={heroGhost}
+              >
+                <FileDownIcon size={13} /> CSV
+              </button>
+              <button onClick={() => window.print()} className={heroGold}>
+                <PrinterIcon size={13} /> Print
+              </button>
+            </>
+          }
+          stats={[
+            { label: "Opening", value: report.openingCents / 100, format: (n) => fmt(n * 100) },
+            { label: "Expected", value: report.closing.expectedCents / 100, format: (n) => fmt(n * 100), accent: true },
+            { label: "Counted", value: c ? c.actual_cents / 100 : null, format: (n) => fmt(n * 100), sub: c ? undefined : "not closed" },
+            {
+              label: "Difference",
+              value: c ? c.difference_cents / 100 : null,
+              format: (n) => signed(n * 100),
+              tone: c ? (c.difference_cents === 0 ? "good" : c.difference_cents < 0 ? "bad" : "warn") : undefined,
+            },
+            {
+              label: "Checks",
+              value: report.checks.total - report.checks.failing.length,
+              text: `${report.checks.total - report.checks.failing.length}/${report.checks.total}`,
+              tone: report.checks.passed ? "good" : "bad",
+            },
+            { label: "Gold closing", value: report.goldBalance ? report.goldBalance.closingMg / 1000 : null, format: (n) => n.toFixed(3), unit: "g" },
+          ]}
+        />
       </div>
-      <div className="print-area mx-auto w-full max-w-2xl rounded-2xl border border-ink/10 bg-paper p-8 text-sm shadow-elevated">
+      <div className="print-area relative mx-auto w-full max-w-2xl overflow-hidden rounded-2xl bg-white p-8 text-[13px] shadow-[0_30px_60px_-36px_rgba(16,32,27,0.55),0_0_0_1px_rgba(16,32,27,0.07)] print:rounded-none print:shadow-none">
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-gold-deep via-gold to-gold-light print:hidden" aria-hidden />
         <div className="text-center">
           <p className="g-kicker justify-center">Daily closing report</p>
           <h1 className="mt-2 font-display text-2xl font-bold tracking-tight text-ink">{String(shop.data?.value ?? "GoldOS")}</h1>
@@ -117,7 +143,7 @@ function ReportView() {
           </p>
         </div>
 
-        <h2 className="mt-6 border-b border-ink/15 pb-1 text-xs font-semibold uppercase tracking-[0.12em] text-ink-4">Cash</h2>
+        <h2 className="mt-6 border-b-2 border-gold/40 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-gold-dark">Cash</h2>
         <Row label="Opening cash (from the ledger)" cents={report.openingCents} />
         {report.cashIn.lines.map((l, i) => (
           <Row key={`in-${i}`} label={`+ ${l.label}`} cents={l.cents} />
@@ -133,7 +159,7 @@ function ReportView() {
 
         {counts && Object.keys(counts).length ? (
           <>
-            <h2 className="mt-5 border-b border-ink/15 pb-1 text-xs font-semibold uppercase tracking-[0.12em] text-ink-4">Cash count</h2>
+            <h2 className="mt-5 border-b-2 border-gold/40 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-gold-dark">Cash count</h2>
             <div className="grid grid-cols-3 gap-x-6">
               {Object.entries(counts)
                 .sort((a, b) => Number(b[0]) - Number(a[0]))
@@ -151,24 +177,24 @@ function ReportView() {
 
         {c?.card_actual_cents !== null && c?.card_actual_cents !== undefined ? (
           <>
-            <h2 className="mt-5 border-b border-ink/15 pb-1 text-xs font-semibold uppercase tracking-[0.12em] text-ink-4">Card terminal</h2>
+            <h2 className="mt-5 border-b-2 border-gold/40 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-gold-dark">Card terminal</h2>
             <Row label="Card sales recorded" cents={c.card_expected_cents} />
             <Row label="Terminal total" cents={c.card_actual_cents} />
             <Row label="Difference" cents={c.card_actual_cents - (c.card_expected_cents ?? 0)} strong />
           </>
         ) : report.card ? (
           <>
-            <h2 className="mt-5 border-b border-ink/15 pb-1 text-xs font-semibold uppercase tracking-[0.12em] text-ink-4">Card</h2>
+            <h2 className="mt-5 border-b-2 border-gold/40 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-gold-dark">Card</h2>
             <Row label="Card takings (net)" cents={report.card.netCents} />
           </>
         ) : null}
 
-        <h2 className="mt-5 border-b border-ink/15 pb-1 text-xs font-semibold uppercase tracking-[0.12em] text-ink-4">The day in money</h2>
+        <h2 className="mt-5 border-b-2 border-gold/40 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-gold-dark">The day in money</h2>
         {MONEY_LABELS.map(([k, label]) => (
           <Row key={k} label={label} cents={report.money[k] ?? 0} />
         ))}
 
-        <h2 className="mt-5 border-b border-ink/15 pb-1 text-xs font-semibold uppercase tracking-[0.12em] text-ink-4">Gold (fine grams)</h2>
+        <h2 className="mt-5 border-b-2 border-gold/40 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-gold-dark">Gold (fine grams)</h2>
         {report.goldBalance ? (
           <div className="grid grid-cols-4 gap-2 py-1 text-ink-2">
             {[
@@ -193,7 +219,7 @@ function ReportView() {
             </div>
           ))}
 
-        <h2 className="mt-5 border-b border-ink/15 pb-1 text-xs font-semibold uppercase tracking-[0.12em] text-ink-4">Checks</h2>
+        <h2 className="mt-5 border-b-2 border-gold/40 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-gold-dark">Checks</h2>
         <p className={report.checks.passed ? "text-emerald-700" : "text-rose-700"}>
           {report.checks.total - report.checks.failing.length} of {report.checks.total} reconciliation checks pass
           {report.checks.failing.length ? ` — failing: ${report.checks.failing.join(", ")}` : ""}

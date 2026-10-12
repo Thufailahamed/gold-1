@@ -372,6 +372,7 @@ export function Kpi({
   tone,
   className,
   spark,
+  sparkMinSpan,
   detail,
 }: {
   label: ReactNode;
@@ -387,6 +388,8 @@ export function Kpi({
   className?: string;
   /** Recent values, drawn as a faint line along the bottom of the tile. */
   spark?: number[];
+  /** Passed to the sparkline: the smallest vertical range it draws. */
+  sparkMinSpan?: number;
   /** Hover card body. */
   detail?: ReactNode;
 }) {
@@ -395,17 +398,10 @@ export function Kpi({
     <div
       {...(detail ? hover.bind : {})}
       tabIndex={detail ? 0 : undefined}
-      className={cn("group/kpi relative min-w-0 overflow-hidden px-4 pb-3 pt-3 transition-colors", detail && "cursor-default hover:bg-[#0a3a2f] focus:outline-none", className)}
+      className={cn("group/kpi relative flex min-w-0 flex-col overflow-hidden px-4 pt-3 transition-colors", detail && "cursor-default hover:bg-[#0a3a2f] focus:outline-none", className)}
       style={tone ? { backgroundImage: `radial-gradient(120% 90% at 100% 0%, ${tone}26, transparent 60%)` } : undefined}
     >
       {detail ? hover.render(detail) : null}
-      {spark && spark.length >= 2 ? (
-        <Sparkline
-          values={spark}
-          color={tone}
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-9 opacity-40 transition-opacity group-hover/kpi:opacity-80 [&>span]:hidden"
-        />
-      ) : null}
       {tone ? <span className="absolute inset-x-0 top-0 h-[2px]" style={{ background: `linear-gradient(90deg, ${tone}, ${tone}00)` }} aria-hidden /> : null}
       <div className="relative flex items-center gap-1.5 truncate text-[9.5px] font-semibold uppercase tracking-[0.16em] text-paper/45">
         {tone ? <span className="size-1.5 shrink-0 rounded-full" style={{ background: tone, boxShadow: `0 0 8px ${tone}` }} /> : null}
@@ -426,7 +422,20 @@ export function Kpi({
       ) : (
         <Shimmer dark className="mt-1.5 h-4 w-20" />
       )}
-      {sub ? <div className="relative mt-1.5 flex min-h-[18px] items-center text-[10.5px] text-paper/40">{sub}</div> : null}
+      {sub ? <div className="relative mt-1.5 flex min-h-[18px] min-w-0 items-center truncate whitespace-nowrap text-[10.5px] text-paper/40">{sub}</div> : null}
+      {/* own row under the figures, so the line never runs behind text */}
+      <div className="pointer-events-none relative -mx-4 mt-auto h-9 pt-1.5">
+        {spark && spark.length >= 2 ? (
+          <Sparkline
+            values={spark}
+            color={tone}
+            minSpan={sparkMinSpan}
+            className="h-full opacity-60 transition-opacity group-hover/kpi:opacity-100 [&>span]:hidden"
+          />
+        ) : (
+          <div className="absolute inset-x-4 bottom-3 border-t border-dashed border-paper/10" />
+        )}
+      </div>
     </div>
   );
 }
@@ -656,15 +665,33 @@ function SeriesStrip({ values }: { values: number[] }) {
  * Tiny area line for a hero figure. With fewer than two samples it draws a
  * calm flat line through the middle so the tile never reads as broken.
  */
-export function Sparkline({ values, color = "#E2C27A", className }: { values: number[]; color?: string; className?: string }) {
+export function Sparkline({
+  values,
+  color = "#E2C27A",
+  className,
+  minSpan,
+}: {
+  values: number[];
+  color?: string;
+  className?: string;
+  /**
+   * Smallest vertical range drawn, in the series' own units. Defaults to
+   * 0.25% of the level, so rounding noise on a near-flat series (an
+   * exchange rate, a ratio) stays a calm line instead of filling the box.
+   */
+  minSpan?: number;
+}) {
   const id = `spark${useId().replace(/:/g, "")}`;
   const w = 200;
   const h = 48;
-  const pts = values.length >= 2 ? values : [1, 1];
-  const lo = Math.min(...pts);
-  const hi = Math.max(...pts);
-  const span = hi - lo || 1;
-  const xy = pts.map((v, i) => [(i / (pts.length - 1)) * w, hi === lo ? h / 2 : h - 4 - ((v - lo) / span) * (h - 8)] as const);
+  const pts = values.filter((v) => Number.isFinite(v));
+  if (pts.length < 2) pts.splice(0, pts.length, 1, 1);
+  const rawLo = Math.min(...pts);
+  const rawHi = Math.max(...pts);
+  const floor = minSpan ?? Math.abs((rawHi + rawLo) / 2) * 0.0025;
+  const span = Math.max(rawHi - rawLo, floor) || 1;
+  const lo = (rawHi + rawLo) / 2 - span / 2;
+  const xy = pts.map((v, i) => [(i / (pts.length - 1)) * w, h - 4 - ((v - lo) / span) * (h - 8)] as const);
   const line = xy.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
   const last = xy[xy.length - 1]!;
   return (

@@ -2,6 +2,7 @@ import {
   cashBreakdownTotal,
   closingArithmetic,
   denominationTotalCents,
+  KNOWN_CASH_REFS,
   type CashLine,
 } from "@goldos/shared";
 import { buildEntryStmts } from "./journal";
@@ -9,6 +10,7 @@ import { isBusinessDate, type CloseDayInput, type ReopenDayInput } from "@goldos
 import { businessDateFor } from "./busdate";
 import { buildAuditStmt } from "../middleware/audit";
 import { fail } from "./cashbank";
+import { batchOrConflict, staleGuard } from "./guard";
 import { LOCAL_DAY, reconcile } from "./reconcile";
 
 const CASH = "1000";
@@ -39,6 +41,16 @@ const CASH_LABELS: Record<string, string> = {
   cash_correction: "Cash corrections",
   tax_payment: "Tax paid",
 };
+
+// Fail fast in dev/test if a known cash flow has no screen label (or vice
+// versa): an unnamed flow blocks every close via the unclassified guard.
+for (const ref of KNOWN_CASH_REFS) {
+  if (!CASH_LABELS[ref]) throw new Error(`Cash label missing for known ref: ${ref}`);
+}
+for (const ref of Object.keys(CASH_LABELS)) {
+  if (!(KNOWN_CASH_REFS as readonly string[]).includes(ref))
+    throw new Error(`Cash label for unknown ref would never match: ${ref}`);
+}
 
 const GOLD_LINES: { key: GoldKey; label: string; types: string[] }[] = [
   { key: "purchased", label: "Gold Purchased", types: ["PURCHASE", "OLD_GOLD_PURCHASE"] },
@@ -190,6 +202,12 @@ export async function buildClosingReport(
   opts: { branchId: string; date: string }
 ): Promise<ClosingReport> {
   const { branchId, date } = opts;
+  if (!isBusinessDate(date)) fail("VALIDATION", `${date} is not a real date`);
+  const branch = await db
+    .prepare("SELECT id FROM branches WHERE id = ? AND is_active = 1")
+    .bind(branchId)
+    .first();
+  if (!branch) fail("NOT_FOUND", "Branch not found");
 
   const [openingRow, cash, gold, sales, purchases, oldGold, expenses, awaiting, custPay, refunds, purchPay, oldGoldPaid, bankResult, recon] =
     await Promise.all([
@@ -395,6 +413,12 @@ export async function closeDay(
   if (input.date > (await businessDateFor(db, Date.now())))
     fail("VALIDATION", "A day cannot be closed before it has started");
   if (input.actualCents < 0) fail("VALIDATION", "The counted cash cannot be negative");
+  if (!Number.isInteger(input.actualCents)) fail("VALIDATION", "The counted cash must be whole cents");
+  const branch = await db
+    .prepare("SELECT id FROM branches WHERE id = ? AND is_active = 1")
+    .bind(input.branchId)
+    .first();
+  if (!branch) fail("NOT_FOUND", "Branch not found");
   const report = await buildClosingReport(db, {
     branchId: input.branchId,
     date: input.date,
@@ -479,30 +503,65 @@ export async function closeDay(
   // A reopened day closes by UPDATING its row, never by inserting a second
   // one (the unique index would 500). The prior snapshot survives in the
   // audit trail's prev_json, and the reopen trail in day_reopens is untouched.
-  const write = existing
-    ? db
-        .prepare(
-          "UPDATE day_closings SET opening_cents = ?, cash_in_cents = ?, cash_out_cents = ?, expected_cents = ?, actual_cents = ?, difference_cents = ?, difference_reason = ?, report_json = ?, checks_passed = ?, status = 'CLOSED', closed_by = ?, closed_at = ?, denominations_json = ?, card_expected_cents = ?, card_actual_cents = ?, correction_cents = ? WHERE id = ? AND status = 'REOPENED'"
-        )
-        .bind(
-          report.openingCents,
-          report.cashIn.totalCents,
-          report.cashOut.totalCents,
-          expectedCents,
-          input.actualCents,
-          differenceCents,
-          input.differenceReason ?? null,
-          JSON.stringify(frozen),
-          report.checks.passed ? 1 : 0,
-          actorId,
-          now,
-          denominationsJson,
-          cardExpected,
-          cardActual,
-          correctionCents,
-          id
-        )
-    : db
+  // The correction goes first: it is dated the day being closed, and the
+  // day lock only bites once the close row says CLOSED.
+  if (existing) {
+    // Re-close: guarded on REOPENED so two simultaneous re-closes cannot
+    // both post corrections — the loser rolls back as CONFLICT.
+    await batchOrConflict(
+      db,
+      [
+        ...(correction?.stmts ?? []),
+        db
+          .prepare(
+            "UPDATE day_closings SET opening_cents = ?, cash_in_cents = ?, cash_out_cents = ?, expected_cents = ?, actual_cents = ?, difference_cents = ?, difference_reason = ?, report_json = ?, checks_passed = ?, status = 'CLOSED', closed_by = ?, closed_at = ?, denominations_json = ?, card_expected_cents = ?, card_actual_cents = ?, correction_cents = ? WHERE id = ? AND status = 'REOPENED'"
+          )
+          .bind(
+            report.openingCents,
+            report.cashIn.totalCents,
+            report.cashOut.totalCents,
+            expectedCents,
+            input.actualCents,
+            differenceCents,
+            input.differenceReason ?? null,
+            JSON.stringify(frozen),
+            report.checks.passed ? 1 : 0,
+            actorId,
+            now,
+            denominationsJson,
+            cardExpected,
+            cardActual,
+            correctionCents,
+            id
+          ),
+        staleGuard(db),
+        buildAuditStmt(db, {
+          userId: actorId,
+          action: "dayclose.reclose",
+          entity: "day_closing",
+          entityId: id,
+          prev: { status: "REOPENED", actualCents: existing.actual_cents, differenceCents: existing.difference_cents },
+          next: {
+            branchId: input.branchId,
+            date: input.date,
+            expectedCents,
+            actualCents: input.actualCents,
+            differenceCents,
+            awaitingApprovalCents: report.closing.awaitingApprovalCents,
+            cardDifferenceCents: cardDifference,
+            correctionEntryNo: correction?.entryNo ?? null,
+          },
+          branchId: input.branchId,
+        }),
+      ],
+      "This day was just closed by someone else — refresh"
+    );
+    return { id, report: frozen };
+  }
+  try {
+    await db.batch([
+      ...(correction?.stmts ?? []),
+      db
         .prepare(
           "INSERT INTO day_closings (id, branch_id, close_date, opening_cents, cash_in_cents, cash_out_cents, expected_cents, actual_cents, difference_cents, difference_reason, report_json, checks_passed, status, closed_by, closed_at, created_at, denominations_json, card_expected_cents, card_actual_cents, correction_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'CLOSED', ?, ?, ?, ?, ?, ?, ?)"
         )
@@ -526,32 +585,25 @@ export async function closeDay(
           cardExpected,
           cardActual,
           correctionCents
-        );
-  // The correction goes first: it is dated the day being closed, and the
-  // day lock only bites once the close row says CLOSED.
-  try {
-  await db.batch([
-    ...(correction?.stmts ?? []),
-    write,
-    buildAuditStmt(db, {
-      userId: actorId,
-      action: existing ? "dayclose.reclose" : "dayclose.close",
-      entity: "day_closing",
-      entityId: id,
-      prev: existing ? { status: "REOPENED", actualCents: existing.actual_cents, differenceCents: existing.difference_cents } : undefined,
-      next: {
+        ),
+      buildAuditStmt(db, {
+        userId: actorId,
+        action: "dayclose.close",
+        entity: "day_closing",
+        entityId: id,
+        next: {
+          branchId: input.branchId,
+          date: input.date,
+          expectedCents,
+          actualCents: input.actualCents,
+          differenceCents,
+          awaitingApprovalCents: report.closing.awaitingApprovalCents,
+          cardDifferenceCents: cardDifference,
+          correctionEntryNo: correction?.entryNo ?? null,
+        },
         branchId: input.branchId,
-        date: input.date,
-        expectedCents,
-        actualCents: input.actualCents,
-        differenceCents,
-        awaitingApprovalCents: report.closing.awaitingApprovalCents,
-        cardDifferenceCents: cardDifference,
-        correctionEntryNo: correction?.entryNo ?? null,
-      },
-      branchId: input.branchId,
-    }),
-  ]);
+      }),
+    ]);
   } catch (err) {
     // Two people closing the same day at once: the second hits the unique
     // (branch, date) index. Say so, rather than surface a raw database error.
@@ -588,28 +640,39 @@ export async function reopenDay(
     }>();
   if (!closing) fail("NOT_FOUND", "Day closing not found");
   if (closing.status !== "CLOSED") fail("CONFLICT", "This day is not closed");
+  if (!input.reason?.trim()) fail("VALIDATION", "A re-open needs a reason");
   const id = crypto.randomUUID();
   const now = Date.now();
   // The close row is KEPT, snapshot and all. The trail is a new row, so a day
   // reopened twice has two records rather than one overwritten reason.
-  await db.batch([
-    db.prepare("UPDATE day_closings SET status = 'REOPENED' WHERE id = ?").bind(closingId),
-    db
-      .prepare(
-        "INSERT INTO day_reopens (id, closing_id, reason, requested_by, approved_by, approved_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-      )
-      .bind(id, closingId, input.reason, actorId, null, now, now),
-    buildAuditStmt(db, {
-      userId: actorId,
-      action: "dayclose.reopen",
-      entity: "day_closing",
-      entityId: closingId,
-      prev: { status: "CLOSED" },
-      next: { status: "REOPENED" },
-      reason: input.reason,
-      branchId: closing.branch_id,
-    }),
-  ]);
+  // approvedBy is the second pair of eyes when supplied; otherwise the
+  // requester self-approves at reopen time.
+  const approvedBy = input.approvedBy?.trim() || actorId;
+  // Guarded on CLOSED and checked immediately: a concurrent re-open makes
+  // this one roll back as CONFLICT rather than writing a second trail row.
+  await batchOrConflict(
+    db,
+    [
+      db.prepare("UPDATE day_closings SET status = 'REOPENED' WHERE id = ? AND status = 'CLOSED'").bind(closingId),
+      staleGuard(db),
+      db
+        .prepare(
+          "INSERT INTO day_reopens (id, closing_id, reason, requested_by, approved_by, approved_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(id, closingId, input.reason.trim(), actorId, approvedBy, now, now),
+      buildAuditStmt(db, {
+        userId: actorId,
+        action: "dayclose.reopen",
+        entity: "day_closing",
+        entityId: closingId,
+        prev: { status: "CLOSED" },
+        next: { status: "REOPENED", approvedBy },
+        reason: input.reason,
+        branchId: closing.branch_id,
+      }),
+    ],
+    "This day was just re-opened by someone else — refresh"
+  );
   return { id };
 }
 

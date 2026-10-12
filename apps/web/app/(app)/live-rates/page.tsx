@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { hasPermission } from "@goldos/shared";
@@ -11,7 +11,7 @@ import { cn } from "@/lib/cn";
 import { Page, Callout, Modal, EmptyBlock, controlClass } from "@/components/ui";
 import { Select } from "@/components/select";
 import { GoldDust } from "@/components/home/effects";
-import { ArrowRightIcon, CoinsIcon, TrendingUpIcon } from "@/components/icons";
+import { ArrowRightIcon, TrendingUpIcon } from "@/components/icons";
 import {
   BitcoinIcon,
   EthereumIcon,
@@ -19,7 +19,6 @@ import {
   SilverCoinIcon,
   PlatinumCoinIcon,
   PalladiumCoinIcon,
-  CopperCoinIcon,
   GoldBarIcon,
   SovereignPawnIcon,
   FxExchangeIcon,
@@ -44,7 +43,6 @@ import {
   Sparkline,
   SpreadMeter,
   seriesStats,
-  useHoverCard,
   ago,
   currencyName,
   ccyTone,
@@ -58,6 +56,8 @@ import {
 } from "./parts";
 import { BoardHistory, BuyBackDesk, GoldPerformance, RetailQuote, VaultValue } from "./business";
 import { GoldMoves, KaratBars, RelativePerformance } from "./insights";
+import { useDaySeries, useMarketSeries } from "./series";
+import { ToolStrip } from "./desk-kit";
 
 type Quote = {
   symbol: string;
@@ -183,11 +183,7 @@ export default function LiveRatesPage() {
   const [symbol, setSymbol] = useState("XAU");
   const [range, setRange] = useState<Range>("7d");
   const [basis, setBasis] = useState<"g" | "unit">("g");
-  const history = useQuery({
-    queryKey: ["market-history", symbol, range],
-    queryFn: () => api<History>(`/api/v1/market/history?symbol=${symbol}&range=${range}`),
-    refetchInterval: REFRESH_MS * 5,
-  });
+  const history = useMarketSeries(symbol, range);
   const quoteFor = data?.quotes.find((q) => q.symbol === symbol);
   const hasGram = quoteFor ? quoteFor.lkrPerGram != null : !["BTC", "ETH"].includes(symbol);
   const perUnit = basis === "unit" || !hasGram;
@@ -309,14 +305,7 @@ export default function LiveRatesPage() {
   };
 
   /* ---------- the last day for every market: sparklines, hover cards, insights */
-  const dayHists = useQueries({
-    queries: SYMBOLS.map((s) => ({
-      queryKey: ["market-history", s, "1d"],
-      queryFn: () => api<History>(`/api/v1/market/history?symbol=${s}&range=1d`),
-      refetchInterval: REFRESH_MS * 5,
-      staleTime: 60_000,
-    })),
-  });
+  const dayHists = useDaySeries(SYMBOLS);
   /** Day points per symbol, closed at the live quote so lines end at the cards' price. */
   const dayBy: Record<string, Pt[]> = {};
   SYMBOLS.forEach((s, i) => {
@@ -331,7 +320,7 @@ export default function LiveRatesPage() {
   const spark = goldLine(k24?.purity ?? 1);
   const sparkLo = spark.length ? Math.min(...spark) : null;
   const sparkHi = spark.length ? Math.max(...spark) : null;
-  const fxLine = dayBy.XAU!.map((p) => p.priceLkr / p.priceUsd);
+  const fxLine = dayBy.XAU!.map((p) => Math.round((p.priceLkr / p.priceUsd) * 100) / 100);
   const ratioLine = (() => {
     const ag = new Map(dayBy.XAG!.map((p) => [p.t, p.priceUsd]));
     return dayBy.XAU!.flatMap((p) => (ag.get(p.t) ? [p.priceUsd / ag.get(p.t)!] : []));
@@ -500,8 +489,8 @@ export default function LiveRatesPage() {
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_0%_0%,rgba(226,194,122,0.22),transparent_60%)]" />
             <span className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-gold-light via-gold to-gold/0" aria-hidden />
             <div className="relative flex items-center justify-between gap-2">
-              <span className="flex items-center gap-1.5 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-gold-light/80">
-                <GoldBarIcon size={14} /> {k24?.karat ?? "24K"} · fine gold per gram
+              <span className="flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[9.5px] font-semibold uppercase tracking-[0.18em] text-gold-light/80">
+                <GoldBarIcon size={14} className="shrink-0" /> <span className="truncate">{k24?.karat ?? "24K"} · fine gold / gram</span>
               </span>
               <ChangeChip pct={k24?.change24hPct} from={k24?.changeFrom} tone="dark" className="px-1.5 py-px text-[10px]" />
             </div>
@@ -753,6 +742,7 @@ export default function LiveRatesPage() {
               ) : null
             }
             spark={spreadLine}
+            sparkMinSpan={1}
             detail={
               data ? (
                 <CardBody
@@ -805,7 +795,7 @@ export default function LiveRatesPage() {
         {/* ticker */}
         <div className="relative mt-3 overflow-hidden rounded-b-[20px] border-t border-paper/[0.07] bg-paper/[0.02]">
           {ticker.length ? (
-            <div className="home-marquee overflow-hidden py-2">
+            <div className="home-marquee overflow-hidden py-2 [mask-image:linear-gradient(90deg,transparent,#000_5%,#000_95%,transparent)]">
               <div className="home-marquee-track flex w-max gap-8 pr-8">
                 {[...ticker, ...ticker].map((t, i) => (
                   <button
@@ -832,6 +822,9 @@ export default function LiveRatesPage() {
           )}
         </div>
       </section>
+
+      {/* ================================================================ RATE DESK TOOLS */}
+      <ToolStrip />
 
       {/* ================================================================ STATUS */}
       {live.isError ? (
@@ -957,7 +950,13 @@ export default function LiveRatesPage() {
                               </span>
                               <div className="w-[112px] leading-tight">
                                 <div className="flex items-baseline justify-between gap-1">
-                                  <span className="text-[13px] font-semibold text-ink">{k.karat} gold</span>
+                                  <Link
+                                    href={`/live-rates/XAU?karat=${encodeURIComponent(k.karat)}`}
+                                    className="text-[13px] font-semibold text-ink underline-offset-2 hover:text-gold-deep hover:underline"
+                                    title={`Open the ${k.karat} gold market page`}
+                                  >
+                                    {k.karat} gold
+                                  </Link>
                                   <span className="g-metric text-[10px] text-ink-5">{(k.purity * 1000).toFixed(0)}‰</span>
                                 </div>
                                 <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-ink/[0.07]">
@@ -1286,6 +1285,12 @@ export default function LiveRatesPage() {
                   }))}
                 />
               </div>
+              <Link
+                href={`/live-rates/${symbol}`}
+                className="inline-flex h-8 items-center gap-1 rounded-lg bg-void px-2.5 text-[11.5px] font-semibold text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.3)] transition-colors hover:bg-void/85"
+              >
+                Full page <ArrowRightIcon size={11} />
+              </Link>
               {hasGram ? (
                 <Segmented
                   ariaLabel="Price basis"
@@ -1433,9 +1438,12 @@ export default function LiveRatesPage() {
               </div>
             </div>
           </div>
-          {display !== "LKR" && stats ? (
+          {stats && (display !== "LKR" || history.source === "yahoo") ? (
             <div className="rounded-b-2xl border-t border-ink/[0.06] bg-bone/60 px-4 py-2 text-[10.5px] text-ink-4">
-              Converted to {display} at today&apos;s rate; LKR history uses each day&apos;s own exchange rate.
+              {history.source === "yahoo"
+                ? `History from Yahoo Finance${quoteFor?.kind === "metal" ? ` (front-month futures, shifted ${history.basisAdjustPct != null ? `${history.basisAdjustPct.toFixed(2)}%` : ""} to end on spot)` : ""}, at each day's USD/LKR. `
+                : "Recorded spot snapshots. "}
+              {display !== "LKR" ? <>Converted to {display} at today&apos;s rate.</> : null}
             </div>
           ) : null}
         </section>
@@ -1479,15 +1487,22 @@ export default function LiveRatesPage() {
                             ...(gold && q.symbol !== "XAU" ? [{ k: "Gold equivalent", v: `${(q.priceUsd / gold.priceUsd).toFixed(4)} oz` }] : []),
                             { k: "Updated", v: ago(q.updatedAt, now) },
                           ]}
-                          note={q.stale ? "Feed delayed — last stored price." : "Click to open in the main chart."}
+                          note={q.stale ? "Feed delayed — last stored price." : "Click to chart it here · arrow opens the full market page."}
                         />
                       }
                     >
-                    <button
-                      type="button"
+                    <div
+                      role="button"
+                      tabIndex={0}
                       onClick={() => setSymbol(q.symbol)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSymbol(q.symbol);
+                        }
+                      }}
                       className={cn(
-                        "relative flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-all duration-200 ease-brand",
+                        "group/mk relative flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-all duration-200 ease-brand",
                         on ? "bg-gold-pale shadow-[inset_0_0_0_1px_rgba(168,138,62,0.22)]" : "hover:bg-bone"
                       )}
                     >
@@ -1515,7 +1530,16 @@ export default function LiveRatesPage() {
                         </div>
                         <ChangeChip pct={q.change24hPct} from={q.changeFrom} className="mt-0.5 px-1.5 py-px text-[10px]" />
                       </div>
-                    </button>
+                      <Link
+                        href={`/live-rates/${q.symbol}`}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`Open the ${q.name} market page`}
+                        title={`${q.name} market page`}
+                        className="flex size-7 shrink-0 items-center justify-center rounded-lg text-ink-5 transition-colors hover:bg-void hover:text-gold-light"
+                      >
+                        <ArrowRightIcon size={13} />
+                      </Link>
+                    </div>
                     </HoverCard>
                   );
                 })}

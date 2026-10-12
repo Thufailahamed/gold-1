@@ -4,9 +4,8 @@
 // chart, gold's step-by-step moves, and the shop's board against the market
 // per karat. Each chart has a rich hover tooltip with the underlying figures.
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMarketSeries } from "./series";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { MetalCoin, PanelHead, Segmented, Shimmer, karatTone, money, symbolTone } from "./parts";
 
@@ -165,13 +164,12 @@ export function RelativePerformance({ dayBy, quotes, className }: { dayBy: Recor
 /** Gold's step-by-step returns as green/red bars, with the biggest moves called out. */
 export function GoldMoves({ conv, display, purity, className }: { conv: (lkr: number) => number; display: string; purity: number; className?: string }) {
   const [range, setRange] = useState<"1d" | "7d">("7d");
-  const hist = useQuery({
-    queryKey: ["market-history", "XAU", range],
-    queryFn: () => api<{ points: Pt[] }>(`/api/v1/market/history?symbol=XAU&range=${range}`),
-    refetchInterval: 5 * 60_000,
-  });
+  const hist = useMarketSeries("XAU", range);
+  // Even steps whatever the source: the last price in each hour (24H) or 4-hour block (7D).
+  const bucketMs = range === "1d" ? 3_600_000 : 4 * 3_600_000;
   const model = useMemo(() => {
-    const pts = (hist.data?.points ?? []).filter((p) => p.lkrPerGram != null);
+    const raw = (hist.data?.points ?? []).filter((p) => p.lkrPerGram != null);
+    const pts = [...new Map(raw.map((p) => [Math.floor(p.t / bucketMs), p])).values()];
     const rows = pts.slice(1).map((p, i) => {
       const prev = pts[i]!;
       const price = conv(p.lkrPerGram! * purity);
@@ -189,8 +187,8 @@ export function GoldMoves({ conv, display, purity, className }: { conv: (lkr: nu
     const dir = Math.sign(rows[rows.length - 1]!.pct);
     for (let i = rows.length - 1; i >= 0 && dir !== 0 && Math.sign(rows[i]!.pct) === dir; i--) streak++;
     return { rows, up: up.length, down: down.length, best, worst, avgAbs, net, streak, dir };
-  }, [hist.data, conv, purity]);
-  const step = range === "7d" ? "hour" : "sample";
+  }, [hist.data, conv, purity, bucketMs]);
+  const step = range === "7d" ? "4h block" : "hour";
 
   return (
     <section className={cn("g-surface flex flex-col overflow-hidden", className)}>

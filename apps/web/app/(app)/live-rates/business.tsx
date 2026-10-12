@@ -5,6 +5,7 @@
 // builder, and the shop's published board against the market over time.
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useMarketSeries } from "./series";
 import {
   Area,
   CartesianGrid,
@@ -36,7 +37,6 @@ export type BizKarat = {
 };
 
 type HistoryPoint = { t: number; priceUsd: number; priceLkr: number; lkrPerGram: number | null };
-type History = { points: HistoryPoint[] };
 
 const DAY = 86_400_000;
 const PAWN_G = 8;
@@ -47,13 +47,9 @@ const pctTone = (n: number | null | undefined) =>
   n == null || !Number.isFinite(n) || n === 0 ? "text-ink-4" : n > 0 ? "text-emerald-700" : "text-rose-700";
 const fmtDay = (t: number) => new Date(t).toLocaleDateString([], { month: "short", day: "numeric" });
 
-/** Shares its cache with the main chart when the same range is open there. */
+/** Gold history: our spot snapshots when they cover the range, else Yahoo's (shared cache with the main chart). */
 function useGoldHistory(range: "30d" | "1y") {
-  return useQuery({
-    queryKey: ["market-history", "XAU", range],
-    queryFn: () => api<History>(`/api/v1/market/history?symbol=XAU&range=${range}`),
-    staleTime: 5 * 60_000,
-  });
+  return useMarketSeries("XAU", range);
 }
 
 /** A per-viewer number setting, remembered by the browser. */
@@ -166,7 +162,7 @@ export function GoldPerformance({
         right={
           model ? (
             <span className="text-[11px] text-ink-5">
-              {model.days} days of history since {new Date(model.from).toLocaleDateString()}
+              {model.days} days since {new Date(model.from).toLocaleDateString()} · {hist.source === "yahoo" ? "Yahoo Finance history" : "recorded spot"}
             </span>
           ) : null
         }

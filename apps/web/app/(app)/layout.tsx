@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { hasPermission } from "@goldos/shared";
 import { BranchSwitcher } from "@/components/branch-switcher";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -10,65 +11,9 @@ import { Providers } from "@/components/providers";
 import { UserMenu } from "@/components/user-menu";
 import { ScanField } from "@/components/scan-field";
 import { Skeleton } from "@/components/ui";
-import { BellIcon, MenuIcon, ScanBarcodeIcon } from "@/components/icons";
+import { MenuIcon, ScanBarcodeIcon } from "@/components/icons";
+import { MarketAlertBell } from "@/components/market-alert-bell";
 import { useSession } from "@/lib/auth";
-
-function Notifications() {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDocClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onDocClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        title="Notifications"
-        aria-label="Notifications"
-        aria-expanded={open}
-        onClick={() => setOpen((b) => !b)}
-        className="relative flex size-9 items-center justify-center rounded-lg text-ink transition-colors hover:bg-ink/5"
-      >
-        <BellIcon size={16} />
-      </button>
-      {open ? (
-        <div className="g-floating absolute right-0 z-40 mt-2 w-80 animate-fade-in overflow-hidden">
-          <div className="flex items-center justify-between border-b border-ink/[0.07] px-4 py-3">
-            <span className="g-kicker">Notifications</span>
-            <span className="g-metric rounded-full bg-ink/[0.06] px-2 py-0.5 text-[10px] font-semibold text-ink-4">
-              00
-            </span>
-          </div>
-          <div className="p-4">
-            <div className="flex flex-col items-center rounded-xl border border-dashed border-ink/15 bg-bone/50 px-5 py-8 text-center">
-              <span className="mb-3 flex size-10 items-center justify-center rounded-xl bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)]">
-                <BellIcon size={18} />
-              </span>
-              <p className="text-sm font-medium text-ink">All clear</p>
-              <p className="mt-1 max-w-[15rem] text-xs leading-relaxed text-ink-4">
-                Approvals, rate publishes and stock alerts land here.
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { me, loading } = useSession();
@@ -151,7 +96,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               <BranchSwitcher />
               <span className="hidden h-6 w-px bg-ink/10 sm:block" aria-hidden />
-              <Notifications />
+              <MarketAlertBell enabled={hasPermission(me.permissions, "masters:view")} />
               <UserMenu me={me} />
             </div>
             {/* gold accent hairline */}

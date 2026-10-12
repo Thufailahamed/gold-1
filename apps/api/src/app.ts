@@ -19,6 +19,8 @@ import { expenseCategories, expenses } from "./routes/expenses";
 import { health } from "./routes/health";
 import { manufacturing } from "./routes/manufacturing";
 import { market } from "./routes/market";
+import { marketDesk } from "./routes/marketDesk";
+import { evaluateAlerts } from "./services/market-desk";
 import { recordMarketSnapshot } from "./services/market";
 import { melting } from "./routes/melting";
 import { monthly } from "./routes/monthly";
@@ -68,6 +70,7 @@ app.route("/api/v1/audit", audit);
 app.route("/api/v1/masters", catalog);
 app.route("/api/v1/gold-rates", rates);
 app.route("/api/v1/market", market);
+app.route("/api/v1/market-desk", marketDesk);
 app.route("/api/v1/suppliers", suppliers);
 app.route("/api/v1/customers", customers);
 app.route("/api/v1/products", products);
@@ -106,7 +109,13 @@ export default {
     // Hourly tick: writes the day's brief once the shop-local hour is reached.
     ctx.waitUntil(maybeRunBrief(env).catch((e) => console.error("daily brief failed", e)));
     // Market reference prices: the free feed keeps no history, so we do.
-    ctx.waitUntil(recordMarketSnapshot(env.DB).catch((e) => console.error("market snapshot failed", e)));
+    // Price alerts are checked after the snapshot so they read fresh quotes.
+    ctx.waitUntil(
+      recordMarketSnapshot(env.DB)
+        .catch((e) => console.error("market snapshot failed", e))
+        .then(() => evaluateAlerts(env.DB, undefined, { force: true }))
+        .catch((e) => console.error("market alerts failed", e))
+    );
   },
 };
 

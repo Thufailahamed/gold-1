@@ -109,19 +109,27 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
   .get("/unclosed", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     const branchId = c.req.query("branchId");
     if (!branchId) return invalid(c, "branchId is required");
-    const today = await businessDateFor(c.env.DB, Date.now());
-    const to = dateOr(c.req.query("to"), addDays(today, -1));
-    const from = dateOr(c.req.query("from"), addDays(to, -60));
-    const data = await listUnclosedDays(c.env.DB, { branchId, from, to });
-    return c.json({ success: true, data: { from, to, days: data } }, 200);
+    try {
+      const today = await businessDateFor(c.env.DB, Date.now());
+      const to = dateOr(c.req.query("to"), addDays(today, -1));
+      const from = dateOr(c.req.query("from"), addDays(to, -60));
+      const data = await listUnclosedDays(c.env.DB, { branchId, from, to });
+      return c.json({ success: true, data: { from, to, days: data } }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
   })
   .get("/variance", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     const today = await businessDateFor(c.env.DB, Date.now());
     const to = dateOr(c.req.query("to"), today);
     const from = dateOr(c.req.query("from"), addDays(to, -30));
     if (from > to) return invalid(c, "From must be on or before to");
-    const data = await varianceReport(c.env.DB, { from, to, branchId: c.req.query("branchId") || undefined });
-    return c.json({ success: true, data }, 200);
+    try {
+      const data = await varianceReport(c.env.DB, { from, to, branchId: c.req.query("branchId") || undefined });
+      return c.json({ success: true, data }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
   })
   .get("/summary", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     const date = dateOr(c.req.query("date"), await businessDateFor(c.env.DB, Date.now()));
