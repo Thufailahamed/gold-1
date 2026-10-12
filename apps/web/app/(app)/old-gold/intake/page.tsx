@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { api, formApi, type MeData } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { Page } from "@/components/ui";
+import { GoldHero, HeroBadge, grams, heroGhost } from "../kit";
 import {
   AlertCircleIcon,
   ArrowRightIcon,
@@ -45,7 +46,7 @@ const cardShadow =
   "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]";
 
 const inputCls =
-  "h-11 w-full rounded-xl bg-paper px-3.5 text-sm text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)] aria-[invalid=true]:shadow-[inset_0_0_0_1px_#e11d48,0_0_0_4px_rgba(225,29,72,0.12)]";
+  "h-10 w-full rounded-xl bg-paper px-3.5 text-[13px] text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)] aria-[invalid=true]:shadow-[inset_0_0_0_1px_#e11d48,0_0_0_4px_rgba(225,29,72,0.12)]";
 
 /* ------------------------------------------------------------------ pieces */
 
@@ -67,7 +68,7 @@ function Section({
   return (
     <section
       className={cn(
-        "relative rounded-[22px] bg-paper transition-shadow duration-320",
+        "relative rounded-2xl bg-paper transition-shadow duration-320",
         cardShadow,
         "focus-within:shadow-[inset_0_0_0_1px_rgba(205,168,83,0.45),0_1px_2px_rgba(16,32,27,0.04),0_28px_56px_-34px_rgba(16,32,27,0.45)]"
       )}
@@ -79,24 +80,24 @@ function Section({
           done ? "via-gold" : "via-gold/40"
         )}
       />
-      <header className="flex items-center gap-3.5 border-b border-ink/[0.06] px-5 py-4 sm:px-6">
-        <span className="relative flex size-10 shrink-0 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_8px_18px_-10px_rgba(6,42,34,0.7)]">
+      <header className="flex items-center gap-2.5 border-b border-ink/[0.06] px-4 py-2.5">
+        <span className="relative flex size-7 shrink-0 items-center justify-center rounded-lg bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25)]">
           {icon}
           <span className="g-metric absolute -right-1.5 -top-1.5 flex size-[18px] items-center justify-center rounded-full bg-paper text-[9px] text-ink shadow-[0_0_0_1px_rgba(16,32,27,0.12)]">
             {n}
           </span>
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="truncate font-sans text-[15px] font-semibold tracking-normal text-ink">{title}</h2>
-          <p className="truncate text-xs text-ink-4">{sub}</p>
+          <h2 className="truncate font-sans text-[13.5px] font-semibold tracking-normal text-ink">{title}</h2>
+          <p className="truncate text-[11px] text-ink-4">{sub}</p>
         </div>
         {done ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-b from-gold-light to-gold px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-b from-gold-light to-gold px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
             <CheckIcon size={11} /> Done
           </span>
         ) : null}
       </header>
-      <div className="px-5 py-5 sm:px-6">{children}</div>
+      <div className="p-4">{children}</div>
     </section>
   );
 }
@@ -134,7 +135,7 @@ function UnitInput({
         value={value}
         aria-invalid={invalid || undefined}
         onChange={(e) => onChange(e.target.value)}
-        className={cn(inputCls, "g-metric h-12 pr-14 text-[15px]")}
+        className={cn(inputCls, "g-metric pr-14 text-[14px]")}
       />
       <span className="pointer-events-none absolute inset-y-1.5 right-1.5 flex items-center rounded-lg bg-bone px-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-4 ring-1 ring-ink/[0.05] transition-colors group-focus-within:bg-void group-focus-within:text-gold-light">
         {unit}
@@ -161,6 +162,19 @@ export default function IntakePage() {
   // The selected-branch cookie, else the first branch the user works in. An
   // empty branch used to reach the server and come back as "Branch not found".
   const branchId = branchDefault() || me.data?.branchIds[0] || "";
+
+  const todaySum = useQuery({
+    retry: false,
+    staleTime: 30_000,
+    queryKey: ["og-summary", "today"],
+    queryFn: () => api<{ items: number; gross_mg: number; fine_mg: number }>("/api/v1/oldgold/reports/summary?period=today"),
+  });
+  const queueCount = useQuery({
+    retry: false,
+    staleTime: 30_000,
+    queryKey: ["og-dash", "stage", "RECEIVED"],
+    queryFn: () => api<{ rows: unknown[]; total: number }>("/api/v1/oldgold/items?status=RECEIVED&limit=1"),
+  });
 
   const customers = useQuery({
     queryKey: ["og-customers", customerSearch],
@@ -248,57 +262,49 @@ export default function IntakePage() {
   }
 
   return (
-    <Page className="space-y-6">
-      {/* Hero */}
-      <section className="relative overflow-hidden rounded-[28px] bg-void text-paper shadow-5 ring-1 ring-gold/10">
-        <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-60" aria-hidden />
-        <div className="home-drift pointer-events-none absolute -right-24 -top-32 size-[22rem] rounded-full bg-gold/20 blur-[120px]" aria-hidden />
-        <div className="pointer-events-none absolute -bottom-40 -left-24 size-80 rounded-full bg-emerald-400/10 blur-[110px]" aria-hidden />
-        <div className="home-noise pointer-events-none absolute inset-0" aria-hidden />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" aria-hidden />
-
-        <div className="relative px-5 py-6 sm:px-7 lg:px-8 lg:py-7">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/[0.08] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">
-            <span className="size-1.5 animate-pulse-soft rounded-full bg-gold" />
-            Old gold · Counter
-          </span>
-          <h1 className="g-display mt-3.5 text-3xl text-paper sm:text-[2.6rem]">
-            Old gold intake, <span className="home-gold-text">weighed true.</span>
-          </h1>
-          <p className="mt-2.5 max-w-xl text-sm leading-relaxed text-paper/60">
-            Every intake is photographed and weighed before it reaches the testing queue.
-          </p>
-        </div>
-
-        {/* Step tracker */}
-        <ol className="relative grid grid-cols-2 gap-px border-t border-paper/[0.08] bg-paper/[0.06] lg:grid-cols-4">
-          {steps.map((s, i) => (
-            <li key={s.t} className={cn("flex items-center gap-3 px-4 py-4 sm:px-6", s.done ? "bg-[#0d3a2c]" : "bg-void/95")}>
-              <span
-                className={cn(
-                  "flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-all duration-320",
-                  s.done
-                    ? "bg-gradient-to-b from-gold-light to-gold text-void shadow-[0_0_0_4px_rgba(205,168,83,0.15)]"
-                    : "text-paper/50 ring-1 ring-paper/20"
-                )}
-              >
-                {s.done ? <CheckIcon size={14} /> : <span className="g-metric">{i + 1}</span>}
+    <Page className="space-y-4">
+      <GoldHero
+        icon={ScaleIcon}
+        title="Old gold intake,"
+        accent="weighed true"
+        back={{ href: "/old-gold", label: "Old gold" }}
+        badge={<HeroBadge tone={steps.every((x) => x.done) ? "good" : "gold"}>{steps.filter((x) => x.done).length} of 4 steps</HeroBadge>}
+        sub="Every intake is photographed and weighed before it reaches the testing queue. An OG number is minted on save."
+        actions={
+          <>
+            <Link href="/old-gold/testing" className={heroGhost}>
+              <FlaskConicalIcon size={13} /> Testing queue
+            </Link>
+            <Link href="/old-gold/items" className={heroGhost}>
+              Items
+            </Link>
+          </>
+        }
+        stats={[
+          { label: "Taken in today", value: todaySum.data?.items, loading: todaySum.isLoading, sub: todaySum.data ? `${grams(todaySum.data.gross_mg)} g gross` : undefined },
+          { label: "Waiting for test", value: queueCount.data?.total, tone: queueCount.data?.total ? "warn" : undefined, loading: queueCount.isLoading, href: "/old-gold/testing", sub: "Received, not assayed" },
+          { label: "This ticket · net", value: net !== null ? net * 1000 : null, format: grams, unit: "g", accent: true, sub: grossOk ? `${grams(gross * 1000)} g gross` : "Weigh the piece" },
+          { label: "Photos", value: files.length, sub: "Up to 10" },
+        ]}
+      >
+        <ol className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+          {steps.map((x, i) => (
+            <li key={x.t} className={cn("flex items-center gap-2.5 rounded-xl px-3 py-2 ring-1 ring-inset", x.done ? "bg-gold/[0.14] ring-gold/40" : "bg-paper/[0.04] ring-paper/10")}>
+              <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold", x.done ? "bg-gradient-to-b from-gold-light to-gold text-void" : "text-paper/50 ring-1 ring-paper/20")}>
+                {x.done ? <CheckIcon size={12} /> : <span className="g-metric">{i + 1}</span>}
               </span>
-              <span className="min-w-0">
-                <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-paper/40">Step {i + 1}</span>
-                <span className={cn("block truncate text-sm font-medium", s.done ? "text-gold-light" : "text-paper/80")}>{s.t}</span>
-              </span>
+              <span className={cn("truncate text-[12px] font-medium", x.done ? "text-gold-light" : "text-paper/75")}>{x.t}</span>
             </li>
           ))}
         </ol>
-      </section>
+      </GoldHero>
 
       {/* Success */}
       {created ? (
-        <section className="relative flex animate-pop-in flex-col gap-4 overflow-hidden rounded-[22px] bg-gradient-to-r from-emerald-50 via-emerald-50/60 to-paper p-5 ring-1 ring-emerald-600/15 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <section className="relative flex animate-pop-in flex-col gap-3 overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-50 via-emerald-50/60 to-paper px-4 py-3 ring-1 ring-emerald-600/15 sm:flex-row sm:items-center sm:justify-between">
           <div className="pointer-events-none absolute -left-10 -top-16 size-48 rounded-full bg-emerald-300/30 blur-3xl" aria-hidden />
           <div className="relative flex items-center gap-4">
-            <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-emerald-500 to-emerald-700 text-paper shadow-[0_12px_24px_-10px_rgba(5,150,105,0.7)]">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-emerald-500 to-emerald-700 text-paper shadow-[0_12px_24px_-10px_rgba(5,150,105,0.7)]">
               <CheckCircleIcon size={22} />
             </span>
             <div>
@@ -309,18 +315,18 @@ export default function IntakePage() {
             </div>
           </div>
           <div className="relative flex flex-wrap gap-2">
-            <button type="button" onClick={reset} className="g-btn g-btn-secondary h-10 rounded-xl px-4 text-sm">
+            <button type="button" onClick={reset} className="g-btn g-btn-secondary h-8 rounded-lg px-3 text-[12px]">
               <PlusIcon size={14} /> New intake
             </button>
-            <Link href={`/old-gold/items/${created.id}`} className="g-btn g-btn-primary h-10 rounded-xl px-4 text-sm">
+            <Link href={`/old-gold/items/${created.id}`} className="g-btn g-btn-primary h-8 rounded-lg px-3 text-[12px]">
               <FlaskConicalIcon size={14} /> Open for testing <ArrowRightIcon size={13} className="g-btn-arrow text-gold-light" />
             </Link>
           </div>
         </section>
       ) : null}
 
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_21rem]">
-        <div className="min-w-0 space-y-5">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="min-w-0 space-y-4">
           {/* 1 Customer */}
           <Section n="1" title="Customer" sub="Who is selling the piece" icon={<UsersIcon size={17} />} done={!!customer}>
             {customer ? (
@@ -350,7 +356,7 @@ export default function IntakePage() {
                     onChange={(e) => setCustomerSearch(e.target.value)}
                     placeholder="Search name or phone…"
                     autoComplete="off"
-                    className={cn(inputCls, "h-12 pl-10")}
+                    className={cn(inputCls, "pl-10")}
                   />
                   {customers.isFetching ? (
                     <span className="absolute right-3.5 top-1/2 size-3.5 -translate-y-1/2 animate-spin rounded-full border-2 border-gold/30 border-t-gold" />
@@ -460,7 +466,7 @@ export default function IntakePage() {
                 ) : null}
               </label>
             </div>
-            <div className="relative mt-4 flex items-center justify-between overflow-hidden rounded-2xl bg-void px-4 py-3.5 text-paper">
+            <div className="relative mt-4 flex items-center justify-between overflow-hidden rounded-xl bg-void px-4 py-2.5 text-paper">
               <div className="pointer-events-none absolute -right-10 -top-12 size-32 rounded-full bg-gold/20 blur-[50px]" aria-hidden />
               <span className="relative text-[10px] font-semibold uppercase tracking-[0.16em] text-paper/45">Metal weight · gross − stone</span>
               <span className="g-metric relative text-xl text-gold-light">
@@ -484,7 +490,7 @@ export default function IntakePage() {
                 addFiles(e.dataTransfer?.files ?? null);
               }}
               className={cn(
-                "group flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed px-4 py-8 text-center transition-all duration-200",
+                "group flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-5 text-center transition-all duration-200",
                 drag
                   ? "scale-[1.01] border-gold-dark/70 bg-gold-pale"
                   : "border-ink/15 bg-gradient-to-b from-bone/40 to-bone/80 hover:border-gold-dark/50 hover:from-gold-pale/40 hover:to-gold-pale/70"
@@ -502,7 +508,7 @@ export default function IntakePage() {
               />
               <span
                 className={cn(
-                  "flex size-12 items-center justify-center rounded-2xl transition-all duration-200 group-hover:-translate-y-0.5",
+                  "flex size-10 items-center justify-center rounded-xl transition-all duration-200 group-hover:-translate-y-0.5",
                   drag ? "bg-gradient-to-b from-gold-light to-gold text-void" : "bg-void text-gold-light shadow-[0_10px_22px_-12px_rgba(6,42,34,0.8)]"
                 )}
               >
@@ -535,7 +541,7 @@ export default function IntakePage() {
                 ))}
               </div>
             ) : null}
-            <label className="mt-5 block">
+            <label className="mt-4 block">
               <Label extra={<span className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-5">Optional</span>}>Notes</Label>
               <textarea
                 value={notes}
@@ -550,7 +556,7 @@ export default function IntakePage() {
 
         {/* Ticket */}
         <aside className="min-w-0 lg:sticky lg:top-24">
-          <section className="relative overflow-hidden rounded-[22px] bg-void p-5 text-paper shadow-5 ring-1 ring-gold/10">
+          <section className="relative overflow-hidden rounded-2xl bg-void p-4 text-paper shadow-5 ring-1 ring-gold/10">
             <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-40" aria-hidden />
             <div className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full bg-gold/20 blur-[80px]" aria-hidden />
             <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" aria-hidden />
@@ -586,7 +592,7 @@ export default function IntakePage() {
               type="button"
               onClick={() => intake.mutate()}
               disabled={!canSubmit}
-              className="home-btn-gold relative mt-5 h-12 w-full text-sm disabled:cursor-not-allowed disabled:opacity-50"
+              className="home-btn-gold relative mt-4 h-10 w-full text-[13px] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {intake.isPending ? (
                 <>

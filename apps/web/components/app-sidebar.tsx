@@ -25,6 +25,7 @@ import {
   HammerIcon,
   BookOpenIcon,
   SparklesIcon,
+  ChevronRightIcon,
 } from "./icons";
 
 type IconCmp = (props: { size?: number | string; className?: string }) => React.ReactNode;
@@ -135,17 +136,15 @@ function canSee(me: MeData, i: NavItem) {
 
 export function GoldWordmark() {
   return (
-    <span className="flex items-center gap-2.5">
-      <span className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-gold/30 via-gold/10 to-transparent shadow-[inset_0_0_0_1px_rgba(226,194,122,0.35),0_6px_18px_-6px_rgba(205,168,83,0.55)]">
-        <GemIcon size={17} className="text-gold drop-shadow-[0_0_6px_rgba(226,194,122,0.6)]" />
+    <span className="flex items-center gap-3">
+      <span className="sb-gem relative flex size-9 items-center justify-center rounded-[11px]">
+        <GemIcon size={16} className="text-[#022c22]" />
       </span>
       <span className="flex flex-col leading-none">
-        <span className="g-display text-[16px] tracking-wide text-paper">
-          Gold<span className="text-gold">OS</span>
+        <span className="g-display text-[16px] font-semibold tracking-[-0.01em] text-white">
+          Gold<span className="sb-mint-text">OS</span>
         </span>
-        <span className="mt-1.5 text-[9px] font-semibold uppercase tracking-[0.28em] text-gold/80">
-          Console
-        </span>
+        <span className="mt-1.5 text-[8.5px] font-medium uppercase tracking-[0.34em] text-emerald-200/40">Console</span>
       </span>
     </span>
   );
@@ -167,22 +166,80 @@ function WorkspaceCard() {
   }, []);
 
   return (
-    <div className="relative shrink-0 px-3 pb-2">
-      <div className="flex items-center gap-3 rounded-xl bg-gradient-to-br from-paper/[0.08] to-paper/[0.02] p-2.5 shadow-[inset_0_0_0_1px_rgba(246,245,240,0.09),inset_0_1px_0_rgba(255,255,255,0.08),0_10px_24px_-14px_rgba(0,0,0,0.6)]">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-gold/30 to-gold/10 text-gold shadow-[inset_0_0_0_1px_rgba(226,194,122,0.25)]">
-          <Building2Icon size={15} />
+    <div className="relative shrink-0 px-3.5 pb-2 pt-1">
+      <div className="sb-card flex items-center gap-3 px-3 py-2.5">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-emerald-300/[0.1] text-emerald-200 shadow-[inset_0_0_0_1px_rgba(167,243,208,0.14)]">
+          <Building2Icon size={14} />
         </span>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[13px] font-medium text-paper">
-            {branch?.name ?? "GoldOS Network"}
-          </div>
-          <div className="mt-0.5 flex items-center gap-1.5 font-mono text-[10px] text-paper/40">
-            <span className="size-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
-            {branch ? branch.code : "HQ"} · Active
+        <div className="min-w-0 flex-1 leading-tight">
+          <div className="truncate text-[13px] font-semibold text-white">{branch?.name ?? "GoldOS Network"}</div>
+          <div className="mt-1 flex items-center gap-1.5 text-[10px] font-medium text-emerald-200/45">
+            <span className="relative flex size-1.5">
+              <span className="absolute inset-0 animate-ping rounded-full bg-emerald-300/60" />
+              <span className="relative size-1.5 rounded-full bg-emerald-300" />
+            </span>
+            <span className="font-mono uppercase tracking-wider">{branch ? branch.code : "HQ"}</span>
+            <span className="text-emerald-200/25">·</span>
+            Open
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+type LiveKarat = { purityId: string; karat: string; purity: number; lkrPerGram: number; change24hPct: number | null };
+
+/** Today's gold at a glance; shares its cache with the Live Rates page. */
+function RateStrip({ onNavigate }: { onNavigate?: () => void }) {
+  const live = useQuery({
+    queryKey: ["market-live"],
+    queryFn: () => api<{ stale: boolean; karats: LiveKarat[] }>("/api/v1/market/live"),
+    staleTime: 60_000,
+    refetchInterval: 300_000,
+    refetchIntervalInBackground: false,
+  });
+  const ks = live.data?.karats ?? [];
+  const k24 = ks.find((k) => k.purity >= 0.999) ?? ks[0];
+  const k22 = ks.find((k) => k.karat === "22K");
+  const shown = [k24, k22].filter((k, i, a): k is LiveKarat => !!k && a.indexOf(k) === i);
+  if (live.isError || (!live.isLoading && !shown.length)) return null;
+  return (
+    <Link href="/live-rates" onClick={onNavigate} className="sb-card group block px-3 py-2.5 transition-transform duration-300 hover:-translate-y-px">
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-1.5 text-[9.5px] font-semibold uppercase tracking-[0.2em] text-emerald-200/45">
+          <span className={cn("size-1.5 rounded-full", live.data?.stale ? "bg-emerald-200/25" : "animate-pulse-soft bg-emerald-300 shadow-[0_0_8px_rgba(110,231,183,0.9)]")} />
+          Live gold
+        </span>
+        <span className="flex items-center gap-0.5 text-[9.5px] font-medium text-emerald-200/35 transition-colors group-hover:text-emerald-200">
+          LKR/g
+          <ChevronRightIcon size={11} className="transition-transform group-hover:translate-x-0.5" />
+        </span>
+      </div>
+      <div className="mt-2 grid grid-cols-2 divide-x divide-emerald-200/[0.08]">
+        {live.isLoading
+          ? [0, 1].map((i) => <span key={i} className={cn("h-8 animate-pulse rounded-md bg-emerald-300/[0.07]", i ? "ml-3" : "mr-3")} />)
+          : shown.map((k, i) => {
+              const p = k.change24hPct;
+              return (
+                <div key={k.purityId} className={cn("min-w-0 leading-none", i ? "pl-3" : "pr-3")}>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-[10px] font-semibold text-emerald-300">{k.karat}</span>
+                    {p != null && p !== 0 ? (
+                      <span className={cn("g-metric text-[9.5px] font-medium", p > 0 ? "text-emerald-300" : "text-emerald-100/40")}>
+                        {p > 0 ? "+" : "−"}
+                        {Math.abs(p).toFixed(1)}%
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="g-metric mt-1.5 truncate text-[15px] font-semibold tracking-tight text-white">
+                    {Math.round(k.lkrPerGram).toLocaleString("en-US")}
+                  </div>
+                </div>
+              );
+            })}
+      </div>
+    </Link>
   );
 }
 
@@ -203,25 +260,30 @@ function NavLink({
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200",
+        "group relative flex h-[38px] items-center gap-3 rounded-[11px] px-3 text-[13.5px] transition-all duration-200",
         active
-          ? "bg-gradient-to-r from-gold/[0.22] via-gold/[0.08] to-transparent text-paper shadow-[inset_0_0_0_1px_rgba(226,194,122,0.22),inset_0_1px_0_rgba(255,255,255,0.06)] before:absolute before:-left-3 before:top-2.5 before:bottom-2.5 before:w-[3px] before:rounded-r-full before:bg-gold before:shadow-[0_0_12px_rgba(226,194,122,0.9)]"
-          : "text-paper/55 hover:translate-x-0.5 hover:bg-paper/[0.06] hover:text-paper"
+          ? "sb-link-active font-semibold text-white"
+          : "font-medium text-emerald-50/55 hover:bg-emerald-200/[0.045] hover:text-emerald-50"
       )}
     >
-      <span
+      {active ? (
+        <span
+          aria-hidden
+          className="absolute -left-3.5 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-gradient-to-b from-emerald-200 to-emerald-400 shadow-[0_0_14px_2px_rgba(52,211,153,0.6)]"
+        />
+      ) : null}
+      <item.icon
+        size={16}
         className={cn(
-          "shrink-0 transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover:-rotate-6 group-hover:scale-125 group-active:rotate-0 group-active:scale-75 motion-reduce:transform-none motion-reduce:transition-none",
+          "shrink-0 transition-all duration-200",
           active
-            ? "scale-110 text-gold drop-shadow-[0_0_6px_rgba(226,194,122,0.55)]"
-            : "text-paper/35 group-hover:text-gold group-hover:drop-shadow-[0_0_6px_rgba(226,194,122,0.5)]"
+            ? "text-emerald-300 drop-shadow-[0_0_8px_rgba(110,231,183,0.7)]"
+            : "text-emerald-200/40 group-hover:text-emerald-200/80"
         )}
-      >
-        <item.icon size={16} />
-      </span>
+      />
       <span className="flex-1 truncate">{item.label}</span>
       {badge ? (
-        <span className="g-metric min-w-5 rounded-full bg-gradient-to-b from-gold to-gold/80 px-1.5 py-0.5 text-center text-[10px] font-bold text-ink shadow-[0_2px_8px_-2px_rgba(205,168,83,0.7)]">
+        <span className="g-metric min-w-5 rounded-full bg-emerald-300 px-1.5 py-0.5 text-center text-[10px] font-bold text-[#022c22]">
           {badge > 99 ? "99+" : badge}
         </span>
       ) : null}
@@ -241,6 +303,7 @@ export function AppSidebar({
   const pathname = usePathname();
   const initial = (me.user.name || me.user.email || "G").charAt(0).toUpperCase();
   const footer = FOOTER_ITEMS.filter((i) => canSee(me, i));
+  const seesRates = hasPermission(me.permissions, "masters:view");
 
   // Nested routes (/inventory and /inventory/counts) both prefix-match; only
   // the most specific entry is the current page.
@@ -255,12 +318,10 @@ export function AppSidebar({
   }
 
   return (
-    <aside className="relative flex h-full w-full shrink-0 select-none flex-col overflow-hidden bg-[linear-gradient(180deg,#0a3529_0%,#062a22_55%,#041f19_100%)] text-paper shadow-[inset_-1px_0_0_rgba(226,194,122,0.10)]">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-[radial-gradient(90%_100%_at_0%_0%,rgba(205,168,83,0.20),transparent_70%)]"
-      />
-      <div className="relative flex h-[72px] shrink-0 items-center justify-between px-5">
+    <aside className="sb-shell relative flex h-full w-full shrink-0 select-none flex-col overflow-hidden text-white">
+      <div aria-hidden className="home-noise pointer-events-none absolute inset-0" />
+
+      <div className="relative flex h-16 shrink-0 items-center justify-between px-5">
         <Link href="/dashboard" aria-label="GoldOS dashboard" onClick={onNavigate}>
           <GoldWordmark />
         </Link>
@@ -269,7 +330,7 @@ export function AppSidebar({
             type="button"
             onClick={onClose}
             aria-label="Close navigation"
-            className="flex size-8 items-center justify-center rounded-lg text-paper/50 transition-colors hover:bg-paper/10 hover:text-paper"
+            className="flex size-8 items-center justify-center rounded-lg text-emerald-100/50 transition-colors hover:bg-emerald-200/10 hover:text-white"
           >
             <XIcon size={18} />
           </button>
@@ -278,15 +339,17 @@ export function AppSidebar({
 
       <WorkspaceCard />
 
-      <nav className="relative flex-1 space-y-6 overflow-y-auto px-3 py-4 scrollbar-thin" aria-label="Main">
+      <nav
+        className="relative flex-1 space-y-5 overflow-y-auto px-3.5 pb-4 pt-3 scrollbar-thin [mask-image:linear-gradient(180deg,transparent,#000_14px,#000_calc(100%-20px),transparent)]"
+        aria-label="Main"
+      >
         {SECTIONS.map((section) => {
           const visible = section.items.filter((i) => canSee(me, i));
           if (visible.length === 0) return null;
           return (
             <div key={section.title}>
-              <div className="mb-2 flex items-center gap-2 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-gold/60">
+              <div className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-200/30">
                 {section.title}
-                <span className="h-px flex-1 bg-gradient-to-r from-gold/25 to-transparent" />
               </div>
               <div className="space-y-0.5">
                 {visible.map((item) => (
@@ -298,33 +361,33 @@ export function AppSidebar({
         })}
       </nav>
 
-      <div className="relative shrink-0 space-y-3 border-t border-gold/15 bg-black/10 p-3">
+      <div className="relative shrink-0 space-y-2.5 px-3.5 pb-3.5">
+        <div className="sb-rule -mx-3.5 mb-3" />
+        {seesRates ? <RateStrip onNavigate={onNavigate} /> : null}
         {footer.length > 0 ? (
           <div className="space-y-0.5">
             {footer.map((item) => (
-              <NavLink
-                key={item.href}
-                item={item}
-                active={item.href === activeHref}
-                onNavigate={onNavigate}
-              />
+              <NavLink key={item.href} item={item} active={item.href === activeHref} onNavigate={onNavigate} />
             ))}
           </div>
         ) : null}
-        <div className="flex items-center gap-3 rounded-xl bg-gradient-to-br from-paper/[0.08] to-paper/[0.02] p-2.5 shadow-[inset_0_0_0_1px_rgba(246,245,240,0.08)]">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#e2c27a] to-[#b8923f] font-display shadow-[0_4px_12px_-3px_rgba(205,168,83,0.6)] text-sm font-bold text-ink">
-            {initial}
+        <div className="sb-card flex items-center gap-3 p-2 pr-2.5">
+          <div className="relative shrink-0">
+            <div className="sb-gem flex size-9 items-center justify-center rounded-[10px] font-display text-[14px] font-bold text-[#022c22]">
+              {initial}
+            </div>
+            <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full bg-emerald-300 ring-2 ring-[#031b15]" aria-hidden />
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[13px] font-medium text-paper" title={me.user.email}>
+          <div className="min-w-0 flex-1 leading-tight">
+            <div className="truncate text-[13px] font-semibold text-white" title={me.user.email}>
               {me.user.name}
             </div>
-            <div className="mt-0.5 truncate font-mono text-[10px] text-paper/40">{me.user.email}</div>
+            <div className="mt-1 truncate text-[10.5px] text-emerald-200/40">{me.user.email}</div>
           </div>
           <button
             type="button"
             onClick={onSignOut}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-paper/40 transition-colors hover:bg-rose-500/15 hover:text-rose-400"
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-emerald-200/40 transition-colors hover:bg-emerald-200/[0.08] hover:text-emerald-200"
             title="Sign out"
             aria-label="Sign out"
           >

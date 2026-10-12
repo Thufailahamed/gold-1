@@ -8,21 +8,16 @@ import { api } from "@/lib/api";
 import { LineageChain, type LineageNode, type LineageEdge } from "@/components/lineage-chain";
 import {
   Page,
-  Hero,
-  Panel,
-  StatGrid,
-  StatCard,
   Pill,
-  type PillTone,
   Modal,
   Skeleton,
   Callout,
   EmptyBlock,
   controlClass,
-  heroBtnPrimary,
-  heroBtnGhost,
 } from "@/components/ui";
-import { FlaskConicalIcon, CreditCardIcon } from "@/components/icons";
+import { ArchiveIcon, BanknoteIcon, CheckIcon, CreditCardIcon, FlaskConicalIcon, GemIcon, HistoryIcon, PackageIcon, ScaleIcon, UsersIcon } from "@/components/icons";
+import { cn } from "@/lib/cn";
+import { Card, CardHead, Empty, GoldHero, HeroBadge, STAGES, ShareBar, grams, heroGhost, heroGold, lkr, stamp, statusText, th, thead, tr } from "../../kit";
 
 type Detail = {
   item: {
@@ -41,19 +36,6 @@ type Detail = {
   journal: { id: string; account_code: string; debit_cents: number; credit_cents: number }[];
   gold: { id: string; direction: string; fine_mg: number }[];
   converted: { id: string; barcode: string; name: string; status: string } | null;
-};
-
-const TONES: Record<string, PillTone> = {
-  RECEIVED: "warning",
-  TESTED: "info",
-  VALUED: "info",
-  PURCHASED: "brand",
-  AVAILABLE: "success",
-  RESERVED_FOR_MELTING: "warning",
-  MELTED: "dark",
-  RESOLD: "neutral",
-  TRANSFERRED: "info",
-  VOID: "danger",
 };
 
 export default function OldGoldDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -109,9 +91,9 @@ export default function OldGoldDetailPage({ params }: { params: Promise<{ id: st
 
   if (detail.isLoading) {
     return (
-      <Page>
-        <Skeleton className="h-56" />
-        <Skeleton className="h-64" />
+      <Page className="space-y-4">
+        <Skeleton className="h-44 rounded-[20px]" />
+        <Skeleton className="h-72 rounded-2xl" />
       </Page>
     );
   }
@@ -126,61 +108,113 @@ export default function OldGoldDetailPage({ params }: { params: Promise<{ id: st
     );
   }
   const { item, customer, tests, purchase, journal, gold, converted } = detail.data;
+  const owed = purchase ? purchase.value_cents - purchase.paid_cents : 0;
+  const paidShare = purchase && purchase.value_cents > 0 ? Math.min(1, purchase.paid_cents / purchase.value_cents) : 0;
+  const stoneShare = item.gross_mg > 0 ? (item.stone_mg / item.gross_mg) * 100 : 0;
+  const atBoard = item.rate_cents_per_g !== null ? (item.fine_mg / 1000) * item.rate_cents_per_g : null;
+  const atBuy = atBoard !== null && item.buy_pct !== null ? atBoard * (item.buy_pct / 100) : null;
+  const perFineG = item.purchase_value_cents !== null && item.fine_mg > 0 ? (item.purchase_value_cents / item.fine_mg) * 1000 : null;
+  const stageIdx = STAGES.findIndex((s) => s.status === item.status);
+  const offFlow = stageIdx < 0;
+  const debit = journal.reduce((n, j) => n + j.debit_cents, 0);
+  const credit = journal.reduce((n, j) => n + j.credit_cents, 0);
+  const row = (k: string, v: string, tone = "text-ink") => (
+    <div key={k} className="flex items-center justify-between gap-3 px-4 py-1.5">
+      <dt className="text-ink-4">{k}</dt>
+      <dd className={cn("g-metric", tone)}>{v}</dd>
+    </div>
+  );
 
   return (
-    <Page>
-      <Hero
+    <Page className="space-y-4">
+      <GoldHero
+        icon={ScaleIcon}
+        title={<span className={cn(item.status === "VOID" && "line-through decoration-paper/40")}>{item.number}</span>}
         back={{ href: "/old-gold/items", label: "Old gold items" }}
-        kicker="Old gold"
-        title={item.number}
-        description={`${item.description} · ${customer?.name ?? "—"}${item.notes ? ` — ${item.notes}` : ""}`}
-        meta={
+        badge={
           <>
-            <Pill tone="ghost" className="!text-paper">{item.status.replace(/_/g, " ")}</Pill>
-            {item.karat ? <Pill tone="ghost" className="!text-paper">{item.karat}</Pill> : null}
-            {item.item_type ? <Pill tone="ghost" className="!text-paper">{item.item_type}</Pill> : null}
+            <HeroBadge tone={item.status === "VOID" ? "bad" : item.status === "AVAILABLE" ? "good" : item.status === "MELTED" || item.status === "RESOLD" ? "muted" : "gold"}>{statusText(item.status)}</HeroBadge>
+            {item.karat ? <HeroBadge tone="muted">{item.karat}</HeroBadge> : null}
           </>
         }
-        stats={[
-          { label: "Net weight", value: `${g(item.net_mg)} g` },
-          { label: "Fine gold", value: `${g(item.fine_mg)} g` },
-          { label: "Value", value: item.purchase_value_cents !== null ? `${fmt(item.purchase_value_cents)} LKR` : "—" },
-          purchase
-            ? { label: "Owed to customer", value: `${fmt(purchase.value_cents - purchase.paid_cents)} LKR` }
-            : { label: "Paid", value: `${fmt(item.paid_cents)} LKR` },
-        ]}
+        sub={
+          <>
+            {item.description}
+            {item.item_type ? ` · ${item.item_type}` : ""} · {customer ? `${customer.name} (${customer.code})` : "No customer"}
+            {item.notes ? ` · ${item.notes}` : ""}
+          </>
+        }
         actions={
           <>
             {item.status === "RECEIVED" || item.status === "TESTED" ? (
-              <Link href="/old-gold/testing" className={item.status === "RECEIVED" ? heroBtnPrimary : heroBtnGhost}>
-                {item.status === "RECEIVED" ? "Test purity" : "Retest"}
+              <Link href="/old-gold/testing" className={item.status === "RECEIVED" ? heroGold : heroGhost}>
+                <FlaskConicalIcon size={13} /> {item.status === "RECEIVED" ? "Test purity" : "Retest"}
               </Link>
             ) : null}
             {item.status === "TESTED" || item.status === "VALUED" ? (
-              <button onClick={() => setDialog("value")} className={heroBtnPrimary}>Value</button>
+              <button onClick={() => setDialog("value")} className={item.status === "TESTED" ? heroGold : heroGhost}>
+                <GemIcon size={13} /> Value
+              </button>
             ) : null}
             {item.status === "VALUED" ? (
-              <button onClick={() => setDialog("purchase")} className={heroBtnPrimary}>Purchase</button>
+              <button onClick={() => setDialog("purchase")} className={heroGold}>
+                <BanknoteIcon size={13} /> Purchase
+              </button>
             ) : null}
             {item.status === "PURCHASED" ? (
-              <button onClick={() => act("/release", {}, "Released")} disabled={busy} className={heroBtnPrimary}>Release to stock</button>
+              <button onClick={() => act("/release", {}, "Released")} disabled={busy} className={heroGold}>
+                <ArchiveIcon size={13} /> Release to stock
+              </button>
             ) : null}
             {item.status === "AVAILABLE" ? (
-              <button onClick={() => setDialog("convert")} className={heroBtnGhost}>Convert to product</button>
+              <button onClick={() => setDialog("convert")} className={heroGhost}>
+                <PackageIcon size={13} /> Convert to product
+              </button>
             ) : null}
             {["RECEIVED", "TESTED", "VALUED"].includes(item.status) ? (
-              <button onClick={() => setDialog("void")} className={`${heroBtnGhost} !text-rose-300`}>Void</button>
+              <button onClick={() => setDialog("void")} className={`${heroGhost} !text-rose-300`}>
+                Void
+              </button>
             ) : null}
           </>
         }
-      />
-
-      <StatGrid>
-        <StatCard label="Gross" value={`${g(item.gross_mg)}g`} />
-        <StatCard label="Net" value={`${g(item.net_mg)}g`} />
-        <StatCard label="Tested" value={item.tested_permille !== null ? `${item.tested_permille}‰` : "—"} />
-        <StatCard label="Board rate" value={item.rate_cents_per_g !== null ? `${fmt(item.rate_cents_per_g)}/g` : "—"} />
-      </StatGrid>
+        stats={[
+          { label: "Gross", value: item.gross_mg, format: grams, unit: "g", sub: "As handed over" },
+          { label: "Stones", value: item.stone_mg, format: grams, unit: "g", sub: `${stoneShare.toFixed(1)}% of gross` },
+          { label: "Net", value: item.net_mg, format: grams, unit: "g", sub: "Gross less stones" },
+          { label: "Purity", value: null, text: item.tested_permille !== null ? `${item.tested_permille}‰` : "Untested", sub: item.karat ?? `${tests.length} test${tests.length === 1 ? "" : "s"}` },
+          { label: "Fine gold", value: item.fine_mg, format: grams, unit: "g", accent: true, sub: item.net_mg ? `${((item.fine_mg / item.net_mg) * 100).toFixed(1)}% of net` : undefined },
+          { label: "Value", value: item.purchase_value_cents, format: lkr, unit: item.purchase_value_cents !== null ? "LKR" : undefined, sub: perFineG ? `${lkr(perFineG)} / g fine` : "Not valued yet" },
+          purchase
+            ? { label: "Owed", value: owed, format: lkr, unit: "LKR", tone: owed > 0 ? "warn" : "good", sub: owed > 0 ? "To the customer" : "Paid in full" }
+            : { label: "Paid", value: item.paid_cents, format: lkr, unit: "LKR", sub: "Nothing purchased yet" },
+        ]}
+      >
+        {offFlow ? (
+          <p className="text-[11.5px] text-paper/55">This item left the buy-back flow: {statusText(item.status).toLowerCase()}.</p>
+        ) : (
+          <ol className="flex flex-wrap items-center gap-1.5" aria-label="Item lifecycle">
+            {STAGES.map((s, i) => {
+              const done = i < stageIdx;
+              const current = i === stageIdx;
+              return (
+                <li key={s.status} className="flex items-center gap-1.5" aria-current={current ? "step" : undefined}>
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ring-inset",
+                      done ? "bg-gold/[0.14] text-gold-light ring-gold/40" : current ? "bg-paper/10 text-paper ring-paper/25" : "text-paper/35 ring-paper/10"
+                    )}
+                  >
+                    {done ? <CheckIcon size={11} aria-hidden /> : <span className={cn("size-1.5 rounded-full", current ? "animate-pulse-soft bg-gold" : "bg-paper/25")} />}
+                    {s.label}
+                  </span>
+                  {i < STAGES.length - 1 ? <span aria-hidden className={cn("h-px w-4", done ? "bg-gold/50" : "bg-paper/15")} /> : null}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </GoldHero>
 
       {item.negotiated_cents !== null ? (
         <Callout tone="info" title="Negotiated total">
@@ -195,51 +229,173 @@ export default function OldGoldDetailPage({ params }: { params: Promise<{ id: st
         </Callout>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel title="Tests" icon={<FlaskConicalIcon size={17} />} description={`${tests.length} recorded`}>
-          {tests.length === 0 ? (
-            <EmptyBlock title="No tests" description="Record a purity test from the testing queue." />
-          ) : (
-            <ul className="space-y-2.5 text-sm">
-              {tests.map((t) => (
-                <li key={t.id} className="flex items-center justify-between gap-3">
-                  <span className="text-ink-2">
-                    <span className="capitalize">{t.method.replace(/_/g, " ")}</span>
-                    <span className="g-metric ml-2 text-xs text-ink-4">{t.tested_permille}‰</span>
-                    {t.approved_by ? <span className="ml-2 text-xs text-ink-4">· approved {t.approved_by.slice(0, 8)}</span> : null}
-                  </span>
-                  <Pill tone={t.result === "pass" ? "success" : t.result === "fail" ? "danger" : "warning"} dot>{t.result}</Pill>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-        {purchase ? (
-          <Panel title="Purchase" icon={<CreditCardIcon size={17} />} description={`Paid ${fmt(purchase.paid_cents)} of ${fmt(purchase.value_cents)} LKR`}>
-            <ul className="space-y-2 g-metric text-xs">
-              {journal.map((j) => (
-                <li key={j.id} className="flex items-center justify-between gap-3">
-                  <span className="text-ink-3">{j.account_code}</span>
-                  <span className="text-ink">{j.debit_cents ? `DR ${fmt(j.debit_cents)}` : `CR ${fmt(j.credit_cents)}`}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="g-kicker mt-4 !text-[10px]">Gold movements</p>
-            <ul className="mt-2 space-y-2 g-metric text-xs">
-              {gold.map((m) => (
-                <li key={m.id} className="flex items-center justify-between gap-3">
-                  <span className="text-ink-3">{m.direction}</span>
-                  <span className="text-ink">{g(m.fine_mg)}g fine</span>
-                </li>
-              ))}
-            </ul>
-          </Panel>
-        ) : null}
-      </div>
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="min-w-0 space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHead icon={ScaleIcon} title="Weights" sub="Grams · as weighed and assayed" />
+              <dl className="divide-y divide-ink/[0.05] text-[12.5px]">
+                {row("Gross", `${g(item.gross_mg)} g`)}
+                {row("Stones", `− ${g(item.stone_mg)} g`, "text-ink-3")}
+                {row("Net", `${g(item.net_mg)} g`)}
+                {row("Tested purity", item.tested_permille !== null ? `× ${item.tested_permille}‰` : "—", "text-ink-3")}
+                <div className="flex items-center justify-between gap-3 bg-gold-pale/40 px-4 py-2">
+                  <dt className="text-[9.5px] font-semibold uppercase tracking-[0.16em] text-gold-dark">Fine gold</dt>
+                  <dd className="g-metric text-[15px] text-gold-deep">{g(item.fine_mg)} g</dd>
+                </div>
+              </dl>
+            </Card>
+            <Card>
+              <CardHead icon={GemIcon} title="Valuation" sub="LKR · how the offer was built" />
+              <dl className="divide-y divide-ink/[0.05] text-[12.5px]">
+                {row("Board rate", item.rate_cents_per_g !== null ? `${fmt(item.rate_cents_per_g)} / g` : "—")}
+                {row("Fine at board", atBoard !== null ? fmt(Math.round(atBoard)) : "—")}
+                {row("Buy %", item.buy_pct !== null ? `× ${item.buy_pct}%` : "—", "text-ink-3")}
+                {atBuy !== null ? row("At buy %", fmt(Math.round(atBuy))) : null}
+                {row("Stone deduction", item.stone_deduction_cents ? `− ${fmt(item.stone_deduction_cents)}` : "—", "text-ink-3")}
+                {row("Processing", item.processing_deduction_cents ? `− ${fmt(item.processing_deduction_cents)}` : "—", "text-ink-3")}
+                {item.negotiated_cents !== null ? row("Negotiated", fmt(item.negotiated_cents), "text-amber-700") : null}
+                <div className="flex items-center justify-between gap-3 bg-gold-pale/40 px-4 py-2">
+                  <dt className="text-[9.5px] font-semibold uppercase tracking-[0.16em] text-gold-dark">Purchase value</dt>
+                  <dd className="g-metric text-[15px] text-gold-deep">{item.purchase_value_cents !== null ? fmt(item.purchase_value_cents) : "—"}</dd>
+                </div>
+              </dl>
+            </Card>
+          </div>
 
-      <Panel title="Gold lineage" description="Intake → melt → lot → product">
-        <OldGoldLineage id={id} />
-      </Panel>
+          <Card>
+            <CardHead icon={FlaskConicalIcon} title="Tests" sub={`${tests.length} recorded`} />
+            {tests.length === 0 ? (
+              <Empty icon={FlaskConicalIcon} title="No tests" desc="Record a purity test from the testing queue." />
+            ) : (
+              <table className="w-full text-[12.5px]">
+                <thead className={thead}>
+                  <tr>
+                    <th className={cn(th, "pl-4")}>Method</th>
+                    <th className={cn(th, "text-right")}>Purity</th>
+                    <th className={th}>Approved by</th>
+                    <th className={th}>When</th>
+                    <th className={cn(th, "pr-4 text-right")}>Result</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tests.map((t) => (
+                    <tr key={t.id} className={tr}>
+                      <td className="py-1.5 pl-4 pr-2 font-medium capitalize text-ink">{t.method.replace(/_/g, " ")}</td>
+                      <td className="g-metric px-2 py-1.5 text-right text-ink">{t.tested_permille}‰</td>
+                      <td className="px-2 py-1.5 text-ink-4">{t.approved_by ? t.approved_by.slice(0, 8) : "—"}</td>
+                      <td className="whitespace-nowrap px-2 py-1.5 text-[11px] text-ink-4">{stamp(t.created_at)}</td>
+                      <td className="py-1.5 pl-2 pr-4 text-right">
+                        <Pill tone={t.result === "pass" ? "success" : t.result === "fail" ? "danger" : "warning"} dot>
+                          {t.result}
+                        </Pill>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Card>
+
+          <Card>
+            <CardHead icon={HistoryIcon} title="Gold lineage" sub="Intake → melt → lot → product" />
+            <div className="p-4">
+              <OldGoldLineage id={id} />
+            </div>
+          </Card>
+        </div>
+
+        <div className="min-w-0 space-y-4">
+          <Card>
+            <CardHead icon={UsersIcon} title="Customer" />
+            {customer ? (
+              <div className="flex items-center gap-3 px-4 py-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-gold-light to-gold text-[11px] font-bold text-void">
+                  {customer.name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[13px] font-semibold text-ink">{customer.name}</span>
+                  <span className="block truncate text-[11px] text-ink-4">
+                    <span className="g-metric">{customer.code}</span>
+                    {customer.phone ? ` · ${customer.phone}` : ""}
+                  </span>
+                </span>
+              </div>
+            ) : (
+              <p className="px-4 py-3 text-[12px] text-ink-4">No customer on this item.</p>
+            )}
+          </Card>
+
+          <Card>
+            <CardHead icon={CreditCardIcon} title="Purchase" sub={purchase ? `Paid ${fmt(purchase.paid_cents)} of ${fmt(purchase.value_cents)} LKR` : "Not purchased yet"} />
+            {purchase ? (
+              <>
+                <div className="px-4 pt-3">
+                  <ShareBar value={paidShare * 100} className="h-2" color="bg-gradient-to-r from-emerald-700 to-emerald-400" />
+                  <p className="mt-1 flex justify-between text-[10.5px] text-ink-4">
+                    <span className="capitalize">{purchase.method}</span>
+                    <span className="g-metric">{Math.round(paidShare * 100)}% paid</span>
+                  </p>
+                </div>
+                <dl className="mt-2 divide-y divide-ink/[0.05] border-t border-ink/[0.06] text-[12.5px]">
+                  {row("Value", fmt(purchase.value_cents))}
+                  {row("Paid", fmt(purchase.paid_cents), "text-emerald-700")}
+                  {row("Owed to customer", fmt(owed), owed > 0 ? "text-amber-700" : "text-ink")}
+                </dl>
+              </>
+            ) : (
+              <p className="px-4 py-3 text-[12px] text-ink-4">Value and purchase the item to settle with the customer.</p>
+            )}
+          </Card>
+
+          {journal.length > 0 ? (
+            <Card>
+              <CardHead
+                icon={CreditCardIcon}
+                title="Journal"
+                sub={`${journal.length} lines`}
+                action={
+                  <span className={cn("rounded-full px-2 py-px text-[10.5px] font-semibold ring-1 ring-inset", debit === credit ? "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25" : "bg-rose-500/10 text-rose-800 ring-rose-500/25")}>
+                    {debit === credit ? "Balanced" : "Out of balance"}
+                  </span>
+                }
+              />
+              <table className="w-full text-[12px]">
+                <thead className={thead}>
+                  <tr>
+                    <th className={cn(th, "pl-4")}>Account</th>
+                    <th className={cn(th, "text-right")}>Dr</th>
+                    <th className={cn(th, "pr-4 text-right")}>Cr</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {journal.map((j) => (
+                    <tr key={j.id} className={tr}>
+                      <td className="g-metric py-1.5 pl-4 pr-2 text-ink-3">{j.account_code}</td>
+                      <td className="g-metric px-2 py-1.5 text-right text-ink">{j.debit_cents ? fmt(j.debit_cents) : "—"}</td>
+                      <td className="g-metric py-1.5 pl-2 pr-4 text-right text-ink">{j.credit_cents ? fmt(j.credit_cents) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          ) : null}
+
+          {gold.length > 0 ? (
+            <Card>
+              <CardHead icon={GemIcon} title="Gold movements" sub={`${gold.length} on the gold ledger`} />
+              <ul className="divide-y divide-ink/[0.05] text-[12px]">
+                {gold.map((m) => (
+                  <li key={m.id} className="flex items-center justify-between gap-3 px-4 py-1.5">
+                    <span className="text-ink-3">{m.direction}</span>
+                    <span className="g-metric text-ink">{g(m.fine_mg)} g fine</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          ) : null}
+        </div>
+      </div>
 
       {dialog === "value" ? <ValueDialog pending={busy} onSubmit={(b) => act("/value", b, "Valued")} onClose={() => setDialog(null)} /> : null}
       {dialog === "purchase" ? <PurchaseDialog pending={busy} maxLkr={item.purchase_value_cents !== null ? item.purchase_value_cents / 100 : 0} onSubmit={(b) => act("/purchase", b, "Purchased")} onClose={() => setDialog(null)} /> : null}
@@ -252,10 +408,7 @@ export default function OldGoldDetailPage({ params }: { params: Promise<{ id: st
 function OldGoldLineage({ id }: { id: string }) {
   const lineage = useQuery({
     queryKey: ["og-lineage", id],
-    queryFn: () =>
-      api<{ nodes: LineageNode[]; edges: LineageEdge[] }>(
-        `/api/v1/gold/lineage?refEntity=old_gold&refId=${id}`
-      ),
+    queryFn: () => api<{ nodes: LineageNode[]; edges: LineageEdge[] }>(`/api/v1/gold/lineage?refEntity=old_gold&refId=${id}`),
   });
   if (lineage.isLoading) return <Skeleton className="h-10" />;
   if (lineage.isError || !lineage.data) return <EmptyBlock title="Lineage unavailable" description="Could not load the gold lineage." />;

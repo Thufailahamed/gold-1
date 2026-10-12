@@ -13,22 +13,44 @@ import { Select } from "@/components/select";
 import { GoldDust } from "@/components/home/effects";
 import { ArrowRightIcon, CoinsIcon, TrendingUpIcon } from "@/components/icons";
 import {
+  BitcoinIcon,
+  EthereumIcon,
+  GoldCoinIcon,
+  SilverCoinIcon,
+  PlatinumCoinIcon,
+  PalladiumCoinIcon,
+  CopperCoinIcon,
+  GoldBarIcon,
+  SovereignPawnIcon,
+  FxExchangeIcon,
+  RatioScaleIcon,
+  SpreadGaugeIcon,
+  CountryFlag,
+} from "@/components/market-icons";
+import {
   ChangeChip,
   ChartTip,
   CurrencyBadge,
-  KaratCard,
+  Kpi,
   LiveNumber,
   MetalCoin,
+  PanelHead,
   RefreshRing,
-  SectionHead,
   Segmented,
   Shimmer,
+  SpreadMeter,
   ago,
   currencyName,
+  ccyTone,
+  karatTone,
   money,
+  REGIONS,
+  spreadTone,
+  symbolTone,
   useNow,
   usd,
 } from "./parts";
+import { BoardHistory, BuyBackDesk, GoldPerformance, RetailQuote, VaultValue } from "./business";
 
 type Quote = {
   symbol: string;
@@ -81,13 +103,31 @@ const CCY_KEY = "goldos.liveRates.currency";
 /** Pinned to the top of the currency picker; everything else follows A–Z. */
 const PINNED = ["LKR", "USD", "EUR", "GBP", "INR", "AED", "SAR", "QAR", "KWD", "OMR", "AUD", "CAD", "SGD", "JPY", "CNY"];
 const RANGE_LABEL: Record<Range, string> = { "1d": "24 hours", "7d": "7 days", "30d": "30 days", "1y": "12 months" };
+type WeightUnit = "g" | "pawn" | "tola" | "oz";
+/** Grams per unit: Sri Lankan pawn (8 g), Indian tola, troy ounce. */
+const UNIT_G: Record<WeightUnit, number> = { g: 1, pawn: 8, tola: 11.6638, oz: 31.1035 };
+const UNIT_LABEL: Record<WeightUnit, string> = { g: "Gram", pawn: "Pawn", tola: "Tola", oz: "Troy oz" };
+const inputCls =
+  "g-metric h-9 w-full min-w-0 rounded-lg bg-paper px-3 text-sm text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] transition-shadow focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.24)]";
 const unitWord = (u: Quote["unit"] | undefined) => (u === "coin" ? "coin" : u === "lb" ? "lb" : "oz");
+/** Weights a counter quotes most, smallest first. */
+const LADDER = [
+  { label: "1 gram", g: 1 },
+  { label: "1 pawn", g: 8, hint: "8 g" },
+  { label: "10 grams", g: 10 },
+  { label: "1 tola", g: UNIT_G.tola, hint: "11.66 g" },
+  { label: "1 troy oz", g: UNIT_G.oz, hint: "31.10 g" },
+  { label: "5 pawn", g: 40, hint: "40 g" },
+  { label: "100 grams", g: 100 },
+  { label: "1 kilo bar", g: 1000 },
+];
 
 export default function LiveRatesPage() {
   const qc = useQueryClient();
   const now = useNow(1000);
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
   const canPublish = hasPermission(me.data?.permissions ?? [], "masters:create");
+  const canSeeStock = hasPermission(me.data?.permissions ?? [], "gold:view");
 
   const live = useQuery({
     queryKey: ["market-live"],
@@ -161,8 +201,25 @@ export default function LiveRatesPage() {
     const vs = chart.map((r) => r.v);
     const open = vs[0]!;
     const close = vs[vs.length - 1]!;
-    return { open, close, high: Math.max(...vs), low: Math.min(...vs), pct: open > 0 ? ((close - open) / open) * 100 : null };
+    const high = Math.max(...vs);
+    const low = Math.min(...vs);
+    const avg = vs.reduce((a, v) => a + v, 0) / vs.length;
+    // Spread of step-to-step returns: a plain read of how jumpy the period was.
+    const rets = vs.slice(1).map((v, i) => (vs[i]! > 0 ? (v - vs[i]!) / vs[i]! : 0));
+    const mean = rets.reduce((a, r) => a + r, 0) / rets.length;
+    const vol = Math.sqrt(rets.reduce((a, r) => a + (r - mean) ** 2, 0) / rets.length) * 100;
+    return {
+      open,
+      close,
+      high,
+      low,
+      avg,
+      vol,
+      pos: high > low ? (close - low) / (high - low) : 0.5,
+      pct: open > 0 ? ((close - open) / open) * 100 : null,
+    };
   }, [chart]);
+  const tone = symbolTone(symbol);
   const liveChartValue = quoteFor
     ? conv(perUnit || quoteFor.lkrPerGram == null ? quoteFor.priceLkr : quoteFor.lkrPerGram)
     : null;
@@ -179,6 +236,8 @@ export default function LiveRatesPage() {
       .filter((c, i, a) => a.indexOf(c) === i && c !== display && perUsd(c) > 0)
       .map((code) => ({ code, value: base / perUsd(code), perUsd: perUsd(code) }));
   }, [data, display]);
+  const [fxRegion, setFxRegion] = useState<string | null>(null);
+  const shownFx = fxRegion ? fxRows.filter((f) => ccyTone(f.code) === REGIONS.find((r) => r.key === fxRegion)?.hex) : fxRows;
   const [convAmount, setConvAmount] = useState("1");
   const [convFrom, setConvFrom] = useState("USD");
   const converted = data ? (Number(convAmount) || 0) * (perUsd(display) / perUsd(convFrom)) : null;
@@ -223,158 +282,265 @@ export default function LiveRatesPage() {
     unit: q.lkrPerGram != null ? `${display}/g` : `${display}/${unitWord(q.unit)}`,
     change: q.change24hPct,
   }));
+  const goldSilverRatio = gold && silver && silver.priceUsd > 0 ? gold.priceUsd / silver.priceUsd : null;
+  const boarded = (data?.karats ?? []).filter((k) => k.boardDiffPct != null);
+  const avgSpread = boarded.length ? boarded.reduce((a, k) => a + k.boardDiffPct!, 0) / boarded.length : null;
+  const fxTarget = display === "USD" ? "LKR" : display;
+  const fxValue = data ? (fxTarget === "LKR" ? data.usdLkr : perUsd(fxTarget)) : null;
+
+  /* ---------- gold value calculator */
+  const [calcW, setCalcW] = useState("8");
+  const [calcUnit, setCalcUnit] = useState<WeightUnit>("g");
+  const [calcKarat, setCalcKarat] = useState("");
+  const calcK = data?.karats.find((k) => k.purityId === calcKarat) ?? k22 ?? k24;
+  const grams = (Number(calcW) || 0) * UNIT_G[calcUnit];
+  const calcMarket = calcK ? conv(grams * calcK.lkrPerGram) : null;
+  const calcBoard = calcK?.boardRate != null ? conv(grams * calcK.boardRate) : null;
+
+  /* ---------- market pulse: movers, weight ladder, cross-market ratios */
+  const movers = useMemo(
+    () =>
+      [...(data?.quotes ?? [])].sort((a, b) =>
+        a.change24hPct == null ? 1 : b.change24hPct == null ? -1 : b.change24hPct - a.change24hPct
+      ),
+    [data?.quotes]
+  );
+  const maxMove = Math.max(0.5, ...movers.map((q) => Math.abs(q.change24hPct ?? 0)));
+  const [ladderKarat, setLadderKarat] = useState("");
+  const ladderK = data?.karats.find((k) => k.purityId === ladderKarat) ?? k24;
+  const quote = (s: string) => data?.quotes.find((q) => q.symbol === s);
+  const plat = quote("XPT");
+  const pall = quote("XPD");
+  const btc = quote("BTC");
+  const eth = quote("ETH");
+  const ratios: { label: string; hint: string; v: number | null; fmt: (n: number) => string; tone: string; icon: React.ReactNode }[] = [
+    { label: "Gold / silver", hint: "oz of silver per oz of gold", v: goldSilverRatio, fmt: (n) => `${n.toFixed(1)} : 1`, tone: symbolTone("XAG"), icon: <RatioScaleIcon size={16} /> },
+    { label: "Gold / platinum", hint: "oz of platinum per oz of gold", v: gold && plat ? gold.priceUsd / plat.priceUsd : null, fmt: (n) => `${n.toFixed(2)} : 1`, tone: symbolTone("XPT"), icon: <PlatinumCoinIcon size={16} /> },
+    { label: "Gold / palladium", hint: "oz of palladium per oz of gold", v: gold && pall ? gold.priceUsd / pall.priceUsd : null, fmt: (n) => `${n.toFixed(2)} : 1`, tone: symbolTone("XPD"), icon: <PalladiumCoinIcon size={16} /> },
+    { label: "1 Bitcoin buys", hint: "troy oz of gold", v: gold && btc ? btc.priceUsd / gold.priceUsd : null, fmt: (n) => `${n.toFixed(2)} oz`, tone: symbolTone("BTC"), icon: <BitcoinIcon size={16} /> },
+    { label: "1 Ether buys", hint: "grams of gold", v: gold && eth ? eth.priceUsd / (gold.priceUsd / UNIT_G.oz) : null, fmt: (n) => `${n.toFixed(1)} g`, tone: symbolTone("ETH"), icon: <EthereumIcon size={16} /> },
+    { label: "Spot gold per gram", hint: "international, USD", v: gold ? gold.priceUsd / UNIT_G.oz : null, fmt: (n) => `$${usd(n)}`, tone: symbolTone("XAU"), icon: <GoldBarIcon size={16} /> },
+    { label: "24K − 22K per gram", hint: `purity premium, ${display}`, v: k24 && k22 ? conv(k24.lkrPerGram - k22.lkrPerGram) : null, fmt: money, tone: "#D97706", icon: <GoldCoinIcon size={16} /> },
+    { label: "1 USD buys", hint: "milligrams of 24K gold", v: k24 && data ? (data.usdLkr / k24.lkrPerGram) * 1000 : null, fmt: (n) => `${n.toFixed(1)} mg`, tone: "#38BDF8", icon: <CountryFlag code="USD" size={16} /> },
+  ];
 
   return (
-    <Page>
+    <Page className="space-y-4">
       {/* ================================================================ HERO */}
       {/* Not overflow-hidden: the currency dropdown must be free to open past the edge. */}
-      <section className="relative z-10 rounded-[24px] bg-void text-paper shadow-5">
-        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[24px]">
-          <div className="home-grid-bg absolute inset-0 opacity-50" />
-          <div className="absolute -right-24 -top-32 size-[420px] rounded-full bg-gold/[0.18] blur-[110px]" />
-          <div className="absolute -bottom-40 left-[20%] size-80 rounded-full bg-gold-deep/25 blur-[120px]" />
-          <GoldDust className="absolute inset-0 size-full opacity-70" density={0.00005} />
+      <section className="relative z-10 rounded-[20px] bg-void text-paper shadow-5">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[20px]">
+          <div className="home-grid-bg absolute inset-0 opacity-40" />
+          <div className="absolute -right-24 -top-40 size-[380px] rounded-full bg-gold/[0.16] blur-[110px]" />
+          <div className="absolute -bottom-40 left-[15%] size-72 rounded-full bg-gold-deep/25 blur-[120px]" />
+          <GoldDust className="absolute inset-0 size-full opacity-60" density={0.00004} />
           <div className="home-noise absolute inset-0" />
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
         </div>
 
-        <div className="relative px-5 pb-6 pt-5 sm:px-8 sm:pb-8 sm:pt-7">
-          {/* top bar */}
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-gold/25 bg-gold/[0.08] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">
-                <span className="relative flex size-2">
-                  <span
-                    className={cn(
-                      "absolute inline-flex size-full rounded-full opacity-70",
-                      data?.stale ? "bg-amber-400" : "animate-ping bg-emerald-400"
-                    )}
-                  />
-                  <span className={cn("relative inline-flex size-2 rounded-full", data?.stale ? "bg-amber-400" : "bg-emerald-400")} />
-                </span>
-                {data?.stale ? "Delayed feed" : "Live market"}
-              </span>
-              <span className="text-xs text-paper/45">
-                {data ? `Updated ${ago(data.fetchedAt, now)} · next in ${secondsLeft}s` : "Connecting to market feed…"}
-              </span>
+        {/* top bar */}
+        <div className="relative flex flex-col gap-3 px-4 pt-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-3.5">
+            <div className="relative">
+              <MetalCoin symbol="XAU" size={42} />
+              <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full bg-emerald-400 ring-2 ring-void" />
             </div>
-
-            <div className="home-glass flex flex-wrap items-center gap-2 !rounded-2xl p-2">
-              <div className="min-w-[210px] flex-1">
-                <Select
-                  value={display}
-                  onChange={setCcy}
-                  options={currencyOptions}
-                  ariaLabel="Display currency"
-                  icon={<CoinsIcon size={13} />}
-                  hintInTrigger
-                  searchable
-                  loading={live.isLoading}
-                />
-              </div>
-              <RefreshRing
-                progress={refreshProgress}
-                spinning={live.isFetching}
-                secondsLeft={secondsLeft}
-                onClick={() => live.refetch()}
-              />
-              <Link href="/gold-rates" className="home-btn-gold h-10 px-4 text-sm">
-                Board rates
-                <ArrowRightIcon size={14} />
-              </Link>
-            </div>
-          </div>
-
-          {/* headline */}
-          <div className="mt-8 grid gap-8 lg:grid-cols-[1.35fr_1fr] lg:items-end">
             <div className="min-w-0">
-              <h1 className="g-display text-[30px] leading-[1.05] sm:text-[40px]">
-                Live <span className="home-gold-text">Rates</span>
-              </h1>
-              <p className="mt-2 max-w-lg text-sm leading-relaxed text-paper/55">
-                International spot prices, converted at today&apos;s exchange rates, side by side with the rates on your
-                board.
-              </p>
-
-              <div className="mt-7">
-                <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-paper/45">
-                  <MetalCoin symbol="XAU" size={18} />
-                  Fine gold {k24 ? `· ${k24.karat}` : ""} · per gram
-                </div>
-                {k24 ? (
-                  <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-2">
-                    <div className="flex items-baseline gap-2">
-                      <LiveNumber value={conv(k24.lkrPerGram)} tone="dark" className="text-[44px] leading-none text-paper sm:text-[60px]" />
-                      <span className="text-base font-semibold text-gold-light">{display}</span>
-                    </div>
-                    <ChangeChip pct={k24.change24hPct} tone="dark" suffix={<span className="ml-1 font-sans font-medium opacity-60">24h</span>} className="mb-2" />
-                  </div>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h1 className="g-display text-[24px] leading-none">
+                  Live <span className="home-gold-text">Rates</span>
+                </h1>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/[0.08] px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.16em] text-gold-light">
+                  <span className="relative flex size-1.5">
+                    <span
+                      className={cn(
+                        "absolute inline-flex size-full rounded-full opacity-70",
+                        data?.stale ? "bg-amber-400" : "animate-ping bg-emerald-400"
+                      )}
+                    />
+                    <span className={cn("relative inline-flex size-1.5 rounded-full", data?.stale ? "bg-amber-400" : "bg-emerald-400")} />
+                  </span>
+                  {data?.stale ? "Delayed" : "Live"}
+                </span>
+              </div>
+              <div className="mt-1 truncate text-[11px] text-paper/45">
+                {data ? (
+                  <>
+                    Updated {ago(data.fetchedAt, now)} · next in <span className="g-metric">{secondsLeft}s</span> · FX{" "}
+                    {ago(data.fxUpdatedAt, now)}
+                  </>
                 ) : (
-                  <Shimmer dark className="mt-3 h-14 w-72" />
+                  "Connecting to market feed…"
                 )}
               </div>
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
-              {[
-                {
-                  label: `24K · pawn (8g)`,
-                  value: k24 ? conv(k24.lkrPerPawn) : null,
-                  unit: display,
-                },
-                {
-                  label: `22K · pawn (8g)`,
-                  value: k22 ? conv(k22.lkrPerPawn) : null,
-                  unit: display,
-                },
-                { label: "Spot gold", value: gold?.priceUsd ?? null, unit: "USD/oz", fmt: usd },
-                display === "USD"
-                  ? { label: "USD → LKR", value: data?.usdLkr ?? null, unit: "LKR" }
-                  : silver
-                    ? { label: "Silver · per gram", value: silver.lkrPerGram != null ? conv(silver.lkrPerGram) : null, unit: display }
-                    : { label: `USD → ${display}`, value: data ? perUsd(display) : null, unit: display },
-              ].map((s) => (
-                <div key={s.label} className="home-glass !rounded-2xl px-4 py-3.5">
-                  <div className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-paper/40">{s.label}</div>
-                  {s.value != null ? (
-                    <div className="mt-1.5 flex items-baseline gap-1.5">
-                      <LiveNumber value={s.value} format={s.fmt ?? money} tone="dark" className="truncate text-xl leading-none text-paper" />
-                      <span className="text-[10px] font-semibold text-paper/40">{s.unit}</span>
-                    </div>
-                  ) : (
-                    <Shimmer dark className="mt-2 h-5 w-24" />
-                  )}
-                </div>
-              ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="w-[250px]">
+              <Select
+                value={display}
+                onChange={setCcy}
+                options={currencyOptions}
+                ariaLabel="Display currency"
+                icon={<CountryFlag code={display} size={16} />}
+                hintInTrigger
+                searchable
+                size="sm"
+                loading={live.isLoading}
+              />
             </div>
+            <RefreshRing
+              progress={refreshProgress}
+              spinning={live.isFetching}
+              secondsLeft={secondsLeft}
+              onClick={() => live.refetch()}
+            />
+            <Link href="/gold-rates" className="home-btn-gold h-9 px-3.5 text-[13px]">
+              Board rates
+              <ArrowRightIcon size={13} />
+            </Link>
           </div>
         </div>
 
+        {/* KPI strip */}
+        <div className="relative mx-4 mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-paper/[0.08] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] sm:mx-5 sm:grid-cols-4 2xl:grid-cols-8">
+          <Kpi
+            accent
+            tone="#E2C27A"
+            className="bg-void"
+            label={
+              <span className="flex items-center gap-1.5">
+                <GoldBarIcon size={14} /> {k24?.karat ?? "24K"} · per gram
+              </span>
+            }
+            value={k24 ? conv(k24.lkrPerGram) : null}
+            unit={display}
+            sub={<ChangeChip pct={k24?.change24hPct} tone="dark" className="px-1.5 py-px text-[10px]" />}
+          />
+          <Kpi
+            className="bg-void"
+            tone="#F59E0B"
+            label={
+              <span className="flex items-center gap-1.5">
+                <GoldCoinIcon size={14} /> 22K · per gram
+              </span>
+            }
+            value={k22 ? conv(k22.lkrPerGram) : null}
+            unit={display}
+            sub={<ChangeChip pct={k22?.change24hPct} tone="dark" className="px-1.5 py-px text-[10px]" />}
+          />
+          <Kpi
+            className="bg-void"
+            tone="#FB923C"
+            label={
+              <span className="flex items-center gap-1.5">
+                <SovereignPawnIcon size={14} /> 22K · pawn (8g)
+              </span>
+            }
+            value={k22 ? conv(k22.lkrPerPawn) : null}
+            unit={display}
+            sub={k24 ? <>24K pawn <span className="g-metric ml-1 text-paper/70">{money(conv(k24.lkrPerPawn))}</span></> : null}
+          />
+          <Kpi
+            className="bg-void"
+            tone="#FACC15"
+            label={
+              <span className="flex items-center gap-1.5">
+                <GoldBarIcon size={14} /> Spot gold · troy oz
+              </span>
+            }
+            value={gold?.priceUsd}
+            format={usd}
+            unit="USD"
+            sub={<ChangeChip pct={gold?.change24hPct} tone="dark" className="px-1.5 py-px text-[10px]" />}
+          />
+          <Kpi
+            className="bg-void"
+            tone="#CBD5E1"
+            label={
+              <span className="flex items-center gap-1.5">
+                <SilverCoinIcon size={14} /> Silver · per gram
+              </span>
+            }
+            value={silver?.lkrPerGram != null ? conv(silver.lkrPerGram) : null}
+            unit={display}
+            sub={<ChangeChip pct={silver?.change24hPct} tone="dark" className="px-1.5 py-px text-[10px]" />}
+          />
+          <Kpi
+            className="bg-void"
+            tone="#38BDF8"
+            label={
+              <span className="flex items-center gap-1.5">
+                <FxExchangeIcon size={14} /> USD → {fxTarget}
+              </span>
+            }
+            value={fxValue}
+            unit={fxTarget}
+            sub={data ? <>{data.fx.length + 1} currencies tracked</> : null}
+          />
+          <Kpi
+            className="bg-void"
+            tone="#A78BFA"
+            label={
+              <span className="flex items-center gap-1.5">
+                <RatioScaleIcon size={14} /> Gold / silver ratio
+              </span>
+            }
+            value={goldSilverRatio}
+            format={(n) => n.toFixed(1)}
+            unit=": 1"
+            sub="oz of silver per oz of gold"
+          />
+          <Kpi
+            className="bg-void"
+            tone={avgSpread == null ? "#94A3B8" : Math.abs(avgSpread) <= 2 ? "#34D399" : Math.abs(avgSpread) <= 8 ? "#FBBF24" : "#FB7185"}
+            label={
+              <span className="flex items-center gap-1.5">
+                <SpreadGaugeIcon size={14} /> Board vs market
+              </span>
+            }
+            value={avgSpread}
+            format={(n) => `${n > 0 ? "+" : ""}${n.toFixed(2)}%`}
+            sub={
+              data ? (
+                avgSpread != null ? (
+                  <span className={avgSpread >= 0 ? "text-emerald-300/80" : "text-rose-300/80"}>
+                    avg of {boarded.length} karat{boarded.length === 1 ? "" : "s"}
+                  </span>
+                ) : (
+                  "No board published"
+                )
+              ) : null
+            }
+          />
+        </div>
+
         {/* ticker */}
-        <div className="relative overflow-hidden rounded-b-[24px] border-t border-paper/[0.08] bg-paper/[0.02]">
+        <div className="relative mt-3 overflow-hidden rounded-b-[20px] border-t border-paper/[0.07] bg-paper/[0.02]">
           {ticker.length ? (
-            <div className="home-marquee overflow-hidden py-3">
-              <div className="home-marquee-track flex w-max gap-10 pr-10">
+            <div className="home-marquee overflow-hidden py-2">
+              <div className="home-marquee-track flex w-max gap-8 pr-8">
                 {[...ticker, ...ticker].map((t, i) => (
                   <button
                     key={`${t.key}-${i}`}
                     type="button"
                     onClick={() => setSymbol(t.key)}
-                    className="flex items-center gap-2.5 whitespace-nowrap text-xs text-paper/60 transition-colors hover:text-paper"
+                    className="flex items-center gap-2 whitespace-nowrap text-[11px] text-paper/60 transition-colors hover:text-paper"
                   >
-                    <MetalCoin symbol={t.key} size={18} />
+                    <MetalCoin symbol={t.key} size={15} />
                     <span className="font-semibold text-paper/80">{t.label}</span>
                     <span className="g-metric text-paper">{money(t.value)}</span>
-                    <span className="text-[10px] text-paper/35">{t.unit}</span>
-                    <ChangeChip pct={t.change} tone="dark" />
+                    <span className="text-[9.5px] text-paper/35">{t.unit}</span>
+                    <ChangeChip pct={t.change} tone="dark" className="px-1.5 py-px text-[10px]" />
                   </button>
                 ))}
               </div>
             </div>
           ) : (
-            <div className="flex gap-6 px-8 py-3">
+            <div className="flex gap-6 px-5 py-2">
               {[0, 1, 2, 3].map((i) => (
-                <Shimmer key={i} dark className="h-5 w-40" />
+                <Shimmer key={i} dark className="h-4 w-36" />
               ))}
             </div>
           )}
@@ -403,220 +569,527 @@ export default function LiveRatesPage() {
       ) : null}
 
       {/* ================================================================ KARATS */}
-      <section className="space-y-4">
-        <SectionHead
+      <section className="g-surface overflow-hidden">
+        <PanelHead
           kicker="Gold by karat"
           title={`Market vs your board · ${display}`}
-          aside="Spot × purity · excludes duty, premium and making"
+          right={<span className="text-[11px] text-ink-5">Spot × purity · excludes duty, premium and making</span>}
         />
-        {live.isLoading ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="g-surface space-y-4 p-5">
-                <Shimmer className="h-11 w-28" />
-                <Shimmer className="h-8 w-40" />
-                <Shimmer className="h-16 w-full" />
-              </div>
-            ))}
-          </div>
-        ) : !data?.karats.length ? (
-          <div className="g-surface">
-            <EmptyBlock title="No gold price" description="Gold spot is unavailable or no purities are active." />
-          </div>
+        {!live.isLoading && !data?.karats.length ? (
+          <EmptyBlock title="No gold price" description="Gold spot is unavailable or no purities are active." />
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {data.karats.map((k, i) => (
-              <KaratCard
-                key={k.purityId}
-                featured={i === 0}
-                karat={k.karat}
-                purity={k.purity}
-                perGram={conv(k.lkrPerGram)}
-                perPawn={conv(k.lkrPerPawn)}
-                change={k.change24hPct}
-                board={k.boardRate != null ? conv(k.boardRate) : null}
-                boardDiffPct={k.boardDiffPct}
-                boardSince={k.boardEffectiveFrom}
-                ccy={display}
-                onPublish={canPublish ? () => setPublish({ karat: k, rate: String(Math.round(k.lkrPerGram)) }) : undefined}
-              />
-            ))}
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full min-w-[960px] text-[12.5px]">
+              <thead>
+                <tr className="bg-bone/60 text-left text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">
+                  <th className="py-2 pl-4 pr-2 font-semibold">Karat</th>
+                  <th className="px-2 text-right font-semibold">Per gram</th>
+                  <th className="px-2 text-right font-semibold">24h</th>
+                  <th className="px-2 text-right font-semibold">Pawn · 8 g</th>
+                  <th className="px-2 text-right font-semibold">10 g</th>
+                  <th className="px-2 text-right font-semibold">Tola · 11.66 g</th>
+                  <th className="px-2 text-right font-semibold">Troy oz</th>
+                  <th className="border-l border-ink/[0.06] px-3 text-right font-semibold">Your board / g</th>
+                  <th className="w-[220px] px-3 font-semibold">Board vs market</th>
+                  {canPublish ? <th className="w-px pr-4" /> : null}
+                </tr>
+              </thead>
+              <tbody>
+                {live.isLoading
+                  ? [0, 1, 2, 3].map((i) => (
+                      <tr key={i} className="border-t border-ink/[0.05]">
+                        <td colSpan={canPublish ? 10 : 9} className="px-4 py-2.5">
+                          <Shimmer className="h-7 w-full" />
+                        </td>
+                      </tr>
+                    ))
+                  : data!.karats.map((k, i) => {
+                      const top = i === 0;
+                      const kt = karatTone(k.purity);
+                      return (
+                        <tr
+                          key={k.purityId}
+                          className={cn(
+                            "group border-t border-ink/[0.05] transition-colors duration-150",
+                            top ? "bg-gold-pale/40 hover:bg-gold-pale/70" : "hover:bg-bone/70"
+                          )}
+                        >
+                          <td className="relative py-2 pl-4 pr-2">
+                            <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full" style={{ background: kt.hex }} aria-hidden />
+                            <div className="flex items-center gap-2.5">
+                              <span
+                                className={cn(
+                                  "flex h-7 w-10 items-center justify-center rounded-lg font-display text-[11.5px] font-extrabold tracking-tight shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_4px_10px_-6px_rgba(16,32,27,0.5)]",
+                                  kt.badge
+                                )}
+                              >
+                                {k.karat}
+                              </span>
+                              <div className="w-[100px] leading-tight">
+                                <div className="flex items-baseline justify-between gap-1">
+                                  <span className="flex items-center gap-1 text-[12.5px] font-semibold text-ink">
+                                    <GoldCoinIcon size={13} />
+                                    {k.karat} gold
+                                  </span>
+                                  <span className="g-metric text-[10px] text-ink-5">{(k.purity * 1000).toFixed(0)}‰</span>
+                                </div>
+                                <div className="mt-1 h-1 overflow-hidden rounded-full bg-ink/[0.07]">
+                                  <div className={cn("h-full rounded-full", kt.bar)} style={{ width: `${k.purity * 100}%` }} />
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-2 text-right">
+                            <LiveNumber value={conv(k.lkrPerGram)} className="text-[15px] font-semibold text-ink" />
+                          </td>
+                          <td className="px-2 text-right">
+                            <ChangeChip pct={k.change24hPct} className="px-1.5 py-px text-[10px]" />
+                          </td>
+                          <td className="g-metric px-2 text-right text-ink-2">{money(conv(k.lkrPerPawn))}</td>
+                          <td className="g-metric px-2 text-right text-ink-3">{money(conv(k.lkrPerGram * 10))}</td>
+                          <td className="g-metric px-2 text-right text-ink-3">{money(conv(k.lkrPerGram * UNIT_G.tola))}</td>
+                          <td className="g-metric px-2 text-right text-ink-3">{money(conv(k.lkrPerGram * UNIT_G.oz))}</td>
+                          <td className="border-l border-ink/[0.06] px-3 text-right">
+                            {k.boardRate != null ? (
+                              <div className="leading-tight">
+                                <span className="g-metric font-semibold text-ink">{money(conv(k.boardRate))}</span>
+                                {k.boardEffectiveFrom ? (
+                                  <div className="text-[10px] text-ink-5" title={new Date(k.boardEffectiveFrom).toLocaleString()}>
+                                    set {ago(k.boardEffectiveFrom, now)}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-ink-5">Not published</span>
+                            )}
+                          </td>
+                          <td className="px-3">
+                            {k.boardDiffPct != null ? (
+                              <div className="flex items-center gap-2.5">
+                                <SpreadMeter pct={k.boardDiffPct} className="flex-1" />
+                                <span className="w-[78px] text-right leading-tight">
+                                  <span className={cn("g-metric block text-[11px] font-semibold", spreadTone(k.boardDiffPct))}>
+                                    {k.boardDiffPct > 0 ? "+" : ""}
+                                    {k.boardDiffPct.toFixed(2)}%
+                                  </span>
+                                  {k.boardRate != null ? (
+                                    <span className="g-metric block text-[9.5px] text-ink-5" title="Board minus market, per 8 g pawn">
+                                      {k.boardRate - k.lkrPerGram > 0 ? "+" : ""}
+                                      {money(conv((k.boardRate - k.lkrPerGram) * 8))}/pawn
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-ink-6">—</span>
+                            )}
+                          </td>
+                          {canPublish ? (
+                            <td className="py-2 pr-4">
+                              <button
+                                type="button"
+                                onClick={() => setPublish({ karat: k, rate: String(Math.round(k.lkrPerGram)) })}
+                                className={cn(
+                                  "inline-flex h-7 items-center gap-1 whitespace-nowrap rounded-md px-2.5 text-[11.5px] font-semibold transition-all duration-200 ease-brand",
+                                  top
+                                    ? "bg-void text-gold-light hover:bg-void/90"
+                                    : "bg-bone text-ink-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)] hover:bg-void hover:text-gold-light"
+                                )}
+                              >
+                                Set rate
+                                <ArrowRightIcon size={11} className="transition-transform duration-200 group-hover:translate-x-0.5" />
+                              </button>
+                            </td>
+                          ) : null}
+                        </tr>
+                      );
+                    })}
+              </tbody>
+            </table>
           </div>
         )}
       </section>
 
-      {/* ================================================================ CHART */}
-      <section className="g-surface relative">
-        <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
-        <div className="flex flex-col gap-4 px-5 pt-5 sm:px-6 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex min-w-0 items-start gap-3.5">
-            <MetalCoin symbol={symbol} size={44} />
-            <div className="min-w-0">
-              <div className="g-kicker">Price history · {RANGE_LABEL[range]}</div>
-              <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-                {liveChartValue != null ? (
-                  <LiveNumber value={liveChartValue} className="text-[28px] leading-none text-ink" />
-                ) : (
-                  <Shimmer className="h-7 w-36" />
-                )}
-                <span className="text-xs font-semibold text-ink-4">{chartUnit}</span>
-                {stats?.pct != null ? (
-                  <ChangeChip pct={Math.round(stats.pct * 100) / 100} suffix={<span className="ml-1 font-sans font-medium opacity-60">{range}</span>} />
-                ) : null}
+      {/* ================================================================ PERFORMANCE */}
+      <GoldPerformance pureLkrPerGram={gold?.lkrPerGram ?? null} change24hPct={gold?.change24hPct ?? null} conv={conv} display={display} />
+
+      {/* ================================================================ PULSE */}
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-12">
+        {/* 24h movers */}
+        <section className="g-surface flex flex-col overflow-hidden xl:col-span-4">
+          <PanelHead
+            kicker="Market pulse"
+            title="24h movers"
+            right={
+              <span className="flex items-center gap-2 text-[10px] font-semibold">
+                <span className="text-emerald-700">▲ {movers.filter((q) => (q.change24hPct ?? 0) > 0).length}</span>
+                <span className="text-rose-700">▼ {movers.filter((q) => (q.change24hPct ?? 0) < 0).length}</span>
+              </span>
+            }
+          />
+          <div className="flex-1 px-4 py-2">
+            {live.isLoading
+              ? [0, 1, 2, 3, 4, 5].map((i) => <Shimmer key={i} className="my-2 h-5" />)
+              : movers.map((q) => {
+                  const p = q.change24hPct;
+                  const w = p == null ? 0 : (Math.abs(p) / maxMove) * 50;
+                  return (
+                    <button
+                      key={q.symbol}
+                      type="button"
+                      onClick={() => setSymbol(q.symbol)}
+                      title={`Chart ${q.name}`}
+                      className="grid w-full grid-cols-[96px_1fr_58px] items-center gap-2.5 rounded-md py-[5px] text-left transition-colors hover:bg-bone/70"
+                    >
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <MetalCoin symbol={q.symbol} size={16} />
+                        <span className="truncate text-[11.5px] font-semibold text-ink-2">{q.name}</span>
+                      </span>
+                      <span className="relative h-3 rounded-sm bg-ink/[0.035]">
+                        <span className="absolute inset-y-[-2px] left-1/2 w-px bg-ink/20" aria-hidden />
+                        {p != null && p !== 0 ? (
+                          <span
+                            className={cn(
+                              "absolute inset-y-0.5 rounded-sm transition-[width] duration-700 ease-brand",
+                              p > 0 ? "left-1/2 bg-gradient-to-r from-emerald-500/70 to-emerald-500" : "right-1/2 bg-gradient-to-l from-rose-500/70 to-rose-500"
+                            )}
+                            style={{ width: `${Math.max(1.5, w)}%` }}
+                          />
+                        ) : null}
+                      </span>
+                      <span
+                        className={cn(
+                          "g-metric text-right text-[11px] font-semibold",
+                          p == null ? "text-ink-6" : p > 0 ? "text-emerald-700" : p < 0 ? "text-rose-700" : "text-ink-4"
+                        )}
+                      >
+                        {p == null ? "—" : `${p > 0 ? "+" : ""}${p.toFixed(2)}%`}
+                      </span>
+                    </button>
+                  );
+                })}
+          </div>
+          <div className="border-t border-ink/[0.06] bg-bone/50 px-4 py-1.5 text-[10px] text-ink-5">
+            Bars scaled to the largest move ({maxMove.toFixed(2)}%) · tap to chart
+          </div>
+        </section>
+
+        {/* weight ladder */}
+        <section className="g-surface flex flex-col overflow-hidden xl:col-span-5">
+          <PanelHead
+            kicker="Price ladder"
+            title={`${ladderK?.karat ?? "Gold"} by weight · ${display}`}
+            right={
+              <div className="flex gap-1">
+                {(data?.karats ?? []).map((k) => {
+                  const on = k.purityId === ladderK?.purityId;
+                  const kt = karatTone(k.purity);
+                  return (
+                    <button
+                      key={k.purityId}
+                      type="button"
+                      onClick={() => setLadderKarat(k.purityId)}
+                      className={cn(
+                        "h-6 rounded-md px-2 font-display text-[10.5px] font-extrabold transition-all duration-200",
+                        on ? cn(kt.badge, "shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]") : "bg-ink/[0.05] text-ink-4 hover:bg-ink/[0.09]"
+                      )}
+                    >
+                      {k.karat}
+                    </button>
+                  );
+                })}
+              </div>
+            }
+          />
+          <div className="flex-1 overflow-x-auto scrollbar-thin">
+            <table className="w-full min-w-[420px] text-[12px]">
+              <thead>
+                <tr className="bg-bone/60 text-left text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">
+                  <th className="py-1.5 pl-4 pr-2 font-semibold">Weight</th>
+                  <th className="px-2 text-right font-semibold">Fine gold</th>
+                  <th className="px-2 text-right font-semibold">Market</th>
+                  <th className="px-2 pr-4 text-right font-semibold">Your board</th>
+                </tr>
+              </thead>
+              <tbody>
+                {LADDER.map((l, i) => (
+                  <tr key={l.label} className="border-t border-ink/[0.05] transition-colors hover:bg-gold-pale/30">
+                    <td className="py-[5px] pl-4 pr-2">
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="h-3 rounded-sm"
+                          style={{
+                            width: 4 + i * 3,
+                            background: ladderK ? karatTone(ladderK.purity).hex : "#CDA853",
+                            opacity: 0.35 + i * 0.09,
+                          }}
+                          aria-hidden
+                        />
+                        {l.g >= 100 ? (
+                          <GoldBarIcon size={14} className="shrink-0" />
+                        ) : l.g === 8 || l.g === 40 ? (
+                          <SovereignPawnIcon size={14} className="shrink-0" />
+                        ) : (
+                          <GoldCoinIcon size={13} className="shrink-0" />
+                        )}
+                        <span className="font-semibold text-ink-2">{l.label}</span>
+                        {l.hint ? <span className="text-[10px] text-ink-5">{l.hint}</span> : null}
+                      </span>
+                    </td>
+                    <td className="g-metric px-2 text-right text-ink-4">
+                      {ladderK ? `${(l.g * ladderK.purity).toLocaleString("en-US", { maximumFractionDigits: 2 })} g` : "—"}
+                    </td>
+                    <td className="px-2 text-right">
+                      {ladderK ? (
+                        <LiveNumber value={conv(l.g * ladderK.lkrPerGram)} className="font-semibold text-ink" />
+                      ) : (
+                        <Shimmer className="ml-auto h-4 w-20" />
+                      )}
+                    </td>
+                    <td className="g-metric px-2 pr-4 text-right text-ink-3">
+                      {ladderK?.boardRate != null ? money(conv(l.g * ladderK.boardRate)) : <span className="text-ink-6">—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* cross-market ratios */}
+        <section className="g-surface flex flex-col overflow-hidden lg:col-span-2 xl:col-span-3">
+          <PanelHead kicker="Cross-market" title="Ratios & equivalents" />
+          <div className="grid flex-1 grid-cols-2 gap-px bg-ink/[0.05] lg:grid-cols-4 xl:grid-cols-1">
+            {ratios.map((r) => (
+              <div key={r.label} className="relative bg-paper py-[7px] pl-4 pr-3 transition-colors hover:bg-gold-pale/30">
+                <span className="absolute inset-y-2 left-0 w-[3px] rounded-r-full" style={{ background: r.tone }} aria-hidden />
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="shrink-0">{r.icon}</span>
+                    <span className="truncate text-[11px] font-semibold text-ink-2">{r.label}</span>
+                  </div>
+                  {r.v != null && Number.isFinite(r.v) ? (
+                    <span className="g-metric shrink-0 text-[12.5px] font-semibold text-ink">{r.fmt(r.v)}</span>
+                  ) : live.isLoading ? (
+                    <Shimmer className="h-3.5 w-14" />
+                  ) : (
+                    <span className="text-[11px] text-ink-6">—</span>
+                  )}
+                </div>
+                <div className="truncate pl-[24px] text-[9.5px] text-ink-5">{r.hint}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      {/* ================================================================ CHART + MARKETS */}
+      <div className="grid gap-4 xl:grid-cols-12">
+        <section className="g-surface relative flex flex-col xl:col-span-8">
+          <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
+          <div className="flex flex-col gap-3 border-b border-ink/[0.06] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <MetalCoin symbol={symbol} size={32} />
+              <div className="min-w-0">
+                <div className="g-kicker !text-[9.5px]">
+                  {history.data?.name ?? quoteFor?.name ?? symbol} · {RANGE_LABEL[range]}
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  {liveChartValue != null ? (
+                    <LiveNumber value={liveChartValue} className="text-[20px] leading-none text-ink" />
+                  ) : (
+                    <Shimmer className="h-5 w-28" />
+                  )}
+                  <span className="text-[11px] font-semibold text-ink-4">{chartUnit}</span>
+                  {stats?.pct != null ? (
+                    <ChangeChip
+                      pct={Math.round(stats.pct * 100) / 100}
+                      className="px-1.5 py-px text-[10px]"
+                      suffix={<span className="ml-1 font-sans font-medium opacity-60">{range}</span>}
+                    />
+                  ) : null}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="w-[190px]">
-              <Select
-                value={symbol}
-                onChange={setSymbol}
-                ariaLabel="Market"
-                searchable={false}
-                icon={<TrendingUpIcon size={13} />}
-                options={(data?.quotes ?? [{ symbol: "XAU", name: "Gold", kind: "metal" as const }]).map((q) => ({
-                  value: q.symbol,
-                  label: q.name,
-                  hint: q.kind === "crypto" ? "Crypto" : "Metal",
-                }))}
-              />
-            </div>
-            {hasGram ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <div className="w-[160px]">
+                <Select
+                  value={symbol}
+                  onChange={setSymbol}
+                  ariaLabel="Market"
+                  searchable={false}
+                  size="sm"
+                  icon={<TrendingUpIcon size={12} />}
+                  options={(data?.quotes ?? [{ symbol: "XAU", name: "Gold", kind: "metal" as const }]).map((q) => ({
+                    value: q.symbol,
+                    label: q.name,
+                    hint: q.kind === "crypto" ? "Crypto" : "Metal",
+                  }))}
+                />
+              </div>
+              {hasGram ? (
+                <Segmented
+                  ariaLabel="Price basis"
+                  value={basis}
+                  onChange={setBasis}
+                  items={[
+                    { key: "g", label: "g" },
+                    { key: "unit", label: quoteFor?.unit === "lb" ? "lb" : "oz" },
+                  ]}
+                />
+              ) : null}
               <Segmented
-                ariaLabel="Price basis"
-                value={basis}
-                onChange={setBasis}
+                ariaLabel="Range"
+                value={range}
+                onChange={setRange}
                 items={[
-                  { key: "g", label: "Per g" },
-                  { key: "unit", label: `Per ${quoteFor?.unit === "lb" ? "lb" : "oz"}` },
+                  { key: "1d", label: "1D" },
+                  { key: "7d", label: "7D" },
+                  { key: "30d", label: "30D" },
+                  { key: "1y", label: "1Y" },
                 ]}
               />
-            ) : null}
-            <Segmented
-              ariaLabel="Range"
-              value={range}
-              onChange={setRange}
-              items={[
-                { key: "1d", label: "1D" },
-                { key: "7d", label: "7D" },
-                { key: "30d", label: "30D" },
-                { key: "1y", label: "1Y" },
-              ]}
-            />
+            </div>
           </div>
-        </div>
 
-        <div className="px-2 pb-2 pt-4 sm:px-3">
-          {history.isLoading ? (
-            <Shimmer className="mx-3 h-72" />
-          ) : chart.length < 2 ? (
-            <div className="relative mx-3 flex h-72 flex-col items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-b from-gold-pale to-paper text-center shadow-[inset_0_0_0_1px_rgba(168,138,62,0.15)]">
-              <svg className="absolute inset-x-0 bottom-0 h-32 w-full text-gold/25" viewBox="0 0 400 100" preserveAspectRatio="none" aria-hidden>
-                <path d="M0 80 C 60 70, 90 40, 140 52 S 230 20, 280 34 S 360 10, 400 18 L400 100 L0 100Z" fill="currentColor" />
-              </svg>
-              <div className="relative">
-                <div className="font-display text-base font-bold text-ink">History is building</div>
-                <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-ink-4">
-                  Prices are recorded every hour, and whenever this page is open. The chart fills in as samples accumulate.
-                </p>
+          <div className="flex-1 px-1 pt-3">
+            {history.isLoading ? (
+              <Shimmer className="mx-3 h-60" />
+            ) : chart.length < 2 ? (
+              <div className="relative mx-3 flex h-60 flex-col items-center justify-center overflow-hidden rounded-xl bg-gradient-to-b from-gold-pale to-paper text-center shadow-[inset_0_0_0_1px_rgba(168,138,62,0.15)]">
+                <svg className="absolute inset-x-0 bottom-0 h-28 w-full text-gold/25" viewBox="0 0 400 100" preserveAspectRatio="none" aria-hidden>
+                  <path d="M0 80 C 60 70, 90 40, 140 52 S 230 20, 280 34 S 360 10, 400 18 L400 100 L0 100Z" fill="currentColor" />
+                </svg>
+                <div className="relative">
+                  <div className="font-display text-sm font-bold text-ink">History is building</div>
+                  <p className="mx-auto mt-1 max-w-sm text-[11px] leading-relaxed text-ink-4">
+                    Prices are recorded every hour, and whenever this page is open. The chart fills in as samples accumulate.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="h-60">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chart} margin={{ top: 8, right: 10, left: 4, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="mkt-fill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stopColor={tone} stopOpacity={0.38} />
+                        <stop offset="0.7" stopColor={tone} stopOpacity={0.06} />
+                        <stop offset="1" stopColor={tone} stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="mkt-stroke" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0" stopColor={tone} stopOpacity={0.55} />
+                        <stop offset="1" stopColor={tone} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="rgba(16,32,27,0.06)" strokeDasharray="3 6" vertical={false} />
+                    <XAxis
+                      dataKey="t"
+                      type="number"
+                      scale="time"
+                      domain={["dataMin", "dataMax"]}
+                      tickFormatter={fmtTick}
+                      tickLine={false}
+                      axisLine={false}
+                      minTickGap={40}
+                      tick={{ fill: "#5d6e68", fontSize: 10 }}
+                    />
+                    <YAxis
+                      domain={["auto", "auto"]}
+                      orientation="right"
+                      tickLine={false}
+                      axisLine={false}
+                      width={52}
+                      tick={{ fill: "#93a29c", fontSize: 10 }}
+                      tickFormatter={(v: number) => Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(v)}
+                    />
+                    {stats ? <ReferenceLine y={stats.open} stroke="rgba(16,32,27,0.25)" strokeDasharray="2 4" /> : null}
+                    {stats ? <ReferenceLine y={stats.high} stroke="rgba(5,150,105,0.35)" strokeDasharray="1 5" /> : null}
+                    {stats ? <ReferenceLine y={stats.low} stroke="rgba(225,29,72,0.35)" strokeDasharray="1 5" /> : null}
+                    <Tooltip
+                      cursor={{ stroke: "rgba(168,138,62,0.5)", strokeDasharray: "3 3" }}
+                      content={(p) => (
+                        <ChartTip
+                          {...(p as unknown as { active?: boolean; payload?: { value?: number }[]; label?: number })}
+                          unit={chartUnit}
+                          name={history.data?.name ?? symbol}
+                        />
+                      )}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="v"
+                      stroke="url(#mkt-stroke)"
+                      strokeWidth={2}
+                      fill="url(#mkt-fill)"
+                      isAnimationActive={false}
+                      activeDot={{ r: 4.5, fill: tone, stroke: "#fff", strokeWidth: 2 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+
+          {/* where the last price sits between the period's low and high */}
+          {stats ? (
+            <div className="mx-4 mt-2 flex items-center gap-2.5 text-[10px]">
+              <span className="g-metric text-rose-700">{money(stats.low)}</span>
+              <div className="relative h-1.5 flex-1 rounded-full bg-gradient-to-r from-rose-500/25 via-ink/[0.06] to-emerald-500/25">
+                <span
+                  className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-paper transition-[left] duration-700 ease-brand"
+                  style={{ left: `${stats.pos * 100}%`, background: tone }}
+                />
+              </div>
+              <span className="g-metric text-emerald-700">{money(stats.high)}</span>
+              <span className="w-[86px] text-right font-semibold text-ink-4">{Math.round(stats.pos * 100)}% of range</span>
+            </div>
+          ) : null}
+          <div className="mt-2 grid grid-cols-4 gap-px border-t border-ink/[0.06] bg-ink/[0.06] sm:grid-cols-8">
+            {[
+              { label: "Open", v: stats?.open },
+              { label: "High", v: stats?.high, cls: "text-emerald-700" },
+              { label: "Low", v: stats?.low, cls: "text-rose-700" },
+              { label: "Last", v: stats?.close },
+              { label: "Average", v: stats?.avg },
+              { label: "Range", v: stats ? stats.high - stats.low : undefined },
+              { label: "Change", v: stats ? stats.close - stats.open : undefined, signed: true },
+            ].map((s) => (
+              <div key={s.label} className="bg-paper px-3 py-2">
+                <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">{s.label}</div>
+                <div
+                  className={cn(
+                    "g-metric mt-0.5 truncate text-[12.5px]",
+                    s.signed && s.v != null ? (s.v > 0 ? "text-emerald-700" : s.v < 0 ? "text-rose-700" : "text-ink") : (s.cls ?? "text-ink")
+                  )}
+                >
+                  {s.v != null ? `${s.signed && s.v > 0 ? "+" : ""}${money(s.v)}` : "—"}
+                </div>
+              </div>
+            ))}
+            <div className="bg-paper px-3 py-2" title="Standard deviation of step-to-step moves over the period">
+              <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">Volatility</div>
+              <div className={cn("g-metric mt-0.5 text-[12.5px]", stats == null ? "text-ink" : stats.vol < 0.3 ? "text-emerald-700" : stats.vol < 1 ? "text-amber-700" : "text-rose-700")}>
+                {stats ? `${stats.vol.toFixed(2)}%` : "—"}
               </div>
             </div>
-          ) : (
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chart} margin={{ top: 10, right: 14, left: 4, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="mkt-fill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0" stopColor="#CDA853" stopOpacity={0.38} />
-                      <stop offset="0.7" stopColor="#CDA853" stopOpacity={0.06} />
-                      <stop offset="1" stopColor="#CDA853" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="mkt-stroke" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0" stopColor="#E2C27A" />
-                      <stop offset="0.6" stopColor="#CDA853" />
-                      <stop offset="1" stopColor="#7E6223" />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="rgba(16,32,27,0.06)" strokeDasharray="3 6" vertical={false} />
-                  <XAxis
-                    dataKey="t"
-                    type="number"
-                    scale="time"
-                    domain={["dataMin", "dataMax"]}
-                    tickFormatter={fmtTick}
-                    tickLine={false}
-                    axisLine={false}
-                    minTickGap={40}
-                    tick={{ fill: "#5d6e68", fontSize: 11 }}
-                  />
-                  <YAxis
-                    domain={["auto", "auto"]}
-                    orientation="right"
-                    tickLine={false}
-                    axisLine={false}
-                    width={60}
-                    tick={{ fill: "#93a29c", fontSize: 11 }}
-                    tickFormatter={(v: number) => Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(v)}
-                  />
-                  {stats ? <ReferenceLine y={stats.open} stroke="rgba(16,32,27,0.25)" strokeDasharray="2 4" /> : null}
-                  <Tooltip
-                    cursor={{ stroke: "rgba(168,138,62,0.5)", strokeDasharray: "3 3" }}
-                    content={(p) => (
-                      <ChartTip
-                        {...(p as unknown as { active?: boolean; payload?: { value?: number }[]; label?: number })}
-                        unit={chartUnit}
-                        name={history.data?.name ?? symbol}
-                      />
-                    )}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="v"
-                    stroke="url(#mkt-stroke)"
-                    strokeWidth={2.25}
-                    fill="url(#mkt-fill)"
-                    isAnimationActive={false}
-                    activeDot={{ r: 5, fill: "#CDA853", stroke: "#fff", strokeWidth: 2 }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 border-t border-ink/[0.07] sm:grid-cols-4">
-          {[
-            { label: "Open", v: stats?.open },
-            { label: "High", v: stats?.high },
-            { label: "Low", v: stats?.low },
-            { label: "Last", v: stats?.close },
-          ].map((s, i) => (
-            <div key={s.label} className={cn("px-5 py-3.5 sm:px-6", i > 0 && "sm:border-l sm:border-ink/[0.07]", i % 2 === 1 && "border-l border-ink/[0.07]", i >= 2 && "border-t border-ink/[0.07] sm:border-t-0")}>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-5">{s.label}</div>
-              <div className="g-metric mt-1 text-[15px] text-ink">{s.v != null ? money(s.v) : "—"}</div>
-            </div>
-          ))}
-        </div>
-        {display !== "LKR" && stats ? (
-          <div className="rounded-b-2xl border-t border-ink/[0.07] bg-bone/60 px-5 py-2.5 text-[11px] text-ink-4 sm:px-6">
-            Converted to {display} at today&apos;s rate; LKR history uses each day&apos;s own exchange rate.
           </div>
-        ) : null}
-      </section>
-
-      {/* ================================================================ MARKETS + FX */}
-      <div className="grid gap-4 lg:grid-cols-5">
-        <section className="g-surface overflow-hidden lg:col-span-3">
-          <div className="flex items-end justify-between gap-3 px-5 pb-3 pt-5 sm:px-6">
-            <div>
-              <div className="g-kicker">Metals & markets</div>
-              <h3 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">International spot in {display}</h3>
+          {display !== "LKR" && stats ? (
+            <div className="rounded-b-2xl border-t border-ink/[0.06] bg-bone/60 px-4 py-2 text-[10.5px] text-ink-4">
+              Converted to {display} at today&apos;s rate; LKR history uses each day&apos;s own exchange rate.
             </div>
-            <span className="hidden text-xs text-ink-5 sm:block">Tap a row to chart it</span>
-          </div>
-          <div className="px-2 pb-2 sm:px-3">
+          ) : null}
+        </section>
+
+        <section className="g-surface flex flex-col overflow-hidden xl:col-span-4">
+          <PanelHead
+            kicker="Metals & markets"
+            title={`Spot in ${display}`}
+            right={<span className="text-[10.5px] text-ink-5">Tap to chart</span>}
+          />
+          <div className="flex-1 p-1.5">
             {live.isLoading
-              ? [0, 1, 2, 3, 4].map((i) => <Shimmer key={i} className="m-2 h-14" />)
+              ? [0, 1, 2, 3, 4, 5, 6].map((i) => <Shimmer key={i} className="m-1.5 h-10" />)
               : (data?.quotes ?? []).map((q) => {
                   const on = q.symbol === symbol;
                   return (
@@ -625,110 +1098,255 @@ export default function LiveRatesPage() {
                       type="button"
                       onClick={() => setSymbol(q.symbol)}
                       className={cn(
-                        "group relative flex w-full items-center gap-3.5 rounded-2xl px-3 py-3 text-left transition-all duration-200 ease-brand",
+                        "relative flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-all duration-200 ease-brand",
                         on ? "bg-gold-pale shadow-[inset_0_0_0_1px_rgba(168,138,62,0.22)]" : "hover:bg-bone"
                       )}
                     >
-                      {on ? <span className="absolute inset-y-3 left-0 w-[3px] rounded-full bg-gradient-to-b from-gold-light to-gold-dark" /> : null}
-                      <MetalCoin symbol={q.symbol} size={38} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate text-sm font-semibold text-ink">{q.name}</span>
+                      <span
+                        className={cn("absolute inset-y-2.5 left-0 w-[3px] rounded-full transition-opacity", on ? "opacity-100" : "opacity-30")}
+                        style={{ background: symbolTone(q.symbol) }}
+                      />
+                      <MetalCoin symbol={q.symbol} size={28} />
+                      <div className="min-w-0 flex-1 leading-tight">
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate text-[12.5px] font-semibold text-ink">{q.name}</span>
                           {q.stale ? (
-                            <span className="rounded-full bg-amber-600/15 px-1.5 py-px text-[10px] font-semibold text-amber-700">Delayed</span>
+                            <span className="rounded-full bg-amber-600/15 px-1.5 text-[9px] font-semibold text-amber-700">Delayed</span>
                           ) : null}
                         </div>
-                        <div className="g-metric text-[11px] text-ink-5">
-                          {q.symbol} · {usd(q.priceUsd)} USD/{unitWord(q.unit)}
+                        <div className="g-metric truncate text-[10.5px] text-ink-5">
+                          {q.symbol} · ${usd(q.priceUsd)}/{unitWord(q.unit)}
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right leading-tight">
                         <div className="flex items-baseline justify-end gap-1">
-                          <LiveNumber value={conv(q.lkrPerGram ?? q.priceLkr)} className="text-[15px] font-semibold text-ink" />
-                          <span className="text-[10px] font-semibold text-ink-5">
-                            {display}/{q.lkrPerGram != null ? "g" : unitWord(q.unit)}
-                          </span>
+                          <LiveNumber value={conv(q.lkrPerGram ?? q.priceLkr)} className="text-[13px] font-semibold text-ink" />
+                          <span className="text-[9.5px] font-semibold text-ink-5">/{q.lkrPerGram != null ? "g" : unitWord(q.unit)}</span>
                         </div>
-                        <div className="mt-1 flex justify-end">
-                          <ChangeChip pct={q.change24hPct} />
-                        </div>
+                        <ChangeChip pct={q.change24hPct} className="mt-0.5 px-1.5 py-px text-[10px]" />
                       </div>
                     </button>
                   );
                 })}
           </div>
         </section>
+      </div>
 
-        <section className="g-surface lg:col-span-2">
-          <div className="px-5 pb-4 pt-5 sm:px-6">
-            <div className="g-kicker">Exchange</div>
-            <h3 className="mt-1 font-display text-lg font-bold tracking-tight text-ink">Currency rates</h3>
+      {/* ================================================================ BOARD + VAULT */}
+      <div className="grid gap-4 xl:grid-cols-12">
+        <BoardHistory karats={data?.karats ?? []} conv={conv} display={display} className={canSeeStock ? "xl:col-span-7" : "xl:col-span-12"} />
+        {canSeeStock ? (
+          <VaultValue
+            pureLkrPerGram={gold?.lkrPerGram ?? null}
+            change24hPct={gold?.change24hPct ?? null}
+            conv={conv}
+            display={display}
+            className="xl:col-span-5"
+          />
+        ) : null}
+      </div>
 
-            {/* converter */}
-            <div className="mt-4 rounded-2xl bg-void p-4 text-paper shadow-[inset_0_0_0_1px_rgba(226,194,122,0.18)]">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gold-light/80">Quick convert</div>
-              <div className="mt-3 flex gap-2">
+      {/* ================================================================ COUNTER DESK */}
+      <div className="grid gap-4 xl:grid-cols-12">
+        <BuyBackDesk karats={data?.karats ?? []} conv={conv} display={display} className="xl:col-span-7" />
+        <RetailQuote karats={data?.karats ?? []} conv={conv} display={display} className="xl:col-span-5" />
+      </div>
+
+      {/* ================================================================ CALCULATOR + FX */}
+      <div className="grid gap-4 xl:grid-cols-12">
+        <section className="g-surface flex flex-col overflow-hidden xl:col-span-4">
+          <PanelHead kicker="Calculator" title="Value a piece of gold" />
+          <div className="flex flex-1 flex-col gap-3 p-4">
+            <div className="flex gap-2">
+              <div className="relative min-w-0 flex-1">
                 <input
                   type="number"
                   inputMode="decimal"
                   min="0"
                   step="any"
-                  value={convAmount}
-                  onChange={(e) => setConvAmount(e.target.value)}
-                  aria-label="Amount"
-                  className="g-metric h-11 w-0 min-w-0 flex-1 rounded-xl bg-paper/[0.06] px-3.5 text-base text-paper shadow-[inset_0_0_0_1px_rgba(255,255,255,0.12)] placeholder:text-paper/30 focus:outline-none focus:shadow-[inset_0_0_0_1px_rgba(226,194,122,0.7),0_0_0_4px_rgba(205,168,83,0.18)]"
+                  value={calcW}
+                  onChange={(e) => setCalcW(e.target.value)}
+                  aria-label="Weight"
+                  className={inputCls}
                 />
-                <div className="w-[118px] shrink-0">
-                  <Select value={convFrom} onChange={setConvFrom} options={currencyOptions} ariaLabel="Convert from" searchable />
+              </div>
+              <div className="w-[128px] shrink-0">
+                <Select
+                  value={calcK?.purityId ?? ""}
+                  onChange={setCalcKarat}
+                  ariaLabel="Karat"
+                  size="sm"
+                  searchable={false}
+                  loading={live.isLoading}
+                  options={(data?.karats ?? []).map((k) => ({ value: k.purityId, label: k.karat, hint: `${(k.purity * 1000).toFixed(0)}` }))}
+                />
+              </div>
+            </div>
+            <Segmented
+              ariaLabel="Weight unit"
+              value={calcUnit}
+              onChange={setCalcUnit}
+              items={(Object.keys(UNIT_G) as WeightUnit[]).map((u) => ({ key: u, label: UNIT_LABEL[u] }))}
+            />
+            <div className="mt-auto rounded-xl bg-void p-3.5 text-paper shadow-[inset_0_0_0_1px_rgba(226,194,122,0.18)]">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-[9.5px] font-semibold uppercase tracking-[0.16em] text-gold-light/80">
+                  <GoldBarIcon size={13} />
+                  Market value
+                </span>
+                <span className="g-metric text-[10.5px] text-paper/40">
+                  {grams.toLocaleString("en-US", { maximumFractionDigits: 3 })} g · {calcK?.karat ?? "—"}
+                </span>
+              </div>
+              <div className="mt-1.5 flex items-baseline gap-1.5">
+                {calcMarket != null ? (
+                  <LiveNumber value={calcMarket} tone="dark" className="text-[24px] leading-none text-paper" />
+                ) : (
+                  <Shimmer dark className="h-6 w-32" />
+                )}
+                <span className="text-[11px] font-semibold text-gold-light">{display}</span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-paper/[0.08] text-[10.5px]">
+                <div className="bg-void px-2.5 py-2">
+                  <div className="text-paper/40">At your board</div>
+                  <div className="g-metric mt-0.5 text-[12.5px] text-paper">{calcBoard != null ? money(calcBoard) : "—"}</div>
+                </div>
+                <div className="bg-void px-2.5 py-2">
+                  <div className="text-paper/40">Fine gold content</div>
+                  <div className="g-metric mt-0.5 text-[12.5px] text-paper">
+                    {calcK ? `${(grams * calcK.purity).toLocaleString("en-US", { maximumFractionDigits: 3 })} g` : "—"}
+                  </div>
                 </div>
               </div>
-              <div className="mt-3 flex items-baseline justify-between gap-2 border-t border-paper/[0.08] pt-3">
-                <span className="text-xs text-paper/45">= in {display}</span>
-                {converted != null && Number.isFinite(converted) ? (
-                  <span className="flex items-baseline gap-1.5">
-                    <LiveNumber value={converted} tone="dark" className="text-2xl leading-none text-paper" />
-                    <span className="text-xs font-semibold text-gold-light">{display}</span>
-                  </span>
-                ) : (
-                  <Shimmer dark className="h-6 w-28" />
-                )}
+            </div>
+            <div>
+              <div className="mb-1 text-[9.5px] font-semibold uppercase tracking-[0.16em] text-ink-5">Same weight, every karat</div>
+              <div className="space-y-1">
+                {(data?.karats ?? []).map((k) => {
+                  const kt = karatTone(k.purity);
+                  const v = conv(grams * k.lkrPerGram);
+                  const max = conv(grams * (k24?.lkrPerGram ?? k.lkrPerGram)) || 1;
+                  const on = k.purityId === calcK?.purityId;
+                  return (
+                    <button
+                      key={k.purityId}
+                      type="button"
+                      onClick={() => setCalcKarat(k.purityId)}
+                      className={cn("grid w-full grid-cols-[34px_1fr_auto] items-center gap-2 rounded-md px-1 py-0.5 text-left", on ? "bg-gold-pale/60" : "hover:bg-bone")}
+                    >
+                      <span className={cn("rounded px-1 text-center font-display text-[10px] font-extrabold", kt.badge)}>{k.karat}</span>
+                      <span className="h-1.5 overflow-hidden rounded-full bg-ink/[0.06]">
+                        <span className={cn("block h-full rounded-full", kt.bar)} style={{ width: `${Math.min(100, (v / max) * 100)}%` }} />
+                      </span>
+                      <span className="g-metric text-[11.5px] font-semibold text-ink">{money(v)}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
+        </section>
 
-          <div className="flex items-center justify-between border-t border-ink/[0.07] px-5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-5 sm:px-6">
-            <span>1 unit in {display}</span>
-            <span>{data ? `Updated ${ago(data.fxUpdatedAt, now)}` : ""}</span>
+        <section className="g-surface flex flex-col overflow-hidden xl:col-span-8">
+          <PanelHead
+            kicker="Exchange"
+            title={`Currency rates · 1 unit in ${display}`}
+            right={
+              <div className="flex flex-wrap items-center gap-1">
+                {REGIONS.map((r) => {
+                  const on = fxRegion === r.key;
+                  return (
+                    <button
+                      key={r.key}
+                      type="button"
+                      onClick={() => setFxRegion(on ? null : r.key)}
+                      className={cn(
+                        "inline-flex h-6 items-center gap-1.5 rounded-full px-2 text-[10.5px] font-semibold transition-all duration-200",
+                        on ? "text-paper" : "bg-ink/[0.04] text-ink-3 hover:bg-ink/[0.08]"
+                      )}
+                      style={on ? { background: r.hex } : undefined}
+                    >
+                      <span className="size-1.5 rounded-full" style={{ background: on ? "#fff" : r.hex }} />
+                      {r.label}
+                    </button>
+                  );
+                })}
+              </div>
+            }
+          />
+          {/* converter */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-ink/[0.06] bg-bone/50 px-4 py-2.5">
+            <span className="text-[9.5px] font-semibold uppercase tracking-[0.16em] text-ink-5">Convert</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="any"
+              value={convAmount}
+              onChange={(e) => setConvAmount(e.target.value)}
+              aria-label="Amount"
+              className={cn(inputCls, "w-28 flex-none")}
+            />
+            <div className="w-[112px]">
+              <Select
+                value={convFrom}
+                onChange={setConvFrom}
+                options={currencyOptions}
+                ariaLabel="Convert from"
+                size="sm"
+                searchable
+                icon={<CountryFlag code={convFrom} size={14} />}
+              />
+            </div>
+            <ArrowRightIcon size={13} className="text-ink-5" />
+            <span className="flex items-baseline gap-1.5">
+              {converted != null && Number.isFinite(converted) ? (
+                <LiveNumber value={converted} className="text-[18px] font-semibold leading-none text-ink" />
+              ) : (
+                <Shimmer className="h-5 w-24" />
+              )}
+              <span className="text-[11px] font-semibold text-gold-dark">{display}</span>
+            </span>
+            <span className="ml-auto text-[10px] text-ink-5">{data ? `FX ${ago(data.fxUpdatedAt, now)} · tap a rate to switch` : ""}</span>
           </div>
-          <div className="max-h-[420px] overflow-y-auto px-2 pb-2 scrollbar-thin sm:px-3">
-            {live.isLoading
-              ? [0, 1, 2, 3, 4, 5].map((i) => <Shimmer key={i} className="m-2 h-11" />)
-              : fxRows.map((f) => (
-                  <button
-                    key={f.code}
-                    type="button"
-                    onClick={() => setCcy(f.code)}
-                    title={`Show all prices in ${f.code}`}
-                    className="group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors duration-200 hover:bg-bone"
-                  >
-                    <CurrencyBadge code={f.code} />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-ink">{currencyName(f.code)}</div>
-                      <div className="g-metric text-[11px] text-ink-5">{f.perUsd.toLocaleString("en-US", { maximumFractionDigits: 4 })} per USD</div>
+          <div className="max-h-[296px] flex-1 overflow-y-auto scrollbar-thin">
+            <div className="grid grid-cols-1 gap-px bg-ink/[0.05] sm:grid-cols-2 lg:grid-cols-3">
+              {live.isLoading
+                ? Array.from({ length: 9 }, (_, i) => (
+                    <div key={i} className="bg-paper p-2.5">
+                      <Shimmer className="h-7" />
                     </div>
-                    <div className="text-right">
-                      <span className="g-metric text-sm font-semibold text-ink">{money(f.value)}</span>
-                      <span className="ml-1 text-[10px] font-semibold text-ink-5">{display}</span>
-                    </div>
-                  </button>
-                ))}
+                  ))
+                : shownFx.map((f) => (
+                    <button
+                      key={f.code}
+                      type="button"
+                      onClick={() => setCcy(f.code)}
+                      title={`Show all prices in ${f.code}`}
+                      className="group flex items-center gap-2.5 bg-paper px-3 py-2 text-left transition-colors duration-150 hover:bg-gold-pale/40"
+                    >
+                      <CurrencyBadge code={f.code} />
+                      <div className="min-w-0 flex-1 leading-tight">
+                        <div className="truncate text-[11.5px] font-medium text-ink-2">{currencyName(f.code)}</div>
+                        <div className="g-metric truncate text-[10px] text-ink-5">
+                          {f.perUsd.toLocaleString("en-US", { maximumFractionDigits: 4 })} / USD
+                        </div>
+                      </div>
+                      <span className="g-metric text-[12.5px] font-semibold text-ink">{money(f.value)}</span>
+                    </button>
+                  ))}
+              {/* pad the last grid row so the hairlines stay even */}
+              {!live.isLoading && shownFx.length % 3
+                ? Array.from({ length: 3 - (shownFx.length % 3) }, (_, i) => <div key={`pad-${i}`} className="hidden bg-paper lg:block" />)
+                : null}
+            </div>
           </div>
         </section>
       </div>
 
       {/* ================================================================ SOURCES */}
       {data ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-ink/[0.03] px-5 py-3 text-[11px] text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.05)]">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-[10.5px] text-ink-5">
           <span>
             Sources:{" "}
             {data.sources.map((s, i) => (

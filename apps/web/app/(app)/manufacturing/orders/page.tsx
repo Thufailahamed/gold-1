@@ -6,25 +6,36 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
+import { cn } from "@/lib/cn";
+import { Page, Pager, Modal, controlClass } from "@/components/ui";
+import { HammerIcon, PackageIcon, PlusIcon, SearchIcon, UserCheckIcon, XIcon } from "@/components/icons";
 import {
-  Page,
-  Hero,
-  TableCard,
-  TableSkeleton,
-  Pager,
-  EmptyBlock,
-  StatusPill,
-  Pill,
-  Modal,
-  controlClass,
-  heroBtnPrimary,
-} from "@/components/ui";
-import { HammerIcon } from "@/components/icons";
+  Card,
+  CardHead,
+  Empty,
+  FilterPills,
+  GoldHero,
+  HeroBadge,
+  ORDER_META,
+  ORDER_STATUSES,
+  OPEN_STATUSES,
+  OrderChip,
+  RowsSkeleton,
+  TypeChip,
+  ago,
+  heroGold,
+  inputCls,
+  th,
+  thead,
+  tr,
+} from "../kit";
 
 type Order = { id: string; number: string; type: string; design: string; status: string; customer_name: string | null; created_at: number };
 type Customer = { id: string; name: string; code: string };
+type Summary = { byStatus: { status: string; n: number }[] };
 
-const STATUSES = ["DRAFT", "ALLOCATED", "IN_PRODUCTION", "QC_PASSED", "QC_FAILED", "COMPLETE", "VOID"];
+const STATUSES: readonly string[] = ORDER_STATUSES;
+const PAGE = 25;
 
 function branchDefault(): string {
   if (typeof document === "undefined") return "";
@@ -57,16 +68,18 @@ export default function MfgOrdersPage() {
   const list = useQuery({
     queryKey: ["mfg-orders", search, page, fStatus],
     queryFn: () =>
-      api<{ rows: Order[]; total: number }>(
-        `/api/v1/manufacturing/orders?search=${encodeURIComponent(search)}&page=${page}&limit=20${fStatus ? `&status=${fStatus}` : ""}`
-      ),
+      api<{ rows: Order[]; total: number }>(`/api/v1/manufacturing/orders?search=${encodeURIComponent(search)}&page=${page}&limit=${PAGE}${fStatus ? `&status=${fStatus}` : ""}`),
+  });
+  // Status counts come from the all-time summary, the same cache the overview uses.
+  const summary = useQuery({
+    queryKey: ["mfg-summary", "all"],
+    queryFn: () => api<Summary>("/api/v1/manufacturing/reports/summary?period=all"),
+    staleTime: 30_000,
+    retry: false,
   });
   const customers = useQuery({
     queryKey: ["mfg-customers", customerSearch],
-    queryFn: () =>
-      api<{ rows: Customer[]; total: number }>(
-        `/api/v1/customers?search=${encodeURIComponent(customerSearch)}&limit=10`
-      ),
+    queryFn: () => api<{ rows: Customer[]; total: number }>(`/api/v1/customers?search=${encodeURIComponent(customerSearch)}&limit=10`),
     enabled: customerSearch.length > 0,
   });
 
@@ -89,92 +102,160 @@ export default function MfgOrdersPage() {
       setDescription("");
       setCustomerId("");
       qc.invalidateQueries({ queryKey: ["mfg-orders"] });
+      qc.invalidateQueries({ queryKey: ["mfg-summary"] });
+      qc.invalidateQueries({ queryKey: ["mfg-dash"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Create failed"),
   });
 
   const rows = list.data?.rows ?? [];
   const total = list.data?.total ?? 0;
-  const active = rows.filter((r) => !["COMPLETE", "VOID"].includes(r.status)).length;
+  const by = new Map((summary.data?.byStatus ?? []).map((r) => [r.status, r.n]));
+  const all = (summary.data?.byStatus ?? []).reduce((n, r) => n + r.n, 0);
+  const open = OPEN_STATUSES.reduce((n, s) => n + (by.get(s) ?? 0), 0);
+  const failed = by.get("QC_FAILED") ?? 0;
+  const sLoading = summary.isLoading;
+  const filtered = !!search || !!fStatus;
+  const pageCustomers = rows.filter((r) => r.type === "CUSTOMER").length;
 
   return (
-    <Page>
-      <Hero
-        kicker="Workshop"
-        title="Manufacturing orders"
-        description="Refined lots in, finished jewellery out."
-        note="Materials allocate from approved melting lots — every gram is lineage-tracked."
-        stats={[
-          { label: "Orders", value: total },
-          { label: "On this page", value: rows.length },
-          { label: "In progress", value: active },
-        ]}
+    <Page className="space-y-4">
+      <GoldHero
+        icon={HammerIcon}
+        title="Workshop"
+        accent="orders"
+        badge={failed > 0 ? <HeroBadge tone="bad">{failed} need rework</HeroBadge> : <HeroBadge>Lineage-tracked</HeroBadge>}
+        sub="Refined lots in, finished jewellery out · materials allocate from approved melting lots"
         actions={
           canCreate ? (
-            <button onClick={() => setDialog(true)} className={heroBtnPrimary}>
+            <button type="button" onClick={() => setDialog(true)} className={heroGold}>
+              <PlusIcon size={13} />
               New order
             </button>
           ) : null
         }
+        stats={[
+          { label: "All orders", value: summary.data ? all : undefined, accent: true, loading: sLoading, sub: `${by.get("VOID") ?? 0} void` },
+          { label: "Open", value: summary.data ? open : undefined, loading: sLoading, sub: "Draft → QC passed" },
+          { label: "Draft", value: by.get("DRAFT") ?? (summary.data ? 0 : undefined), loading: sLoading, sub: ORDER_META.DRAFT!.hint },
+          { label: "On the bench", value: summary.data ? (by.get("ALLOCATED") ?? 0) + (by.get("IN_PRODUCTION") ?? 0) : undefined, loading: sLoading, sub: "Allocated or in production" },
+          { label: "QC failed", value: summary.data ? failed : undefined, tone: failed > 0 ? "bad" : undefined, loading: sLoading, sub: "Back to the bench" },
+          { label: "Ready to finish", value: summary.data ? by.get("QC_PASSED") ?? 0 : undefined, tone: "warn", loading: sLoading, sub: "QC passed" },
+          { label: "Complete", value: summary.data ? by.get("COMPLETE") ?? 0 : undefined, tone: "good", loading: sLoading, sub: "In stock / delivered" },
+        ]}
       />
-      <div className="flex flex-wrap gap-2">
-        <input
-          placeholder="Search number or design…"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-          className={controlClass}
+
+      <Card>
+        <CardHead
+          icon={HammerIcon}
+          title="Order book"
+          sub={`${total.toLocaleString("en-US")} ${filtered ? "matching" : "on file"} · ${pageCustomers} customer commission${pageCustomers === 1 ? "" : "s"} on this page`}
+          action={
+            <>
+              <label className="relative">
+                <SearchIcon size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-5" />
+                <input
+                  placeholder="Search number or design…"
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPage(1);
+                  }}
+                  aria-label="Search orders"
+                  className={cn(inputCls, "w-56 pl-8")}
+                />
+              </label>
+              {filtered ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setFStatus("");
+                    setPage(1);
+                  }}
+                  className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[11.5px] font-medium text-ink-4 hover:bg-ink/[0.05] hover:text-ink"
+                >
+                  <XIcon size={12} /> Clear
+                </button>
+              ) : null}
+            </>
+          }
         />
-        <select value={fStatus} onChange={(e) => { setFStatus(e.target.value); setPage(1); }} className={controlClass}>
-          <option value="">All statuses</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-      </div>
-      <TableCard
-        title="Orders"
-        icon={<HammerIcon size={17} />}
-        actions={<span className="g-metric text-[11px] font-medium uppercase tracking-[0.14em] text-ink-4">{String(total).padStart(2, "0")} on file</span>}
-        footer={<Pager page={page} onChange={setPage} pageSize={20} count={rows.length} total={total} unit="orders" />}
-      >
+        <div className="overflow-x-auto border-b border-ink/[0.06] px-4 py-2 scrollbar-thin">
+          <FilterPills
+            value={fStatus}
+            onChange={(s) => {
+              setFStatus(s);
+              setPage(1);
+            }}
+            items={[
+              { key: "", label: "All", count: summary.data ? all : undefined },
+              ...STATUSES.map((s) => ({ key: s, label: ORDER_META[s]!.label, count: summary.data ? by.get(s) ?? 0 : undefined, dot: ORDER_META[s]!.dot })),
+            ]}
+          />
+        </div>
         {list.isLoading ? (
-          <TableSkeleton rows={5} cols={5} />
+          <RowsSkeleton rows={8} />
         ) : list.isError ? (
-          <EmptyBlock title="Failed to load" description="Check the API connection and retry." />
+          <Empty icon={HammerIcon} title="Failed to load" desc="Check the API connection and retry." />
         ) : rows.length === 0 ? (
-          <EmptyBlock title="No orders" description="Create the first manufacturing order." />
+          <Empty
+            icon={PackageIcon}
+            title="No orders"
+            desc={filtered ? "Nothing matches these filters." : "Create the first manufacturing order."}
+            action={
+              canCreate && !filtered ? (
+                <button type="button" onClick={() => setDialog(true)} className="inline-flex h-8 items-center gap-1 rounded-lg bg-void px-3 text-[12px] font-semibold text-gold-light">
+                  <PlusIcon size={12} /> New
+                </button>
+              ) : null
+            }
+          />
         ) : (
-          <table className="g-table">
-            <thead>
-              <tr>
-                <th>Number</th>
-                <th>Type</th>
-                <th>Design</th>
-                <th>Customer</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((o) => (
-                <tr key={o.id}>
-                  <td>
-                    <Link href={`/manufacturing/orders/${o.id}`} className="g-metric font-medium text-ink hover:text-gold-700">
-                      {o.number}
-                    </Link>
-                  </td>
-                  <td><Pill tone="neutral">{o.type}</Pill></td>
-                  <td className="font-medium text-ink">{o.design}</td>
-                  <td className="text-ink-3">{o.customer_name ?? "—"}</td>
-                  <td><StatusPill status={o.status} /></td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-[12px]">
+              <thead>
+                <tr className={thead}>
+                  <th className={cn(th, "pl-4")}>Order</th>
+                  <th className={th}>Type</th>
+                  <th className={th}>Design</th>
+                  <th className={th}>Customer</th>
+                  <th className={th}>Status</th>
+                  <th className={cn(th, "pr-4 text-right")}>Created</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((o) => (
+                  <tr key={o.id} className={cn(tr, o.status === "QC_FAILED" && "bg-rose-50/40", o.status === "VOID" && "opacity-60")}>
+                    <td className="py-1.5 pl-4 pr-2">
+                      <Link href={`/manufacturing/orders/${o.id}`} className="g-metric font-semibold text-ink hover:text-gold-dark">
+                        {o.number}
+                      </Link>
+                    </td>
+                    <td className="px-2">
+                      <TypeChip type={o.type} />
+                    </td>
+                    <td className="max-w-[260px] truncate px-2 font-medium text-ink-2" title={o.design}>
+                      {o.design}
+                    </td>
+                    <td className="max-w-[180px] truncate px-2 text-ink-3">{o.customer_name ?? <span className="text-ink-6">—</span>}</td>
+                    <td className="px-2">
+                      <OrderChip status={o.status} />
+                    </td>
+                    <td className="whitespace-nowrap py-1.5 pl-2 pr-4 text-right text-[11px] text-ink-4" title={new Date(o.created_at).toLocaleString()}>
+                      {ago(o.created_at)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </TableCard>
+        <div className="border-t border-ink/[0.06] px-4 py-2">
+          <Pager page={page} onChange={setPage} pageSize={PAGE} count={rows.length} total={total} unit="orders" />
+        </div>
+      </Card>
+
       {dialog ? (
         <Modal
           kicker="Workshop"
@@ -185,15 +266,27 @@ export default function MfgOrdersPage() {
           submitDisabled={!design || (type === "CUSTOMER" && !customerId)}
           submitLabel="Create"
         >
-          <div className="flex gap-2">
-            {(["INTERNAL", "CUSTOMER"] as const).map((t) => (
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                { t: "INTERNAL", label: "For stock", hint: "Goes to inventory", icon: PackageIcon },
+                { t: "CUSTOMER", label: "For a customer", hint: "Commissioned piece", icon: UserCheckIcon },
+              ] as const
+            ).map((x) => (
               <button
-                key={t}
+                key={x.t}
                 type="button"
-                onClick={() => setType(t)}
-                className={`g-btn h-9 flex-1 px-3.5 text-xs ${type === t ? "g-btn-primary" : "g-btn-secondary"}`}
+                onClick={() => setType(x.t)}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left ring-1 ring-inset transition",
+                  type === x.t ? "bg-void text-paper ring-void" : "bg-paper text-ink ring-ink/10 hover:ring-gold/50"
+                )}
               >
-                {t}
+                <x.icon size={15} className={type === x.t ? "text-gold-light" : "text-ink-4"} />
+                <span className="leading-tight">
+                  <span className="block text-[13px] font-semibold">{x.label}</span>
+                  <span className={cn("block text-[11px]", type === x.t ? "text-paper/50" : "text-ink-4")}>{x.hint}</span>
+                </span>
               </button>
             ))}
           </div>
@@ -201,18 +294,22 @@ export default function MfgOrdersPage() {
             <div className="space-y-2">
               <input placeholder="Search customers…" value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} className={controlClass} />
               <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className={controlClass}>
-                <option value="">Select customer…</option>
+                <option value="">{customerSearch ? "Select customer…" : "Type above to find a customer"}</option>
                 {(customers.data?.rows ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.code})
+                  </option>
                 ))}
               </select>
             </div>
           ) : null}
-          <label className="block text-sm text-ink-2">Design
-            <input value={design} onChange={(e) => setDesign(e.target.value)} className={controlClass} />
+          <label className="block text-sm text-ink-2">
+            Design
+            <input value={design} onChange={(e) => setDesign(e.target.value)} className={controlClass} placeholder="e.g. 22K bangle, floral" />
           </label>
-          <label className="block text-sm text-ink-2">Description
-            <input value={description} onChange={(e) => setDescription(e.target.value)} className={controlClass} />
+          <label className="block text-sm text-ink-2">
+            Description
+            <input value={description} onChange={(e) => setDescription(e.target.value)} className={controlClass} placeholder="Optional — size, stones, finish" />
           </label>
         </Modal>
       ) : null}

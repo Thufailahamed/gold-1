@@ -40,26 +40,26 @@ export function AskBooks({ branchId, className }: { branchId?: string; className
   };
 
   return (
-    <div className={cn("relative border-t border-paper/[0.08] px-5 py-4 sm:px-6", className)}>
+    <div className={cn("relative flex flex-col gap-2 border-t border-paper/[0.08] bg-paper/[0.02] px-4 py-2.5 sm:px-5 lg:flex-row lg:items-center lg:gap-3", className)}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
           ask(q);
         }}
-        className="home-glass group flex items-center gap-3 rounded-2xl p-1.5 pl-2 transition-shadow focus-within:shadow-[inset_0_0_0_1px_rgba(226,194,122,0.6),0_0_0_4px_rgba(205,168,83,0.12)]"
+        className="home-glass group flex min-w-0 items-center gap-2.5 !rounded-xl p-1 pl-1.5 transition-shadow lg:flex-1 focus-within:shadow-[inset_0_0_0_1px_rgba(226,194,122,0.6),0_0_0_4px_rgba(205,168,83,0.12)]"
       >
-        <span className="ast-orb flex size-9 shrink-0 items-center justify-center text-void" aria-hidden>
-          <SparklesIcon size={16} />
+        <span className="ast-orb flex size-7 shrink-0 items-center justify-center text-void" aria-hidden>
+          <SparklesIcon size={13} />
         </span>
         <div className="relative min-w-0 flex-1">
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             aria-label="Ask the accounts assistant"
-            className="peer h-10 w-full bg-transparent text-[14px] text-paper outline-none"
+            className="peer h-8 w-full bg-transparent text-[13px] text-paper outline-none"
           />
           {!q && (
-            <span className="pointer-events-none absolute inset-y-0 left-0 flex min-w-0 items-center gap-1.5 text-[14px] text-paper/40">
+            <span className="pointer-events-none absolute inset-y-0 left-0 flex min-w-0 items-center gap-1.5 text-[13px] text-paper/40">
               <span className="hidden shrink-0 sm:inline">Ask the books —</span>
               <span key={hint} className="truncate text-paper/60 animate-fade-in">
                 “{EXAMPLES[hint]}”
@@ -67,24 +67,24 @@ export function AskBooks({ branchId, className }: { branchId?: string; className
             </span>
           )}
         </div>
-        <button type="submit" className="home-btn-gold h-10 shrink-0 px-4 text-[13px]">
+        <button type="submit" className="home-btn-gold h-8 shrink-0 px-3.5 text-[12.5px]">
           <span className="hidden sm:inline">Ask</span>
-          <ArrowRightIcon size={15} />
+          <ArrowRightIcon size={13} />
         </button>
       </form>
-      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5 lg:shrink-0">
         <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-paper/35">Try</span>
         {CHIPS.map((c) => (
           <button
             key={c}
             type="button"
             onClick={() => ask(c)}
-            className="rounded-full bg-paper/[0.04] px-2.5 py-1 text-[11.5px] text-paper/60 ring-1 ring-inset ring-paper/10 transition hover:bg-paper/[0.08] hover:text-gold-light hover:ring-gold/40"
+            className="rounded-full bg-paper/[0.04] px-2.5 py-0.5 text-[11px] text-paper/60 ring-1 ring-inset ring-paper/10 transition hover:bg-paper/[0.08] hover:text-gold-light hover:ring-gold/40"
           >
             {c}
           </button>
         ))}
-        <span className="ml-auto hidden items-center gap-1.5 text-[11px] text-paper/35 md:inline-flex">
+        <span className="ml-auto hidden items-center gap-1.5 pl-1 text-[10.5px] text-paper/35 md:inline-flex lg:hidden 2xl:inline-flex">
           <span className="size-1.5 rounded-full bg-emerald-400" aria-hidden />
           Answers from the live ledger
         </span>

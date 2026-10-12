@@ -5,25 +5,10 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { Page, Skeleton, StatusPill } from "@/components/ui";
-import {
-  Card,
-  CardHead,
-  Empty,
-  HeadLink,
-  ListSkeleton,
-  ModuleCard,
-  ModuleHero,
-  SectionHead,
-  ago,
-  count,
-  grams,
-  lkr,
-} from "@/components/module-dashboard";
+import { Page, Skeleton } from "@/components/ui";
 import {
   AlertCircleIcon,
   ArrowRightIcon,
-  BanknoteIcon,
   CheckCircleIcon,
   GemIcon,
   HammerIcon,
@@ -31,8 +16,31 @@ import {
   PlusIcon,
   ScaleIcon,
   TrendingUpIcon,
-  UserCheckIcon,
 } from "@/components/icons";
+import {
+  Card,
+  CardHead,
+  Empty,
+  GoldHero,
+  HeadLink,
+  HeroBadge,
+  ORDER_FLOW,
+  ORDER_META,
+  OPEN_STATUSES,
+  OrderChip,
+  RowsSkeleton,
+  ShareBar,
+  TypeChip,
+  ago,
+  count,
+  grams,
+  heroGhost,
+  heroGold,
+  lkrFromCents,
+  th,
+  thead,
+  tr,
+} from "./kit";
 
 /* ------------------------------------------------------------------ types */
 
@@ -41,16 +49,6 @@ type Wip = { id: string; number: string; status: string; allocatedMg: number; ou
 type Order = { id: string; number: string; type: string; design: string; status: string; customer_name: string | null; created_at: number };
 type Paged<R> = { rows: R[]; total: number };
 type Stages = { stages: { old_gold_mg: number; melting_mg: number; refined_mg: number; for_sale_mg: number } };
-
-/** A workshop order's life, from brief to finished piece. QC_FAILED is a detour back to the bench. */
-const STAGES = [
-  { status: "DRAFT", label: "Draft", hint: "Design briefed", bar: "bg-gold-light" },
-  { status: "ALLOCATED", label: "Allocated", hint: "Gold issued", bar: "bg-gold" },
-  { status: "IN_PRODUCTION", label: "On the bench", hint: "Being made", bar: "bg-amber-400" },
-  { status: "QC_FAILED", label: "QC failed", hint: "Needs rework", bar: "bg-rose-500" },
-  { status: "QC_PASSED", label: "QC passed", hint: "Ready to finish", bar: "bg-gold-deep" },
-  { status: "COMPLETE", label: "Complete", hint: "In stock / delivered", bar: "bg-emerald-500" },
-] as const;
 
 /* ------------------------------------------------------------------- page */
 
@@ -64,7 +62,7 @@ export default function ManufacturingDashboardPage() {
   const month = useQuery({ ...opt, queryKey: ["mfg-summary", "month"], queryFn: () => api<Summary>("/api/v1/manufacturing/reports/summary?period=month") });
   const allTime = useQuery({ ...opt, queryKey: ["mfg-summary", "all"], queryFn: () => api<Summary>("/api/v1/manufacturing/reports/summary?period=all") });
   const wip = useQuery({ ...opt, queryKey: ["mfg-wip"], queryFn: () => api<Wip[]>("/api/v1/manufacturing/reports/wip") });
-  const recent = useQuery({ ...opt, queryKey: ["mfg-dash", "recent"], queryFn: () => api<Paged<Order>>("/api/v1/manufacturing/orders?limit=6") });
+  const recent = useQuery({ ...opt, queryKey: ["mfg-dash", "recent", 8], queryFn: () => api<Paged<Order>>("/api/v1/manufacturing/orders?limit=8") });
   const stock = useQuery({
     ...opt,
     enabled: canGold,
@@ -81,230 +79,210 @@ export default function ManufacturingDashboardPage() {
 
   const m = month.data;
   const statusCount = new Map((allTime.data?.byStatus ?? []).map((r) => [r.status, r.n]));
-  const counts = STAGES.map((s) => statusCount.get(s.status) ?? 0);
-  const countAt = (i: number) => counts[i] ?? 0;
+  const counts = ORDER_FLOW.map((s) => statusCount.get(s) ?? 0);
   const inFlow = counts.reduce((a, c) => a + c, 0);
-  const active = STAGES.filter((s) => s.status !== "COMPLETE").reduce((a, s) => a + (statusCount.get(s.status) ?? 0), 0);
+  const open = OPEN_STATUSES.reduce((a, s) => a + (statusCount.get(s) ?? 0), 0);
   const failed = statusCount.get("QC_FAILED") ?? 0;
+  const readyToFinish = statusCount.get("QC_PASSED") ?? 0;
+  const completed = statusCount.get("COMPLETE") ?? 0;
   const wipRows = wip.data ?? [];
   const wipGold = wipRows.reduce((s, w) => s + w.allocatedMg, 0);
   const lossPct = m && m.goldInMg > 0 ? (m.lossMg / m.goldInMg) * 100 : undefined;
   const outPct = m && m.goldInMg > 0 ? Math.min(100, (m.goldOutMg / m.goldInMg) * 100) : 0;
+  const benchPct = m && m.goldInMg > 0 ? Math.max(0, 100 - outPct - (lossPct ?? 0)) : 0;
   const internalN = internal?.data?.total;
   const customerN = customer?.data?.total;
   const typeTotal = (internalN ?? 0) + (customerN ?? 0);
 
   return (
-    <Page>
-      <ModuleHero
-        kicker="Workshop"
-        title={
+    <Page className="space-y-4">
+      <GoldHero
+        icon={HammerIcon}
+        title="Manufacturing"
+        accent="workshop"
+        badge={failed > 0 ? <HeroBadge tone="bad">{failed} failed QC</HeroBadge> : <HeroBadge>Lineage-tracked</HeroBadge>}
+        sub={
           <>
-            Refined lots in, <span className="home-gold-text">finished pieces out.</span>
+            {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · refined lots in, finished pieces out,
+            every gram traced
           </>
         }
-        description="Brief a design, issue gold from approved melting lots, track it across the bench and QC, and finish it into stock — every gram lineage-tracked."
         actions={
           <>
             {canCreate ? (
-              <Link href="/manufacturing/orders?new=1" className="home-btn-gold h-10 px-4 text-sm">
-                <PlusIcon size={15} />
+              <Link href="/manufacturing/orders?new=1" className={heroGold}>
+                <PlusIcon size={13} />
                 New order
               </Link>
             ) : null}
-            <Link href="/manufacturing/orders?status=IN_PRODUCTION" className="home-btn-ghost h-10 px-4 text-sm">
-              <HammerIcon size={15} />
+            <Link href="/manufacturing/orders?status=IN_PRODUCTION" className={heroGhost}>
+              <HammerIcon size={13} />
               On the bench
             </Link>
-            <Link href="/manufacturing/reports" className="home-btn-ghost h-10 px-4 text-sm">
-              <TrendingUpIcon size={15} />
+            {canGold ? (
+              <Link href="/gold/melting?status=APPROVED" className={heroGhost}>
+                <GemIcon size={13} />
+                Refined gold
+              </Link>
+            ) : null}
+            <Link href="/manufacturing/reports" className={heroGhost}>
+              <TrendingUpIcon size={13} />
               Reports
             </Link>
           </>
         }
-        metrics={[
-          { label: "Work in progress", value: wip.data ? wipRows.length : undefined, format: count, unit: "orders", icon: HammerIcon, href: "/manufacturing/reports" },
-          { label: "Gold on the bench", value: wip.data ? wipGold : undefined, format: grams, unit: "g", icon: ScaleIcon, href: "/manufacturing/reports" },
-          { label: "Gold out · month", value: m?.goldOutMg, format: grams, unit: "g", icon: GemIcon, href: "/manufacturing/reports" },
-          { label: "Labour & making · month", value: m?.labourCents, format: lkr, unit: "LKR", icon: BanknoteIcon, href: "/manufacturing/reports" },
+        stats={[
+          { label: "Open orders", value: allTime.data ? open : undefined, accent: true, href: "/manufacturing/orders", loading: allTime.isLoading, sub: `${completed} completed all time` },
+          { label: "On the bench", value: wip.data ? wipRows.length : undefined, unit: "orders", href: "/manufacturing/reports", loading: wip.isLoading, sub: "Allocated → QC" },
+          { label: "Gold on the bench", value: wip.data ? wipGold : undefined, format: grams, unit: "g", href: "/manufacturing/reports", loading: wip.isLoading, sub: "Fine, allocated" },
+          { label: "Gold in · month", value: m?.goldInMg, format: grams, unit: "g", loading: month.isLoading, sub: "Issued to orders" },
+          { label: "Gold out · month", value: m?.goldOutMg, format: grams, unit: "g", tone: "good", loading: month.isLoading, sub: m && m.goldInMg ? `${outPct.toFixed(1)}% of issued` : "In finished pieces" },
+          {
+            label: "Loss · month",
+            value: m?.lossMg,
+            format: grams,
+            unit: "g",
+            tone: m && m.lossMg > 0 ? "bad" : undefined,
+            loading: month.isLoading,
+            sub: lossPct !== undefined ? `${lossPct.toFixed(2)}% of issued` : "Recorded at production",
+          },
+          { label: "Labour & making", value: m?.labourCents, format: lkrFromCents, unit: "LKR", loading: month.isLoading, sub: "This month, with stones" },
+          canGold
+            ? { label: "Refined, ready", value: stock.data?.stages.refined_mg, format: grams, unit: "g", href: "/gold/melting?status=APPROVED", loading: stock.isLoading, sub: "To allocate" }
+            : { label: "Ready to finish", value: allTime.data ? readyToFinish : undefined, loading: allTime.isLoading, sub: "QC passed" },
         ]}
       />
 
-      {/* ------------------------------------------------------- workspaces */}
-      <SectionHead index="01" title="Workspaces" sub="Jump into any part of the workshop" />
-      <div className={cn("grid gap-4 sm:grid-cols-2", canGold || !me.data ? "xl:grid-cols-3" : "xl:grid-cols-2")}>
-        <ModuleCard
-          href="/manufacturing/orders"
-          index="01"
-          icon={HammerIcon}
-          title="Orders"
-          description="Brief new pieces, allocate gold, record production, QC and finish."
-          metric={allTime.data ? active : "—"}
-          metricLabel="Open orders"
-          cta="Manage"
-          loading={allTime.isLoading}
-          alert={failed > 0}
-          delay={0}
-        />
-        <ModuleCard
-          href="/manufacturing/reports"
-          index="02"
-          icon={TrendingUpIcon}
-          title="Reports"
-          description="Throughput, the gold balance in versus out, loss and work in progress."
-          metric={m ? `${grams(m.goldOutMg)} g` : "—"}
-          metricLabel="Gold finished this month"
-          cta="View reports"
-          loading={month.isLoading}
-          delay={60}
-        />
-        {canGold || !me.data ? (
-          <ModuleCard
-            href="/gold/melting?status=APPROVED"
-            index="03"
-            icon={GemIcon}
-            title="Refined gold"
-            description="Approved melting output — the stock your orders allocate from."
-            metric={stock.data ? `${grams(stock.data.stages.refined_mg)} g` : "—"}
-            metricLabel="Ready to allocate"
-            cta="Melting lots"
-            loading={stock.isLoading && canGold}
-            delay={120}
+      {/* --------------------------------------------- pipeline + balance */}
+      <div className="grid gap-4 xl:grid-cols-12">
+        <Card className="xl:col-span-8">
+          <CardHead
+            icon={HammerIcon}
+            title="Production pipeline"
+            sub={allTime.isLoading ? "Every order by stage" : `${count(open)} open · ${count(completed)} completed · tap a stage to see its orders`}
+            action={
+              failed > 0 ? (
+                <Link href="/manufacturing/orders?status=QC_FAILED" className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700 ring-1 ring-inset ring-rose-200">
+                  <AlertCircleIcon size={11} /> {failed} need rework
+                </Link>
+              ) : (
+                <HeadLink href="/manufacturing/orders">All orders</HeadLink>
+              )
+            }
           />
-        ) : null}
-      </div>
-
-      {/* --------------------------------------------------------- pipeline */}
-      <SectionHead index="02" title="Production pipeline" sub="Every order by stage — tap a stage to see its orders" />
-      <Card>
-        <div className="px-5 pt-5 sm:px-6">
-          <div className="flex items-baseline justify-between gap-3">
-            <span className="text-xs font-medium text-ink-4">
-              <span className="g-metric text-base text-ink">{allTime.isLoading ? "—" : count(active)}</span> orders open ·{" "}
-              {count(statusCount.get("COMPLETE") ?? 0)} completed
-            </span>
-            {failed > 0 ? (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-600">
-                <AlertCircleIcon size={13} />
-                {failed} failed QC
-              </span>
-            ) : null}
+          <div className="px-4 pt-3">
+            <div className="flex h-2.5 overflow-hidden rounded-full bg-ink/[0.06]" aria-hidden>
+              {inFlow > 0
+                ? ORDER_FLOW.map((s, i) =>
+                    (counts[i] ?? 0) > 0 ? (
+                      <span
+                        key={s}
+                        className={cn("h-full border-r-2 border-paper transition-[width] duration-700 ease-brand last:border-r-0", ORDER_META[s]!.dot)}
+                        style={{ width: `${((counts[i] ?? 0) / inFlow) * 100}%` }}
+                      />
+                    ) : null
+                  )
+                : null}
+            </div>
           </div>
-          <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-ink/[0.06]" aria-hidden>
-            {inFlow > 0
-              ? STAGES.map((s, i) =>
-                  countAt(i) > 0 ? (
-                    <span
-                      key={s.status}
-                      className={cn("h-full border-r-2 border-paper last:border-r-0 transition-[width] duration-700 ease-brand", s.bar)}
-                      style={{ width: `${(countAt(i) / inFlow) * 100}%` }}
-                    />
-                  ) : null
-                )
-              : null}
-          </div>
-        </div>
-        <ol className="mt-5 grid grid-cols-2 gap-px border-t border-ink/[0.06] bg-ink/[0.06] sm:grid-cols-3 lg:grid-cols-6">
-          {STAGES.map((s, i) => (
-            <li key={s.status} className="bg-paper">
-              <Link
-                href={`/manufacturing/orders?status=${s.status}`}
-                className={cn(
-                  "group relative flex h-full flex-col px-4 py-4 transition-colors",
-                  s.status === "QC_FAILED" && countAt(i) > 0 ? "bg-rose-50/60 hover:bg-rose-50" : "hover:bg-gold-pale/50"
-                )}
-              >
-                <span className="flex items-center gap-2">
-                  <span className={cn("size-2 rounded-full", s.bar)} />
-                  <span className="g-metric text-[10px] tracking-[0.2em] text-ink-5">{String(i + 1).padStart(2, "0")}</span>
-                </span>
-                <span className="mt-3 text-[13px] font-semibold text-ink transition-colors group-hover:text-gold-dark">{s.label}</span>
-                {allTime.isLoading ? (
-                  <Skeleton className="mt-2 h-7 w-10" />
-                ) : (
-                  <span className="g-metric mt-1 text-2xl leading-none text-ink">{allTime.data ? countAt(i) : "—"}</span>
-                )}
-                <span className="mt-2 text-[11px] text-ink-4">{s.hint}</span>
-                {i < STAGES.length - 1 ? (
-                  <ArrowRightIcon size={12} className="absolute right-3 top-4 hidden text-ink-6 transition-colors group-hover:text-gold-dark lg:block" />
-                ) : null}
-              </Link>
-            </li>
-          ))}
-        </ol>
-      </Card>
+          <ol className="mt-3 grid flex-1 grid-cols-2 gap-px border-t border-ink/[0.06] bg-ink/[0.06] sm:grid-cols-3 lg:grid-cols-6">
+            {ORDER_FLOW.map((s, i) => {
+              const c = counts[i] ?? 0;
+              const meta = ORDER_META[s]!;
+              return (
+                <li key={s} className="bg-paper">
+                  <Link
+                    href={`/manufacturing/orders?status=${s}`}
+                    className={cn(
+                      "group relative flex h-full flex-col px-3.5 py-3 transition-colors",
+                      s === "QC_FAILED" && c > 0 ? "bg-rose-50/60 hover:bg-rose-50" : "hover:bg-gold-pale/50"
+                    )}
+                  >
+                    <span className="flex items-center justify-between gap-1">
+                      <span className="flex items-center gap-1.5">
+                        <span className={cn("size-2 rounded-full", meta.dot)} />
+                        <span className="text-[11.5px] font-semibold text-ink transition-colors group-hover:text-gold-dark">{meta.label}</span>
+                      </span>
+                      <span className="g-metric text-[9.5px] text-ink-5">{inFlow ? `${((c / inFlow) * 100).toFixed(0)}%` : `0${i + 1}`}</span>
+                    </span>
+                    {allTime.isLoading ? (
+                      <Skeleton className="mt-2 h-6 w-8" />
+                    ) : (
+                      <span className={cn("g-metric mt-1.5 text-[22px] leading-none", s === "QC_FAILED" && c > 0 ? "text-rose-700" : "text-ink")}>
+                        {allTime.data ? c : "—"}
+                      </span>
+                    )}
+                    <span className="mt-1 text-[10.5px] text-ink-4">{meta.hint}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ol>
+        </Card>
 
-      {/* ------------------------------------------------------ gold balance */}
-      <SectionHead index="03" title="Gold balance" sub="This month's orders — what went in, what came out, what was lost" />
-      <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
-          <CardHead icon={ScaleIcon} title="In versus out" sub="Fine gold issued to orders against fine gold in finished pieces" action={<HeadLink href="/manufacturing/reports">Report</HeadLink>} />
-          <div className="px-5 pb-6 sm:px-6">
+        <Card className="xl:col-span-4">
+          <CardHead icon={ScaleIcon} title="Gold balance · month" sub="Issued to orders against finished pieces" action={<HeadLink href="/manufacturing/reports">Report</HeadLink>} />
+          <div className="flex-1 p-4">
             {month.isLoading ? (
-              <ListSkeleton rows={2} className="h-16 rounded-xl" />
+              <RowsSkeleton rows={3} />
             ) : !m || m.goldInMg === 0 ? (
-              <Empty icon={ScaleIcon} title="No gold issued yet" desc="Allocate refined gold to an order this month to see the balance here." />
+              <Empty icon={ScaleIcon} title="No gold issued yet" desc="Allocate refined gold to an order this month to see the balance." />
             ) : (
-              <div className="space-y-5">
-                <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg bg-ink/[0.06] text-center">
                   {[
-                    { label: "Gold in", value: `${grams(m.goldInMg)} g`, tone: "text-ink" },
-                    { label: "Gold out", value: `${grams(m.goldOutMg)} g`, tone: "text-emerald-700" },
-                    { label: "Loss", value: `${grams(m.lossMg)} g`, tone: m.lossMg > 0 ? "text-rose-700" : "text-ink" },
+                    { k: "In", v: grams(m.goldInMg), tone: "text-ink" },
+                    { k: "Out", v: grams(m.goldOutMg), tone: "text-emerald-700" },
+                    { k: "Loss", v: grams(m.lossMg), tone: m.lossMg > 0 ? "text-rose-700" : "text-ink" },
                   ].map((x) => (
-                    <div key={x.label}>
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">{x.label}</span>
-                      <p className={cn("g-metric mt-1 text-xl leading-none", x.tone)}>{x.value}</p>
+                    <div key={x.k} className="bg-bone/70 px-2 py-2">
+                      <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-ink-5">{x.k} g</div>
+                      <div className={cn("g-metric text-[15px]", x.tone)}>{x.v}</div>
                     </div>
                   ))}
                 </div>
                 <div>
-                  <div className="h-3 overflow-hidden rounded-full bg-ink/[0.06]">
-                    <div className="h-full rounded-full bg-gradient-to-r from-gold-deep via-gold to-gold-light transition-[width] duration-700 ease-brand" style={{ width: `${outPct}%` }} />
+                  <div className="flex h-2.5 overflow-hidden rounded-full bg-ink/[0.06]">
+                    <span className="h-full bg-gradient-to-r from-gold-deep to-gold-light" style={{ width: `${outPct}%` }} />
+                    <span className="h-full bg-amber-300/70" style={{ width: `${benchPct}%` }} />
+                    <span className="h-full bg-rose-500" style={{ width: `${lossPct ?? 0}%` }} />
                   </div>
-                  <div className="mt-2 flex justify-between text-[11px] text-ink-4">
-                    <span>{outPct.toFixed(1)}% of issued gold is in finished pieces</span>
-                    {lossPct !== undefined ? <span className={lossPct > 0 ? "text-rose-600" : ""}>{lossPct.toFixed(2)}% loss</span> : null}
+                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-ink-4">
+                    <span className="flex items-center gap-1">
+                      <span className="size-1.5 rounded-full bg-gold" /> {outPct.toFixed(1)}% finished
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="size-1.5 rounded-full bg-amber-300" /> {benchPct.toFixed(1)}% on bench
+                    </span>
+                    <span className="flex items-center gap-1 text-rose-700">
+                      <span className="size-1.5 rounded-full bg-rose-500" /> {(lossPct ?? 0).toFixed(2)}% loss
+                    </span>
                   </div>
                 </div>
-                <p className="text-[11px] leading-relaxed text-ink-5">
-                  The gap between in and out is gold still on the bench plus recorded loss. Orders are counted by the month they were created.
-                </p>
               </div>
             )}
           </div>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <CardHead icon={UserCheckIcon} title="Order mix" sub="Stock pieces versus customer commissions" action={<HeadLink href="/manufacturing/orders">Orders</HeadLink>} />
-          <div className="space-y-3 px-5 pb-6 sm:px-6">
+          <div className="border-t border-ink/[0.06] px-4 py-2.5">
+            <div className="mb-1.5 flex items-center justify-between text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">
+              <span>Order mix</span>
+              <span className="g-metric normal-case tracking-normal">{typeTotal} total</span>
+            </div>
             {[
-              { label: "For stock", hint: "Internal orders", n: internalN, icon: PackageIcon, bar: "bg-gold" },
-              { label: "For customers", hint: "Commissioned pieces", n: customerN, icon: UserCheckIcon, bar: "bg-gold-deep" },
+              { label: "For stock", n: internalN, bar: "bg-gold", href: "/manufacturing/orders" },
+              { label: "For customers", n: customerN, bar: "bg-void", href: "/custom-orders" },
             ].map((x) => (
-              <div key={x.label} className="rounded-xl bg-bone/70 p-3.5 ring-1 ring-ink/[0.06]">
-                <div className="flex items-center gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-paper text-gold-deep ring-1 ring-ink/[0.08]">
-                    <x.icon size={15} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] font-semibold text-ink">{x.label}</span>
-                    <span className="block text-[11px] text-ink-4">{x.hint}</span>
-                  </span>
-                  <span className="g-metric text-xl text-ink">{x.n === undefined ? "—" : count(x.n)}</span>
-                </div>
-                <div className="mt-3 h-1 overflow-hidden rounded-full bg-ink/[0.07]">
-                  <div className={cn("h-full rounded-full transition-[width] duration-700 ease-brand", x.bar)} style={{ width: `${typeTotal > 0 ? ((x.n ?? 0) / typeTotal) * 100 : 0}%` }} />
-                </div>
-              </div>
+              <Link key={x.label} href={x.href} className="group flex items-center gap-2 py-0.5 text-[12px]">
+                <span className="w-24 shrink-0 text-ink-3 group-hover:text-gold-dark">{x.label}</span>
+                <ShareBar value={typeTotal > 0 ? ((x.n ?? 0) / typeTotal) * 100 : 0} className="flex-1" color={x.bar} />
+                <span className="g-metric w-8 text-right text-ink">{x.n === undefined ? "—" : count(x.n)}</span>
+              </Link>
             ))}
           </div>
         </Card>
       </div>
 
-      {/* ---------------------------------------------------------- the bench */}
-      <SectionHead index="04" title="On the bench" sub="Open work and the latest orders" />
-      <div className="grid gap-4 lg:grid-cols-2">
+      {/* ---------------------------------------------- bench + latest orders */}
+      <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardHead
             icon={HammerIcon}
@@ -312,72 +290,101 @@ export default function ManufacturingDashboardPage() {
             sub={wip.data ? `${wipRows.length} open · ${grams(wipGold)} g fine allocated` : "Allocated, in production or in QC"}
             action={<HeadLink href="/manufacturing/reports">All WIP</HeadLink>}
           />
-          <div className="px-5 pb-5 sm:px-6">
-            {wip.isLoading ? (
-              <ListSkeleton />
-            ) : wipRows.length === 0 ? (
-              <Empty icon={CheckCircleIcon} title="Bench is clear" desc="Nothing is allocated or in production right now." />
-            ) : (
-              <ul className="space-y-2">
-                {wipRows.slice(0, 6).map((w) => (
-                  <li key={w.id}>
-                    <Link
-                      href={`/manufacturing/orders/${w.id}`}
-                      className={cn(
-                        "group flex items-center gap-3 rounded-xl px-3.5 py-3 ring-1 transition-colors",
-                        w.status === "QC_FAILED"
-                          ? "bg-rose-50/70 ring-rose-200/70 hover:bg-rose-50"
-                          : "bg-bone/70 ring-ink/[0.06] hover:bg-gold-pale/60 hover:ring-gold-dark/20"
-                      )}
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="g-metric text-xs font-semibold text-ink">{w.number}</span>
-                        <span className="mt-0.5 block truncate text-xs text-ink-4">
-                          {grams(w.allocatedMg)} g allocated · {w.outputs} piece{w.outputs === 1 ? "" : "s"} made
-                        </span>
-                      </span>
-                      <StatusPill status={w.status} />
-                      <ArrowRightIcon size={13} className="shrink-0 text-ink-5 transition-all group-hover:translate-x-0.5 group-hover:text-gold-dark" />
-                    </Link>
-                  </li>
+          {wip.isLoading ? (
+            <RowsSkeleton />
+          ) : wipRows.length === 0 ? (
+            <Empty icon={CheckCircleIcon} title="Bench is clear" desc="Nothing is allocated or in production right now." />
+          ) : (
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className={thead}>
+                  <th className={cn(th, "pl-4")}>Order</th>
+                  <th className={th}>Status</th>
+                  <th className={cn(th, "w-[28%]")}>Share of bench gold</th>
+                  <th className={cn(th, "text-right")}>Fine g</th>
+                  <th className={cn(th, "pr-4 text-right")}>Pieces</th>
+                </tr>
+              </thead>
+              <tbody>
+                {wipRows.slice(0, 8).map((w) => (
+                  <tr key={w.id} className={cn(tr, w.status === "QC_FAILED" && "bg-rose-50/50")}>
+                    <td className="py-1.5 pl-4 pr-2">
+                      <Link href={`/manufacturing/orders/${w.id}`} className="g-metric font-semibold text-ink hover:text-gold-dark">
+                        {w.number}
+                      </Link>
+                    </td>
+                    <td className="px-2">
+                      <OrderChip status={w.status} />
+                    </td>
+                    <td className="px-2">
+                      <ShareBar value={wipGold ? (w.allocatedMg / wipGold) * 100 : 0} />
+                    </td>
+                    <td className="g-metric px-2 text-right text-ink">{grams(w.allocatedMg)}</td>
+                    <td className="g-metric py-1.5 pl-2 pr-4 text-right text-ink-3">{w.outputs}</td>
+                  </tr>
                 ))}
-              </ul>
-            )}
-          </div>
+              </tbody>
+            </table>
+          )}
+          {wipRows.length > 8 ? <p className="border-t border-ink/[0.05] px-4 py-1.5 text-[11px] text-ink-4">+ {wipRows.length - 8} more on the bench</p> : null}
         </Card>
 
         <Card>
-          <CardHead icon={PackageIcon} title="Latest orders" sub="Most recently briefed" action={<HeadLink href="/manufacturing/orders">All orders</HeadLink>} />
-          <div className="pb-2">
-            {recent.isLoading ? (
-              <div className="px-5 pb-4 sm:px-6">
-                <ListSkeleton rows={4} className="h-11 rounded-lg" />
-              </div>
-            ) : (recent.data?.rows ?? []).length === 0 ? (
-              <div className="px-5 pb-4 sm:px-6">
-                <Empty icon={PackageIcon} title="No orders yet" desc="Brief your first piece and it will show up here." />
-              </div>
-            ) : (
-              <ul className="divide-y divide-ink/[0.05] border-t border-ink/[0.05]">
+          <CardHead
+            icon={PackageIcon}
+            title="Latest orders"
+            sub={recent.data ? `${count(recent.data.total)} on file · most recently briefed` : "Most recently briefed"}
+            action={
+              <>
+                {canCreate ? (
+                  <Link href="/manufacturing/orders?new=1" className="inline-flex items-center gap-1 rounded-md bg-void px-2 py-1 text-[11px] font-semibold text-gold-light hover:bg-void/90">
+                    <PlusIcon size={11} /> New
+                  </Link>
+                ) : null}
+                <HeadLink href="/manufacturing/orders">All</HeadLink>
+              </>
+            }
+          />
+          {recent.isLoading ? (
+            <RowsSkeleton />
+          ) : (recent.data?.rows ?? []).length === 0 ? (
+            <Empty icon={PackageIcon} title="No orders yet" desc="Brief your first piece and it will show up here." />
+          ) : (
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className={thead}>
+                  <th className={cn(th, "pl-4")}>Order</th>
+                  <th className={th}>Design</th>
+                  <th className={th}>For</th>
+                  <th className={cn(th, "pr-4 text-right")}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
                 {(recent.data?.rows ?? []).map((o) => (
-                  <li key={o.id}>
-                    <Link href={`/manufacturing/orders/${o.id}`} className="group flex items-center gap-3 px-5 py-3 transition-colors hover:bg-gold-pale/40 sm:px-6">
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2">
-                          <span className="g-metric text-xs font-semibold text-ink group-hover:text-gold-dark">{o.number}</span>
-                          <span className="text-[11px] text-ink-5">{ago(o.created_at)}</span>
-                        </span>
-                        <span className="mt-0.5 block truncate text-xs text-ink-4">
-                          {o.design} · {o.type === "CUSTOMER" ? o.customer_name ?? "Customer" : "For stock"}
-                        </span>
-                      </span>
-                      <StatusPill status={o.status} />
-                    </Link>
-                  </li>
+                  <tr key={o.id} className={tr}>
+                    <td className="whitespace-nowrap py-1.5 pl-4 pr-2">
+                      <Link href={`/manufacturing/orders/${o.id}`} className="g-metric font-semibold text-ink hover:text-gold-dark">
+                        {o.number}
+                      </Link>
+                      <span className="ml-1.5 text-[10px] text-ink-5">{ago(o.created_at)}</span>
+                    </td>
+                    <td className="max-w-[180px] truncate px-2 text-ink-2" title={o.design}>
+                      {o.design}
+                    </td>
+                    <td className="max-w-[140px] truncate px-2">
+                      {o.type === "CUSTOMER" ? <span className="text-ink-3">{o.customer_name ?? "Customer"}</span> : <TypeChip type={o.type} />}
+                    </td>
+                    <td className="py-1.5 pl-2 pr-4 text-right">
+                      <OrderChip status={o.status} />
+                    </td>
+                  </tr>
                 ))}
-              </ul>
-            )}
-          </div>
+              </tbody>
+            </table>
+          )}
+          <Link href="/manufacturing/orders" className="group mt-auto flex items-center justify-center gap-1 border-t border-ink/[0.06] py-2 text-[11px] font-medium text-ink-4 hover:bg-bone hover:text-ink">
+            Open the order book <ArrowRightIcon size={11} className="transition-transform group-hover:translate-x-0.5" />
+          </Link>
         </Card>
       </div>
     </Page>

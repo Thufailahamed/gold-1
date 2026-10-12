@@ -3,10 +3,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { Page, Skeleton } from "@/components/ui";
+import { Page } from "@/components/ui";
+import { Card, CardHead, Empty, FilterPills, GoldHero, HeroBadge, RowsSkeleton, ago, grams, heroGhost, inputCls, th, thead, tr } from "../kit";
 import {
   AlertCircleIcon,
   ArrowRightIcon,
@@ -15,13 +17,13 @@ import {
   CircleSlashIcon,
   FlaskConicalIcon,
   GemIcon,
-  InboxIcon,
   RefreshCwIcon,
   ScaleIcon,
+  SearchIcon,
   XIcon,
 } from "@/components/icons";
 
-type QueueRow = { id: string; number: string; description: string; status: string; net_mg: number };
+type QueueRow = { id: string; number: string; description: string; status: string; net_mg: number; created_at?: number; customer_name?: string | null };
 
 const METHODS: { key: string; label: string; hint: string }[] = [
   { key: "acid", label: "Acid", hint: "Scratch & acid" },
@@ -67,14 +69,6 @@ const RESULTS: { key: string; label: string; hint: string; icon: ReactNode; on: 
   },
 ];
 
-const TABS = [
-  { key: "RECEIVED", label: "Awaiting test" },
-  { key: "TESTED", label: "Tested" },
-] as const;
-
-const cardShadow =
-  "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]";
-
 const karatOf = (p: number) => {
   const k = (p / 1000) * 24;
   return Number.isFinite(k) ? `${k.toFixed(k >= 10 ? 1 : 2).replace(/\.0$/, "")}K` : "—";
@@ -82,11 +76,13 @@ const karatOf = (p: number) => {
 
 export default function TestingPage() {
   const qc = useQueryClient();
+  const router = useRouter();
   const [tab, setTab] = useState<"RECEIVED" | "TESTED">("RECEIVED");
   const [testing, setTesting] = useState<QueueRow | null>(null);
   const [method, setMethod] = useState("xrf");
   const [permille, setPermille] = useState("");
   const [result, setResult] = useState("pass");
+  const [q, setQ] = useState("");
 
   const queue = useQuery({
     queryKey: ["og-queue"],
@@ -121,226 +117,181 @@ export default function TestingPage() {
 
   const waitingRows = queue.data?.rows ?? [];
   const testedRows = retest.data?.rows ?? [];
-  const waiting = waitingRows.length;
-  const retests = testedRows.length;
+  const waiting = queue.data?.total ?? waitingRows.length;
+  const retests = retest.data?.total ?? testedRows.length;
   const loading = queue.isLoading || retest.isLoading;
   const waitingNet = waitingRows.reduce((s, r) => s + r.net_mg, 0);
-  const rows = tab === "RECEIVED" ? waitingRows : testedRows;
-
-  const stats: { label: string; value: string; sub: string; icon: ReactNode; gold?: boolean; warn?: boolean }[] = [
-    { label: "Awaiting test", value: String(waiting), sub: waiting ? "Received, not yet assayed" : "Queue is clear", icon: <InboxIcon size={16} />, warn: waiting > 0 },
-    { label: "Tested", value: String(retests), sub: "Passed · can be retested", icon: <CheckCircleIcon size={16} /> },
-    {
-      label: "Metal waiting",
-      value: `${(waitingNet / 1000).toLocaleString("en-US", { maximumFractionDigits: 3 })} g`,
-      sub: "Net weight in the queue",
-      icon: <ScaleIcon size={16} />,
-      gold: true,
-    },
-  ];
+  const testedNet = testedRows.reduce((s, r) => s + r.net_mg, 0);
+  const oldest = waitingRows.reduce((m, r) => (r.created_at ? Math.min(m, r.created_at) : m), Infinity);
+  const needle = q.trim().toLowerCase();
+  const rows = (tab === "RECEIVED" ? waitingRows : testedRows).filter(
+    (r) => !needle || [r.number, r.description, r.customer_name ?? ""].some((x) => x.toLowerCase().includes(needle))
+  );
 
   return (
-    <Page className="space-y-6">
-      {/* Hero */}
-      <section className="relative overflow-hidden rounded-[28px] bg-void text-paper shadow-5 ring-1 ring-gold/10">
-        <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-60" aria-hidden />
-        <div className="home-drift pointer-events-none absolute -right-24 -top-32 size-[22rem] rounded-full bg-gold/20 blur-[120px]" aria-hidden />
-        <div className="pointer-events-none absolute -bottom-40 -left-24 size-80 rounded-full bg-emerald-400/10 blur-[110px]" aria-hidden />
-        <div className="home-noise pointer-events-none absolute inset-0" aria-hidden />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" aria-hidden />
+    <Page className="space-y-4">
+      <GoldHero
+        icon={FlaskConicalIcon}
+        title="Purity testing,"
+        accent="assayed true"
+        back={{ href: "/old-gold", label: "Old gold" }}
+        badge={loading ? null : waiting ? <HeroBadge tone="warn">{waiting} to test</HeroBadge> : <HeroBadge tone="good">Queue clear</HeroBadge>}
+        sub="Assay every received piece before valuation. A pass sets the purity; a fail or inconclusive result sends it back for a retest."
+        actions={
+          <Link href="/old-gold/intake" className={heroGhost}>
+            <ScaleIcon size={13} /> New intake
+          </Link>
+        }
+        stats={[
+          { label: "Awaiting test", value: loading ? undefined : waiting, tone: waiting ? "warn" : "good", loading, sub: waiting ? "Received, not yet assayed" : "Queue is clear" },
+          { label: "Metal waiting", value: loading ? undefined : waitingNet, format: grams, unit: "g", accent: true, loading, sub: "Net weight in the queue" },
+          { label: "Oldest waiting", value: null, text: Number.isFinite(oldest) ? ago(oldest) : "—", loading, sub: "Since intake" },
+          { label: "Tested", value: loading ? undefined : retests, loading, sub: "Passed · awaiting valuation" },
+          { label: "Tested metal", value: loading ? undefined : testedNet, format: grams, unit: "g", loading, sub: "Ready to value" },
+        ]}
+      />
 
-        <div className="relative px-5 py-6 sm:px-7 lg:px-8 lg:py-7">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/[0.08] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">
-            <FlaskConicalIcon size={11} />
-            Old gold · Lab
-          </span>
-          <h1 className="g-display mt-3.5 text-3xl text-paper sm:text-[2.6rem]">
-            Purity testing, <span className="home-gold-text">assayed true.</span>
-          </h1>
-          <p className="mt-2.5 max-w-xl text-sm leading-relaxed text-paper/60">
-            Assay every received piece before valuation. A pass sets the purity; a fail or inconclusive result sends it
-            back for a retest.
-          </p>
-        </div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+        <Card>
+          <CardHead
+            icon={FlaskConicalIcon}
+            title="Testing queue"
+            sub={`${waiting + retests} item${waiting + retests === 1 ? "" : "s"} · test received pieces, retest tested ones`}
+            action={
+              <>
+                <label className="relative">
+                  <span className="sr-only">Filter queue</span>
+                  <SearchIcon size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-5" />
+                  <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Number, piece, customer…" className={cn(inputCls, "w-48 pl-7")} />
+                </label>
+                <FilterPills<"RECEIVED" | "TESTED">
+                  value={tab}
+                  onChange={setTab}
+                  items={[
+                    { key: "RECEIVED", label: "Awaiting test", count: waiting, dot: waiting ? "bg-amber-400" : undefined },
+                    { key: "TESTED", label: "Tested", count: retests },
+                  ]}
+                />
+              </>
+            }
+          />
 
-        <div className="relative grid grid-cols-1 gap-px border-t border-paper/[0.08] bg-paper/[0.06] sm:grid-cols-3">
-          {stats.map((s) => (
-            <div
-              key={s.label}
-              className={cn(
-                "group flex min-w-0 items-center gap-3.5 bg-void/95 px-4 py-4 transition-colors hover:bg-void/80 sm:px-6",
-                s.gold && "bg-gradient-to-br from-void/95 to-[#0d3a2c]/95"
-              )}
-            >
-              <span
-                className={cn(
-                  "flex size-10 shrink-0 items-center justify-center rounded-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1",
-                  s.gold
-                    ? "bg-gradient-to-b from-gold-light to-gold text-void ring-gold/40"
-                    : s.warn
-                      ? "bg-amber-400/15 text-amber-200 ring-amber-300/25"
-                      : "bg-gradient-to-b from-paper/[0.09] to-paper/[0.03] text-gold-light ring-paper/[0.09]"
-                )}
-              >
-                {s.icon}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-paper/40">{s.label}</span>
-                {loading ? (
-                  <Skeleton className="mt-1 h-6 w-14 bg-paper/10" />
-                ) : (
-                  <span className={cn("g-metric mt-0.5 block truncate text-xl leading-tight", s.gold ? "text-gold-light" : s.warn ? "text-amber-200" : "text-paper")}>
-                    {s.value}
-                  </span>
-                )}
-                <span className="mt-1 block truncate text-[10px] text-paper/35">{s.sub}</span>
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Queue */}
-      <section className={cn("relative overflow-hidden rounded-[22px] bg-paper", cardShadow)}>
-        <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
-        <div className="flex flex-col gap-4 border-b border-ink/[0.06] px-5 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-center gap-3.5">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_8px_18px_-10px_rgba(6,42,34,0.7)]">
-              <FlaskConicalIcon size={17} />
-            </span>
-            <div className="min-w-0">
-              <h2 className="truncate font-sans text-[15px] font-semibold tracking-normal text-ink">Testing queue</h2>
-              <p className="truncate text-xs text-ink-4">
-                {waiting + retests} item{waiting + retests === 1 ? "" : "s"} · test received pieces, retest tested ones
-              </p>
-            </div>
-          </div>
-          <div
-            role="tablist"
-            aria-label="Queue"
-            className="relative grid grid-cols-2 rounded-xl bg-bone p-1 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)] sm:w-80"
-          >
-            <span
-              aria-hidden
-              className="absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/2)] rounded-lg bg-void shadow-[inset_0_0_0_1px_rgba(205,168,83,0.3),0_8px_18px_-10px_rgba(6,42,34,0.8)] transition-transform duration-320 ease-brand"
-              style={{ transform: `translateX(${tab === "TESTED" ? 100 : 0}%)` }}
+          {loading ? (
+            <RowsSkeleton rows={6} />
+          ) : rows.length === 0 ? (
+            <Empty
+              icon={CheckCircleIcon}
+              title={needle ? "No matches" : tab === "RECEIVED" ? "Nothing awaiting a test" : "No tested items"}
+              desc={
+                needle
+                  ? "Try another number or description."
+                  : tab === "RECEIVED"
+                    ? "Every received piece has been assayed. New intake lands here automatically."
+                    : "Passed items wait here for valuation and can be retested."
+              }
+              action={
+                <Link href="/old-gold/intake" className="g-btn g-btn-primary h-8 rounded-lg px-3 text-[12px]">
+                  <ScaleIcon size={12} /> New intake
+                </Link>
+              }
             />
-            {TABS.map((t) => {
-              const on = t.key === tab;
-              const n = t.key === "RECEIVED" ? waiting : retests;
-              return (
-                <button
-                  key={t.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={on}
-                  onClick={() => setTab(t.key)}
-                  className={cn(
-                    "relative inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3 text-[13px] font-medium transition-colors duration-200",
-                    on ? "text-paper" : "text-ink-4 hover:text-ink"
-                  )}
-                >
-                  {t.label}
-                  <span
-                    className={cn(
-                      "g-metric min-w-5 rounded-full px-1.5 text-center text-[10px] font-semibold leading-[18px]",
-                      on ? (t.key === "RECEIVED" && n > 0 ? "bg-amber-400 text-void" : "bg-paper/15 text-paper") : "bg-ink/[0.07] text-ink-3"
-                    )}
-                  >
-                    {n}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="grid gap-3 p-5 sm:grid-cols-2 sm:p-6 xl:grid-cols-3">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-36 rounded-2xl" />
-            ))}
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="p-5 sm:p-6">
-            <div className="relative flex flex-col items-center overflow-hidden rounded-[22px] bg-gradient-to-b from-emerald-50 via-emerald-50/30 to-paper px-6 py-14 text-center ring-1 ring-emerald-600/10">
-              <div className="pointer-events-none absolute -top-20 left-1/2 size-60 -translate-x-1/2 rounded-full bg-emerald-300/30 blur-[70px]" aria-hidden />
-              <span className="relative mb-4 flex size-14 items-center justify-center rounded-2xl bg-gradient-to-b from-emerald-500 to-emerald-700 text-paper shadow-[0_12px_24px_-10px_rgba(5,150,105,0.7)]">
-                <CheckCircleIcon size={26} />
-              </span>
-              <h3 className="relative font-sans text-lg font-semibold tracking-normal text-ink">
-                {tab === "RECEIVED" ? "Nothing awaiting a test" : "No tested items"}
-              </h3>
-              <p className="relative mt-1.5 max-w-sm text-sm text-ink-4">
-                {tab === "RECEIVED"
-                  ? "Every received piece has been assayed. New intake lands here automatically."
-                  : "Passed items wait here for valuation and can be retested."}
-              </p>
-              <Link href="/old-gold/intake" className="g-btn g-btn-primary relative mt-6 h-10 rounded-xl px-4 text-sm">
-                <ScaleIcon size={14} /> New intake
-              </Link>
+          ) : (
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full min-w-[600px] text-[12.5px]">
+                <thead className={thead}>
+                  <tr>
+                    <th className={cn(th, "pl-4")}>Item</th>
+                    <th className={th}>Piece</th>
+                    <th className={th}>Customer</th>
+                    <th className={cn(th, "text-right")}>Net g</th>
+                    <th className={cn(th, "text-right")}>Waiting</th>
+                    <th className={cn(th, "pr-4 text-right")}>
+                      <span className="sr-only">Action</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => {
+                    const received = r.status === "RECEIVED";
+                    return (
+                      <tr key={r.id} className={cn(tr, "group cursor-pointer")} onClick={() => router.push(`/old-gold/items/${r.id}`)}>
+                        <td className="relative whitespace-nowrap py-1.5 pl-4 pr-2">
+                          <span aria-hidden className={cn("absolute inset-y-1 left-0 w-[3px] rounded-r-full", received ? "bg-amber-400" : "bg-gold")} />
+                          <Link href={`/old-gold/items/${r.id}`} onClick={(e) => e.stopPropagation()} className="g-metric font-semibold text-ink group-hover:text-gold-deep">
+                            {r.number}
+                          </Link>
+                        </td>
+                        <td className="max-w-[18rem] truncate px-2 py-1.5 text-ink-3">{r.description}</td>
+                        <td className="max-w-[10rem] truncate px-2 py-1.5 text-ink-4">{r.customer_name ?? "—"}</td>
+                        <td className="g-metric px-2 py-1.5 text-right font-medium text-ink">{grams(r.net_mg)}</td>
+                        <td className="whitespace-nowrap px-2 py-1.5 text-right text-[11px] text-ink-4">{r.created_at ? ago(r.created_at) : "—"}</td>
+                        <td className="py-1 pl-2 pr-4 text-right">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTesting(r);
+                            }}
+                            className={cn(
+                              "inline-flex h-7 items-center gap-1 rounded-lg px-2.5 text-[11.5px] font-semibold transition-colors",
+                              received ? "bg-void text-paper hover:bg-void/90" : "text-ink-3 ring-1 ring-inset ring-ink/10 hover:bg-void hover:text-paper hover:ring-0"
+                            )}
+                          >
+                            {received ? <FlaskConicalIcon size={11} className="text-gold-light" /> : <RefreshCwIcon size={11} />}
+                            {received ? "Test" : "Retest"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="bg-bone/70">
+                  <tr className="border-t border-ink/10 text-[12px] font-semibold">
+                    <td colSpan={3} className="py-1.5 pl-4 text-[9.5px] uppercase tracking-[0.14em] text-gold-dark">
+                      Total · {rows.length} items
+                    </td>
+                    <td className="g-metric px-2 py-1.5 text-right text-gold-deep">{grams(rows.reduce((n, r) => n + r.net_mg, 0))}</td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              </table>
             </div>
-          </div>
-        ) : (
-          <ul className="grid gap-3 p-5 sm:grid-cols-2 sm:p-6 xl:grid-cols-3">
-            {rows.map((r, i) => {
-              const received = r.status === "RECEIVED";
-              return (
-                <li
-                  key={r.id}
-                  className={cn(
-                    "group relative flex animate-fade-in flex-col overflow-hidden rounded-2xl bg-paper p-4 ring-1 transition-all duration-320 ease-brand",
-                    "ring-ink/[0.08] hover:-translate-y-1 hover:shadow-[0_24px_48px_-28px_rgba(126,98,35,0.5)] hover:ring-gold-dark/35"
-                  )}
-                  style={{ animationDelay: `${Math.min(i, 12) * 35}ms` }}
-                >
-                  <span
-                    aria-hidden
-                    className={cn("absolute inset-x-0 top-0 h-[3px]", received ? "bg-gradient-to-r from-amber-300 to-amber-500" : "bg-gradient-to-r from-gold-dark to-gold-light")}
-                  />
-                  <div className="flex items-start justify-between gap-3">
-                    <Link href={`/old-gold/items/${r.id}`} className="min-w-0">
-                      <span className="g-metric block text-sm font-semibold text-ink transition-colors group-hover:text-gold-deep">{r.number}</span>
-                      <span className="mt-0.5 line-clamp-2 block text-[13px] leading-snug text-ink-3">{r.description}</span>
-                    </Link>
-                    <span
-                      className={cn(
-                        "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ring-1",
-                        received ? "bg-amber-50 text-amber-700 ring-amber-600/15" : "bg-gold-pale text-gold-deep ring-gold-dark/20"
-                      )}
-                    >
-                      <span className={cn("size-1.5 rounded-full", received ? "bg-amber-500" : "bg-gold")} />
-                      {received ? "Received" : "Tested"}
-                    </span>
-                  </div>
-                  <div className="mt-4 flex items-end justify-between gap-3">
-                    <span>
-                      <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-5">Net</span>
-                      <span className="g-metric text-lg leading-tight text-ink">
-                        {(r.net_mg / 1000).toLocaleString("en-US")}
-                        <span className="ml-0.5 text-xs text-ink-4">g</span>
-                      </span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setTesting(r)}
-                      className={cn(
-                        "inline-flex h-10 items-center gap-1.5 rounded-xl px-4 text-xs font-semibold transition-all duration-200",
-                        received
-                          ? "bg-void text-paper shadow-[inset_0_0_0_1px_rgba(205,168,83,0.3),0_10px_20px_-12px_rgba(6,42,34,0.8)] hover:-translate-y-px"
-                          : "text-ink-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.14)] hover:bg-void hover:text-paper hover:shadow-none"
-                      )}
-                    >
-                      {received ? <FlaskConicalIcon size={13} className="text-gold-light" /> : <RefreshCwIcon size={12} />}
-                      {received ? "Test" : "Retest"}
-                    </button>
-                  </div>
+          )}
+        </Card>
+
+        <div className="min-w-0 space-y-4">
+          <Card>
+            <CardHead icon={GemIcon} title="Common finenesses" sub="One tap in the test dialog" />
+            <table className="w-full text-[12px]">
+              <tbody>
+                {PRESETS.map((pr) => (
+                  <tr key={pr.permille} className={tr}>
+                    <td className="py-1.5 pl-4">
+                      <span className="g-metric rounded bg-gradient-to-b from-gold-light to-gold px-1.5 py-px text-[10px] font-bold text-void">{pr.karat}</span>
+                    </td>
+                    <td className="g-metric px-2 py-1.5 text-right text-ink">{pr.permille}‰</td>
+                    <td className="g-metric py-1.5 pl-2 pr-4 text-right text-ink-4">{(pr.permille / 10).toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+          <Card>
+            <CardHead icon={FlaskConicalIcon} title="Methods" sub="Pick one when recording a test" />
+            <ul className="divide-y divide-ink/[0.05] text-[12px]">
+              {METHODS.map((m) => (
+                <li key={m.key} className="flex items-center justify-between gap-3 px-4 py-1.5">
+                  <span className="font-medium text-ink">{m.label}</span>
+                  <span className="text-ink-4">{m.hint}</span>
                 </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+              ))}
+            </ul>
+            <p className="border-t border-ink/[0.06] bg-bone/40 px-4 py-2 text-[10.5px] leading-snug text-ink-4">
+              Only a pass sets the purity ({karatOf(916)} = 916‰). Fail or inconclusive sends the piece back to the queue.
+            </p>
+          </Card>
+        </div>
+      </div>
 
       {testing ? (
         <TestDialog

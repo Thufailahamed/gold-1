@@ -9,8 +9,7 @@ import { api, type MeData } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useCountUp } from "@/lib/count-up";
 import { businessToday, monthBounds, type MonthlyReport } from "@/lib/monthly";
-import { BarList, GaugeRing, Page, Pill, SectionLabel, Skeleton, StatusPill, controlClass } from "@/components/ui";
-import { SpotlightCard } from "@/components/home/motion";
+import { BarList, Page, Pill, SectionLabel, Skeleton, StatusPill } from "@/components/ui";
 import { AskBooks } from "@/components/ask-books";
 import { DailyBrief } from "@/components/daily-brief";
 import {
@@ -90,11 +89,14 @@ function Signed({ cents, className }: { cents: number; className?: string }) {
 
 /* ------------------------------------------------------------- primitives */
 
-function Card({ children, className }: { children: ReactNode; className?: string }) {
+function Card({ children, className, dark }: { children: ReactNode; className?: string; dark?: boolean }) {
   return (
     <section
       className={cn(
-        "relative overflow-hidden rounded-[18px] bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-28px_rgba(16,32,27,0.25)]",
+        "relative flex flex-col overflow-hidden rounded-2xl",
+        dark
+          ? "bg-void text-paper shadow-4"
+          : "bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-30px_rgba(16,32,27,0.28)]",
         className
       )}
     >
@@ -117,21 +119,26 @@ function CardHead({
   dark?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 px-5 pb-4 pt-5 sm:px-6">
-      <div className="flex min-w-0 items-center gap-3">
+    <div
+      className={cn(
+        "relative flex items-center justify-between gap-3 border-b px-4 py-2.5",
+        dark ? "border-paper/[0.08]" : "border-ink/[0.06]"
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-2.5">
         <span
           className={cn(
-            "flex size-9 shrink-0 items-center justify-center rounded-xl",
+            "flex size-7 shrink-0 items-center justify-center rounded-lg",
             dark
               ? "bg-gradient-to-b from-gold-light to-gold-deep text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]"
               : "bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,138,62,0.2)]"
           )}
         >
-          <Icon size={16} />
+          <Icon size={14} />
         </span>
-        <div className="min-w-0">
-          <h2 className={cn("truncate font-sans text-[15px] font-semibold tracking-normal", dark ? "text-paper" : "text-ink")}>{title}</h2>
-          {sub ? <p className={cn("truncate text-xs", dark ? "text-paper/45" : "text-ink-4")}>{sub}</p> : null}
+        <div className="min-w-0 leading-tight">
+          <h2 className={cn("truncate font-sans text-[13.5px] font-semibold tracking-normal", dark ? "text-paper" : "text-ink")}>{title}</h2>
+          {sub ? <p className={cn("truncate text-[11px]", dark ? "text-paper/45" : "text-ink-4")}>{sub}</p> : null}
         </div>
       </div>
       {action}
@@ -144,12 +151,12 @@ function HeadLink({ href, children, dark }: { href: string; children: ReactNode;
     <Link
       href={href}
       className={cn(
-        "group inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+        "group inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
         dark ? "text-paper/50 hover:bg-paper/[0.06] hover:text-gold-light" : "text-ink-4 hover:bg-ink/[0.05] hover:text-ink"
       )}
     >
       {children}
-      <ArrowRightIcon size={12} className="transition-transform group-hover:translate-x-0.5" />
+      <ArrowRightIcon size={11} className="transition-transform group-hover:translate-x-0.5" />
     </Link>
   );
 }
@@ -158,178 +165,140 @@ function Empty({ icon: Icon, title, desc, dark }: { icon: IconCmp; title: string
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-xl border border-dashed px-6 py-10 text-center",
+        "flex items-center gap-3 rounded-xl border border-dashed px-4 py-4",
         dark ? "border-paper/15 bg-paper/[0.02]" : "border-ink/[0.12] bg-bone/60"
       )}
     >
       <span
         className={cn(
-          "mb-3 flex size-10 items-center justify-center rounded-xl",
+          "flex size-8 shrink-0 items-center justify-center rounded-lg",
           dark ? "bg-paper/[0.06] text-gold-light" : "bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)]"
         )}
       >
-        <Icon size={18} />
+        <Icon size={15} />
       </span>
-      <p className={cn("text-sm font-medium", dark ? "text-paper" : "text-ink")}>{title}</p>
-      <p className={cn("mt-1 max-w-[16rem] text-xs leading-relaxed", dark ? "text-paper/50" : "text-ink-4")}>{desc}</p>
-    </div>
-  );
-}
-
-/** Section divider with a mono index, title and an optional right-side control. */
-function SectionHead({ index, title, sub, aside }: { index: string; title: ReactNode; sub?: ReactNode; aside?: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-end gap-3 pt-2 sm:gap-4">
-      <span className="g-metric pb-0.5 text-[11px] font-semibold tracking-[0.22em] text-gold-dark">{index}</span>
       <div className="min-w-0">
-        <h2 className="font-display text-base font-bold tracking-tight text-ink">{title}</h2>
-        {sub ? <p className="mt-0.5 text-xs text-ink-4">{sub}</p> : null}
+        <p className={cn("text-[13px] font-medium", dark ? "text-paper" : "text-ink")}>{title}</p>
+        <p className={cn("text-[11px] leading-snug", dark ? "text-paper/50" : "text-ink-4")}>{desc}</p>
       </div>
-      <div className="hidden h-px flex-1 translate-y-[-6px] bg-ink/[0.08] sm:block" />
-      {aside}
     </div>
   );
 }
 
-/** Spotlight KPI tile with a count-up metric and a gold underline sweep on hover. */
-function KpiTile({
+/** One figure in the hero ledger strip; counts up and links to its desk. */
+function HeroStat({
   label,
-  icon: Icon,
   cents,
+  text,
   format = lkr,
   sub,
+  tone,
   href,
-  tone = "neutral",
+  meter,
   loading,
-  delay = 0,
 }: {
   label: string;
-  icon: IconCmp;
   cents?: number;
+  text?: string;
   format?: (n: number) => string;
   sub?: ReactNode;
+  tone?: "good" | "bad";
   href?: string;
-  tone?: "neutral" | "good" | "bad";
+  meter?: number;
   loading?: boolean;
-  delay?: number;
 }) {
   const shown = useCountUp(cents);
   const body = (
-    <SpotlightCard tone="light" className="flex h-full flex-col p-4">
-      <div className="flex items-center justify-between gap-3">
-        <span className="flex min-w-0 items-center gap-2.5 text-sm font-medium text-ink-3">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,138,62,0.2)] transition-all duration-320 group-hover:from-void group-hover:to-ink-2 group-hover:text-gold-light">
-            <Icon size={15} />
-          </span>
-          <span className="truncate">{label}</span>
-        </span>
+    <>
+      <span className="flex items-center justify-between gap-2">
+        <span className="truncate text-[9.5px] font-semibold uppercase tracking-[0.16em] text-paper/40">{label}</span>
         {href ? (
           <ArrowRightIcon
-            size={14}
-            className="-translate-x-1 shrink-0 text-ink-5 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-gold-dark group-hover:opacity-100"
+            size={11}
+            className="shrink-0 -translate-x-1 text-paper/30 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-gold-light group-hover:opacity-100"
           />
         ) : null}
-      </div>
-      <div className="mt-3">
-        {loading ? (
-          <Skeleton className="h-7 w-28" />
-        ) : (
-          <div className="flex items-baseline gap-1.5">
-            {cents !== undefined ? <span className="text-xs font-medium text-ink-4">LKR</span> : null}
-            <span
-              className={cn(
-                "g-metric truncate text-[21px] leading-none",
-                tone === "good" && "text-emerald-700",
-                tone === "bad" && "text-rose-700",
-                tone === "neutral" && "text-ink"
-              )}
-            >
-              {cents !== undefined ? format(shown) : "—"}
-            </span>
-          </div>
-        )}
-        {sub ? <p className="mt-2 truncate text-xs text-ink-4">{sub}</p> : null}
-      </div>
-      <span className="absolute inset-x-4 bottom-0 h-0.5 origin-left scale-x-0 rounded-full bg-gradient-to-r from-gold-dark via-gold-light to-transparent transition-transform duration-500 ease-brand group-hover:scale-x-100" />
-    </SpotlightCard>
+      </span>
+      {loading ? (
+        <Skeleton className="mt-1.5 h-5 w-24 bg-paper/10" />
+      ) : (
+        <span className="mt-1 flex items-baseline gap-1 whitespace-nowrap">
+          {cents !== undefined ? <span className="text-[9.5px] font-semibold text-paper/35">LKR</span> : null}
+          <span
+            className={cn(
+              "g-metric truncate text-[18px] leading-none",
+              tone === "good" ? "text-emerald-300" : tone === "bad" ? "text-rose-300" : "text-paper"
+            )}
+          >
+            {cents !== undefined ? format(shown) : text ?? "—"}
+          </span>
+        </span>
+      )}
+      {meter !== undefined ? (
+        <span className="mt-2 block h-1 overflow-hidden rounded-full bg-paper/10">
+          <span
+            className={cn(
+              "block h-full rounded-full transition-[width] duration-700 ease-brand",
+              meter >= 100 ? "bg-emerald-400" : "bg-gradient-to-r from-gold-deep to-gold-light"
+            )}
+            style={{ width: `${meter}%` }}
+          />
+        </span>
+      ) : sub ? (
+        <span className="mt-1.5 block truncate text-[10.5px] text-paper/40">{sub}</span>
+      ) : null}
+    </>
   );
-  const cls = "group block h-full animate-fade-in rounded-[22px]";
-  const style = { animationDelay: `${delay}ms` };
+  const cls = "group block min-w-0 bg-void px-4 py-2.5 transition-colors hover:bg-[#0a3a2f]";
   return href ? (
-    <Link href={href} className={cls} style={style}>
+    <Link href={href} className={cls}>
       {body}
     </Link>
   ) : (
-    <div className={cls} style={style}>
-      {body}
-    </div>
+    <div className={cls}>{body}</div>
   );
 }
 
-/**
- * Hub card linking to an accounts desk or book. Vertical so names and live
- * stats never truncate; `featured` widens the first card of a group on the
- * two-column layout so five cards never leave an orphan.
- */
-function HubTile({
+/** A compact launcher cell for a desk or book. */
+function DeskTile({
   href,
-  index,
   icon: Icon,
   title,
-  description,
   stat,
   statTone = "muted",
-  featured,
-  variant = "desk",
-  delay = 0,
+  book,
 }: {
   href: string;
-  index: string;
   icon: IconCmp;
   title: string;
-  description: string;
   stat?: ReactNode;
   statTone?: "ok" | "warn" | "info" | "muted";
-  featured?: boolean;
-  variant?: "desk" | "book";
-  delay?: number;
+  book?: boolean;
 }) {
   const dot = { ok: "bg-emerald-500", warn: "bg-amber-500", info: "bg-gold", muted: "bg-ink/25" }[statTone];
   return (
     <Link
       href={href}
-      style={{ animationDelay: `${delay}ms` }}
       className={cn(
-        "group relative flex min-w-0 animate-fade-in flex-col overflow-hidden rounded-2xl p-3.5 transition-all duration-320 ease-brand hover:-translate-y-0.5",
-        variant === "desk"
-          ? "bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),inset_0_1px_0_rgba(255,255,255,0.9),0_18px_40px_-32px_rgba(16,32,27,0.3)] hover:shadow-[inset_0_0_0_1px_rgba(205,168,83,0.55),0_26px_50px_-30px_rgba(126,98,35,0.45)]"
-          : "bg-gradient-to-b from-paper to-gold-pale/70 shadow-[inset_0_0_0_1px_rgba(168,138,62,0.16),0_18px_40px_-32px_rgba(126,98,35,0.35)] hover:shadow-[inset_0_0_0_1px_rgba(205,168,83,0.6),0_26px_50px_-30px_rgba(126,98,35,0.5)]",
-        featured && "sm:col-span-2 lg:col-span-1"
+        "group relative flex min-w-0 items-center gap-2.5 px-3 py-2.5 transition-colors duration-200",
+        book ? "bg-gradient-to-b from-paper to-gold-pale/40 hover:to-gold-pale" : "bg-paper hover:bg-gold-pale/50"
       )}
     >
-      <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/70 to-transparent opacity-0 transition-opacity duration-320 group-hover:opacity-100" />
-      <span className="pointer-events-none absolute -right-12 -top-12 size-32 rounded-full bg-gold/15 opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-100" />
-
-      <div className="relative flex items-center gap-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,138,62,0.22),inset_0_1px_0_rgba(255,255,255,0.8)] transition-all duration-320 group-hover:from-void group-hover:to-ink-2 group-hover:text-gold-light group-hover:shadow-[0_10px_22px_-10px_rgba(6,42,34,0.6)]">
-          <Icon size={16} />
+      <span className="pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-gold/70 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,138,62,0.22),inset_0_1px_0_rgba(255,255,255,0.8)] transition-all duration-300 group-hover:from-void group-hover:to-ink-2 group-hover:text-gold-light">
+        <Icon size={15} />
+      </span>
+      <span className="min-w-0 flex-1 leading-tight">
+        <span className="block truncate text-[12.5px] font-semibold text-ink transition-colors group-hover:text-gold-deep">{title}</span>
+        <span className="mt-0.5 flex items-center gap-1.5">
+          <span className={cn("size-1.5 shrink-0 rounded-full", dot, statTone === "warn" && "animate-pulse-soft")} />
+          <span className="truncate text-[10.5px] text-ink-4">{stat}</span>
         </span>
-        <h3 className="min-w-0 flex-1 font-sans text-sm font-semibold leading-tight tracking-normal text-ink transition-colors group-hover:text-gold-deep">
-          {title}
-        </h3>
-        <span className="g-metric shrink-0 self-start text-[9px] tracking-[0.2em] text-ink-5 transition-colors group-hover:text-gold-dark">{index}</span>
-      </div>
-      <p className="relative mt-2 line-clamp-2 text-[11.5px] leading-snug text-ink-4">{description}</p>
-
-      <div className="min-h-2.5 flex-1" />
-      <div className="relative flex items-center gap-2 border-t border-ink/[0.06] pt-2">
-        <span className={cn("size-1.5 shrink-0 rounded-full", dot, statTone === "warn" && "animate-pulse-soft")} />
-        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-ink-3">{stat}</span>
-        <ArrowRightIcon
-          size={13}
-          className="shrink-0 -translate-x-1 text-ink-5 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-gold-dark group-hover:opacity-100"
-        />
-      </div>
+      </span>
+      <ArrowRightIcon
+        size={12}
+        className="shrink-0 -translate-x-1 text-ink-5 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-gold-dark group-hover:opacity-100"
+      />
     </Link>
   );
 }
@@ -350,25 +319,25 @@ function StatementRow({
   return (
     <div
       className={cn(
-        "flex items-baseline justify-between gap-3 py-2.5",
-        indent && "pl-4",
+        "flex items-baseline justify-between gap-3",
+        indent && "pl-3",
         strong
-          ? "mt-1.5 rounded-xl bg-bone px-3.5 py-3 text-[15px] font-semibold text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]"
-          : "border-b border-ink/[0.05] text-sm text-ink-3"
+          ? "mt-1 rounded-lg bg-bone px-3 py-2 text-[13.5px] font-semibold text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]"
+          : "border-b border-dashed border-ink/[0.07] py-1.5 text-[12.5px] text-ink-3"
       )}
     >
       <span className="min-w-0 truncate" title={hint}>
         {label}
       </span>
-      <Signed cents={cents} className={strong ? "text-lg" : "text-sm"} />
+      <Signed cents={cents} className={strong ? "text-[15px]" : "text-[12.5px]"} />
     </div>
   );
 }
 
 /* ------------------------------------------------------------------- page */
 
-const heroSelectClass =
-  "h-9 rounded-full bg-paper/[0.07] px-4 pr-9 text-[13px] text-paper shadow-[inset_0_0_0_1px_rgba(246,245,240,0.18)] transition-shadow duration-200 hover:bg-paper/[0.1] focus:outline-none focus:shadow-[inset_0_0_0_1px_#E2C27A,0_0_0_3px_rgba(205,168,83,0.3)] [&>option]:bg-paper [&>option]:text-ink";
+const heroControl =
+  "h-8 rounded-lg bg-paper/[0.07] px-2.5 text-[12.5px] text-paper shadow-[inset_0_0_0_1px_rgba(246,245,240,0.16)] transition-shadow duration-200 hover:bg-paper/[0.1] focus:outline-none focus:shadow-[inset_0_0_0_1px_#E2C27A,0_0_0_3px_rgba(205,168,83,0.3)] [color-scheme:dark] [&>option]:bg-paper [&>option]:text-ink";
 
 export default function AccountsDashboardPage() {
   const today = businessToday();
@@ -519,94 +488,54 @@ export default function AccountsDashboardPage() {
   const branchName = visibleBranches.find((b) => b.id === branchId)?.name ?? "";
   const dayStatus = !branchId ? "Pick a branch" : closedToday ? "Today is closed" : "Today is open";
 
-  const strip: {
-    label: string;
-    value: string;
-    prefix?: string;
-    suffix?: string;
-    icon: IconCmp;
-    href?: string;
-    tone?: string;
-    meter?: number;
-  }[] = [
-    { label: "Spent today", value: todays.data ? lkr(todayPosted) : "—", prefix: "LKR", icon: CreditCardIcon, href: "/expenses?range=today" },
-    {
-      label: "Day closing",
-      value: !branchId ? "—" : closedToday ? "Closed" : p ? `${checksPass}/${checksTotal}` : "—",
-      suffix: !branchId ? "pick a branch" : !closedToday && p ? "checks pass" : undefined,
-      icon: ClipboardCheckIcon,
-      href: "/day-closing",
-      tone: closedToday ? "text-emerald-300" : undefined,
-      meter: branchId && p ? (closedToday ? 100 : checksPct) : undefined,
-    },
-    { label: "Spent this month", value: summary.data ? lkr(monthPosted) : "—", prefix: "LKR", icon: TrendingUpIcon, href: "/expenses?range=month" },
-    {
-      label: "Net profit · month",
-      value: r ? lkrSigned(r.profit.netProfitCents) : "—",
-      prefix: "LKR",
-      icon: ScaleIcon,
-      href: monthReportHref,
-      tone: r && r.profit.netProfitCents < 0 ? "text-rose-300" : undefined,
-    },
-  ];
+  const monthLabel = new Date(Date.UTC(year, mon - 1, 1)).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+  const attention = (pending.data?.rows.length ?? 0) > 0 || (r?.warnings.length ?? 0) > 0;
+  const recentClosings = (closings.data?.rows ?? []).slice(0, 5);
 
   return (
-    <Page>
+    <Page className="space-y-4">
       {/* ---------------------------------------------------------------- hero */}
-      <section className="relative overflow-hidden rounded-[22px] bg-void text-paper shadow-5">
+      <section className="relative overflow-hidden rounded-[20px] bg-void text-paper shadow-5">
         <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-40" />
-        <div className="home-drift pointer-events-none absolute -right-24 -top-32 size-80 rounded-full bg-gold/20 blur-[110px]" />
+        <div className="home-drift pointer-events-none absolute -right-24 -top-40 size-80 rounded-full bg-gold/[0.18] blur-[110px]" />
         <div className="pointer-events-none absolute -bottom-40 left-1/4 size-72 rounded-full bg-gold-deep/25 blur-[110px]" />
         <div className="home-noise pointer-events-none absolute inset-0" />
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
 
-        <div className="relative grid gap-4 px-5 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-8">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/[0.08] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">
-                <span className="size-1.5 animate-pulse-soft rounded-full bg-gold" />
-                Accounts
-              </span>
-              <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-paper/40">{longDate(today)}</span>
+        {/* title + controls */}
+        <div className="relative flex flex-col gap-3 px-4 pt-4 sm:px-5 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex size-[38px] shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-light to-gold-deep text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_10px_24px_-10px_rgba(205,168,83,0.7)]">
+              <ScaleIcon size={18} />
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h1 className="g-display text-[24px] leading-none">
+                  Accounts <span className="home-gold-text">overview</span>
+                </h1>
+                <Link
+                  href="/day-closing"
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.16em] transition-colors",
+                    closedToday
+                      ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
+                      : branchId
+                        ? "border-gold/25 bg-gold/[0.08] text-gold-light hover:bg-gold/15"
+                        : "border-paper/15 bg-paper/5 text-paper/50"
+                  )}
+                >
+                  <span className={cn("size-1.5 rounded-full", closedToday ? "bg-emerald-400" : branchId ? "animate-pulse-soft bg-gold" : "bg-paper/30")} />
+                  {dayStatus}
+                </Link>
+              </div>
+              <div className="mt-1 truncate text-[11px] text-paper/45">
+                {longDate(today)} · {branchName ? <span className="text-paper/70">{branchName}</span> : "All branches"} · reconciled from double entry
+              </div>
             </div>
-            <h1 className="g-display mt-2.5 text-[24px] leading-[1.08] text-paper text-balance sm:text-[30px]">
-              Every rupee, <span className="home-gold-text">accounted for.</span>
-            </h1>
-            <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-paper/55 text-pretty">
-              Expenses, cash, dues and the double-entry ledger {branchName ? <>for <span className="text-paper/85">{branchName}</span></> : "across every branch"} —
-              reconciled to the cent, closed every day.
-            </p>
           </div>
 
-          <Link
-            href="/day-closing"
-            className="group relative hidden shrink-0 flex-col items-center lg:flex"
-            aria-label={`Day closing: ${dayStatus}`}
-          >
-            <span className="pointer-events-none absolute inset-4 rounded-full bg-gold/10 blur-2xl transition-opacity duration-500 group-hover:bg-gold/20" />
-            <span className="relative block size-[96px] transition-transform duration-500 ease-brand group-hover:scale-[1.03]">
-              <GaugeRing
-                value={closedToday ? 1 : checksPass}
-                max={closedToday ? 1 : Math.max(checksTotal, 1)}
-                label={closedToday ? "Day" : "Checks"}
-                caption={!branchId ? "—" : closedToday ? "Closed" : p ? `${checksPass}/${checksTotal}` : "—"}
-              />
-            </span>
-            <span className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-medium text-paper/50 transition-colors group-hover:text-gold-light">
-              <span className={cn("size-1.5 rounded-full", closedToday ? "bg-emerald-400" : branchId ? "bg-gold" : "bg-paper/30")} />
-              {dayStatus}
-            </span>
-          </Link>
-        </div>
-
-        {/* the assistant: ask the books in plain words */}
-        <AskBooks branchId={branchId || undefined} />
-
-        {/* command bar */}
-        <div className="relative flex flex-wrap items-center gap-2 border-t border-paper/[0.08] bg-paper/[0.025] px-5 py-2.5 sm:px-6">
-          <label className="flex items-center gap-2.5">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-paper/40">Branch</span>
-            <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={heroSelectClass} aria-label="Branch">
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={heroControl} aria-label="Branch">
               {canShop ? <option value="">All branches</option> : null}
               {visibleBranches.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -614,297 +543,364 @@ export default function AccountsDashboardPage() {
                 </option>
               ))}
             </select>
-          </label>
-          <div className="hidden flex-1 sm:block" />
-          <Link href="/day-closing" className="home-btn-ghost h-9 px-3.5 text-[13px]">
-            <ClipboardCheckIcon size={15} />
-            Close the day
-          </Link>
-          {canManage ? (
-            <Link href="/accounts/receivables" className="home-btn-ghost h-9 px-3.5 text-[13px]">
-              <UsersIcon size={15} />
-              Collect dues
+            <input
+              type="month"
+              value={month}
+              max={today.slice(0, 7)}
+              onChange={(e) => e.target.value && setMonth(e.target.value)}
+              className={cn(heroControl, "g-metric w-[138px]")}
+              aria-label="Month"
+            />
+            {!isCurrentMonth ? (
+              <button type="button" onClick={() => setMonth(today.slice(0, 7))} className="home-btn-ghost h-8 px-3 text-[12px]">
+                This month
+              </button>
+            ) : null}
+            <span className="mx-0.5 hidden h-5 w-px bg-paper/15 sm:block" aria-hidden />
+            <Link href="/day-closing" className="home-btn-ghost h-8 px-3 text-[12.5px]">
+              <ClipboardCheckIcon size={14} />
+              Close day
             </Link>
-          ) : null}
-          {canManage ? (
-            <Link href="/expenses?new=1" className="home-btn-gold h-9 px-4 text-[13px]">
-              <PlusIcon size={15} />
-              Record expense
-            </Link>
-          ) : null}
-        </div>
-
-        <div className="relative grid grid-cols-2 border-t border-paper/[0.08] lg:grid-cols-4">
-          {strip.map((s, i) => {
-            const body = (
-              <>
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-paper/[0.05] text-gold-light ring-1 ring-paper/[0.08] transition-all duration-320 group-hover:bg-gradient-to-b group-hover:from-gold-light group-hover:to-gold-dark group-hover:text-void group-hover:ring-gold/40">
-                  <s.icon size={15} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-paper/40">{s.label}</span>
-                  <span className="mt-1 flex items-baseline gap-1.5 whitespace-nowrap">
-                    {s.prefix ? <span className="text-[10px] font-medium text-paper/40">{s.prefix}</span> : null}
-                    <span className={cn("g-metric text-base leading-none", s.tone ?? "text-paper")}>{s.value}</span>
-                    {s.suffix ? <span className="truncate text-[11px] font-medium text-paper/45">{s.suffix}</span> : null}
-                  </span>
-                  {s.meter !== undefined ? (
-                    <span className="mt-2 block h-1 overflow-hidden rounded-full bg-paper/10">
-                      <span
-                        className={cn(
-                          "block h-full rounded-full transition-[width] duration-700 ease-brand",
-                          s.meter >= 100 ? "bg-emerald-400" : "bg-gradient-to-r from-gold-deep to-gold-light"
-                        )}
-                        style={{ width: `${s.meter}%` }}
-                      />
-                    </span>
-                  ) : null}
-                </span>
-                {s.href ? (
-                  <ArrowRightIcon
-                    size={13}
-                    className="shrink-0 -translate-x-1 text-paper/30 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-gold-light group-hover:opacity-100"
-                  />
-                ) : null}
-              </>
-            );
-            const cls = cn(
-              "group flex min-w-0 items-center gap-3 px-5 py-3 transition-colors hover:bg-paper/[0.04] sm:px-6",
-              i % 2 === 1 && "border-l border-paper/[0.08]",
-              i >= 2 && "border-t border-paper/[0.08] lg:border-t-0",
-              i === 2 && "lg:border-l"
-            );
-            return s.href ? (
-              <Link key={s.label} href={s.href} className={cls}>
-                {body}
-              </Link>
-            ) : (
-              <div key={s.label} className={cls}>
-                {body}
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      <DailyBrief />
-
-      {/* ------------------------------------------------------------- hub */}
-      <SectionHead index="A-01" title="Run the day" sub="The desks where money moves — open any one to act" />
-      <nav aria-label="Daily accounts desks" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <HubTile
-          featured
-          href="/expenses"
-          index="01"
-          icon={BanknoteIcon}
-          title="Expenses"
-          description="Record and review what the shop spends"
-          stat={pending.data?.total ? `${pending.data.total} awaiting approval` : "Nothing waiting"}
-          statTone={pending.data?.total ? "warn" : "ok"}
-        />
-        <HubTile
-          href="/accounts/cash"
-          index="02"
-          icon={CoinsIcon}
-          title="Cash & bank"
-          description="Balances, cash book, owner in and out"
-          stat={banks.data ? `Banks ${lkr(bankTotal)} LKR` : "Drawer & bank balances"}
-          statTone="info"
-          delay={40}
-        />
-        <HubTile
-          href="/accounts/receivables"
-          index="03"
-          icon={UsersIcon}
-          title="Customer dues"
-          description="Collect payments on credit sales"
-          stat={dues.data ? (dues.data.totalCents > 0 ? `${lkr(dues.data.totalCents)} LKR owed` : "Nobody owes") : "Who owes the shop"}
-          statTone={dues.data?.totalCents ? "warn" : "ok"}
-          delay={80}
-        />
-        <HubTile
-          href="/accounts/payables"
-          index="04"
-          icon={FileTextIcon}
-          title="Supplier dues"
-          description="What the shop owes, aged by bill"
-          stat={r ? (r.payables.totalCents > 0 ? `${lkr(r.payables.totalCents)} LKR owed` : "Nothing owed") : "Open purchase bills"}
-          statTone={r?.payables.totalCents ? "warn" : "ok"}
-          delay={120}
-        />
-        <HubTile
-          href="/day-closing"
-          index="05"
-          icon={ClipboardCheckIcon}
-          title="Day closing"
-          description="Count the drawer, explain it, lock the day"
-          stat={dayStatus}
-          statTone={branchId ? (closedToday ? "ok" : "warn") : "muted"}
-          delay={160}
-        />
-      </nav>
-
-      <SectionHead index="A-02" title="Books & reports" sub="The ledger, statements and filings — live from double entry" />
-      <nav aria-label="Accounting books and reports" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <HubTile
-          featured
-          variant="book"
-          href={monthReportHref}
-          index="06"
-          icon={TrendingUpIcon}
-          title="Monthly report"
-          description="Sales, profit, cash and stock for the month"
-          stat={r ? `Net ${lkrSigned(r.profit.netProfitCents)} LKR` : "Open the full report"}
-          statTone="info"
-        />
-        <HubTile
-          variant="book"
-          href="/accounts/statements"
-          index="07"
-          icon={ScaleIcon}
-          title="Financial statements"
-          description="P&L, balance sheet and trial balance"
-          stat="Any period, live"
-          delay={40}
-        />
-        <HubTile
-          variant="book"
-          href="/accounts/chart"
-          index="08"
-          icon={BookOpenIcon}
-          title="Chart of accounts"
-          description="Ledger balances and adjustments"
-          stat="Double entry"
-          delay={80}
-        />
-        <HubTile
-          variant="book"
-          href="/accounts/tax"
-          index="09"
-          icon={TagsIcon}
-          title="Sales tax"
-          description="VAT charged, refunded and paid"
-          stat="Any period"
-          delay={120}
-        />
-        <HubTile
-          variant="book"
-          href="/accounts/year-end"
-          index="10"
-          icon={HistoryIcon}
-          title="Financial year"
-          description="Close the year and lock the books"
-          stat="Year-end close"
-          delay={160}
-        />
-      </nav>
-
-      {/* -------------------------------------------------------------- today */}
-      <SectionHead index="T-01" title="Today" sub={longDate(today)} />
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiTile
-          label="Spent today"
-          icon={CreditCardIcon}
-          cents={todays.data ? todayPosted : undefined}
-          loading={todays.isLoading}
-          sub={
-            todayPending > 0
-              ? `+ ${lkr(todayPending)} awaiting approval`
-              : `${todayRows.length} ${todayRows.length === 1 ? "entry" : "entries"} today`
-          }
-          href="/expenses?range=today"
-        />
-        <KpiTile
-          label="Sales today"
-          icon={TrendingUpIcon}
-          cents={p?.money.salesCents}
-          loading={preview.isLoading && !!branchId}
-          sub={p ? `Purchases ${lkr(p.money.purchasesCents)} · Old gold ${lkr(p.money.oldGoldCents)}` : "Select a branch"}
-          delay={60}
-        />
-        <KpiTile
-          label="Cash in drawer"
-          icon={BanknoteIcon}
-          cents={p?.closing.expectedCents}
-          loading={preview.isLoading && !!branchId}
-          sub={p ? `Opening ${lkr(p.openingCents)} · in ${lkr(p.cashIn.totalCents)} · out ${lkr(p.cashOut.totalCents)}` : "Expected — select a branch"}
-          href="/day-closing"
-          delay={120}
-        />
-        <KpiTile
-          label="Bank balance"
-          icon={CoinsIcon}
-          cents={banks.data ? bankTotal : undefined}
-          loading={banks.isLoading}
-          sub={`${(banks.data ?? []).filter((b) => b.is_active).length} active accounts`}
-          delay={180}
-        />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
-          <CardHead
-            icon={CreditCardIcon}
-            title="Today's expenses"
-            sub={`${todayRows.length} recorded · ${lkrFull(todayPosted)} LKR posted`}
-            action={<HeadLink href="/expenses?range=today">Open register</HeadLink>}
-          />
-          <div className="px-3 pb-3 sm:px-4">
-            {todays.isLoading ? (
-              <div className="space-y-2.5 px-2 pb-2">
-                <Skeleton className="h-12 rounded-xl" />
-                <Skeleton className="h-12 rounded-xl" />
-                <Skeleton className="h-12 rounded-xl" />
-              </div>
-            ) : todayRows.length === 0 ? (
-              <div className="px-2 pb-2">
-                <Empty icon={CreditCardIcon} title="No expenses today" desc="Anything the shop spends today shows up here the moment it is recorded." />
-              </div>
-            ) : (
-              <ul>
-                {todayRows.slice(0, 8).map((e) => (
-                  <li key={e.id}>
-                    <Link
-                      href={`/expenses/${e.id}`}
-                      className="group flex items-center gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-gold-pale/60"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium text-ink transition-colors group-hover:text-gold-dark">
-                          {e.description}
-                        </div>
-                        <div className="mt-0.5 truncate text-xs text-ink-4">
-                          {e.category_name}
-                          {e.vendor ? ` · ${e.vendor}` : ""} · <span className="font-mono">{e.number}</span>
-                        </div>
-                      </div>
-                      <StatusPill status={e.status} />
-                      <span className="g-metric w-24 shrink-0 text-right text-sm text-ink">{lkrFull(e.amount_cents)}</span>
-                    </Link>
-                  </li>
-                ))}
-                {todayRows.length > 8 ? (
-                  <li className="px-3 py-2 text-xs text-ink-4">+ {todayRows.length - 8} more today</li>
-                ) : null}
-              </ul>
-            )}
             {canManage ? (
-              <Link
-                href="/expenses?new=1"
-                className="group mt-2 flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-medium text-ink-4 ring-1 ring-ink/[0.08] transition-colors hover:bg-ink hover:text-paper hover:ring-ink"
-              >
-                <PlusIcon size={12} />
-                Record an expense
+              <Link href="/accounts/receivables" className="home-btn-ghost h-8 px-3 text-[12.5px]">
+                <UsersIcon size={14} />
+                Collect dues
+              </Link>
+            ) : null}
+            {canManage ? (
+              <Link href="/expenses?new=1" className="home-btn-gold h-8 px-3.5 text-[12.5px]">
+                <PlusIcon size={14} />
+                Record expense
               </Link>
             ) : null}
           </div>
+        </div>
+
+        {/* ledger strip: today on top, the chosen month below */}
+        <div className="relative mx-4 mt-4 overflow-hidden rounded-2xl bg-paper/[0.08] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] sm:mx-5">
+          {[
+            {
+              group: "Today",
+              hint: dayLabel(today),
+              cells: [
+                <HeroStat
+                  key="spent"
+                  label="Spent today"
+                  cents={todays.data ? todayPosted : undefined}
+                  loading={todays.isLoading}
+                  sub={todayPending > 0 ? `+ ${lkr(todayPending)} awaiting` : `${todayRows.length} ${todayRows.length === 1 ? "entry" : "entries"}`}
+                  href="/expenses?range=today"
+                />,
+                <HeroStat
+                  key="sales"
+                  label="Sales today"
+                  cents={p?.money.salesCents}
+                  loading={preview.isLoading && !!branchId}
+                  sub={p ? `Purch ${lkr(p.money.purchasesCents)} · Old gold ${lkr(p.money.oldGoldCents)}` : "Pick a branch"}
+                />,
+                <HeroStat
+                  key="drawer"
+                  label="Cash in drawer"
+                  cents={p?.closing.expectedCents}
+                  loading={preview.isLoading && !!branchId}
+                  sub={p ? `In ${lkr(p.cashIn.totalCents)} · out ${lkr(p.cashOut.totalCents)}` : "Expected cash"}
+                  href="/day-closing"
+                />,
+                <HeroStat
+                  key="close"
+                  label="Closing checks"
+                  text={!branchId ? "—" : closedToday ? "Closed" : p ? `${checksPass}/${checksTotal} pass` : "—"}
+                  tone={closedToday || allClear ? "good" : undefined}
+                  loading={preview.isLoading && !!branchId}
+                  meter={branchId && p ? (closedToday ? 100 : checksPct) : undefined}
+                  sub="Pick a branch"
+                  href="/day-closing"
+                />,
+              ],
+            },
+            {
+              group: "Month",
+              hint: monthLabel,
+              cells: [
+                <HeroStat
+                  key="msales"
+                  label="Sales · net"
+                  cents={r?.sales.netCents}
+                  loading={report.isLoading}
+                  sub={r ? `${r.sales.invoiceCount} invoices` : undefined}
+                  href={monthReportHref}
+                />,
+                <HeroStat
+                  key="mexp"
+                  label="Expenses"
+                  cents={summary.data ? monthPosted : undefined}
+                  loading={summary.isLoading}
+                  sub={monthPending > 0 ? `+ ${lkr(monthPending)} awaiting` : `≈ ${lkr(avgPerDay)} / day`}
+                  href="/expenses?range=month"
+                />,
+                <HeroStat
+                  key="mnet"
+                  label="Net profit"
+                  cents={r?.profit.netProfitCents}
+                  format={lkrSigned}
+                  tone={r ? (r.profit.netProfitCents < 0 ? "bad" : r.profit.netProfitCents > 0 ? "good" : undefined) : undefined}
+                  loading={report.isLoading}
+                  sub={r ? `Gross ${lkr(r.profit.grossProfitCents)} − opex ${lkr(r.profit.operatingExpensesCents)}` : undefined}
+                  href={monthReportHref}
+                />,
+                <HeroStat
+                  key="bank"
+                  label="Bank balance"
+                  cents={banks.data ? bankTotal : undefined}
+                  loading={banks.isLoading}
+                  sub={`${(banks.data ?? []).filter((b) => b.is_active).length} active accounts`}
+                  href="/accounts/cash"
+                />,
+              ],
+            },
+          ].map((row, ri) => (
+            <div
+              key={row.group}
+              className={cn(
+                "grid grid-cols-2 gap-px sm:grid-cols-4 lg:grid-cols-[104px_repeat(4,minmax(0,1fr))]",
+                ri > 0 && "mt-px"
+              )}
+            >
+              <div className="col-span-2 flex items-center justify-between gap-2 bg-void/95 px-4 py-1.5 sm:col-span-4 lg:col-span-1 lg:flex-col lg:items-start lg:justify-center lg:py-2.5">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gold-light">{row.group}</span>
+                <span className="g-metric truncate text-[10px] text-paper/35">{row.hint}</span>
+              </div>
+              {row.cells}
+            </div>
+          ))}
+        </div>
+
+        {/* the assistant: ask the books in plain words */}
+        <AskBooks branchId={branchId || undefined} className="mt-3" />
+      </section>
+
+      {/* ------------------------------------------------------ needs attention */}
+      {attention ? (
+        <section className="relative overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(180,83,9,0.28),0_18px_40px_-30px_rgba(180,83,9,0.35)]">
+          <div className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full bg-amber-400/15 blur-3xl" />
+          <div className="relative grid md:grid-cols-[220px_1fr]">
+            <div className="flex items-center gap-2.5 border-b border-amber-600/15 bg-amber-500/[0.06] px-4 py-3 md:border-b-0 md:border-r">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-amber-600/10 text-amber-700 shadow-[inset_0_0_0_1px_rgba(180,83,9,0.25)]">
+                <AlertCircleIcon size={14} />
+              </span>
+              <div className="leading-tight">
+                <h2 className="text-[13.5px] font-semibold text-ink">Needs attention</h2>
+                <p className="text-[11px] text-ink-4">Resolve before closing</p>
+              </div>
+            </div>
+            <div className="grid gap-x-6 gap-y-3 px-4 py-3 md:grid-cols-2">
+              {(pending.data?.rows.length ?? 0) > 0 ? (
+                <div className="min-w-0">
+                  <div className="mb-1 flex items-center justify-between">
+                    <SectionLabel>Awaiting approval ({pending.data?.total})</SectionLabel>
+                    <HeadLink href="/expenses">Review</HeadLink>
+                  </div>
+                  <ul className="divide-y divide-ink/[0.06]">
+                    {pending.data?.rows.map((e) => (
+                      <li key={e.id} className="flex items-center justify-between gap-3 py-1.5 text-[12.5px]">
+                        <Link href={`/expenses/${e.id}`} className="min-w-0 truncate text-ink-2 transition-colors hover:text-gold-dark">
+                          {e.description} <span className="text-ink-4">· {dayLabel(e.incurred_on)}</span>
+                        </Link>
+                        <span className="g-metric shrink-0 text-ink">{lkr(e.amount_cents)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {(r?.warnings.length ?? 0) > 0 ? (
+                <div className="min-w-0">
+                  <SectionLabel className="mb-1">Report warnings</SectionLabel>
+                  <ul className="space-y-1">
+                    {r?.warnings.map((w) => (
+                      <li key={w} className="flex items-start gap-2 py-0.5 text-[12.5px] text-ink-2">
+                        <AlertCircleIcon size={13} className="mt-0.5 shrink-0 text-amber-600" />
+                        <span>{w}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {/* ------------------------------------------------------------- desks */}
+      <Card>
+        {[
+          {
+            label: "Run the day",
+            book: false,
+            tiles: [
+              {
+                href: "/expenses",
+                icon: BanknoteIcon,
+                title: "Expenses",
+                stat: pending.data?.total ? `${pending.data.total} awaiting approval` : "Nothing waiting",
+                tone: pending.data?.total ? "warn" : "ok",
+              },
+              {
+                href: "/accounts/cash",
+                icon: CoinsIcon,
+                title: "Cash & bank",
+                stat: banks.data ? `Banks ${lkr(bankTotal)} LKR` : "Drawer & bank balances",
+                tone: "info",
+              },
+              {
+                href: "/accounts/receivables",
+                icon: UsersIcon,
+                title: "Customer dues",
+                stat: dues.data ? (dues.data.totalCents > 0 ? `${lkr(dues.data.totalCents)} LKR owed` : "Nobody owes") : "Who owes the shop",
+                tone: dues.data?.totalCents ? "warn" : "ok",
+              },
+              {
+                href: "/accounts/payables",
+                icon: FileTextIcon,
+                title: "Supplier dues",
+                stat: r ? (r.payables.totalCents > 0 ? `${lkr(r.payables.totalCents)} LKR owed` : "Nothing owed") : "Open purchase bills",
+                tone: r?.payables.totalCents ? "warn" : "ok",
+              },
+              {
+                href: "/day-closing",
+                icon: ClipboardCheckIcon,
+                title: "Day closing",
+                stat: dayStatus,
+                tone: branchId ? (closedToday ? "ok" : "warn") : "muted",
+              },
+            ],
+          },
+          {
+            label: "Books & reports",
+            book: true,
+            tiles: [
+              {
+                href: monthReportHref,
+                icon: TrendingUpIcon,
+                title: "Monthly report",
+                stat: r ? `Net ${lkrSigned(r.profit.netProfitCents)} LKR` : "Full month report",
+                tone: "info",
+              },
+              { href: "/accounts/statements", icon: ScaleIcon, title: "Statements", stat: "P&L · balance sheet · TB", tone: "muted" },
+              { href: "/accounts/chart", icon: BookOpenIcon, title: "Chart of accounts", stat: "Ledger balances", tone: "muted" },
+              { href: "/accounts/tax", icon: TagsIcon, title: "Sales tax", stat: "VAT charged & paid", tone: "muted" },
+              { href: "/accounts/year-end", icon: HistoryIcon, title: "Financial year", stat: "Close & lock the books", tone: "muted" },
+            ],
+          },
+        ].map((g, gi) => (
+          <nav
+            key={g.label}
+            aria-label={g.label}
+            className={cn("grid lg:grid-cols-[132px_1fr]", gi > 0 && "border-t border-ink/[0.06]")}
+          >
+            <div className="flex items-center gap-2 border-b border-ink/[0.06] bg-bone/50 px-4 py-2 lg:border-b-0 lg:border-r">
+              <span className="g-metric text-[10px] font-semibold tracking-[0.2em] text-gold-dark">{gi === 0 ? "A-01" : "A-02"}</span>
+              <span className="text-[11.5px] font-semibold text-ink-2">{g.label}</span>
+            </div>
+            <div className="grid grid-cols-1 gap-px bg-ink/[0.05] sm:grid-cols-2 lg:grid-cols-5">
+              {g.tiles.map((t) => (
+                <DeskTile
+                  key={t.title}
+                  href={t.href}
+                  icon={t.icon}
+                  title={t.title}
+                  stat={t.stat}
+                  statTone={t.tone as "ok" | "warn" | "info" | "muted"}
+                  book={g.book}
+                />
+              ))}
+            </div>
+          </nav>
+        ))}
+      </Card>
+
+      {/* ----------------------------------------------------- spend + closing */}
+      <div className="grid gap-4 xl:grid-cols-12">
+        <Card className="xl:col-span-8">
+          <CardHead
+            icon={CreditCardIcon}
+            title="Daily expenses"
+            sub={`${monthLabel} · posted spending per day`}
+            action={<HeadLink href="/expenses?range=month">Register</HeadLink>}
+          />
+          <div className="grid grid-cols-2 border-b border-ink/[0.06] sm:grid-cols-4">
+            {[
+              ["Month total", summary.data ? lkr(monthPosted) : "—"],
+              ["Daily average", summary.data ? lkr(avgPerDay) : "—"],
+              ["Busiest day", peak && peak.posted + peak.pending > 0 ? `${dayLabel(peak.date)} · ${compact(peak.posted + peak.pending)}` : "—"],
+              ["Days with spend", `${activeDays} / ${chartData.length}`],
+            ].map(([k, v], i) => (
+              <div key={k} className={cn("px-4 py-2", i % 2 === 1 && "border-l border-ink/[0.06]", i >= 2 && "border-t border-ink/[0.06] sm:border-t-0", i === 2 && "sm:border-l")}>
+                <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">{k}</div>
+                <div className="g-metric mt-0.5 truncate text-[13px] text-ink">{v}</div>
+              </div>
+            ))}
+          </div>
+          <div className="flex-1 px-3 pb-3 pt-2">
+            {daily.isLoading ? (
+              <Skeleton className="h-52 rounded-xl" />
+            ) : daily.isError ? (
+              <Empty icon={CreditCardIcon} title="Could not load" desc="The daily expense report is unavailable." />
+            ) : activeDays === 0 ? (
+              <div className="flex h-52 items-center justify-center">
+                <Empty icon={CreditCardIcon} title="No expenses this month" desc="Recorded expenses will chart here day by day." />
+              </div>
+            ) : (
+              <>
+                <div className="mb-1 flex flex-wrap items-center justify-end gap-x-3 gap-y-1 px-1 text-[10.5px] text-ink-4">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="size-2 rounded-sm bg-[#CDA853]" /> Posted
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="size-2 rounded-sm bg-[#E2C27A]/45" /> Awaiting
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-3 border-t border-dashed border-[#7E6223]" /> Average
+                  </span>
+                </div>
+                <div className="h-52" role="img" aria-label={`Daily expenses for the month, ${activeDays} days with spending`}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barCategoryGap="22%">
+                      <CartesianGrid stroke="rgba(16,32,27,0.06)" strokeDasharray="3 5" vertical={false} />
+                      <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#5d6e68", fontSize: 10 }} interval="preserveStartEnd" />
+                      <YAxis tickLine={false} axisLine={false} width={40} tick={{ fill: "#93a29c", fontSize: 10 }} tickFormatter={(v: number) => compact(v)} />
+                      <Tooltip
+                        cursor={{ fill: "rgba(205,168,83,0.08)" }}
+                        contentStyle={{
+                          borderRadius: 10,
+                          border: "none",
+                          background: "#062a22",
+                          color: "#fff",
+                          fontSize: 12,
+                          boxShadow: "0 20px 40px -16px rgba(0,0,0,0.5)",
+                        }}
+                        labelStyle={{ color: "#E2C27A", fontWeight: 600, marginBottom: 4 }}
+                        itemStyle={{ color: "#f6f5f0" }}
+                        labelFormatter={(_, pl) => (pl?.[0]?.payload?.date ? dayLabel(pl[0].payload.date) : "")}
+                        formatter={(v) => `LKR ${Number(v ?? 0).toLocaleString("en-US")}`}
+                      />
+                      {avgPerDay > 0 ? (
+                        <ReferenceLine y={avgPerDay / 100} stroke="#7E6223" strokeDasharray="4 4" strokeOpacity={0.6} ifOverflow="extendDomain" />
+                      ) : null}
+                      <Bar dataKey="posted" name="Posted" stackId="a" fill="#CDA853" />
+                      <Bar dataKey="pending" name="Awaiting approval" stackId="a" fill="#E2C27A" fillOpacity={0.45} radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
+            )}
+          </div>
         </Card>
 
-        <Card className="lg:col-span-2">
+        <Card className="xl:col-span-4">
           <CardHead
             icon={ClipboardCheckIcon}
             title="Day closing"
-            sub={branchId ? "Is the drawer counted and locked?" : "Choose a branch above"}
+            sub={branchId ? "Drawer counted and locked?" : "Choose a branch above"}
             action={
               branchId ? (
                 closedToday ? (
@@ -919,64 +915,78 @@ export default function AccountsDashboardPage() {
               ) : undefined
             }
           />
-          <div className="px-5 pb-5 sm:px-6">
+          <div className="flex-1 p-4">
             {!branchId ? (
-              <Empty icon={ClipboardCheckIcon} title="Pick a branch" desc="Day closing is per branch — choose one to see today's status." />
+              <Empty icon={ClipboardCheckIcon} title="Pick a branch" desc="Day closing is per branch." />
             ) : preview.isLoading ? (
-              <Skeleton className="h-40 rounded-xl" />
+              <Skeleton className="h-48 rounded-xl" />
             ) : p ? (
-              <div className="space-y-4">
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Expected cash</div>
-                  <div className="mt-1 flex items-baseline gap-1.5">
-                    <span className="text-xs text-ink-4">LKR</span>
-                    <span className="g-metric text-3xl text-ink">{lkr(p.closing.expectedCents)}</span>
+              <div className="space-y-3">
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <div className="text-[9.5px] font-semibold uppercase tracking-[0.16em] text-ink-5">Expected cash</div>
+                    <div className="mt-0.5 flex items-baseline gap-1">
+                      <span className="text-[10px] font-semibold text-ink-5">LKR</span>
+                      <span className="g-metric text-[24px] leading-none text-ink">{lkr(p.closing.expectedCents)}</span>
+                    </div>
                   </div>
+                  <span className={cn("g-metric text-[12px] font-semibold", allClear ? "text-emerald-700" : "text-amber-700")}>
+                    {checksPass}/{checksTotal} checks
+                  </span>
                 </div>
-                <div>
-                  <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium">
-                    <span className="uppercase tracking-[0.14em] text-ink-4">Closing checks</span>
-                    <span className={cn("g-metric", allClear ? "text-emerald-700" : "text-amber-700")}>
-                      {checksPass}/{checksTotal} pass
-                    </span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-ink/[0.07]">
-                    <div
-                      className={cn(
-                        "h-full rounded-full transition-[width] duration-700 ease-brand",
-                        allClear ? "bg-gradient-to-r from-emerald-700 to-emerald-500" : "bg-gradient-to-r from-gold-deep via-gold to-gold-light"
-                      )}
-                      style={{ width: `${checksPct}%` }}
-                    />
-                  </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-ink/[0.07]">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-[width] duration-700 ease-brand",
+                      allClear ? "bg-gradient-to-r from-emerald-700 to-emerald-500" : "bg-gradient-to-r from-gold-deep via-gold to-gold-light"
+                    )}
+                    style={{ width: `${checksPct}%` }}
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg bg-ink/[0.06] text-center">
+                  {[
+                    ["Opening", p.openingCents],
+                    ["Cash in", p.cashIn.totalCents],
+                    ["Cash out", p.cashOut.totalCents],
+                  ].map(([k, v]) => (
+                    <div key={k as string} className="bg-bone/70 px-2 py-1.5">
+                      <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-ink-5">{k}</div>
+                      <div className="g-metric text-[12px] text-ink">{lkr(v as number)}</div>
+                    </div>
+                  ))}
                 </div>
                 <div
                   className={cn(
-                    "flex items-start gap-2.5 rounded-xl p-3 text-sm",
+                    "flex items-start gap-2 rounded-lg px-3 py-2 text-[12px]",
                     allClear ? "bg-emerald-700/[0.07] text-emerald-800" : "bg-amber-600/[0.1] text-amber-800"
                   )}
                 >
                   {allClear ? (
                     <>
-                      <CheckCircleIcon size={16} className="mt-0.5 shrink-0" />
+                      <CheckCircleIcon size={14} className="mt-px shrink-0" />
                       <span>All {p.checks.total} checks pass — ready to close.</span>
                     </>
                   ) : (
                     <>
-                      <AlertCircleIcon size={16} className="mt-0.5 shrink-0" />
-                      <span>{p.checks.passed ? "Some cash is unclassified." : `Fix before closing: ${p.checks.failing.join(", ")}.`}</span>
+                      <AlertCircleIcon size={14} className="mt-px shrink-0" />
+                      <span>
+                        {p.checks.passed
+                          ? `${lkr(p.cashIn.unclassifiedCents)} LKR cash is unclassified.`
+                          : `Fix: ${p.checks.failing.join(", ")}.`}
+                      </span>
                     </>
                   )}
                 </div>
-                {(closings.data?.rows ?? []).length > 0 ? (
-                  <div className="rounded-xl bg-bone/70 p-3 ring-1 ring-ink/[0.05]">
-                    <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Recent closings</div>
-                    <ul className="space-y-1.5">
-                      {(closings.data?.rows ?? []).slice(0, 4).map((c) => (
-                        <li key={c.id} className="flex items-center justify-between text-xs">
+                {recentClosings.length > 0 ? (
+                  <div>
+                    <div className="mb-1 text-[9.5px] font-semibold uppercase tracking-[0.16em] text-ink-5">Recent closings</div>
+                    <ul className="divide-y divide-ink/[0.05]">
+                      {recentClosings.map((c) => (
+                        <li key={c.id} className="flex items-center justify-between gap-2 py-1 text-[11.5px]">
                           <span className="text-ink-3">{dayLabel(c.close_date)}</span>
-                          <span className={cn("g-metric", c.difference_cents === 0 ? "text-emerald-700" : "text-rose-700")}>
-                            {c.difference_cents === 0 ? "Balanced" : `${c.difference_cents > 0 ? "+" : "−"}${lkr(Math.abs(c.difference_cents))} diff`}
+                          <span className="g-metric text-ink-4">{lkr(c.actual_cents)}</span>
+                          <span className={cn("g-metric w-24 text-right", c.difference_cents === 0 ? "text-emerald-700" : "text-rose-700")}>
+                            {c.difference_cents === 0 ? "Balanced" : `${c.difference_cents > 0 ? "+" : "−"}${lkr(Math.abs(c.difference_cents))}`}
                           </span>
                         </li>
                       ))}
@@ -988,178 +998,102 @@ export default function AccountsDashboardPage() {
               <Empty icon={ClipboardCheckIcon} title="Unavailable" desc="Could not load today's cash position." />
             )}
           </div>
-          <div className="border-t border-ink/[0.06] px-5 py-3 sm:px-6">
+          <div className="border-t border-ink/[0.06] px-4 py-2">
             <Link
               href="/day-closing"
-              className="group flex items-center justify-center gap-2 rounded-xl py-2 text-xs font-medium text-ink-4 ring-1 ring-ink/[0.08] transition-colors hover:bg-ink hover:text-paper hover:ring-ink"
+              className="group flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-[11.5px] font-medium text-ink-3 ring-1 ring-ink/[0.08] transition-colors hover:bg-void hover:text-gold-light hover:ring-void"
             >
               {closedToday ? "View closing" : "Count the drawer & close"}
-              <ArrowRightIcon size={12} className="transition-transform group-hover:translate-x-0.5" />
+              <ArrowRightIcon size={11} className="transition-transform group-hover:translate-x-0.5" />
             </Link>
           </div>
         </Card>
       </div>
 
-      {/* -------------------------------------------------------------- month */}
-      <SectionHead
-        index="M-01"
-        title="Monthly accounts"
-        sub={new Date(Date.UTC(year, mon - 1, 1)).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" })}
-        aside={
-          <div className="flex items-center gap-2">
-            <input
-              type="month"
-              value={month}
-              max={today.slice(0, 7)}
-              onChange={(e) => e.target.value && setMonth(e.target.value)}
-              className={controlClass}
-              aria-label="Month"
-            />
-            {!isCurrentMonth ? (
-              <button type="button" onClick={() => setMonth(today.slice(0, 7))} className="g-btn g-btn-secondary h-10 px-4 text-sm">
-                This month
-              </button>
-            ) : null}
-          </div>
-        }
-      />
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiTile
-          label="Sales (net)"
-          icon={TrendingUpIcon}
-          cents={r?.sales.netCents}
-          loading={report.isLoading}
-          sub={r ? `${r.sales.invoiceCount} invoices` : undefined}
-        />
-        <KpiTile
-          label="Expenses"
-          icon={CreditCardIcon}
-          cents={summary.data ? monthPosted : undefined}
-          loading={summary.isLoading}
-          sub={monthPending > 0 ? `+ ${lkr(monthPending)} awaiting approval` : `≈ ${lkr(avgPerDay)} per day`}
-          href="/expenses?range=month"
-          delay={60}
-        />
-        <KpiTile
-          label="Net profit"
-          icon={ScaleIcon}
-          cents={r?.profit.netProfitCents}
-          format={lkrSigned}
-          tone={r && r.profit.netProfitCents < 0 ? "bad" : "neutral"}
-          loading={report.isLoading}
-          sub={r ? `Gross ${lkr(r.profit.grossProfitCents)} − opex ${lkr(r.profit.operatingExpensesCents)}` : undefined}
-          href={monthReportHref}
-          delay={120}
-        />
-        <KpiTile
-          label="Closing cash"
-          icon={BanknoteIcon}
-          cents={r?.cashflow.closingCents}
-          loading={report.isLoading}
-          sub={r ? `In ${lkr(r.cashflow.inflowsCents)} · out ${lkr(r.cashflow.outflowsCents)}` : undefined}
-          delay={180}
-        />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
+      {/* --------------------------------------------- today's spend + categories */}
+      <div className="grid gap-4 xl:grid-cols-12">
+        <Card className="xl:col-span-7">
           <CardHead
             icon={CreditCardIcon}
-            title="Daily expenses"
-            sub="Posted spending per day"
-            action={<HeadLink href="/expenses?range=month">This month</HeadLink>}
+            title="Today's expenses"
+            sub={`${todayRows.length} recorded · ${lkrFull(todayPosted)} LKR posted`}
+            action={
+              <div className="flex items-center gap-1">
+                {canManage ? (
+                  <Link
+                    href="/expenses?new=1"
+                    className="inline-flex items-center gap-1 rounded-md bg-void px-2 py-1 text-[11px] font-semibold text-gold-light transition hover:bg-void/90"
+                  >
+                    <PlusIcon size={11} />
+                    New
+                  </Link>
+                ) : null}
+                <HeadLink href="/expenses?range=today">Register</HeadLink>
+              </div>
+            }
           />
-          <div className="px-5 pb-5 sm:px-6">
-            {daily.isLoading ? (
-              <Skeleton className="h-64 rounded-xl" />
-            ) : daily.isError ? (
-              <Empty icon={CreditCardIcon} title="Could not load" desc="The daily expense report is unavailable." />
+          <div className="flex-1">
+            {todays.isLoading ? (
+              <div className="space-y-2 p-3">
+                <Skeleton className="h-9 rounded-lg" />
+                <Skeleton className="h-9 rounded-lg" />
+                <Skeleton className="h-9 rounded-lg" />
+              </div>
+            ) : todayRows.length === 0 ? (
+              <div className="p-3">
+                <Empty icon={CreditCardIcon} title="No expenses today" desc="Anything spent today shows up here the moment it is recorded." />
+              </div>
             ) : (
-              <>
-                <div className="mb-4 grid grid-cols-3 gap-3">
-                  {[
-                    ["Month total", `${lkr(monthPosted)}`],
-                    ["Daily average", `${lkr(avgPerDay)}`],
-                    ["Busiest day", peak && peak.posted + peak.pending > 0 ? `${dayLabel(peak.date)} · ${compact(peak.posted + peak.pending)}` : "—"],
-                  ].map(([k, v]) => (
-                    <div key={k} className="rounded-xl bg-bone/70 p-3 ring-1 ring-ink/[0.05]">
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-4">{k}</div>
-                      <div className="g-metric mt-1 truncate text-sm text-ink">{v}</div>
-                    </div>
+              <table className="w-full text-[12.5px]">
+                <thead>
+                  <tr className="bg-bone/60 text-left text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">
+                    <th className="py-1.5 pl-4 pr-2 font-semibold">Description</th>
+                    <th className="hidden px-2 font-semibold md:table-cell">Category</th>
+                    <th className="px-2 font-semibold">Status</th>
+                    <th className="py-1.5 pl-2 pr-4 text-right font-semibold">LKR</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {todayRows.slice(0, 10).map((e) => (
+                    <tr key={e.id} className="group border-t border-ink/[0.05] transition-colors hover:bg-gold-pale/40">
+                      <td className="max-w-0 py-1.5 pl-4 pr-2">
+                        <Link href={`/expenses/${e.id}`} className="block truncate font-medium text-ink group-hover:text-gold-dark">
+                          {e.description}
+                        </Link>
+                        <span className="block truncate text-[10.5px] text-ink-5">
+                          <span className="font-mono">{e.number}</span>
+                          {e.vendor ? ` · ${e.vendor}` : ""}
+                        </span>
+                      </td>
+                      <td className="hidden truncate px-2 text-ink-3 md:table-cell">{e.category_name}</td>
+                      <td className="px-2">
+                        <StatusPill status={e.status} />
+                      </td>
+                      <td className="g-metric py-1.5 pl-2 pr-4 text-right text-ink">{lkrFull(e.amount_cents)}</td>
+                    </tr>
                   ))}
-                </div>
-                {activeDays === 0 ? (
-                  <Empty icon={CreditCardIcon} title="No expenses this month" desc="Recorded expenses will chart here day by day." />
-                ) : (
-                  <>
-                    <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-4">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="size-2 rounded-sm bg-[#CDA853]" /> Posted
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="size-2 rounded-sm bg-[#E2C27A]/45" /> Awaiting approval
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="w-3 border-t border-dashed border-[#7E6223]" /> Daily average
-                      </span>
-                    </div>
-                    <div className="h-60" role="img" aria-label={`Daily expenses for the month, ${activeDays} days with spending`}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData} margin={{ top: 6, right: 6, left: 0, bottom: 0 }} barCategoryGap="22%">
-                          <CartesianGrid stroke="rgba(16,32,27,0.06)" strokeDasharray="3 5" vertical={false} />
-                          <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#5d6e68", fontSize: 11 }} interval="preserveStartEnd" />
-                          <YAxis
-                            tickLine={false}
-                            axisLine={false}
-                            width={44}
-                            tick={{ fill: "#93a29c", fontSize: 11 }}
-                            tickFormatter={(v: number) => compact(v)}
-                          />
-                          <Tooltip
-                            cursor={{ fill: "rgba(205,168,83,0.08)" }}
-                            contentStyle={{
-                              borderRadius: 12,
-                              border: "none",
-                              background: "#062a22",
-                              color: "#fff",
-                              fontSize: 12,
-                              boxShadow: "0 20px 40px -16px rgba(0,0,0,0.5)",
-                            }}
-                            labelStyle={{ color: "#E2C27A", fontWeight: 600, marginBottom: 4 }}
-                            itemStyle={{ color: "#f6f5f0" }}
-                            labelFormatter={(_, pl) => (pl?.[0]?.payload?.date ? dayLabel(pl[0].payload.date) : "")}
-                            formatter={(v) => `LKR ${Number(v ?? 0).toLocaleString("en-US")}`}
-                          />
-                          {avgPerDay > 0 ? (
-                            <ReferenceLine y={avgPerDay / 100} stroke="#7E6223" strokeDasharray="4 4" strokeOpacity={0.6} ifOverflow="extendDomain" />
-                          ) : null}
-                          <Bar dataKey="posted" name="Posted" stackId="a" fill="#CDA853" radius={[0, 0, 0, 0]} />
-                          <Bar dataKey="pending" name="Awaiting approval" stackId="a" fill="#E2C27A" fillOpacity={0.45} radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </>
-                )}
-              </>
+                </tbody>
+              </table>
             )}
+            {todayRows.length > 10 ? <p className="border-t border-ink/[0.05] px-4 py-1.5 text-[11px] text-ink-4">+ {todayRows.length - 10} more today</p> : null}
           </div>
         </Card>
 
-        <section className="relative overflow-hidden rounded-[18px] bg-void text-paper shadow-4 lg:col-span-2">
+        <Card dark className="xl:col-span-5">
           <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-50" />
           <div className="pointer-events-none absolute -right-20 -top-20 size-64 rounded-full bg-gold/20 blur-[90px]" />
           <CardHead
             dark
             icon={BookOpenIcon}
             title="Where the money went"
-            sub="This month, by expense category"
+            sub={`${monthLabel} · by expense category`}
+            action={<HeadLink dark href="/expenses?range=month">All</HeadLink>}
           />
-          <div className="relative px-5 pb-5 sm:px-6">
+          <div className="relative flex-1 p-4">
             {summary.isLoading ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {[0, 1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-12 rounded-xl bg-paper/10" />
+                  <Skeleton key={i} className="h-9 rounded-lg bg-paper/10" />
                 ))}
               </div>
             ) : categories.length === 0 ? (
@@ -1167,156 +1101,98 @@ export default function AccountsDashboardPage() {
             ) : (
               <BarList
                 tone="dark"
-                items={categories.slice(0, 7).map((c) => ({
+                items={categories.slice(0, 6).map((c) => ({
                   key: c.id,
                   label: c.name,
                   value: c.posted_cents + c.pending_cents,
                   secondary:
                     monthPosted + monthPending > 0
-                      ? `${Math.round(((c.posted_cents + c.pending_cents) / (monthPosted + monthPending)) * 100)}% of spend · ${c.account_code}`
+                      ? `${Math.round(((c.posted_cents + c.pending_cents) / (monthPosted + monthPending)) * 100)}% · ${c.account_code}`
                       : c.account_code,
                 }))}
                 format={(n) => lkr(n)}
               />
             )}
-            <Link
-              href="/expenses?range=month"
-              className="group mt-4 flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-medium text-paper/60 ring-1 ring-paper/10 transition-colors hover:bg-gold hover:text-void hover:ring-gold"
-            >
-              See every expense
-              <ArrowRightIcon size={12} className="transition-transform group-hover:translate-x-0.5" />
-            </Link>
           </div>
-        </section>
+        </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      {/* ---------------------------------------------------------- statements */}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card>
-          <CardHead icon={TrendingUpIcon} title="Profit & loss" sub={r ? r.profit.basis : "Ledger-posted"} />
-          <div className="px-5 pb-5 sm:px-6">
+          <CardHead icon={TrendingUpIcon} title="Profit & loss" sub={r ? r.profit.basis : "Ledger-posted"} action={<HeadLink href={monthReportHref}>Report</HeadLink>} />
+          <div className="flex-1 px-4 py-2.5">
             {report.isLoading ? (
-              <Skeleton className="h-44 rounded-xl" />
+              <Skeleton className="h-36 rounded-lg" />
             ) : r ? (
               <div>
                 <StatementRow label="Revenue" cents={r.profit.revenueCents} />
                 <StatementRow label="Cost of goods sold" cents={-r.profit.cogsCents} indent />
                 <StatementRow label="Gross profit" cents={r.profit.grossProfitCents} />
-                {r.profit.otherIncomeCents ? (
-                  <StatementRow label="Other income" cents={r.profit.otherIncomeCents} indent />
-                ) : null}
+                {r.profit.otherIncomeCents ? <StatementRow label="Other income" cents={r.profit.otherIncomeCents} indent /> : null}
                 <StatementRow label="Operating expenses" cents={-r.profit.operatingExpensesCents} indent />
                 <StatementRow label="Net profit" cents={r.profit.netProfitCents} strong />
               </div>
             ) : (
-              <Empty icon={TrendingUpIcon} title="No report" desc="Report unavailable for this period." />
+              <Empty icon={TrendingUpIcon} title="No report" desc="Unavailable for this period." />
             )}
-          </div>
-          <div className="border-t border-ink/[0.06] px-5 py-3 sm:px-6">
-            <HeadLink href={monthReportHref}>Open the full monthly report</HeadLink>
           </div>
         </Card>
 
         <Card>
-          <CardHead icon={BanknoteIcon} title="Cash flow" sub="Drawer + bank movement" />
-          <div className="px-5 pb-5 sm:px-6">
+          <CardHead icon={BanknoteIcon} title="Cash flow" sub="Drawer + bank movement" action={<HeadLink href={monthReportHref}>Detail</HeadLink>} />
+          <div className="flex-1 px-4 py-2.5">
             {report.isLoading ? (
-              <Skeleton className="h-44 rounded-xl" />
+              <Skeleton className="h-36 rounded-lg" />
             ) : r ? (
               <div>
                 <StatementRow label="Opening cash" cents={r.cashflow.openingCents} />
                 <StatementRow label="Cash in" cents={r.cashflow.inflowsCents} indent />
                 <StatementRow label="Cash out" cents={-r.cashflow.outflowsCents} indent />
+                <StatementRow label="Net movement" cents={r.cashflow.inflowsCents - r.cashflow.outflowsCents} />
                 <StatementRow label="Closing cash" cents={r.cashflow.closingCents} strong />
               </div>
             ) : (
-              <Empty icon={BanknoteIcon} title="No report" desc="Report unavailable for this period." />
+              <Empty icon={BanknoteIcon} title="No report" desc="Unavailable for this period." />
             )}
-          </div>
-          <div className="border-t border-ink/[0.06] px-5 py-3 sm:px-6">
-            <HeadLink href={monthReportHref}>See where cash moved</HeadLink>
           </div>
         </Card>
 
         <Card>
           <CardHead icon={ScaleIcon} title="Owed to & by the shop" sub="Outstanding right now" />
-          <div className="px-5 pb-5 sm:px-6">
+          <div className="flex-1 space-y-2 p-4">
             {report.isLoading ? (
-              <Skeleton className="h-44 rounded-xl" />
+              <Skeleton className="h-36 rounded-lg" />
             ) : r ? (
-              <div className="space-y-3">
-                <div className="rounded-xl bg-bone/70 p-4 ring-1 ring-ink/[0.05]">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-sm text-ink-3">Customers owe you</span>
-                    <Signed cents={r.receivables.totalCents} className="text-lg" />
-                  </div>
-                  <div className="mt-1 text-xs text-ink-4">{r.receivables.outstanding.length} open invoices</div>
+              <>
+                {[
+                  { k: "Customers owe you", v: r.receivables.totalCents, n: `${r.receivables.outstanding.length} open invoices`, href: "/accounts/receivables" },
+                  { k: "You owe suppliers", v: r.payables.totalCents, n: `${r.payables.outstanding.length} open bills`, href: "/accounts/payables" },
+                ].map((x) => (
+                  <Link key={x.k} href={x.href} className="group block rounded-lg bg-bone/70 px-3 py-2 ring-1 ring-ink/[0.05] transition hover:bg-gold-pale/60 hover:ring-gold/30">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-[12px] text-ink-3">{x.k}</span>
+                      <Signed cents={x.v} className="text-[15px]" />
+                    </div>
+                    <div className="mt-0.5 flex items-center justify-between text-[10.5px] text-ink-4">
+                      {x.n}
+                      <ArrowRightIcon size={11} className="opacity-0 transition group-hover:opacity-100" />
+                    </div>
+                  </Link>
+                ))}
+                <div className="flex items-baseline justify-between px-1 pt-1 text-[11.5px]">
+                  <span className="text-ink-4">Net position</span>
+                  <Signed cents={r.receivables.totalCents - r.payables.totalCents} className="text-[13px] font-semibold" />
                 </div>
-                <div className="rounded-xl bg-bone/70 p-4 ring-1 ring-ink/[0.05]">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-sm text-ink-3">You owe suppliers</span>
-                    <Signed cents={r.payables.totalCents} className="text-lg" />
-                  </div>
-                  <div className="mt-1 text-xs text-ink-4">{r.payables.outstanding.length} open bills</div>
-                </div>
-              </div>
+              </>
             ) : (
-              <Empty icon={ScaleIcon} title="No report" desc="Report unavailable for this period." />
+              <Empty icon={ScaleIcon} title="No report" desc="Unavailable for this period." />
             )}
           </div>
-          <div className="border-t border-ink/[0.06] px-5 py-3 sm:px-6">
-            <HeadLink href={monthReportHref}>Receivables & payables detail</HeadLink>
-          </div>
         </Card>
-      </div>
 
-      {/* ------------------------------------------------------ needs attention */}
-      {(pending.data?.rows.length ?? 0) > 0 || (r?.warnings.length ?? 0) > 0 ? (
-        <section className="relative overflow-hidden rounded-[18px] bg-paper shadow-[inset_0_0_0_1px_rgba(180,83,9,0.28),0_18px_40px_-28px_rgba(180,83,9,0.35)]">
-          <div className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full bg-amber-400/15 blur-3xl" />
-          <div className="relative flex items-center gap-3 px-5 pb-4 pt-5 sm:px-6">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-600/10 text-amber-700 shadow-[inset_0_0_0_1px_rgba(180,83,9,0.25)]">
-              <AlertCircleIcon size={16} />
-            </span>
-            <div>
-              <h2 className="font-sans text-[15px] font-semibold tracking-normal text-ink">Needs your attention</h2>
-              <p className="text-xs text-ink-4">Resolve these before you close the day or the month</p>
-            </div>
-          </div>
-          <div className="relative grid gap-6 px-5 pb-5 sm:px-6 md:grid-cols-2">
-            {(pending.data?.rows.length ?? 0) > 0 ? (
-              <div>
-                <SectionLabel className="mb-2">Expenses awaiting approval ({pending.data?.total})</SectionLabel>
-                <ul className="divide-y divide-ink/[0.06]">
-                  {pending.data?.rows.map((e) => (
-                    <li key={e.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                      <Link href={`/expenses/${e.id}`} className="min-w-0 truncate text-ink-2 transition-colors hover:text-gold-dark">
-                        {e.description} <span className="text-ink-4">· {dayLabel(e.incurred_on)}</span>
-                      </Link>
-                      <span className="g-metric shrink-0 text-ink">{lkr(e.amount_cents)}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-3">
-                  <HeadLink href="/expenses">Review in the register</HeadLink>
-                </div>
-              </div>
-            ) : null}
-            {(r?.warnings.length ?? 0) > 0 ? (
-              <div>
-                <SectionLabel className="mb-2">Monthly report warnings</SectionLabel>
-                <ul className="space-y-2">
-                  {r?.warnings.map((w) => (
-                    <li key={w} className="flex items-start gap-2.5 text-sm text-ink-2">
-                      <AlertCircleIcon size={14} className="mt-0.5 shrink-0 text-amber-600" />
-                      <span>{w}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
+        <DailyBrief />
+      </div>
     </Page>
   );
 }

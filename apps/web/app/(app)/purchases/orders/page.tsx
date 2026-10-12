@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
@@ -9,6 +9,9 @@ import { cn } from "@/lib/cn";
 import { type ItemDraft } from "@/components/purchase-items";
 import { Dialog, DialogClose, Label, PurchaseItemsEditor, Spinner, UnitInput, inputCls, itemMissing, newItem, num } from "@/components/purchase-form";
 import { Page, Skeleton } from "@/components/ui";
+import { Card, CardHead, FilterPills, GoldHero, HeroBadge, ORDER_META, ORDER_STATUSES as PO_STATUSES, PoChip, RowsSkeleton, ago, heroGold, inputCls as kitInput, th, thead, tr } from "../kit";
+
+const ORDER_STATUSES: readonly string[] = PO_STATUSES;
 import { Select } from "@/components/select";
 import {
   AlertCircleIcon,
@@ -30,7 +33,6 @@ import {
 type Order = { id: string; number: string; supplier_name: string; status: string; items: number; created_at: number };
 type Supplier = { id: string; name: string; code: string };
 
-const ORDER_STATUSES = ["DRAFT", "SENT", "RECEIVED", "CANCELLED"];
 const FILTERS = ["", ...ORDER_STATUSES];
 const STATUS_LABEL: Record<string, string> = { DRAFT: "Draft", SENT: "Sent", RECEIVED: "Received", CANCELLED: "Cancelled" };
 const STATUS_STYLE: Record<string, { chip: string; dot: string }> = {
@@ -86,30 +88,24 @@ export default function OrdersPage() {
         `/api/v1/purchases/orders?search=${encodeURIComponent(search)}&page=${page}&limit=${PAGE_SIZE}${fStatus ? `&status=${fStatus}` : ""}`
       ),
   });
+  // One count per status for the pills and the header — same cache as the overview.
+  const counts = useQueries({
+    queries: ORDER_STATUSES.map((s) => ({
+      queryKey: ["pur-dash", "order-state", s],
+      queryFn: () => api<{ rows: Order[]; total: number }>(`/api/v1/purchases/orders?status=${s}&limit=${s === "DRAFT" || s === "SENT" ? 6 : 1}`),
+      staleTime: 30_000,
+      retry: false,
+    })),
+  });
+  const countOf = (s: string) => counts[ORDER_STATUSES.indexOf(s)]?.data?.total;
+  const countsLoading = counts.some((c) => c.isLoading);
+  const allCount = countsLoading ? undefined : ORDER_STATUSES.reduce((n, s) => n + (countOf(s) ?? 0), 0);
 
   const rows = list.data?.rows ?? [];
   const total = list.data?.total ?? 0;
-  const open = rows.filter((r) => r.status === "DRAFT" || r.status === "SENT").length;
   const itemCount = rows.reduce((n, r) => n + r.items, 0);
   const filtered = Boolean(search || fStatus);
-
-  const stats: { label: string; value: string; sub: string; icon: ReactNode; gold?: boolean; warn?: boolean }[] = [
-    {
-      label: "Orders",
-      value: list.data ? total.toLocaleString("en-US") : "â€”",
-      sub: fStatus ? `${STATUS_LABEL[fStatus]} only` : "All on file",
-      icon: <FileTextIcon size={16} />,
-    },
-    { label: "On this page", value: list.data ? String(rows.length) : "â€”", sub: `Page ${page}`, icon: <LayersIcon size={16} /> },
-    {
-      label: "Open drafts",
-      value: list.data ? String(open) : "â€”",
-      sub: open ? "Draft or sent, awaiting receipt" : "Nothing waiting",
-      icon: <TruckIcon size={16} />,
-      gold: true,
-    },
-    { label: "Items ordered", value: list.data ? itemCount.toLocaleString("en-US") : "â€”", sub: "Lines on this page", icon: <PackageIcon size={16} /> },
-  ];
+  const sent = countOf("SENT") ?? 0;
 
   const setFilter = (s: string) => {
     setFStatus(s);
@@ -117,257 +113,168 @@ export default function OrdersPage() {
   };
 
   return (
-    <Page className="space-y-6">
-      {/* Hero */}
-      <section className="relative overflow-hidden rounded-[28px] bg-void text-paper shadow-5 ring-1 ring-gold/10">
-        <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-60" aria-hidden />
-        <div className="home-drift pointer-events-none absolute -right-24 -top-32 size-[22rem] rounded-full bg-gold/20 blur-[120px]" aria-hidden />
-        <div className="pointer-events-none absolute -bottom-40 -left-24 size-80 rounded-full bg-emerald-400/10 blur-[110px]" aria-hidden />
-        <div className="home-noise pointer-events-none absolute inset-0" aria-hidden />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" aria-hidden />
-
-        <div className="relative flex flex-col gap-6 px-5 py-6 sm:px-7 lg:flex-row lg:items-end lg:justify-between lg:px-8 lg:py-7">
-          <div className="min-w-0">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/[0.08] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">
-              <span className="size-1.5 animate-pulse-soft rounded-full bg-gold" />
-              Purchasing Â· Orders
-            </span>
-            <h1 className="g-display mt-3.5 text-3xl text-paper sm:text-[2.6rem]">
-              Purchase orders, <span className="home-gold-text">received in one step.</span>
-            </h1>
-            <p className="mt-2.5 max-w-xl text-sm leading-relaxed text-paper/60">
-              Drafts â€” receiving posts stock, ledger and journal atomically.
-            </p>
-          </div>
-          {canCreate ? (
-            <button type="button" onClick={() => setDialog(true)} className="home-btn-gold h-11 shrink-0 self-start px-5 text-sm lg:self-auto">
-              <PlusIcon size={15} />
+    <Page className="space-y-4">
+      <GoldHero
+        icon={FileTextIcon}
+        title="Purchase"
+        accent="orders"
+        badge={sent > 0 ? <HeroBadge tone="warn">{sent} with supplier</HeroBadge> : <HeroBadge>Received in one step</HeroBadge>}
+        sub="Receiving a draft creates products, stock movements and journal entries atomically"
+        actions={
+          canCreate ? (
+            <button type="button" onClick={() => setDialog(true)} className={heroGold}>
+              <PlusIcon size={13} />
               New order
             </button>
-          ) : null}
-        </div>
+          ) : null
+        }
+        stats={[
+          { label: "All orders", value: allCount, accent: true, loading: countsLoading, sub: "On file" },
+          { label: "Open", value: countsLoading ? undefined : (countOf("DRAFT") ?? 0) + sent, loading: countsLoading, sub: "Draft or sent" },
+          ...ORDER_STATUSES.map((s) => ({
+            label: ORDER_META[s]!.label,
+            value: countOf(s),
+            loading: countsLoading,
+            tone: s === "SENT" && sent ? ("warn" as const) : s === "RECEIVED" ? ("good" as const) : undefined,
+            sub: ORDER_META[s]!.hint,
+          })),
+        ]}
+      />
 
-        <div className="relative grid grid-cols-2 gap-px border-t border-paper/[0.08] bg-paper/[0.06] lg:grid-cols-4">
-          {stats.map((s) => (
-            <div
-              key={s.label}
-              className={cn(
-                "group flex min-w-0 items-center gap-3.5 bg-void/95 px-4 py-4 transition-colors hover:bg-void/80 sm:px-6",
-                s.gold && "bg-gradient-to-br from-void/95 to-[#0d3a2c]/95"
-              )}
-            >
-              <span
-                className={cn(
-                  "flex size-10 shrink-0 items-center justify-center rounded-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 transition-colors",
-                  s.gold
-                    ? "bg-gradient-to-b from-gold-light to-gold text-void ring-gold/40"
-                    : "bg-gradient-to-b from-paper/[0.09] to-paper/[0.03] text-gold-light ring-paper/[0.09] group-hover:text-gold"
-                )}
-              >
-                {s.icon}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-paper/40">{s.label}</span>
-                {list.isLoading ? (
-                  <Skeleton className="mt-1 h-6 w-12 bg-paper/10" />
-                ) : (
-                  <span className={cn("g-metric mt-0.5 block truncate text-xl leading-tight", s.gold ? "text-gold-light" : "text-paper")}>{s.value}</span>
-                )}
-                <span className="mt-1 block truncate text-[10px] text-paper/35">{s.sub}</span>
-              </span>
-            </div>
-          ))}
-        </div>
-
-        <div className="relative flex items-center gap-2 border-t border-paper/[0.08] px-5 py-3 text-xs text-paper/50 sm:px-7 lg:px-8">
-          <span className="size-1.5 shrink-0 rounded-full bg-gold" />
-          Receiving a draft creates products, stock movements and journal entries in one step.
-        </div>
-      </section>
-
-      {/* Orders */}
-      <section className={cn("relative overflow-hidden rounded-[22px] bg-paper", cardShadow)}>
-        <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
-
-        <div className="flex flex-col gap-4 border-b border-ink/[0.06] px-5 py-4 sm:px-6">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3.5">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_8px_18px_-10px_rgba(6,42,34,0.7)]">
-                <FileTextIcon size={17} />
-              </span>
-              <div className="min-w-0">
-                <h2 className="truncate font-sans text-[15px] font-semibold tracking-normal text-ink">Purchase orders</h2>
-                <p className="truncate text-xs text-ink-4">{fStatus ? `${STATUS_LABEL[fStatus]} only` : "Every status"}</p>
-              </div>
-            </div>
-            <span className="g-metric hidden shrink-0 items-center gap-1.5 rounded-full bg-bone px-3 py-1 text-[11px] text-ink-3 ring-1 ring-ink/[0.06] sm:inline-flex">
-              <span className="font-semibold text-ink">{total.toLocaleString("en-US")}</span> on file
-              {list.isFetching && !list.isLoading ? (
-                <span className="ml-0.5 size-3 animate-spin rounded-full border-2 border-gold/30 border-t-gold" aria-label="Refreshing" />
-              ) : null}
-            </span>
-          </div>
-
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <label className="group relative block w-full lg:max-w-sm">
-              <span className="sr-only">Search orders</span>
-              <SearchIcon size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-5 transition-colors group-focus-within:text-gold-dark" />
-              <input
-                type="search"
-                autoComplete="off"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="Search by numberâ€¦"
-                className="h-11 w-full rounded-xl bg-bone/60 pl-10 pr-9 text-sm text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)] transition-all duration-200 placeholder:text-ink-5 hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] focus:bg-paper focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)] [&::-webkit-search-cancel-button]:hidden"
-              />
-              {search ? (
-                <button
-                  type="button"
-                  aria-label="Clear search"
-                  onClick={() => {
-                    setSearch("");
+      <Card>
+        <CardHead
+          icon={FileTextIcon}
+          title="Order book"
+          sub={`${total.toLocaleString("en-US")} ${filtered ? "matching" : "on file"} · ${itemCount} item line${itemCount === 1 ? "" : "s"} on this page`}
+          action={
+            <>
+              <label className="relative">
+                <SearchIcon size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-5" />
+                <input
+                  type="search"
+                  autoComplete="off"
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
                     setPage(1);
                   }}
-                  className="absolute right-2 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-lg text-ink-4 hover:bg-ink/5 hover:text-ink"
+                  placeholder="Search by number…"
+                  aria-label="Search orders"
+                  className={cn(kitInput, "w-52 pl-8 [&::-webkit-search-cancel-button]:hidden")}
+                />
+              </label>
+              {filtered ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setFilter("");
+                  }}
+                  className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[11.5px] font-medium text-ink-4 hover:bg-ink/[0.05] hover:text-ink"
                 >
-                  <XIcon size={13} />
+                  <XIcon size={12} /> Clear
                 </button>
               ) : null}
-            </label>
-
-            <div className="-mx-1 overflow-x-auto px-1 scrollbar-thin">
-              <div role="tablist" aria-label="Status" className="relative grid min-w-max grid-cols-5 rounded-xl bg-bone p-1 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
-                <span
-                  aria-hidden
-                  className="absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/5)] rounded-lg bg-void shadow-[inset_0_0_0_1px_rgba(205,168,83,0.3),0_8px_18px_-10px_rgba(6,42,34,0.8)] transition-transform duration-320 ease-brand"
-                  style={{ transform: `translateX(${Math.max(0, FILTERS.indexOf(fStatus)) * 100}%)` }}
-                />
-                {FILTERS.map((k) => {
-                  const active = k === fStatus;
-                  return (
-                    <button
-                      key={k || "all"}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      onClick={() => setFilter(k)}
-                      className={cn(
-                        "relative inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3.5 text-[13px] font-medium transition-colors duration-200",
-                        active ? "text-paper" : "text-ink-4 hover:text-ink"
-                      )}
-                    >
-                      {k ? <span className={cn("size-1.5 rounded-full", STATUS_STYLE[k]?.dot)} /> : null}
-                      {k ? STATUS_LABEL[k] : "All"}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+              {list.isFetching && !list.isLoading ? <span className="size-3 animate-spin rounded-full border-2 border-gold/30 border-t-gold" aria-label="Refreshing" /> : null}
+            </>
+          }
+        />
+        <div className="overflow-x-auto border-b border-ink/[0.06] px-4 py-2 scrollbar-thin">
+          <FilterPills
+            value={fStatus}
+            onChange={setFilter}
+            items={[
+              { key: "", label: "All", count: allCount },
+              ...ORDER_STATUSES.map((s) => ({ key: s, label: ORDER_META[s]!.label, count: countOf(s), dot: ORDER_META[s]!.dot })),
+            ]}
+          />
         </div>
 
-        <div className="overflow-x-auto scrollbar-thin">
-          {list.isLoading ? (
-            <div className="space-y-2.5 p-5 sm:p-6">
-              {[0, 1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-14 rounded-2xl" />
-              ))}
-            </div>
-          ) : list.isError ? (
-            <Empty
-              icon={<AlertCircleIcon size={24} />}
-              title="Couldn't load orders"
-              body="Check the API connection, then retry."
-              action={
-                <button type="button" onClick={() => void list.refetch()} className="g-btn g-btn-secondary h-10 rounded-xl px-4 text-sm">
-                  Retry
+        {list.isLoading ? (
+          <RowsSkeleton rows={8} />
+        ) : list.isError ? (
+          <Empty
+            icon={<AlertCircleIcon size={22} />}
+            title="Couldn't load orders"
+            body="Check the API connection, then retry."
+            action={
+              <button type="button" onClick={() => void list.refetch()} className="g-btn g-btn-secondary h-9 rounded-lg px-3 text-sm">
+                Retry
+              </button>
+            }
+          />
+        ) : rows.length === 0 ? (
+          <Empty
+            icon={<FileTextIcon size={22} />}
+            title={filtered ? "No matching orders" : "No orders yet"}
+            body={filtered ? "Try another number or clear the status filter." : "Create the first purchase order."}
+            action={
+              filtered ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setFilter("");
+                  }}
+                  className="g-btn g-btn-secondary h-9 rounded-lg px-3 text-sm"
+                >
+                  Clear filters
                 </button>
-              }
-            />
-          ) : rows.length === 0 ? (
-            <Empty
-              icon={<FileTextIcon size={24} />}
-              title={filtered ? "No matching orders" : "No orders yet"}
-              body={filtered ? "Try another number or clear the status filter." : "Create the first purchase order."}
-              action={
-                filtered ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearch("");
-                      setFilter("");
-                    }}
-                    className="g-btn g-btn-secondary h-10 rounded-xl px-4 text-sm"
-                  >
-                    Clear filters
-                  </button>
-                ) : canCreate ? (
-                  <button type="button" onClick={() => setDialog(true)} className="g-btn g-btn-primary h-10 rounded-xl px-4 text-sm">
-                    <PlusIcon size={14} /> New order
-                  </button>
-                ) : null
-              }
-            />
-          ) : (
-            <table className="g-table">
+              ) : canCreate ? (
+                <button type="button" onClick={() => setDialog(true)} className="g-btn g-btn-primary h-9 rounded-lg px-3 text-sm">
+                  <PlusIcon size={14} /> New order
+                </button>
+              ) : null
+            }
+          />
+        ) : (
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full min-w-[720px] text-[12px]">
               <thead>
-                <tr>
-                  <th>Order</th>
-                  <th>Supplier</th>
-                  <th className="!text-right">Items</th>
-                  <th>Status</th>
-                  <th>
+                <tr className={thead}>
+                  <th className={cn(th, "pl-4")}>Order</th>
+                  <th className={th}>Supplier</th>
+                  <th className={cn(th, "text-right")}>Items</th>
+                  <th className={th}>Status</th>
+                  <th className={th}>Created</th>
+                  <th className={cn(th, "pr-4 text-right")}>
                     <span className="sr-only">Actions</span>
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((o) => {
-                  const st = STATUS_STYLE[o.status] ?? STATUS_STYLE.DRAFT!;
                   const isOpen = o.status === "DRAFT" || o.status === "SENT";
                   const cancelled = o.status === "CANCELLED";
                   return (
-                    <tr key={o.id} className={cn("group", cancelled && "opacity-60")}>
-                      <td>
-                        <span className="flex items-center gap-3">
-                          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25)] transition-transform duration-320 group-hover:scale-105">
-                            <FileTextIcon size={15} />
-                          </span>
-                          <span className="min-w-0">
-                            <span className={cn("g-metric block text-[13px] font-semibold text-ink", cancelled && "line-through")}>{o.number}</span>
-                            <span className="mt-0.5 block whitespace-nowrap text-[11px] text-ink-5">{day(o.created_at)}</span>
-                          </span>
-                        </span>
+                    <tr key={o.id} className={cn(tr, "group", cancelled && "opacity-60")}>
+                      <td className="py-1.5 pl-4 pr-2">
+                        <span className={cn("g-metric font-semibold text-ink", cancelled && "line-through")}>{o.number}</span>
                       </td>
-                      <td>
-                        <span className="flex items-center gap-2.5">
-                          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-gold-soft to-gold-pale text-[10px] font-semibold text-gold-deep ring-1 ring-gold-dark/15">
+                      <td className="px-2">
+                        <span className="flex items-center gap-2">
+                          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-gold-soft to-gold-pale text-[9px] font-semibold text-gold-deep ring-1 ring-gold-dark/15">
                             {initials(o.supplier_name || "?")}
                           </span>
-                          <span className="max-w-[16rem] truncate font-medium text-ink">{o.supplier_name}</span>
+                          <span className="max-w-[16rem] truncate font-medium text-ink-2">{o.supplier_name}</span>
                         </span>
                       </td>
-                      <td className="!text-right">
-                        <span className="g-metric text-[15px] font-medium text-ink">{o.items}</span>
+                      <td className="g-metric px-2 text-right text-ink">{o.items}</td>
+                      <td className="px-2">
+                        <PoChip status={o.status} />
                       </td>
-                      <td>
-                        <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1", st.chip)}>
-                          <span className={cn("size-1.5 rounded-full", st.dot)} />
-                          {STATUS_LABEL[o.status] ?? o.status}
-                        </span>
+                      <td className="whitespace-nowrap px-2 text-ink-4" title={day(o.created_at)}>
+                        {ago(o.created_at)}
                       </td>
-                      <td>
-                        <span className="flex items-center justify-end gap-1.5">
+                      <td className="py-1.5 pl-2 pr-4">
+                        <span className="flex items-center justify-end gap-1">
                           {isOpen && canCreate ? (
                             <button
                               type="button"
                               onClick={() => setReceiving(o)}
-                              className="inline-flex h-8 items-center gap-1.5 rounded-full bg-void px-3 text-xs font-medium text-paper shadow-[inset_0_0_0_1px_rgba(205,168,83,0.3)] transition-all hover:-translate-y-px hover:text-gold-light"
+                              className="inline-flex h-7 items-center gap-1 rounded-md bg-void px-2.5 text-[11.5px] font-semibold text-paper transition hover:text-gold-light"
                             >
-                              <PackagePlusIcon size={13} className="text-gold-light" />
+                              <PackagePlusIcon size={12} className="text-gold-light" />
                               Receive
                             </button>
                           ) : null}
@@ -377,12 +284,12 @@ export default function OrdersPage() {
                               onClick={() => setCancelling(o)}
                               aria-label={`Cancel ${o.number}`}
                               title="Cancel order"
-                              className="flex size-8 items-center justify-center rounded-full text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.1)] transition-all hover:bg-rose-50 hover:text-rose-700 hover:shadow-[inset_0_0_0_1px_rgba(225,29,72,0.3)]"
+                              className="flex size-7 items-center justify-center rounded-md text-ink-4 ring-1 ring-inset ring-ink/10 transition hover:bg-rose-50 hover:text-rose-700 hover:ring-rose-300"
                             >
-                              <CircleSlashIcon size={14} />
+                              <CircleSlashIcon size={13} />
                             </button>
                           ) : null}
-                          {!isOpen ? <span className="text-xs text-ink-5">â€”</span> : null}
+                          {!isOpen ? <span className="text-[11px] text-ink-6">—</span> : null}
                         </span>
                       </td>
                     </tr>
@@ -390,11 +297,11 @@ export default function OrdersPage() {
                 })}
               </tbody>
             </table>
-          )}
-        </div>
+          </div>
+        )}
 
         {rows.length > 0 ? <PageNav page={page} onChange={setPage} count={rows.length} total={total} /> : null}
-      </section>
+      </Card>
 
       {dialog ? <NewOrderDialog onClose={() => setDialog(false)} /> : null}
       {receiving ? <ReceiveDialog order={receiving} onClose={() => setReceiving(null)} /> : null}
@@ -452,7 +359,7 @@ function NewOrderDialog({ onClose }: { onClose: () => void }) {
     <Dialog
       wide
       icon={<FileTextIcon size={20} />}
-      kicker="Purchasing Â· New order"
+      kicker="Purchasing · New order"
       title="New purchase order"
       intro="Saved as a draft. Nothing is posted to stock or the ledger until the order is received."
       onClose={onClose}
@@ -475,7 +382,7 @@ function NewOrderDialog({ onClose }: { onClose: () => void }) {
             <button type="button" onClick={() => create.mutate()} disabled={pending || !ready} className="g-btn g-btn-primary h-11 rounded-xl px-5 text-sm">
               {pending ? (
                 <>
-                  <Spinner /> Savingâ€¦
+                  <Spinner /> Saving…
                 </>
               ) : (
                 <>
@@ -498,7 +405,7 @@ function NewOrderDialog({ onClose }: { onClose: () => void }) {
               loading={suppliers.isLoading}
               searchable
               icon={<TruckIcon size={13} />}
-              placeholder={suppliers.isLoading ? "Loading suppliersâ€¦" : "Choose supplier"}
+              placeholder={suppliers.isLoading ? "Loading suppliers…" : "Choose supplier"}
               options={(suppliers.data?.rows ?? []).map((s) => ({ value: s.id, label: s.name, hint: s.code }))}
             />
           </div>
@@ -506,7 +413,7 @@ function NewOrderDialog({ onClose }: { onClose: () => void }) {
             <Label htmlFor="po-notes" extra={<span className="text-[11px] font-normal text-ink-5">Optional</span>}>
               Notes
             </Label>
-            <input id="po-notes" value={notes} maxLength={2000} onChange={(e) => setNotes(e.target.value)} placeholder="Delivery terms, referencesâ€¦" className={inputCls} />
+            <input id="po-notes" value={notes} maxLength={2000} onChange={(e) => setNotes(e.target.value)} placeholder="Delivery terms, references…" className={inputCls} />
           </div>
         </div>
 
@@ -573,11 +480,11 @@ function ReceiveDialog({ order, onClose }: { order: Order; onClose: () => void }
   return (
     <Dialog
       icon={<PackagePlusIcon size={20} />}
-      kicker="Purchasing Â· Receive"
+      kicker="Purchasing · Receive"
       title={`Receive ${order.number}`}
       intro={
         <>
-          <span className="font-medium text-paper/80">{order.supplier_name}</span> Â· {order.items} item{order.items === 1 ? "" : "s"}. Creates
+          <span className="font-medium text-paper/80">{order.supplier_name}</span> · {order.items} item{order.items === 1 ? "" : "s"}. Creates
           products, stock, ledger and journal entries atomically.
         </>
       }
@@ -593,7 +500,7 @@ function ReceiveDialog({ order, onClose }: { order: Order; onClose: () => void }
             <button type="button" onClick={receive} disabled={pending || !ready} className="g-btn g-btn-primary h-11 rounded-xl px-5 text-sm">
               {pending ? (
                 <>
-                  <Spinner /> Receivingâ€¦
+                  <Spinner /> Receiving…
                 </>
               ) : (
                 <>
@@ -666,9 +573,9 @@ function CancelDialog({ order, onClose }: { order: Order; onClose: () => void })
     <Dialog
       danger
       icon={<CircleSlashIcon size={20} />}
-      kicker="Purchasing Â· Cancel"
+      kicker="Purchasing · Cancel"
       title={`Cancel ${order.number}`}
-      intro={`${order.supplier_name} Â· ${order.items} item${order.items === 1 ? "" : "s"}. A cancelled order can no longer be received.`}
+      intro={`${order.supplier_name} · ${order.items} item${order.items === 1 ? "" : "s"}. A cancelled order can no longer be received.`}
       onClose={onClose}
       pending={pending}
       footer={
@@ -684,7 +591,7 @@ function CancelDialog({ order, onClose }: { order: Order; onClose: () => void })
             >
               {pending ? (
                 <>
-                  <Spinner /> Cancellingâ€¦
+                  <Spinner /> Cancelling…
                 </>
               ) : (
                 "Cancel order"
@@ -741,7 +648,7 @@ function PageNav({ page, onChange, count, total }: { page: number; onChange: (p:
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink/[0.06] bg-bone/40 px-5 py-3 sm:px-6">
       <span className="text-xs text-ink-4">
-        Showing <span className="g-metric font-medium text-ink">{from}â€“{to}</span> of{" "}
+        Showing <span className="g-metric font-medium text-ink">{from}–{to}</span> of{" "}
         <span className="g-metric font-medium text-ink">{total.toLocaleString("en-US")}</span> orders
       </span>
       <div className="flex items-center gap-2">

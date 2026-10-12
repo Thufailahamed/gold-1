@@ -8,19 +8,10 @@ import { hasPermission, mgToG } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
 import { normalizeCode } from "@/lib/barcode";
 import { CameraScanButton } from "@/components/camera-scan";
-import {
-  Page,
-  Hero,
-  Panel,
-  TableCard,
-  EmptyBlock,
-  Callout,
-  Field,
-  Pill,
-  Skeleton,
-  controlClass,
-} from "@/components/ui";
-import { ArrowLeftRightIcon, ScanBarcodeIcon, TrashIcon, TruckIcon } from "@/components/icons";
+import { Page, Callout, Field, Skeleton, controlClass } from "@/components/ui";
+import { ArrowLeftRightIcon, CheckCircleIcon, CheckIcon, ScanBarcodeIcon, TrashIcon, TruckIcon } from "@/components/icons";
+import { cn } from "@/lib/cn";
+import { Card, CardHead, Empty, GoldHero, HeroBadge, heroGold, th, thead, tr } from "../../kit";
 
 type Branch = { id: string; name: string; code: string; member: boolean };
 
@@ -154,27 +145,37 @@ export default function NewTransferPage() {
   const toName = toChoices.find((b) => b.id === toBranchId)?.name;
   const canSubmit =
     canCreate && !!fromBranchId && !!toBranchId && fromBranchId !== toBranchId && lines.length > 0 && !create.isPending;
+  const karats = new Set(lines.map((l) => l.karat)).size;
+  const avg = lines.length ? totalMg / lines.length : 0;
+  const ready = [
+    { ok: !!fromBranchId, label: "Sending branch" },
+    { ok: !!toBranchId && toBranchId !== fromBranchId, label: "Receiving branch" },
+    { ok: lines.length > 0, label: "At least one piece" },
+  ];
 
   return (
-    <Page>
-      <Hero
+    <Page className="space-y-4">
+      <GoldHero
+        icon={TruckIcon}
+        title="New"
+        accent="transfer"
         back={{ href: "/inventory/transfers", label: "Branch transfers" }}
-        kicker="Inventory"
-        title="New transfer"
-        description="Choose the route, then scan each piece to send. Enter adds a piece; the scanner keeps focus."
-        meta={
-          <>
-            <Pill tone="ghost" className="!text-paper">
-              {fromName ?? "Sending branch"} → {toName ?? "Receiving branch"}
-            </Pill>
-            <Pill tone="ghost" className="!text-paper">
-              {lines.length} piece{lines.length === 1 ? "" : "s"}
-            </Pill>
-          </>
+        badge={
+          <HeroBadge tone={canSubmit ? "good" : "muted"}>
+            {fromName ?? "From"} → {toName ?? "To"}
+          </HeroBadge>
+        }
+        sub="Choose the route, then scan each piece to send. Enter adds a piece and the scanner keeps focus."
+        actions={
+          <button type="button" onClick={() => create.mutate()} disabled={!canSubmit} className={cn(heroGold, "disabled:cursor-not-allowed disabled:opacity-50")}>
+            <TruckIcon size={13} /> {create.isPending ? "Requesting…" : "Request transfer"}
+          </button>
         }
         stats={[
-          { label: "Pieces", value: lines.length },
-          { label: "Net weight", value: `${grams(totalMg)} g` },
+          { label: "Pieces", value: lines.length, sub: `Up to ${MAX_LINES}` },
+          { label: "Net weight", value: totalMg, format: grams, unit: "g", accent: true, sub: "Leaving the branch" },
+          { label: "Average piece", value: avg, format: grams, unit: "g", sub: "Net weight" },
+          { label: "Purities", value: karats, sub: karats ? [...new Set(lines.map((l) => l.karat))].join(" · ") : "None yet" },
         ]}
       >
         <form
@@ -182,13 +183,10 @@ export default function NewTransferPage() {
             e.preventDefault();
             submitScan(scan);
           }}
-          className="relative mt-6 flex gap-2"
+          className="flex gap-2"
         >
           <div className="relative flex-1">
-            <ScanBarcodeIcon
-              size={18}
-              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gold"
-            />
+            <ScanBarcodeIcon size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gold" />
             <label htmlFor="transfer-scan" className="sr-only">
               Scan piece barcode
             </label>
@@ -201,19 +199,19 @@ export default function NewTransferPage() {
               placeholder={fromBranchId ? "Scan barcode…" : "Choose the sending branch first"}
               autoComplete="off"
               disabled={!canCreate}
-              className="h-13 w-full rounded-xl bg-paper/10 py-3.5 pl-11 pr-4 font-mono text-lg text-paper placeholder:text-paper/35 shadow-[inset_0_0_0_1px_rgba(205,168,83,0.45)] transition-shadow focus:outline-none focus:shadow-[inset_0_0_0_2px_#CDA853,0_0_0_4px_rgba(205,168,83,0.2)] disabled:opacity-50"
+              className="h-10 w-full rounded-xl bg-paper/10 pl-10 pr-4 font-mono text-[15px] text-paper placeholder:font-sans placeholder:text-[13px] placeholder:text-paper/35 shadow-[inset_0_0_0_1px_rgba(205,168,83,0.45)] transition-shadow focus:outline-none focus:shadow-[inset_0_0_0_2px_#CDA853,0_0_0_4px_rgba(205,168,83,0.2)] disabled:opacity-50"
             />
           </div>
-          <CameraScanButton onDetected={(c) => submitScan(c)} tone="dark" className="h-auto rounded-xl" />
+          <CameraScanButton onDetected={(c) => submitScan(c)} tone="dark" className="h-10 rounded-xl" />
           <button
             type="submit"
             disabled={lookup.isPending || !canCreate}
-            className="g-btn h-auto rounded-xl bg-gold px-5 text-sm font-medium text-ink transition-colors hover:bg-gold-light disabled:opacity-50"
+            className="g-btn h-10 rounded-xl bg-gold px-4 text-[13px] font-medium text-ink transition-colors hover:bg-gold-light disabled:opacity-50"
           >
             {lookup.isPending ? "Looking up…" : "Add"}
           </button>
         </form>
-      </Hero>
+      </GoldHero>
 
       {me.data && !canCreate ? (
         <Callout tone="warning" title="You cannot request transfers">
@@ -221,78 +219,86 @@ export default function NewTransferPage() {
         </Callout>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Panel title="Route" icon={<ArrowLeftRightIcon size={17} />} description="Where the pieces leave from and go to">
-          {branches.isLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-10" />
-              <Skeleton className="h-10" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-4">
+          <Card>
+            <CardHead icon={ArrowLeftRightIcon} title="Route" sub="Where the pieces leave from and go to" />
+            <div className="p-4">
+              {branches.isLoading ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-10" />
+                  <Skeleton className="h-10" />
+                </div>
+              ) : branches.isError ? (
+                <Callout tone="danger" title="Could not load branches">
+                  {branches.error instanceof Error ? branches.error.message : "Retry in a moment."}
+                </Callout>
+              ) : (
+                <div className="space-y-3">
+                  <Field
+                    label="From (sending branch)"
+                    htmlFor="transfer-from"
+                    hint={memberBranches.length === 0 ? "You are not a member of any branch." : "Changing this clears the scanned list."}
+                  >
+                    <select id="transfer-from" value={fromBranchId} onChange={(e) => changeFrom(e.target.value)} className={`w-full ${controlClass}`}>
+                      <option value="">Select branch…</option>
+                      {memberBranches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} ({b.code})
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="To (receiving branch)" htmlFor="transfer-to" error={toBranchId && toBranchId === fromBranchId ? "Choose a different branch" : undefined}>
+                    <select id="transfer-to" value={toBranchId} onChange={(e) => setToBranchId(e.target.value)} className={`w-full ${controlClass}`}>
+                      <option value="">Select branch…</option>
+                      {toChoices.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} ({b.code})
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Reason (optional)" htmlFor="transfer-reason">
+                    <textarea
+                      id="transfer-reason"
+                      value={reason}
+                      maxLength={500}
+                      onChange={(e) => setReason(e.target.value)}
+                      rows={2}
+                      placeholder="e.g. Restock for weekend exhibition"
+                      className={`w-full !h-auto py-2 ${controlClass}`}
+                    />
+                  </Field>
+                </div>
+              )}
             </div>
-          ) : branches.isError ? (
-            <Callout tone="danger" title="Could not load branches">
-              {branches.error instanceof Error ? branches.error.message : "Retry in a moment."}
-            </Callout>
-          ) : (
-            <div className="space-y-4">
-              <Field
-                label="From (sending branch)"
-                htmlFor="transfer-from"
-                hint={memberBranches.length === 0 ? "You are not a member of any branch." : "Changing this clears the scanned list."}
-              >
-                <select
-                  id="transfer-from"
-                  value={fromBranchId}
-                  onChange={(e) => changeFrom(e.target.value)}
-                  className={`w-full ${controlClass}`}
-                >
-                  <option value="">Select branch…</option>
-                  {memberBranches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({b.code})
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field
-                label="To (receiving branch)"
-                htmlFor="transfer-to"
-                error={toBranchId && toBranchId === fromBranchId ? "Choose a different branch" : undefined}
-              >
-                <select
-                  id="transfer-to"
-                  value={toBranchId}
-                  onChange={(e) => setToBranchId(e.target.value)}
-                  className={`w-full ${controlClass}`}
-                >
-                  <option value="">Select branch…</option>
-                  {toChoices.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({b.code})
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Reason (optional)" htmlFor="transfer-reason">
-                <textarea
-                  id="transfer-reason"
-                  value={reason}
-                  maxLength={500}
-                  onChange={(e) => setReason(e.target.value)}
-                  rows={3}
-                  placeholder="e.g. Restock for weekend exhibition"
-                  className={`w-full !h-auto py-2 ${controlClass}`}
-                />
-              </Field>
-            </div>
-          )}
-        </Panel>
+          </Card>
 
-        <div className="lg:col-span-2">
-          <TableCard
+          <Card>
+            <CardHead icon={CheckCircleIcon} title="Ready to request" sub={canSubmit ? "Everything is in place" : "Complete the checklist"} />
+            <ul className="divide-y divide-ink/[0.05]">
+              {ready.map((r) => (
+                <li key={r.label} className="flex items-center gap-2 px-4 py-1.5 text-[12px]">
+                  <span className={cn("flex size-4 items-center justify-center rounded-full", r.ok ? "bg-emerald-500 text-paper" : "bg-ink/[0.07] text-ink-5")}>
+                    {r.ok ? <CheckIcon size={10} /> : null}
+                  </span>
+                  <span className={r.ok ? "text-ink" : "text-ink-4"}>{r.label}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="border-t border-ink/[0.06] bg-bone/40 px-4 py-2 text-[11px] leading-snug text-ink-4">
+              Pieces stay on the sending branch&rsquo;s shelf until the transfer is dispatched.
+            </p>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHead
+            icon={TruckIcon}
             title="Pieces to send"
-            icon={<TruckIcon size={17} />}
-            description={`${lines.length} piece${lines.length === 1 ? "" : "s"} · ${grams(totalMg)} g net`}
-            actions={
+            sub={`${lines.length} piece${lines.length === 1 ? "" : "s"} · ${grams(totalMg)} g net`}
+            action={
               lines.length > 0 ? (
                 <button
                   type="button"
@@ -300,55 +306,41 @@ export default function NewTransferPage() {
                     setLines([]);
                     scanRef.current?.focus();
                   }}
-                  className="g-btn g-btn-secondary h-8 px-3 text-xs"
+                  className="inline-flex h-7 items-center rounded-lg px-2.5 text-[11.5px] font-medium text-ink-3 ring-1 ring-inset ring-ink/10 hover:bg-bone hover:text-ink"
                 >
                   Clear list
                 </button>
               ) : null
             }
-            footer={
-              <>
-                <span className="num-tabular">
-                  {lines.length} piece{lines.length === 1 ? "" : "s"} · {grams(totalMg)} g net
-                </span>
-                <button
-                  type="button"
-                  onClick={() => create.mutate()}
-                  disabled={!canSubmit}
-                  className="g-btn g-btn-primary h-10 px-4 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {create.isPending ? "Requesting…" : "Request transfer"}
-                </button>
-              </>
-            }
-          >
-            {lines.length === 0 ? (
-              <EmptyBlock
-                icon={<ScanBarcodeIcon size={22} />}
-                title="No pieces yet"
-                description="Scan pieces that are in stock at the sending branch."
-              />
-            ) : (
-              <table className="g-table">
-                <thead>
+          />
+          {lines.length === 0 ? (
+            <Empty icon={ScanBarcodeIcon} title="No pieces yet" desc="Scan pieces that are in stock at the sending branch." />
+          ) : (
+            <div className="max-h-[32rem] overflow-auto scrollbar-thin">
+              <table className="w-full text-[12.5px]">
+                <thead className={cn(thead, "sticky top-0 z-10 backdrop-blur")}>
                   <tr>
-                    <th>Barcode</th>
-                    <th>Item</th>
-                    <th>Karat</th>
-                    <th className="!text-right">Net g</th>
-                    <th>
+                    <th className={cn(th, "w-8 pl-4")}>#</th>
+                    <th className={th}>Barcode</th>
+                    <th className={th}>Item</th>
+                    <th className={th}>Karat</th>
+                    <th className={cn(th, "text-right")}>Net g</th>
+                    <th className={cn(th, "w-10 pr-4")}>
                       <span className="sr-only">Remove</span>
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {lines.map((l) => (
-                    <tr key={l.productId}>
-                      <td className="g-metric text-xs">{l.barcode}</td>
-                      <td className="font-medium text-ink">{l.name}</td>
-                      <td className="text-ink-3">{l.karat}</td>
-                      <td className="!text-right num-tabular">{grams(l.netMg)}</td>
-                      <td className="!text-right">
+                  {lines.map((l, i) => (
+                    <tr key={l.productId} className={tr}>
+                      <td className="g-metric py-1.5 pl-4 pr-2 text-[11px] text-ink-5">{i + 1}</td>
+                      <td className="px-2 py-1.5 font-mono text-[11px] text-ink-2">{l.barcode}</td>
+                      <td className="px-2 py-1.5 font-medium text-ink">{l.name}</td>
+                      <td className="px-2 py-1.5">
+                        <span className="g-metric rounded bg-gold-pale px-1.5 py-px text-[10.5px] font-semibold text-gold-deep ring-1 ring-gold-dark/15">{l.karat}</span>
+                      </td>
+                      <td className="g-metric px-2 py-1.5 text-right">{grams(l.netMg)}</td>
+                      <td className="py-1 pl-2 pr-4 text-right">
                         <button
                           type="button"
                           onClick={() => {
@@ -356,18 +348,40 @@ export default function NewTransferPage() {
                             scanRef.current?.focus();
                           }}
                           aria-label={`Remove ${l.barcode}`}
-                          className="inline-flex size-7 items-center justify-center rounded-md text-rose-600 transition-colors hover:bg-rose-50"
+                          className="inline-flex size-6 items-center justify-center rounded-md text-rose-600 transition-colors hover:bg-rose-50"
                         >
-                          <TrashIcon size={14} />
+                          <TrashIcon size={12} />
                         </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
+                <tfoot className="sticky bottom-0 bg-bone/90 backdrop-blur">
+                  <tr className="border-t border-ink/10 text-[12px] font-semibold">
+                    <td colSpan={4} className="py-1.5 pl-4 text-[9.5px] uppercase tracking-[0.14em] text-gold-dark">
+                      Total · {lines.length} pieces
+                    </td>
+                    <td className="g-metric px-2 py-1.5 text-right text-gold-deep">{grams(totalMg)}</td>
+                    <td />
+                  </tr>
+                </tfoot>
               </table>
-            )}
-          </TableCard>
-        </div>
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-3 border-t border-ink/[0.06] bg-bone/40 px-4 py-2">
+            <span className="g-metric text-[11.5px] text-ink-4">
+              {lines.length} piece{lines.length === 1 ? "" : "s"} · {grams(totalMg)} g net
+            </span>
+            <button
+              type="button"
+              onClick={() => create.mutate()}
+              disabled={!canSubmit}
+              className="g-btn g-btn-primary h-8 rounded-lg px-3.5 text-[12.5px] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {create.isPending ? "Requesting…" : "Request transfer"}
+            </button>
+          </div>
+        </Card>
       </div>
     </Page>
   );

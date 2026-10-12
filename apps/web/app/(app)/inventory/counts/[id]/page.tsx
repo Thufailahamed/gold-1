@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { use, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -10,21 +10,13 @@ import { normalizeCode } from "@/lib/barcode";
 import { CameraScanButton } from "@/components/camera-scan";
 import {
   Page,
-  Hero,
   Panel,
-  TableCard,
   Pill,
-  StatGrid,
-  StatCard,
-  Tabs,
   Modal,
   Callout,
-  EmptyBlock,
   Skeleton,
   Field,
   controlClass,
-  heroBtnPrimary,
-  heroBtnGhost,
   type PillTone,
 } from "@/components/ui";
 import {
@@ -38,6 +30,7 @@ import {
   ScanBarcodeIcon,
 } from "@/components/icons";
 import { cn } from "@/lib/cn";
+import { Card, CardHead, Empty, FilterPills, GoldHero, HeroBadge, MiniStats, ShareBar, ago, heroGhost, heroGold, th, thead, tr } from "../../kit";
 
 type CountScope = "FULL" | "CATEGORY" | "BRANCH" | "LOCATION";
 type CountStatus = "OPEN" | "COMPLETE" | "CANCELLED";
@@ -106,6 +99,7 @@ const time = (ms: number) => new Date(ms).toLocaleTimeString("en-US", { hour: "2
 const grams = (mg: number | null) =>
   mg == null ? "-" : `${mgToG(mg).toLocaleString("en-US", { maximumFractionDigits: 3 })} g`;
 const plural = (n: number, word: string) => `${n.toLocaleString("en-US")} ${word}${n === 1 ? "" : "s"}`;
+const td = "px-2 py-1.5";
 
 export default function StockCountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -131,10 +125,9 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
 
   if (detail.isLoading) {
     return (
-      <Page>
-        <Skeleton className="h-56" />
-        <Skeleton className="h-24" />
-        <Skeleton className="h-64" />
+      <Page className="space-y-4">
+        <Skeleton className="h-44 rounded-[20px]" />
+        <Skeleton className="h-72 rounded-2xl" />
       </Page>
     );
   }
@@ -162,60 +155,77 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
   const matched = lines.filter((l) => l.state !== "MISSING");
   const unexpectedRows = buildUnexpected(unexpected, scans);
   const scanned = summary.expected - summary.missing;
+  const progress = summary.expected > 0 ? scanned / summary.expected : 0;
+  const expectedMg = lines.reduce((s, l) => s + (l.net_mg ?? 0), 0);
+  const missingMg = missing.reduce((s, l) => s + (l.net_mg ?? 0), 0);
+  const noted = missing.filter((l) => l.note).length;
 
   return (
-    <Page>
-      <Hero
+    <Page className="space-y-4">
+      <GoldHero
+        icon={ClipboardCheckIcon}
+        title="Count ·"
+        accent={count.branch_name ?? "Branch"}
         back={{ href: "/inventory/counts", label: "Stock counts" }}
-        kicker="Stock count"
-        title={`${count.branch_name ?? "Branch"} · ${scopeText}`}
-        description={`Started ${when(count.created_at)} by ${count.opened_by_name ?? "unknown"}.`}
-        meta={
+        badge={
+          open ? (
+            <HeroBadge tone="warn">Open · scanning</HeroBadge>
+          ) : count.status === "COMPLETE" ? (
+            <HeroBadge tone="good">Posted</HeroBadge>
+          ) : (
+            <HeroBadge tone="muted">Cancelled</HeroBadge>
+          )
+        }
+        sub={
           <>
-            <Pill tone="ghost" className="!text-paper">{count.status}</Pill>
-            <Pill tone="ghost" className="!text-paper">{count.branch_name ?? count.branch_id}</Pill>
-            <Pill tone="ghost" className="!text-paper">{scopeText}</Pill>
-            {!open && count.closed_by_name ? (
-              <Pill tone="ghost" className="!text-paper">
-                {count.status === "COMPLETE" ? "Posted" : "Cancelled"} by {count.closed_by_name}
-              </Pill>
-            ) : null}
+            {scopeText} · started {when(count.created_at)} by {count.opened_by_name ?? "unknown"}
+            {!open && count.closed_by_name ? ` · ${count.status === "COMPLETE" ? "posted" : "cancelled"} by ${count.closed_by_name}` : ""}
           </>
         }
         actions={
           open ? (
             <>
               {canApprove ? (
-                <button type="button" onClick={() => setDialog("approve")} className={heroBtnPrimary}>
-                  <CheckCircleIcon size={14} /> Post count
+                <button type="button" onClick={() => setDialog("approve")} className={heroGold}>
+                  <CheckCircleIcon size={13} /> Post count
                 </button>
               ) : null}
               {canEdit ? (
-                <button type="button" onClick={() => setDialog("cancel")} className={`${heroBtnGhost} !text-rose-300`}>
+                <button type="button" onClick={() => setDialog("cancel")} className={`${heroGhost} !text-rose-300`}>
                   Cancel count
                 </button>
               ) : null}
             </>
           ) : null
         }
+        stats={[
+          { label: "Expected", value: summary.expected, sub: grams(expectedMg) },
+          { label: "Found", value: scanned, accent: true, sub: `${Math.round(progress * 100)}% of the list` },
+          { label: "Matched", value: summary.matched, tone: summary.matched ? "good" : undefined, sub: "Scanned once" },
+          { label: "Missing", value: summary.missing, tone: summary.missing ? "bad" : undefined, sub: summary.missing ? grams(missingMg) : "Nothing missing" },
+          { label: "Unexpected", value: summary.unexpected, tone: summary.unexpected ? "warn" : undefined, sub: "Not on the list" },
+          { label: "Duplicates", value: summary.duplicates, tone: summary.duplicates ? "warn" : undefined, sub: "Scanned twice" },
+          open
+            ? { label: "Scans", value: scans.length, sub: scans[0] ? `Last ${ago(scans[0].scanned_at)}` : "None yet" }
+            : { label: "Written off", value: summary.posted, tone: summary.posted ? "bad" : undefined, sub: "Posted as LOST" },
+        ]}
       >
-        {open && canEdit ? (
-          <ScanStation countId={id} scans={scans} paused={dialog !== null || noteFor !== null} onScanned={refresh} />
-        ) : null}
-      </Hero>
-
-      <StatGrid cols={5}>
-        <StatCard label="Expected" value={summary.expected.toLocaleString("en-US")} sub={`${plural(scanned, "piece")} found`} />
-        <StatCard label="Matched" value={summary.matched.toLocaleString("en-US")} tone={summary.matched > 0 ? "success" : "neutral"} />
-        <StatCard
-          label="Missing"
-          value={summary.missing.toLocaleString("en-US")}
-          tone={summary.missing > 0 ? "danger" : "neutral"}
-          sub={!open && summary.posted > 0 ? `${plural(summary.posted, "piece")} written off` : undefined}
-        />
-        <StatCard label="Unexpected" value={summary.unexpected.toLocaleString("en-US")} tone={summary.unexpected > 0 ? "warning" : "neutral"} />
-        <StatCard label="Duplicates" value={summary.duplicates.toLocaleString("en-US")} tone={summary.duplicates > 0 ? "warning" : "neutral"} />
-      </StatGrid>
+        <div className="flex items-center gap-3">
+          <span className="block h-1.5 flex-1 overflow-hidden rounded-full bg-paper/10">
+            <span
+              className={cn(
+                "block h-full rounded-full transition-[width] duration-700 ease-brand",
+                progress >= 1 ? "bg-gradient-to-r from-emerald-500 to-emerald-300" : "bg-gradient-to-r from-gold-dark to-gold-light"
+              )}
+              style={{ width: `${Math.min(progress, 1) * 100}%` }}
+            />
+          </span>
+          <span className="g-metric shrink-0 text-[11px] text-paper/55">
+            {scanned.toLocaleString("en-US")} / {summary.expected.toLocaleString("en-US")}
+          </span>
+        </div>
+        {open && canEdit ? <ScanStation countId={id} scans={scans} paused={dialog !== null || noteFor !== null} onScanned={refresh} /> : null}
+      </GoldHero>
 
       {count.status === "COMPLETE" ? (
         <Callout tone="success" title="Count posted">
@@ -236,74 +246,59 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
         </Callout>
       ) : null}
 
-      <Tabs<TabKey>
-        ariaLabel="Count results"
-        value={tab}
-        onChange={setTab}
-        items={[
-          { key: "missing", label: "Missing", count: missing.length, icon: <AlertCircleIcon size={14} /> },
-          { key: "matched", label: "Matched", count: matched.length, icon: <CheckCircleIcon size={14} /> },
-          { key: "unexpected", label: "Unexpected", count: unexpectedRows.length, icon: <ArchiveIcon size={14} /> },
-          { key: "log", label: "Scan log", count: scans.length, icon: <HistoryIcon size={14} /> },
-        ]}
-      />
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <Card>
+          <CardHead
+            icon={tab === "missing" ? AlertCircleIcon : tab === "matched" ? CheckCircleIcon : tab === "unexpected" ? ArchiveIcon : HistoryIcon}
+            title={TAB_TITLE[tab]}
+            sub={TAB_SUB[tab](open)}
+            action={
+              <FilterPills<TabKey>
+                value={tab}
+                onChange={setTab}
+                items={[
+                  { key: "missing", label: "Missing", count: missing.length, dot: missing.length ? "bg-rose-500" : undefined },
+                  { key: "matched", label: "Matched", count: matched.length },
+                  { key: "unexpected", label: "Unexpected", count: unexpectedRows.length, dot: unexpectedRows.length ? "bg-amber-400" : undefined },
+                  { key: "log", label: "Scan log", count: scans.length },
+                ]}
+              />
+            }
+          />
 
-      {tab === "missing" ? (
-        <TableCard
-          title="Missing pieces"
-          icon={<AlertCircleIcon size={17} />}
-          description={
-            open
-              ? "Expected on the shelf but not scanned yet. Posting writes these off as LOST."
-              : "Pieces that were not found when the count closed."
-          }
-        >
-          {missing.length === 0 ? (
-            <EmptyBlock
-              icon={<CheckCircleIcon size={22} />}
-              title={summary.expected === 0 ? "Nothing expected" : "Nothing missing"}
-              description={
-                summary.expected === 0
-                  ? "No in-stock pieces matched this scope when the count started."
-                  : "Every expected piece has been scanned."
-              }
-            />
-          ) : (
-            <table className="g-table">
-              <thead>
-                <tr>
-                  <th>Barcode</th>
-                  <th>Piece</th>
-                  <th>Karat</th>
-                  <th className="!text-right">Net</th>
-                  <th>Location</th>
-                  <th>Note</th>
-                  <th>{open ? <span className="sr-only">Actions</span> : "Outcome"}</th>
-                </tr>
-              </thead>
-              <tbody>
+          {tab === "missing" ? (
+            missing.length === 0 ? (
+              <Empty
+                icon={CheckCircleIcon}
+                title={summary.expected === 0 ? "Nothing expected" : "Nothing missing"}
+                desc={summary.expected === 0 ? "No in-stock pieces matched this scope when the count started." : "Every expected piece has been scanned."}
+              />
+            ) : (
+              <Table head={["Barcode", "Piece", "Karat", "Net", "Location", "Note", open ? "" : "Outcome"]} right={[3, 6]}>
                 {missing.map((l) => (
-                  <tr key={l.productId}>
-                    <td className="font-mono text-xs">{l.barcode}</td>
-                    <td>
+                  <tr key={l.productId} className={tr}>
+                    <td className={cn(td, "pl-4 font-mono text-[11px] text-ink-2")}>{l.barcode}</td>
+                    <td className={td}>
                       <ProductLink line={l} />
                     </td>
-                    <td>{l.karat ?? "-"}</td>
-                    <td className="num num-tabular">{grams(l.net_mg)}</td>
-                    <td>{l.location ?? "-"}</td>
-                    <td className="max-w-xs">
-                      {l.note ? <span className="text-sm text-ink-2 text-pretty">{l.note}</span> : <span className="text-ink-5">-</span>}
+                    <td className={td}>
+                      <KaratTag k={l.karat} />
                     </td>
-                    <td className="!text-right">
+                    <td className={cn(td, "g-metric text-right")}>{grams(l.net_mg)}</td>
+                    <td className={cn(td, "text-ink-3")}>{l.location ?? "-"}</td>
+                    <td className={cn(td, "max-w-[16rem]")}>
+                      {l.note ? <span className="line-clamp-1 text-[11.5px] text-ink-2" title={l.note}>{l.note}</span> : <span className="text-ink-5">-</span>}
+                    </td>
+                    <td className={cn(td, "pr-4 text-right")}>
                       {open ? (
                         canEdit ? (
                           <button
                             type="button"
                             onClick={() => setNoteFor(l)}
-                            className="g-btn g-btn-secondary h-8 px-3 text-xs"
+                            className="inline-flex h-6 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-ink-3 ring-1 ring-inset ring-ink/10 hover:bg-void hover:text-paper hover:ring-0"
                             aria-label={`${l.note ? "Edit" : "Add"} note for ${l.barcode}`}
                           >
-                            <EditIcon size={12} /> {l.note ? "Edit note" : "Add note"}
+                            <EditIcon size={10} /> {l.note ? "Edit" : "Note"}
                           </button>
                         ) : null
                       ) : l.posted ? (
@@ -314,39 +309,27 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          )}
-        </TableCard>
-      ) : null}
+              </Table>
+            )
+          ) : null}
 
-      {tab === "matched" ? (
-        <TableCard title="Matched pieces" icon={<CheckCircleIcon size={17} />} description="Expected pieces that were scanned">
-          {matched.length === 0 ? (
-            <EmptyBlock icon={<ScanBarcodeIcon size={22} />} title="Nothing matched yet" description="Scanned pieces from the expected list appear here." />
-          ) : (
-            <table className="g-table">
-              <thead>
-                <tr>
-                  <th>Barcode</th>
-                  <th>Piece</th>
-                  <th>Karat</th>
-                  <th className="!text-right">Net</th>
-                  <th>Location</th>
-                  <th>State</th>
-                </tr>
-              </thead>
-              <tbody>
+          {tab === "matched" ? (
+            matched.length === 0 ? (
+              <Empty icon={ScanBarcodeIcon} title="Nothing matched yet" desc="Scanned pieces from the expected list appear here." />
+            ) : (
+              <Table head={["Barcode", "Piece", "Karat", "Net", "Location", "State"]} right={[3]}>
                 {matched.map((l) => (
-                  <tr key={l.productId}>
-                    <td className="font-mono text-xs">{l.barcode}</td>
-                    <td>
+                  <tr key={l.productId} className={tr}>
+                    <td className={cn(td, "pl-4 font-mono text-[11px] text-ink-2")}>{l.barcode}</td>
+                    <td className={td}>
                       <ProductLink line={l} />
                     </td>
-                    <td>{l.karat ?? "-"}</td>
-                    <td className="num num-tabular">{grams(l.net_mg)}</td>
-                    <td>{l.location ?? "-"}</td>
-                    <td>
+                    <td className={td}>
+                      <KaratTag k={l.karat} />
+                    </td>
+                    <td className={cn(td, "g-metric text-right")}>{grams(l.net_mg)}</td>
+                    <td className={cn(td, "text-ink-3")}>{l.location ?? "-"}</td>
+                    <td className={cn(td, "pr-4")}>
                       {l.state === "DUPLICATE" ? (
                         <Pill tone="warning" dot title="Scanned more than once">Scanned twice</Pill>
                       ) : (
@@ -355,72 +338,44 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          )}
-        </TableCard>
-      ) : null}
+              </Table>
+            )
+          ) : null}
 
-      {tab === "unexpected" ? (
-        <TableCard
-          title="Unexpected barcodes"
-          icon={<ArchiveIcon size={17} />}
-          description="Scanned here but not on the expected list: another branch, another shelf, already sold, or unknown."
-        >
-          {unexpectedRows.length === 0 ? (
-            <EmptyBlock icon={<CheckCircleIcon size={22} />} title="No unexpected scans" description="Every scanned barcode belonged to this count." />
-          ) : (
-            <table className="g-table">
-              <thead>
-                <tr>
-                  <th>Barcode</th>
-                  <th>Product</th>
-                  <th>Last scanned</th>
-                  <th>By</th>
-                </tr>
-              </thead>
-              <tbody>
+          {tab === "unexpected" ? (
+            unexpectedRows.length === 0 ? (
+              <Empty icon={CheckCircleIcon} title="No unexpected scans" desc="Every scanned barcode belonged to this count." />
+            ) : (
+              <Table head={["Barcode", "Product", "Last scanned", "By"]}>
                 {unexpectedRows.map((u) => (
-                  <tr key={u.barcode}>
-                    <td className="font-mono text-xs">{u.barcode}</td>
-                    <td>
+                  <tr key={u.barcode} className={tr}>
+                    <td className={cn(td, "pl-4 font-mono text-[11px] text-ink-2")}>{u.barcode}</td>
+                    <td className={td}>
                       {u.productId ? (
                         <Link href={`/products/${u.productId}`} className="inline-flex items-center gap-1 font-medium text-ink hover:text-gold-dark">
-                          Open product <ArrowRightIcon size={12} />
+                          Open product <ArrowRightIcon size={11} />
                         </Link>
                       ) : (
                         <Pill tone="neutral">Not in catalog</Pill>
                       )}
                     </td>
-                    <td className="whitespace-nowrap text-ink-3">{u.scannedAt ? when(u.scannedAt) : "-"}</td>
-                    <td>{u.by ?? "-"}</td>
+                    <td className={cn(td, "whitespace-nowrap text-ink-3")}>{u.scannedAt ? when(u.scannedAt) : "-"}</td>
+                    <td className={cn(td, "pr-4 text-ink-3")}>{u.by ?? "-"}</td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          )}
-        </TableCard>
-      ) : null}
+              </Table>
+            )
+          ) : null}
 
-      {tab === "log" ? (
-        <TableCard title="Scan log" icon={<HistoryIcon size={17} />} description="Latest 200 scans, newest first">
-          {scans.length === 0 ? (
-            <EmptyBlock icon={<ScanBarcodeIcon size={22} />} title="No scans yet" description="Every scan is recorded here with who scanned it." />
-          ) : (
-            <table className="g-table">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Barcode</th>
-                  <th>Result</th>
-                  <th>Scanned by</th>
-                </tr>
-              </thead>
-              <tbody>
+          {tab === "log" ? (
+            scans.length === 0 ? (
+              <Empty icon={ScanBarcodeIcon} title="No scans yet" desc="Every scan is recorded here with who scanned it." />
+            ) : (
+              <Table head={["Time", "Barcode", "Result", "Scanned by"]}>
                 {scans.map((s) => (
-                  <tr key={s.id}>
-                    <td className="whitespace-nowrap text-ink-3">{when(s.scanned_at)}</td>
-                    <td className="font-mono text-xs">
+                  <tr key={s.id} className={tr}>
+                    <td className={cn(td, "whitespace-nowrap pl-4 text-ink-3")}>{when(s.scanned_at)}</td>
+                    <td className={cn(td, "font-mono text-[11px]")}>
                       {s.product_id ? (
                         <Link href={`/products/${s.product_id}`} className="hover:text-gold-dark">
                           {s.barcode}
@@ -429,17 +384,19 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
                         s.barcode
                       )}
                     </td>
-                    <td>
+                    <td className={td}>
                       <FlagPill flag={s.flag} />
                     </td>
-                    <td>{s.scanned_by_name ?? "-"}</td>
+                    <td className={cn(td, "pr-4 text-ink-3")}>{s.scanned_by_name ?? "-"}</td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          )}
-        </TableCard>
-      ) : null}
+              </Table>
+            )
+          ) : null}
+        </Card>
+
+        <MissingBreakdown missing={missing} missingMg={missingMg} expectedMg={expectedMg} noted={noted} open={open} />
+      </div>
 
       {dialog === "approve" ? (
         <ApproveDialog
@@ -478,7 +435,101 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
   );
 }
 
+const TAB_TITLE: Record<TabKey, string> = {
+  missing: "Missing pieces",
+  matched: "Matched pieces",
+  unexpected: "Unexpected barcodes",
+  log: "Scan log",
+};
+const TAB_SUB: Record<TabKey, (open: boolean) => string> = {
+  missing: (open) => (open ? "Expected but not scanned yet · posting writes these off as LOST" : "Not found when the count closed"),
+  matched: () => "Expected pieces that were scanned",
+  unexpected: () => "Scanned here but not on the list: another branch, shelf, already sold, or unknown",
+  log: () => "Latest 200 scans, newest first",
+};
+
 /* ---------------------------------------------------------------- helpers */
+
+function Table({ head, right = [], children }: { head: string[]; right?: number[]; children: ReactNode }) {
+  return (
+    <div className="max-h-[34rem] overflow-auto scrollbar-thin">
+      <table className="w-full text-[12.5px]">
+        <thead className={cn(thead, "sticky top-0 z-10 backdrop-blur")}>
+          <tr>
+            {head.map((h, i) => (
+              <th key={i} className={cn(th, i === 0 && "pl-4", i === head.length - 1 && "pr-4", right.includes(i) && "text-right")}>
+                {h || <span className="sr-only">Actions</span>}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
+  );
+}
+
+function KaratTag({ k }: { k: string | null }) {
+  return k ? (
+    <span className="g-metric rounded bg-gold-pale px-1.5 py-px text-[10.5px] font-semibold text-gold-deep ring-1 ring-gold-dark/15">{k}</span>
+  ) : (
+    <span className="text-ink-5">-</span>
+  );
+}
+
+/** Where the gaps are: missing pieces grouped by karat and by location. */
+function MissingBreakdown({ missing, missingMg, expectedMg, noted, open }: { missing: CountLine[]; missingMg: number; expectedMg: number; noted: number; open: boolean }) {
+  const group = (key: (l: CountLine) => string) => {
+    const m = new Map<string, { n: number; mg: number }>();
+    for (const l of missing) {
+      const k = key(l);
+      const cur = m.get(k) ?? { n: 0, mg: 0 };
+      m.set(k, { n: cur.n + 1, mg: cur.mg + (l.net_mg ?? 0) });
+    }
+    return [...m.entries()].sort((a, b) => b[1].mg - a[1].mg);
+  };
+  const byKarat = group((l) => l.karat ?? "Unknown");
+  const byLoc = group((l) => l.location ?? "No location").slice(0, 6);
+  const share = expectedMg > 0 ? (missingMg / expectedMg) * 100 : 0;
+  return (
+    <Card>
+      <CardHead icon={AlertCircleIcon} title="Where the gaps are" sub={missing.length ? `${plural(missing.length, "piece")} · ${grams(missingMg)}` : "Nothing missing"} />
+      <MiniStats
+        items={[
+          { k: "Weight short", v: `${share.toFixed(1)}%`, tone: share > 0 ? "text-rose-700" : "text-ink" },
+          { k: open ? "Investigated" : "Noted", v: `${noted}/${missing.length}` },
+        ]}
+      />
+      {missing.length === 0 ? (
+        <Empty icon={CheckCircleIcon} title="Shelf matches the book" desc="No expected piece is unaccounted for." />
+      ) : (
+        <div className="space-y-3 p-4">
+          {[
+            ["By karat", byKarat],
+            ["By location", byLoc],
+          ].map(([label, rows]) => (
+            <div key={label as string}>
+              <div className="mb-1.5 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">{label as string}</div>
+              <ul className="space-y-1.5">
+                {(rows as [string, { n: number; mg: number }][]).map(([k, v]) => (
+                  <li key={k}>
+                    <div className="flex items-baseline justify-between gap-2 text-[12px]">
+                      <span className="truncate text-ink-2">{k}</span>
+                      <span className="g-metric shrink-0 text-ink">
+                        {grams(v.mg)} <span className="text-[10.5px] text-ink-5">· {v.n}</span>
+                      </span>
+                    </div>
+                    <ShareBar value={missingMg > 0 ? (v.mg / missingMg) * 100 : 0} className="mt-1 h-1" color="bg-gradient-to-r from-rose-600 to-rose-400" />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
 
 function buildUnexpected(barcodes: string[], scans: ScanRow[]) {
   const map = new Map<string, { barcode: string; productId: string | null; scannedAt: number | null; by: string | null }>();
@@ -577,14 +628,14 @@ function ScanStation({
         : "bg-rose-500/15 text-rose-200 ring-rose-400/30";
 
   return (
-    <div className="relative mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+    <div className="relative mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_17rem]">
       <div>
         <form
           onSubmit={(e) => {
             e.preventDefault();
             if (value.trim()) void submit(value);
           }}
-          className="flex w-full flex-col gap-3 sm:flex-row"
+          className="flex w-full flex-col gap-2 sm:flex-row"
         >
           <div className="relative w-full">
             <label htmlFor="count-scan" className="sr-only">
@@ -606,21 +657,21 @@ function ScanStation({
               autoCapitalize="characters"
               spellCheck={false}
               enterKeyHint="send"
-              className="h-12 w-full rounded-lg bg-paper pl-11 pr-4 font-mono text-base text-ink shadow-[inset_0_0_0_1.5px_rgba(205,168,83,0.6)] transition-shadow placeholder:font-sans placeholder:text-ink-5 focus:outline-none focus:shadow-[inset_0_0_0_1.5px_var(--gold,#CDA853),0_0_0_4px_rgba(205,168,83,0.25)]"
+              className="h-10 w-full rounded-lg bg-paper pl-11 pr-4 font-mono text-base text-ink shadow-[inset_0_0_0_1.5px_rgba(205,168,83,0.6)] transition-shadow placeholder:font-sans placeholder:text-ink-5 focus:outline-none focus:shadow-[inset_0_0_0_1.5px_var(--gold,#CDA853),0_0_0_4px_rgba(205,168,83,0.25)]"
             />
           </div>
-          <CameraScanButton onDetected={(c) => void submit(c)} className="h-12" tone="dark" />
+          <CameraScanButton onDetected={(c) => void submit(c)} className="h-10" tone="dark" />
           <button
             type="submit"
-            className="g-btn h-12 bg-gold px-5 text-sm text-ink transition-colors hover:bg-gold-light"
+            className="g-btn h-10 bg-gold px-4 text-[13px] text-ink transition-colors hover:bg-gold-light"
           >
             Record
             <ArrowRightIcon size={14} className="g-btn-arrow" />
           </button>
         </form>
-        <div aria-live="polite" className="mt-3 min-h-10">
+        <div aria-live="polite" className="mt-2 min-h-8">
           {last ? (
-            <div className={cn("flex items-center justify-between gap-3 rounded-lg px-4 py-2.5 text-sm ring-1", lastCls)}>
+            <div className={cn("flex items-center justify-between gap-3 rounded-lg px-3 py-1.5 text-[13px] ring-1", lastCls)}>
               <span className="flex min-w-0 items-center gap-2">
                 {last.flag === "OK" ? <CheckCircleIcon size={15} /> : <AlertCircleIcon size={15} />}
                 <span className="truncate font-mono">{last.barcode}</span>
@@ -628,22 +679,22 @@ function ScanStation({
               <span className="shrink-0 font-medium">{last.message}</span>
             </div>
           ) : (
-            <p className="text-xs text-paper/50">
+            <p className="text-[11px] text-paper/45">
               USB and Bluetooth scanners work here: each scan is recorded on Enter and the box clears for the next one.
             </p>
           )}
           {pending > 0 ? <p className="mt-1.5 text-[11px] text-paper/40">Recording…</p> : null}
         </div>
       </div>
-      <div className="rounded-xl bg-paper/[0.04] p-3 ring-1 ring-paper/[0.08]">
+      <div className="rounded-xl bg-paper/[0.04] px-3 py-2 ring-1 ring-paper/[0.08]">
         <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-paper/40">
           <ClipboardCheckIcon size={12} /> Last scans
         </div>
         {scans.length === 0 ? (
           <p className="py-3 text-xs text-paper/50">No scans yet.</p>
         ) : (
-          <ul className="space-y-1.5">
-            {scans.slice(0, 6).map((s) => (
+          <ul className="space-y-1">
+            {scans.slice(0, 5).map((s) => (
               <li key={s.id} className="flex items-center justify-between gap-2 text-xs">
                 <span className="min-w-0 truncate font-mono text-paper/85">{s.barcode}</span>
                 <span className="flex shrink-0 items-center gap-2">

@@ -175,14 +175,14 @@ function SignOffSlip({
 
   return (
     <div id={`slip-${action.id}`} className={cn("ast-slip scroll-mt-24 animate-fade-in", open && "ast-slip-pending")}>
-      <div className="flex items-start gap-3 px-5 pb-4 pt-5">
+      <div className="flex items-start gap-3 px-4 pb-3 pt-3.5">
         <span
           className={cn(
-            "flex size-10 shrink-0 items-center justify-center rounded-xl",
+            "flex size-8 shrink-0 items-center justify-center rounded-lg",
             open ? "bg-gradient-to-b from-gold-light to-gold-deep text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]" : "bg-ink/[0.05] text-ink-3"
           )}
         >
-          <ScaleIcon size={18} />
+          <ScaleIcon size={15} />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -192,7 +192,7 @@ function SignOffSlip({
               {s.label}
             </span>
           </div>
-          <p className="mt-1.5 text-[15px] font-semibold leading-snug text-ink">{action.title}</p>
+          <p className="mt-1 text-[14px] font-semibold leading-snug text-ink">{action.title}</p>
         </div>
         {amount && (
           <div className="hidden shrink-0 text-right sm:block">
@@ -203,7 +203,7 @@ function SignOffSlip({
       </div>
 
       {(facts.length > 0 || !!amount) && (
-        <dl className="mx-5 divide-y divide-dashed divide-ink/10 border-y border-dashed border-ink/10">
+        <dl className="mx-4 grid divide-y sm:grid-cols-2 sm:gap-x-6 sm:divide-y-0 [&>div]:sm:border-b [&>div]:sm:border-dashed [&>div]:sm:border-ink/10 divide-dashed divide-ink/10 border-y border-dashed border-ink/10">
           {amount && (
             <div className="flex items-baseline justify-between gap-4 py-2 sm:hidden">
               <dt className="text-xs text-ink-4">Amount</dt>
@@ -211,7 +211,7 @@ function SignOffSlip({
             </div>
           )}
           {facts.map((r, i) => (
-            <div key={i} className="flex items-baseline justify-between gap-4 py-2">
+            <div key={i} className="flex items-baseline justify-between gap-4 py-1.5">
               <dt className="shrink-0 text-xs text-ink-4">{r.kv?.label}</dt>
               <dd className="min-w-0 text-right text-sm text-ink-2">{r.kv?.value}</dd>
             </div>
@@ -220,7 +220,7 @@ function SignOffSlip({
       )}
 
       {notes.length > 0 && (
-        <ul className="mx-5 mt-3 space-y-1.5">
+        <ul className="mx-4 mt-2.5 space-y-1">
           {notes.map((r, i) => (
             <li key={i} className="flex gap-2 text-xs leading-relaxed text-ink-3">
               <AlertCircleIcon size={13} className="mt-0.5 shrink-0 text-gold-dark" />
@@ -231,16 +231,16 @@ function SignOffSlip({
       )}
 
       {open ? (
-        <div className="mt-4 border-t border-ink/[0.06] bg-gold-pale/50 px-5 py-4">
+        <div className="mt-3 border-t border-ink/[0.06] bg-gold-pale/50 px-4 py-3">
           <div className="flex flex-wrap items-center gap-2.5">
-            <button type="button" onClick={onConfirm} disabled={busy} className="home-btn-gold h-10 px-5 text-sm disabled:cursor-not-allowed disabled:opacity-60">
+            <button type="button" onClick={onConfirm} disabled={busy} className="home-btn-gold h-9 px-4 text-[13px] disabled:cursor-not-allowed disabled:opacity-60">
               <CheckCircleIcon size={16} /> {busy ? "Posting…" : "Sign off & post"}
             </button>
             <button
               type="button"
               onClick={onCancel}
               disabled={busy}
-              className="inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-sm font-medium text-ink-3 ring-1 ring-inset ring-ink/15 transition-colors hover:bg-ink/[0.04] hover:text-ink disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium text-ink-3 ring-1 ring-inset ring-ink/15 transition-colors hover:bg-ink/[0.04] hover:text-ink disabled:opacity-50"
             >
               <XIcon size={14} /> Discard
             </button>
@@ -248,7 +248,7 @@ function SignOffSlip({
               <ShieldIcon size={12} /> Nothing is saved until you sign off
             </span>
           </div>
-          <div className="mt-3 flex items-center gap-3">
+          <div className="mt-2.5 flex items-center gap-3">
             <div className="h-1 flex-1 overflow-hidden rounded-full bg-ink/[0.06]">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-gold-deep to-gold-light transition-[width] duration-1000"
@@ -261,7 +261,7 @@ function SignOffSlip({
       ) : action.result?.message ? (
         <div
           className={cn(
-            "mt-4 flex items-start gap-2 border-t px-5 py-3 text-xs",
+            "mt-3 flex items-start gap-2 border-t px-4 py-2.5 text-xs",
             status === "FAILED" ? "border-rose-100 bg-rose-50/60 text-rose-800" : "border-emerald-100 bg-emerald-50/50 text-emerald-800",
             (status === "CANCELLED" || status === "EXPIRED") && "border-ink/[0.06] bg-ink/[0.02] text-ink-4"
           )}
@@ -273,9 +273,9 @@ function SignOffSlip({
           </span>
         </div>
       ) : status === "EXPIRED" ? (
-        <p className="mt-4 border-t border-ink/[0.06] px-5 py-3 text-xs text-ink-4">Not posted. Ask again to prepare a fresh entry.</p>
+        <p className="mt-3 border-t border-ink/[0.06] px-4 py-2.5 text-xs text-ink-4">Not posted. Ask again to prepare a fresh entry.</p>
       ) : (
-        <div className="h-4" />
+        <div className="h-3" />
       )}
     </div>
   );
@@ -351,7 +351,7 @@ function BriefCard({
   return (
     <article className={cn("ast-entry animate-fade-in", latest && "ast-entry-latest")} aria-label={question ? `Request: ${question.content}` : "Assistant note"}>
       {question && (
-        <header className="border-b border-ink/[0.06] px-5 pb-4 pt-5 sm:px-6">
+        <header className="border-b border-ink/[0.06] px-4 pb-3 pt-3.5 sm:px-5">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-5">
             <span className="g-metric rounded bg-ink/[0.05] px-1.5 py-0.5 text-ink-4">#{String(index).padStart(2, "0")}</span>
             <span>{instruction ? "Instruction" : "Request"}</span>
@@ -363,17 +363,17 @@ function BriefCard({
               </span>
             )}
           </div>
-          <h2 className="mt-2 whitespace-pre-wrap font-sans text-[16.5px] font-semibold leading-snug tracking-[-0.01em] text-ink">{question.content}</h2>
+          <h2 className="mt-1.5 whitespace-pre-wrap font-sans text-[14.5px] font-semibold leading-snug tracking-[-0.01em] text-ink">{question.content}</h2>
         </header>
       )}
 
-      <div className="px-5 py-5 sm:px-6">
+      <div className="px-4 py-3.5 sm:px-5">
         {answer ? (
           <>
             <div className="flex gap-3.5">
-              <Orb size={26} className="mt-0.5 hidden sm:inline-flex" />
+              <Orb size={22} className="mt-0.5 hidden sm:inline-flex" />
               <div className="min-w-0 flex-1">
-                <Markdown text={answer.content} className="text-[14.5px] leading-[1.7]" />
+                <Markdown text={answer.content} className="text-[13.5px] leading-[1.65]" />
                 {actions.length > 0 && (
                   <div className="mt-4 space-y-3">
                     {actions.map((a) => (
@@ -390,7 +390,7 @@ function BriefCard({
                 )}
               </div>
             </div>
-            <footer className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2.5 border-t border-dashed border-ink/10 pt-3.5">
+            <footer className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-dashed border-ink/10 pt-2.5">
               <div className="min-w-0 flex-1">
                 <Checked labels={labels} />
               </div>
@@ -403,13 +403,13 @@ function BriefCard({
               </button>
             </footer>
             {latest && !waiting && !actions.some((a) => isOpen(a, now)) && (
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
                 {FOLLOW_UPS.map((f) => (
                   <button
                     key={f}
                     type="button"
                     onClick={() => onAsk(f)}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-paper px-3 py-1.5 text-[12px] text-ink-3 ring-1 ring-inset ring-ink/10 transition hover:text-ink hover:ring-gold/60"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-paper px-2.5 py-1 text-[11.5px] text-ink-3 ring-1 ring-inset ring-ink/10 transition hover:text-ink hover:ring-gold/60"
                   >
                     <ArrowRightIcon size={11} className="text-gold-dark" /> {f}
                   </button>
@@ -439,16 +439,16 @@ function WorkingCard({ question, startedAt }: { question: string; startedAt: num
   const step = WORKING[Math.min(WORKING.length - 1, Math.floor(secs / 3))];
   return (
     <article className="ast-entry ast-entry-latest animate-fade-in" role="status" aria-live="polite">
-      <header className="border-b border-ink/[0.06] px-5 pb-4 pt-5 sm:px-6">
+      <header className="border-b border-ink/[0.06] px-4 pb-3 pt-3.5 sm:px-5">
         <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-5">
           <span>New request</span>
           <span aria-hidden>·</span>
           <span className="g-metric normal-case tracking-normal">{shopTime(startedAt)}</span>
         </div>
-        <h2 className="mt-2 whitespace-pre-wrap font-sans text-[16.5px] font-semibold leading-snug tracking-[-0.01em] text-ink">{question}</h2>
+        <h2 className="mt-1.5 whitespace-pre-wrap font-sans text-[14.5px] font-semibold leading-snug tracking-[-0.01em] text-ink">{question}</h2>
       </header>
-      <div className="flex gap-3.5 px-5 py-5 sm:px-6">
-        <Orb size={26} live className="mt-0.5" />
+      <div className="flex gap-3 px-4 py-3.5 sm:px-5">
+        <Orb size={24} live className="mt-0.5" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3">
             <p className="ast-shimmer-text text-sm font-medium">{step}…</p>
@@ -468,17 +468,17 @@ function WorkingCard({ question, startedAt }: { question: string; startedAt: num
 function FailedCard({ question, error, onRetry, onEdit, onDismiss }: { question: string; error: string; onRetry: () => void; onEdit: () => void; onDismiss: () => void }) {
   return (
     <article className="ast-entry animate-fade-in ring-1 ring-inset ring-rose-200" role="alert">
-      <header className="border-b border-ink/[0.06] px-5 pb-4 pt-5 sm:px-6">
+      <header className="border-b border-ink/[0.06] px-4 pb-3 pt-3.5 sm:px-5">
         <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-rose-700">
           <AlertCircleIcon size={12} /> Not answered
           <button type="button" onClick={onDismiss} aria-label="Dismiss" className="ml-auto rounded-md p-1 text-ink-5 hover:bg-ink/[0.05] hover:text-ink">
             <XIcon size={13} />
           </button>
         </div>
-        <h2 className="mt-2 whitespace-pre-wrap font-sans text-[16.5px] font-semibold leading-snug tracking-[-0.01em] text-ink">{question}</h2>
+        <h2 className="mt-1.5 whitespace-pre-wrap font-sans text-[14.5px] font-semibold leading-snug tracking-[-0.01em] text-ink">{question}</h2>
       </header>
-      <div className="flex flex-wrap items-center gap-3 px-5 py-4 sm:px-6">
-        <p className="min-w-0 flex-1 text-sm text-ink-3">{error}</p>
+      <div className="flex flex-wrap items-center gap-2.5 px-4 py-3 sm:px-5">
+        <p className="min-w-0 flex-1 text-[13px] text-ink-3">{error}</p>
         <button type="button" onClick={onEdit} className="h-9 rounded-full px-3.5 text-[13px] font-medium text-ink-3 ring-1 ring-inset ring-ink/15 hover:bg-ink/[0.04]">
           Edit
         </button>
@@ -514,15 +514,15 @@ function CommandBar({
   const hasBlanks = HAS_BLANK.test(draft);
   return (
     <form
-      className={cn("ast-composer rounded-[22px]", hero ? "p-2.5 pl-5" : "p-2 pl-4")}
+      className={cn("ast-composer", hero ? "rounded-2xl p-2 pl-4" : "rounded-xl p-1.5 pl-3.5")}
       onSubmit={(e) => {
         e.preventDefault();
         onSubmit();
       }}
     >
       <div className="flex items-start gap-3">
-        <span className={cn("mt-3 hidden shrink-0 text-gold-dark sm:block", hero && "mt-3.5")} aria-hidden>
-          <SparklesIcon size={hero ? 18 : 16} />
+        <span className={cn("mt-2.5 hidden shrink-0 text-gold-dark sm:block", hero && "mt-3")} aria-hidden>
+          <SparklesIcon size={hero ? 16 : 14} />
         </span>
         <textarea
           ref={inputRef}
@@ -547,19 +547,19 @@ function CommandBar({
           aria-label="Ask or instruct the accounts assistant"
           className={cn(
             "max-h-40 min-w-0 flex-1 resize-none bg-transparent leading-relaxed text-ink outline-none placeholder:text-ink-5",
-            hero ? "min-h-[52px] py-3 text-[16px]" : "min-h-[44px] py-2.5 text-[14.5px]"
+            hero ? "min-h-[46px] py-2.5 text-[15px]" : "min-h-[38px] py-2 text-[13.5px]"
           )}
         />
         <button
           type="submit"
           disabled={!draft.trim() || busy}
           aria-label="Send"
-          className={cn("home-btn-gold mt-0.5 shrink-0 p-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none", hero ? "size-12" : "size-11")}
+          className={cn("home-btn-gold mt-0.5 shrink-0 p-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none", hero ? "size-10" : "size-9")}
         >
-          <SendIcon size={17} />
+          <SendIcon size={15} />
         </button>
       </div>
-      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-ink/[0.06] pb-0.5 pt-2 text-[11px] text-ink-5">
+      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-ink/[0.06] pt-1.5 text-[10.5px] text-ink-5">
         {branchSlot}
         {hasBlanks ? (
           <span className="inline-flex items-center gap-1.5 text-gold-deep">
@@ -612,9 +612,9 @@ const SEVERITY: Record<BriefFinding["severity"], { dot: string; label: string }>
 
 function PanelSection({ title, aside, children, className }: { title: string; aside?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={cn("ast-panel", className)}>
-      <div className="flex items-center justify-between gap-2 px-4 pb-2 pt-4">
-        <h3 className="font-sans text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-4">{title}</h3>
+    <section className={cn("ast-panel !rounded-2xl", className)}>
+      <div className="flex items-center justify-between gap-2 border-b border-ink/[0.05] px-3.5 py-2.5">
+        <h3 className="font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">{title}</h3>
         {aside}
       </div>
       {children}
@@ -666,9 +666,9 @@ function SidePanel({
   const groups = useMemo(() => groupSessions(filtered, now), [filtered, now]);
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto pb-1 scrollbar-thin">
+    <div className="flex h-full flex-col gap-2.5 overflow-y-auto pb-1 scrollbar-thin">
       {/* Sign-offs waiting in this session */}
-      <section className="ast-rail shrink-0 rounded-[20px] p-4 text-paper">
+      <section className="ast-rail shrink-0 rounded-2xl p-3.5 text-paper">
         <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
         <div className="relative flex items-center justify-between gap-2">
           <h3 className="font-sans text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-light/85">Waiting on you</h3>
@@ -677,8 +677,8 @@ function SidePanel({
           </span>
         </div>
         {pending.length === 0 ? (
-          <p className="relative mt-2 text-[12.5px] leading-relaxed text-paper/55">
-            Nothing to sign off. When you ask me to record something, the prepared entry lands here until you post or discard it.
+          <p className="relative mt-1.5 text-[11.5px] leading-relaxed text-paper/50">
+            Nothing to sign off. Prepared entries wait here until you post or discard them.
           </p>
         ) : (
           <ul className="relative mt-3 space-y-1.5">
@@ -687,11 +687,11 @@ function SidePanel({
                 <button
                   type="button"
                   onClick={() => onJump(a.id)}
-                  className="group flex w-full items-center gap-2.5 rounded-xl bg-paper/[0.06] px-3 py-2.5 text-left ring-1 ring-inset ring-paper/10 transition hover:bg-paper/[0.1] hover:ring-gold/40"
+                  className="group flex w-full items-center gap-2.5 rounded-lg bg-paper/[0.06] px-2.5 py-2 text-left ring-1 ring-inset ring-paper/10 transition hover:bg-paper/[0.1] hover:ring-gold/40"
                 >
                   <ScaleIcon size={14} className="shrink-0 text-gold-light" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] text-paper">{a.title}</span>
+                    <span className="block truncate text-[12.5px] text-paper">{a.title}</span>
                     <span className="g-metric text-[10.5px] text-paper/45">{Math.ceil(Math.max(0, a.expiresAt - now) / 60_000)} min left</span>
                   </span>
                   <ArrowRightIcon size={13} className="shrink-0 text-paper/40 transition group-hover:translate-x-0.5 group-hover:text-gold-light" />
@@ -710,46 +710,46 @@ function SidePanel({
           className="shrink-0"
         >
           {briefMissing ? (
-            <div className="px-4 pb-4">
-              <p className="text-[12.5px] leading-relaxed text-ink-4">
-                No brief yet today. It is written every evening from the day&apos;s books and flags cash differences, unclosed days and overdue dues.
+            <div className="px-3.5 py-3">
+              <p className="text-[11.5px] leading-relaxed text-ink-4">
+                No brief yet today. Written every evening; flags cash differences, unclosed days and overdue dues.
               </p>
               {onWriteBrief && (
                 <button
                   type="button"
                   onClick={onWriteBrief}
                   disabled={writingBrief}
-                  className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12px] font-medium text-gold-dark ring-1 ring-inset ring-gold/40 transition hover:bg-gold-pale disabled:opacity-50"
+                  className="mt-2 inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11.5px] font-medium text-gold-dark ring-1 ring-inset ring-gold/40 transition hover:bg-gold-pale disabled:opacity-50"
                 >
                   <SparklesIcon size={12} /> {writingBrief ? "Writing…" : "Write today's brief"}
                 </button>
               )}
             </div>
           ) : briefLoading ? (
-            <div className="space-y-2 px-4 pb-4" aria-hidden>
+            <div className="space-y-2 px-3.5 py-3" aria-hidden>
               <div className="h-3 w-3/4 animate-pulse rounded bg-mist" />
               <div className="h-3 w-1/2 animate-pulse rounded bg-mist" />
             </div>
           ) : findings.length === 0 ? (
-            <p className="flex items-center gap-2 px-4 pb-4 text-[12.5px] text-emerald-700">
+            <p className="flex items-center gap-2 px-3.5 py-3 text-[11.5px] text-emerald-700">
               <span className="size-2 rounded-full bg-emerald-500" aria-hidden /> Nothing in the latest brief needs attention.
             </p>
           ) : (
-            <ul className="divide-y divide-ink/[0.06] px-2 pb-2">
+            <ul className="divide-y divide-ink/[0.06] px-1.5 py-1">
               {findings.slice(0, 5).map((f) => (
-                <li key={f.id} className="px-2 py-2.5">
+                <li key={f.id} className="px-2 py-2">
                   <div className="flex items-start gap-2.5">
                     <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", SEVERITY[f.severity].dot)} title={SEVERITY[f.severity].label} />
                     <div className="min-w-0 flex-1">
-                      <p className="text-[13px] font-medium leading-snug text-ink">{f.title}</p>
-                      <p className="mt-0.5 line-clamp-2 text-[11.5px] leading-snug text-ink-4">
+                      <p className="text-[12px] font-medium leading-snug text-ink">{f.title}</p>
+                      <p className="mt-0.5 line-clamp-2 text-[10.5px] leading-snug text-ink-4">
                         {f.branch} · {f.detail}
                       </p>
                       <button
                         type="button"
                         disabled={busy}
                         onClick={() => onInvestigate(f)}
-                        className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] font-medium text-gold-dark hover:underline disabled:opacity-50"
+                        className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-gold-dark hover:underline disabled:opacity-50"
                       >
                         Look into it <ArrowRightIcon size={11} />
                       </button>
@@ -771,23 +771,23 @@ function SidePanel({
       <PanelSection
         title="Sessions"
         aside={
-          <button type="button" onClick={onNew} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-medium text-gold-dark hover:bg-gold-pale">
-            <PlusIcon size={13} /> New
+          <button type="button" onClick={onNew} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] font-medium text-gold-dark hover:bg-gold-pale">
+            <PlusIcon size={12} /> New
           </button>
         }
-        className="flex min-h-[220px] flex-1 flex-col"
+        className="flex min-h-[200px] flex-1 flex-col"
       >
-        <label className="mx-4 flex h-9 items-center gap-2 rounded-xl bg-bone px-3 text-ink-5 ring-1 ring-inset ring-ink/[0.07] transition focus-within:ring-gold/60">
+        <label className="mx-3 mt-2.5 flex h-8 items-center gap-2 rounded-lg bg-bone px-2.5 text-ink-5 ring-1 ring-inset ring-ink/[0.07] transition focus-within:ring-gold/60">
           <SearchIcon size={13} />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Find a session"
             aria-label="Find a session"
-            className="h-full min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-5"
+            className="h-full min-w-0 flex-1 bg-transparent text-[12.5px] text-ink outline-none placeholder:text-ink-5"
           />
         </label>
-        <nav className="mt-2 flex-1 space-y-3 overflow-y-auto px-2 pb-3 scrollbar-thin" aria-label="Sessions">
+        <nav className="mt-2 flex-1 space-y-2.5 overflow-y-auto px-1.5 pb-2 scrollbar-thin" aria-label="Sessions">
           {sessionsLoading && [0, 1, 2].map((i) => <div key={i} className="mx-2 h-8 animate-pulse rounded-lg bg-mist/60" />)}
           {!sessionsLoading && sessions.length === 0 && (
             <p className="flex items-center gap-2 px-2 py-2 text-[12px] text-ink-4">
@@ -810,7 +810,7 @@ function SidePanel({
                         title={c.title}
                         aria-current={active ? "true" : undefined}
                         className={cn(
-                          "flex w-full items-center gap-2 rounded-lg py-1.5 pl-2.5 pr-9 text-left text-[13px] transition-colors",
+                          "flex w-full items-center gap-2 rounded-lg py-1.5 pl-2.5 pr-9 text-left text-[12.5px] transition-colors",
                           active ? "bg-void text-paper" : "text-ink-3 hover:bg-ink/[0.04] hover:text-ink"
                         )}
                       >
@@ -1130,47 +1130,95 @@ export default function AssistantPage() {
   );
 
   return (
-    <div className="mx-auto flex h-[calc(100dvh-9.25rem)] min-h-[560px] max-w-7xl gap-4 animate-fade-in lg:h-[calc(100dvh-10.25rem)]">
+    <div className="mx-auto flex h-[calc(100dvh-9.25rem)] min-h-[560px] max-w-7xl gap-3 animate-fade-in lg:h-[calc(100dvh-10.25rem)]">
       {/* The desk */}
-      <section className="ast-stage flex min-w-0 flex-1 flex-col overflow-hidden rounded-[22px]">
-        <header className="relative flex shrink-0 items-center gap-3 border-b border-ink/[0.06] px-4 py-3 sm:px-6">
-          <Orb size={34} live={send.isPending} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[14px] font-semibold text-ink">{sessionTitle ?? "Ledger Assistant"}</p>
-            <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-ink-4">
-              <span className={cn("size-1.5 shrink-0 rounded-full", status.data && !status.data.configured ? "bg-amber-500" : "bg-emerald-500")} aria-hidden />
-              <span className="truncate">
-                {send.isPending ? "Working on your request" : "Reading the live ledger"}
-                <span className="hidden sm:inline"> · {longDay(now)}, {shopTime(now)}</span>
+      <section className="ast-stage flex min-w-0 flex-1 flex-col overflow-hidden rounded-[20px]">
+        <header className="relative shrink-0 overflow-hidden bg-void text-paper">
+          <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-40" />
+          <div className="pointer-events-none absolute -right-20 -top-24 size-64 rounded-full bg-gold/[0.18] blur-[90px]" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
+          <div className="relative flex items-center gap-3 px-4 py-3 sm:px-5">
+            <Orb size={34} live={send.isPending} />
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-2">
+                <p className="truncate text-[14px] font-semibold text-paper">{sessionTitle ?? "Ledger Assistant"}</p>
+                <span
+                  className={cn(
+                    "hidden shrink-0 items-center gap-1.5 rounded-full border px-2 py-px text-[9.5px] font-semibold uppercase tracking-[0.16em] sm:inline-flex",
+                    status.data && !status.data.configured
+                      ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
+                      : "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
+                  )}
+                >
+                  <span className={cn("size-1.5 rounded-full", status.data && !status.data.configured ? "bg-amber-400" : "animate-pulse-soft bg-emerald-400")} />
+                  {status.data && !status.data.configured ? "Offline" : send.isPending ? "Working" : "Live ledger"}
+                </span>
+              </div>
+              <p className="mt-0.5 truncate text-[11px] text-paper/45">
+                {longDay(now)} · <span className="g-metric">{shopTime(now)}</span>
+                {scope.branchId ? <> · {scope.visibleBranches.find((b) => b.id === scope.branchId)?.name}</> : null}
                 {modelLabel && <span className="hidden xl:inline"> · {modelLabel}</span>}
-              </span>
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setPanelOpen(true)}
-            aria-label="Open sign-offs, watchlist and sessions"
-            className="relative flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium text-ink-2 ring-1 ring-inset ring-ink/15 hover:bg-ink/[0.04] lg:hidden"
-          >
-            <HistoryIcon size={14} />
-            <span className="hidden sm:inline">Panel</span>
-            {openActions.length > 0 && (
-              <span className="g-metric absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-gold text-[10px] text-void">{openActions.length}</span>
-            )}
-          </button>
-          {!empty && (
+              </p>
+            </div>
             <button
               type="button"
-              onClick={newSession}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium text-ink-2 ring-1 ring-inset ring-ink/15 transition hover:bg-void hover:text-paper hover:ring-void"
+              onClick={() => setPanelOpen(true)}
+              aria-label="Open sign-offs, watchlist and sessions"
+              className="home-btn-ghost relative h-8 px-3 text-[12.5px] lg:hidden"
             >
-              <PlusIcon size={14} /> <span className="hidden sm:inline">New session</span>
+              <HistoryIcon size={13} />
+              <span className="hidden sm:inline">Panel</span>
+              {openActions.length > 0 && (
+                <span className="g-metric absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-gold text-[10px] text-void">{openActions.length}</span>
+              )}
             </button>
-          )}
+            {!empty && (
+              <button type="button" onClick={newSession} className="home-btn-gold h-8 px-3.5 text-[12.5px]">
+                <PlusIcon size={13} /> <span className="hidden sm:inline">New session</span>
+              </button>
+            )}
+          </div>
+          {/* live counters */}
+          <div className="relative grid grid-cols-2 gap-px border-t border-paper/[0.08] bg-paper/[0.06] sm:grid-cols-4">
+            {[
+              {
+                label: "Waiting sign-off",
+                value: String(openActions.length),
+                hint: openActions.length ? "Review below" : "Nothing pending",
+                tone: openActions.length ? "text-gold-light" : "text-paper",
+              },
+              {
+                label: "Watchlist",
+                value: findings === null ? "—" : String(findings.length),
+                hint: findings === null ? "Brief off" : brief.data ? `Brief ${brief.data.date}` : "No brief yet",
+                tone: findings && findings.some((f) => f.severity === "alert") ? "text-rose-300" : findings?.length ? "text-amber-300" : "text-paper",
+              },
+              {
+                label: "This session",
+                value: activeId ? String(entries.length) : "0",
+                hint: activeId ? `${actions.filter((a) => a.status === "DONE").length} posted` : "New session",
+                tone: "text-paper",
+              },
+              {
+                label: "Sessions",
+                value: list.data ? String(list.data.rows.length) : "—",
+                hint: list.data?.rows[0] ? `Last ${stamp(list.data.rows[0].updated_at, now)}` : "None yet",
+                tone: "text-paper",
+              },
+            ].map((c) => (
+              <div key={c.label} className="bg-void px-4 py-2 sm:px-5">
+                <div className="truncate text-[9.5px] font-semibold uppercase tracking-[0.16em] text-paper/40">{c.label}</div>
+                <div className="mt-0.5 flex items-baseline gap-2">
+                  <span className={cn("g-metric text-[17px] leading-none", c.tone)}>{c.value}</span>
+                  <span className="truncate text-[10.5px] text-paper/40">{c.hint}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </header>
 
         {status.data && !status.data.configured && (
-          <div className="mx-4 mt-4 flex items-start gap-2.5 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-200 sm:mx-6">
+          <div className="mx-4 mt-3 flex items-start gap-2.5 rounded-xl bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 ring-1 ring-inset ring-amber-200 sm:mx-6">
             <AlertCircleIcon size={16} className="mt-0.5 shrink-0" />
             <span>
               The assistant is not connected yet: the API has no Workers AI binding. Add <code className="font-mono text-xs">[ai]</code> to wrangler.toml and deploy.
@@ -1178,85 +1226,108 @@ export default function AssistantPage() {
           </div>
         )}
 
-        {!empty && <div className="shrink-0 px-4 pt-4 sm:px-6">{commandBar(false)}</div>}
+        {!empty && <div className="shrink-0 border-b border-ink/[0.05] bg-paper/60 px-4 py-2.5 sm:px-6">{commandBar(false)}</div>}
 
         <div ref={feedRef} className="flex-1 overflow-y-auto scrollbar-thin">
           {empty ? (
-            <div className="mx-auto w-full max-w-3xl px-4 pb-8 pt-6 sm:px-6 sm:pt-8">
-              <p className="g-kicker">
-                {greeting(now)}
-                {name ? `, ${name}` : ""}
-              </p>
-              <h1 className="mt-2 g-display text-[28px] leading-[1.05] text-ink text-balance sm:text-[34px]">
-                What do you need from <span className="home-gold-text">the books?</span>
-              </h1>
-              <p className="mt-2 max-w-xl text-[13.5px] leading-relaxed text-ink-3 text-pretty">
-                I read the live ledger to answer, and show which books I checked. Tell me to record something and I&apos;ll prepare the entry for your sign-off; nothing posts without it.
-              </p>
-
-              <div className="mt-5">{commandBar(true)}</div>
-
-              <div className="mt-7 grid gap-6 md:grid-cols-2">
-                <div>
-                  <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-4">
-                    <SearchIcon size={12} className="text-gold-dark" /> Find out
+            <div className="mx-auto w-full max-w-4xl px-4 pb-6 pt-5 sm:px-6">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div className="min-w-0">
+                  <p className="g-kicker !text-[10px]">
+                    {greeting(now)}
+                    {name ? `, ${name}` : ""}
                   </p>
-                  <ul className="mt-2.5 space-y-1.5">
+                  <h1 className="mt-1 g-display text-[24px] leading-[1.05] text-ink text-balance sm:text-[28px]">
+                    What do you need from <span className="home-gold-text">the books?</span>
+                  </h1>
+                </div>
+                <ol className="flex shrink-0 items-center gap-1.5 text-[10.5px] text-ink-4">
+                  {[
+                    { n: "1", t: "Ask or instruct" },
+                    { n: "2", t: "I check the ledger" },
+                    { n: "3", t: "You sign off" },
+                  ].map((x, i) => (
+                    <li key={x.n} className="flex items-center gap-1.5">
+                      {i > 0 && <span className="h-px w-3 bg-ink/15" aria-hidden />}
+                      <span className="g-metric flex size-4 items-center justify-center rounded-full bg-void text-[9px] text-gold-light">{x.n}</span>
+                      <span className="whitespace-nowrap">{x.t}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+
+              <div className="mt-4">{commandBar(true)}</div>
+
+              <div className="mt-5 space-y-4">
+                <div>
+                  <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">
+                    <SearchIcon size={11} className="text-gold-dark" /> Find out
+                    <span className="h-px flex-1 bg-ink/[0.07]" aria-hidden />
+                    <span className="font-medium normal-case tracking-normal text-ink-5">Sent as written</span>
+                  </p>
+                  <ul className="mt-2 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
                     {ASK.map((c) => (
                       <li key={c.title}>
                         <button
                           type="button"
                           onClick={() => ask(c.prompt)}
-                          className="group flex w-full items-center gap-3 rounded-xl bg-paper px-3 py-2.5 text-left ring-1 ring-inset ring-ink/[0.07] transition hover:ring-gold/60"
+                          title={c.prompt}
+                          className="group flex w-full items-center gap-2.5 rounded-xl bg-paper px-2.5 py-2 text-left ring-1 ring-inset ring-ink/[0.07] transition hover:-translate-y-px hover:ring-gold/60 hover:shadow-[0_14px_28px_-20px_rgba(126,98,35,0.6)]"
                         >
-                          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-void text-gold-light">
-                            <c.icon size={15} />
+                          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-void text-gold-light">
+                            <c.icon size={13} />
                           </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-[13px] font-semibold text-ink">{c.title}</span>
-                            <span className="block truncate text-[12px] text-ink-4">{c.prompt}</span>
+                          <span className="min-w-0 flex-1 leading-tight">
+                            <span className="block text-[12.5px] font-semibold text-ink">{c.title}</span>
+                            <span className="block truncate text-[11px] text-ink-4">{c.prompt}</span>
                           </span>
-                          <ArrowRightIcon size={13} className="shrink-0 text-gold-dark opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
+                          <ArrowRightIcon size={12} className="shrink-0 text-gold-dark opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
                         </button>
                       </li>
                     ))}
                   </ul>
                 </div>
                 <div>
-                  <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-4">
-                    <CheckIcon size={12} className="text-gold-dark" /> Get it done
+                  <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">
+                    <CheckIcon size={11} className="text-gold-dark" /> Get it done
+                    <span className="h-px flex-1 bg-ink/[0.07]" aria-hidden />
+                    <span className="font-medium normal-case tracking-normal text-ink-5">Fill the blanks · Tab jumps</span>
                   </p>
                   {scope.canManage ? (
-                    <ul className="mt-2.5 space-y-1.5">
+                    <ul className="mt-2 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
                       {DO.map((d) => (
                         <li key={d.title}>
                           <button
                             type="button"
                             onClick={() => fillTemplate(d.template)}
-                            className="group flex w-full items-center gap-3 rounded-xl border border-dashed border-ink/15 bg-paper/60 px-3 py-2.5 text-left transition hover:border-gold/70 hover:bg-paper"
+                            title={d.template}
+                            className="group flex w-full items-center gap-2.5 rounded-xl border border-dashed border-ink/15 bg-paper/60 px-2.5 py-2 text-left transition hover:border-gold/70 hover:bg-paper"
                           >
-                            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-gold-pale text-gold-deep ring-1 ring-inset ring-gold/30">
-                              <d.icon size={15} />
+                            <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-gold-pale text-gold-deep ring-1 ring-inset ring-gold/30">
+                              <d.icon size={13} />
                             </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block text-[13px] font-semibold text-ink">{d.title}</span>
-                              <span className="block truncate text-[12px] text-ink-4">{d.template}</span>
+                            <span className="min-w-0 flex-1 leading-tight">
+                              <span className="block text-[12.5px] font-semibold text-ink">{d.title}</span>
+                              <span className="block truncate text-[11px] text-ink-4">{d.template}</span>
                             </span>
-                            <span className="shrink-0 text-[11px] font-medium text-gold-dark opacity-0 transition group-hover:opacity-100">Fill in</span>
+                            <span className="shrink-0 text-[10.5px] font-medium text-gold-dark opacity-0 transition group-hover:opacity-100">Fill</span>
                           </button>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="mt-2.5 rounded-xl border border-dashed border-ink/15 px-4 py-4 text-[12.5px] leading-relaxed text-ink-4">
+                    <p className="mt-2 rounded-xl border border-dashed border-ink/15 px-3 py-2.5 text-[12px] leading-relaxed text-ink-4">
                       Recording entries needs the accounts:manage permission. You can still ask anything about the books.
                     </p>
                   )}
                 </div>
+                <p className="flex items-center gap-1.5 text-[11px] text-ink-5">
+                  <LayersIcon size={11} className="text-gold-dark" /> Every answer lists the books it checked. Prepared entries wait {ACTION_TTL_MS / 60_000} minutes for your sign-off.
+                </p>
               </div>
             </div>
           ) : (
-            <div className="mx-auto w-full max-w-3xl space-y-4 px-4 pb-8 pt-4 sm:px-6">
+            <div className="mx-auto w-full max-w-4xl space-y-3 px-4 pb-6 pt-3 sm:px-6">
               {failed && (
                 <FailedCard
                   question={failed.question}
@@ -1318,13 +1389,17 @@ export default function AssistantPage() {
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5 border-t border-ink/[0.06] px-4 py-2 text-[11px] text-ink-5 sm:px-6">
+        <div className="flex shrink-0 items-center gap-1.5 border-t border-ink/[0.06] bg-bone/50 px-4 py-1.5 text-[10.5px] text-ink-5 sm:px-6">
           <ShieldIcon size={11} className="text-gold-dark" /> Figures come from the live ledger · entries post only after your sign-off
+          <span className="ml-auto hidden items-center gap-1 md:inline-flex">
+            <kbd className="rounded border border-ink/10 bg-paper px-1 font-sans text-[9.5px] text-ink-4">/</kbd> or
+            <kbd className="rounded border border-ink/10 bg-paper px-1 font-sans text-[9.5px] text-ink-4">⌘K</kbd> to ask
+          </span>
         </div>
       </section>
 
       {/* Side panel */}
-      <aside className="hidden w-[300px] shrink-0 lg:block" aria-label="Assistant panel">
+      <aside className="hidden w-[280px] shrink-0 lg:block" aria-label="Assistant panel">
         {panel}
       </aside>
       {panelOpen && (

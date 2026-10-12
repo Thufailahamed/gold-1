@@ -46,7 +46,7 @@ export function Select({
   /** Force the filter box on/off; defaults to on for lists longer than 8. */
   searchable?: boolean;
   loading?: boolean;
-  size?: "md" | "lg";
+  size?: "sm" | "md" | "lg";
   /** Echo the chosen option's hint as a chip on the trigger (keep hints short). */
   hintInTrigger?: boolean;
   buttonRef?: Ref<HTMLButtonElement>;
@@ -159,7 +159,7 @@ export function Select({
         onClick={() => (open ? setOpen(false) : show())}
         className={cn(
           "group flex w-full items-center gap-2.5 rounded-xl bg-paper text-left text-sm text-ink",
-          size === "lg" ? "h-12 px-4" : "h-11 px-3.5",
+          size === "lg" ? "h-12 px-4" : size === "sm" ? "h-9 px-2.5 text-[13px]" : "h-11 px-3.5",
           "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-[box-shadow,background-color] duration-200",
           "hover:bg-gold-pale/40 hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26),0_1px_2px_rgba(16,32,27,0.04)]",
           "focus:outline-none focus-visible:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]",

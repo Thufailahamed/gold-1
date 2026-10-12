@@ -9,20 +9,12 @@ import { api, errorCode, type MeData } from "@/lib/api";
 import { lkr, toCents, type BankAccount } from "@/lib/accounts";
 import {
   Page,
-  Hero,
-  Panel,
-  TableCard,
   Pill,
-  StatusPill,
   Modal,
   Callout,
-  EmptyBlock,
   Skeleton,
   Field,
-  DetailList,
   controlClass,
-  heroBtnPrimary,
-  heroBtnGhost,
 } from "@/components/ui";
 import {
   ArrowRightIcon,
@@ -38,7 +30,8 @@ import {
   XIcon,
 } from "@/components/icons";
 import { cn } from "@/lib/cn";
-import { errMsg, grams, statusLabel, useBranches, useCustomer, when, type RepairStatus } from "../shared";
+import { RepairChip, errMsg, grams, statusLabel, useBranches, useCustomer, when, type RepairStatus } from "../shared";
+import { Card, CardHead, Empty, GoldHero, HeroBadge, ShareBar, heroGhost, heroGold, th, thead, tr } from "../../sales/kit";
 
 type RepairJob = {
   id: string;
@@ -119,10 +112,9 @@ export default function RepairDetailPage({ params }: { params: Promise<{ id: str
 
   if (detail.isLoading) {
     return (
-      <Page>
-        <Skeleton className="h-56" />
-        <Skeleton className="h-10 w-96" />
-        <Skeleton className="h-64" />
+      <Page className="space-y-4">
+        <Skeleton className="h-44 rounded-[20px]" />
+        <Skeleton className="h-72 rounded-2xl" />
       </Page>
     );
   }
@@ -164,109 +156,118 @@ export default function RepairDetailPage({ params }: { params: Promise<{ id: str
   const qcFail = job.status === "IN_PROGRESS" && lastEvent?.from_status === "QC" ? lastEvent : undefined;
   const collectedEvent = events.find((e) => e.to_status === "COLLECTED");
   const stepIndex = job.status === "COLLECTED" ? STEPS.length : STEPS.findIndex((s) => s.status === job.status);
+  const live = job.status !== "COLLECTED" && job.status !== "CANCELLED";
+  const endAt = collectedEvent?.created_at ?? cancelEvent?.created_at ?? Date.now();
+  const days = Math.max(0, Math.floor((endAt - job.created_at) / 86_400_000));
+  const variance = job.actual_cents == null ? null : job.actual_cents - job.estimate_cents;
+  const qcFails = events.filter((e) => e.from_status === "QC" && e.to_status === "IN_PROGRESS").length;
+
+  // Time spent in each stage, from the append-only history.
+  const stageDays = STEPS.slice(0, 4).map((st) => {
+    let ms = 0;
+    events.forEach((e, i) => {
+      if (e.to_status !== st.status) return;
+      const next = events[i + 1]?.created_at ?? (job.status === st.status ? Date.now() : e.created_at);
+      ms += Math.max(0, next - e.created_at);
+    });
+    if (st.status === "RECEIVED" && !events.some((e) => e.to_status === "RECEIVED")) {
+      const first = events[0]?.created_at ?? (job.status === "RECEIVED" ? Date.now() : job.created_at);
+      ms += Math.max(0, first - job.created_at);
+    }
+    return { ...st, days: ms / 86_400_000 };
+  });
+  const maxStage = Math.max(0.01, ...stageDays.map((d) => d.days));
 
   return (
-    <Page>
-      <Hero
-        back={{ href: "/repairs", label: "Repairs" }}
-        kicker="Repair job"
+    <Page className="space-y-4">
+      <GoldHero
+        icon={HammerIcon}
         title={job.number}
-        description={
-          <span>
-            <span className="font-medium text-paper">{job.item_desc}</span>
-            <span className="text-paper/60"> — {job.repair_type}</span>
-          </span>
-        }
-        meta={
+        back={{ href: "/repairs", label: "Repairs" }}
+        badge={<HeroBadge tone={job.status === "READY" ? "good" : job.status === "CANCELLED" ? "bad" : job.status === "COLLECTED" ? "muted" : "warn"}>{statusLabel(job.status)}</HeroBadge>}
+        sub={
           <>
-            <Pill tone="ghost" className="!text-paper">
-              {statusLabel(job.status)}
-            </Pill>
-            <Pill tone="ghost" className="!text-paper">
-              {customer.data ? `${customer.data.name} · ${customer.data.code}` : "Customer"}
-            </Pill>
-            <Pill tone="ghost" className="!text-paper">
-              {branchName}
-            </Pill>
-            <Pill tone="ghost" className="!text-paper">
-              {when(job.created_at)}
-            </Pill>
+            {job.item_desc} · {job.repair_type} · {customer.data ? `${customer.data.name} (${customer.data.code})` : "Customer"} · {branchName} · {when(job.created_at)}
           </>
         }
-        stats={[
-          { label: "Weight at intake", value: `${grams(job.weight_mg)} g` },
-          { label: "Estimate", value: `LKR ${lkr(job.estimate_cents)}` },
-          { label: "Actual", value: job.actual_cents == null ? "-" : `LKR ${lkr(job.actual_cents)}` },
-          { label: "Technician", value: userName(job.technician_id) },
-        ]}
         actions={
           <>
             {showAssign ? (
-              <button type="button" onClick={() => setDialog("assign")} className={heroBtnPrimary}>
-                <UserCheckIcon size={15} /> Assign technician
+              <button type="button" onClick={() => setDialog("assign")} className={heroGold}>
+                <UserCheckIcon size={13} /> Assign technician
               </button>
             ) : null}
             {showFinish ? (
-              <button type="button" onClick={() => setDialog("finish")} className={heroBtnPrimary}>
-                <HammerIcon size={15} /> Repair done
+              <button type="button" onClick={() => setDialog("finish")} className={heroGold}>
+                <HammerIcon size={13} /> Repair done
               </button>
             ) : null}
             {showQc ? (
               <>
-                <button type="button" onClick={() => setDialog("qc-pass")} className={heroBtnPrimary}>
-                  <CheckIcon size={15} /> QC pass
+                <button type="button" onClick={() => setDialog("qc-pass")} className={heroGold}>
+                  <CheckIcon size={13} /> QC pass
                 </button>
-                <button type="button" onClick={() => setDialog("qc-fail")} className={heroBtnGhost}>
-                  <XIcon size={15} /> QC fail
+                <button type="button" onClick={() => setDialog("qc-fail")} className={heroGhost}>
+                  <XIcon size={13} /> QC fail
                 </button>
               </>
             ) : null}
             {showCollect ? (
-              <button type="button" onClick={() => setDialog("collect")} className={heroBtnPrimary}>
-                <BanknoteIcon size={15} /> Collect &amp; take payment
+              <button type="button" onClick={() => setDialog("collect")} className={heroGold}>
+                <BanknoteIcon size={13} /> Collect &amp; take payment
               </button>
             ) : null}
             {showCancel ? (
-              <button type="button" onClick={() => setDialog("cancel")} className={`${heroBtnGhost} !text-rose-300`}>
-                <CircleSlashIcon size={15} /> Cancel repair
+              <button type="button" onClick={() => setDialog("cancel")} className={`${heroGhost} !text-rose-300`}>
+                <CircleSlashIcon size={13} /> Cancel
               </button>
             ) : null}
           </>
         }
-      />
-
-      {job.status === "CANCELLED" ? (
-        <Callout tone="danger" title="Repair cancelled">
-          {cancelEvent?.reason ? `Reason: ${cancelEvent.reason}. ` : null}
-          Return the piece to the customer as received. Cancelled jobs cannot be reopened.
-        </Callout>
-      ) : (
-        <ol className="flex flex-wrap items-center gap-2" aria-label="Repair progress">
-          {STEPS.map((s, i) => {
-            const done = i < stepIndex;
-            const current = i === stepIndex;
-            return (
-              <li key={s.status} className="flex items-center gap-2" aria-current={current ? "step" : undefined}>
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors",
-                    done
-                      ? "bg-ink text-paper"
-                      : current
-                        ? "bg-gold-soft text-ink shadow-[inset_0_0_0_1px_rgba(168,138,62,0.3)]"
-                        : "bg-ink/[0.05] text-ink-4"
-                  )}
-                >
-                  {done ? <CheckIcon size={12} className="text-gold" aria-hidden /> : null}
-                  {s.label}
-                  <span className="sr-only">{done ? " (done)" : current ? " (current)" : " (not started)"}</span>
-                </span>
-                {i < STEPS.length - 1 ? <ArrowRightIcon size={12} className="text-ink-5" aria-hidden /> : null}
-              </li>
-            );
-          })}
-        </ol>
-      )}
+        stats={[
+          { label: "Weight at intake", value: job.weight_mg, format: grams, unit: "g", sub: "Snapshotted on ticket" },
+          { label: "Estimate", value: job.estimate_cents / 100, format: (n) => Math.round(n).toLocaleString("en-US"), unit: "LKR", accent: job.actual_cents == null, sub: "Quoted at intake" },
+          {
+            label: "Actual",
+            value: job.actual_cents == null ? null : job.actual_cents / 100,
+            format: (n) => Math.round(n).toLocaleString("en-US"),
+            unit: job.actual_cents == null ? undefined : "LKR",
+            accent: job.actual_cents != null,
+            sub: variance == null ? "Set when finished" : variance === 0 ? "On estimate" : `${variance > 0 ? "+" : "−"}${lkr(Math.abs(variance))} vs estimate`,
+          },
+          { label: live ? "In shop" : "Turnaround", value: days, unit: "days", tone: live && days >= 14 ? "bad" : live && days >= 7 ? "warn" : undefined, sub: live ? "Since intake" : "Intake to close" },
+          { label: "Technician", value: null, text: userName(job.technician_id), sub: job.technician_id ? "Assigned" : "Not yet assigned" },
+          { label: "QC fails", value: qcFails, tone: qcFails ? "warn" : undefined, sub: `${events.length} transitions` },
+        ]}
+      >
+        {job.status === "CANCELLED" ? (
+          <p className="text-[11.5px] text-rose-200/80">
+            {cancelEvent?.reason ? `Cancelled: ${cancelEvent.reason}. ` : "Cancelled. "}Return the piece to the customer as received. Cancelled jobs cannot be reopened.
+          </p>
+        ) : (
+          <ol className="flex flex-wrap items-center gap-1.5" aria-label="Repair progress">
+            {STEPS.map((s, i) => {
+              const done = i < stepIndex;
+              const current = i === stepIndex;
+              return (
+                <li key={s.status} className="flex items-center gap-1.5" aria-current={current ? "step" : undefined}>
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ring-inset",
+                      done ? "bg-gold/[0.14] text-gold-light ring-gold/40" : current ? "bg-paper/10 text-paper ring-paper/25" : "text-paper/35 ring-paper/10"
+                    )}
+                  >
+                    {done ? <CheckIcon size={11} aria-hidden /> : <span className={cn("size-1.5 rounded-full", current ? "animate-pulse-soft bg-gold" : "bg-paper/25")} />}
+                    {s.label}
+                    <span className="sr-only">{done ? " (done)" : current ? " (current)" : " (not started)"}</span>
+                  </span>
+                  {i < STEPS.length - 1 ? <span aria-hidden className={cn("h-px w-5", done ? "bg-gold/50" : "bg-paper/15")} /> : null}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </GoldHero>
 
       {qcFail ? (
         <Callout tone="warning" title="Returned from quality check">
@@ -284,112 +285,153 @@ export default function RepairDetailPage({ params }: { params: Promise<{ id: str
         </Callout>
       ) : null}
 
-      <Panel title="Job ticket" icon={<ClipboardCheckIcon size={17} />} description="Estimate and actual are both kept on the ticket.">
-        <DetailList
-          columns={3}
-          items={[
-            {
-              label: "Customer",
-              value: customer.isLoading ? (
-                "…"
-              ) : customer.data ? (
-                <>
-                  {customer.data.name} <span className="text-ink-4">· {customer.data.code}</span>
-                  {customer.data.phone ? <div className="text-xs text-ink-4">{customer.data.phone}</div> : null}
-                </>
-              ) : (
-                "-"
-              ),
-            },
-            { label: "Branch", value: branchName },
-            { label: "Received", value: when(job.created_at) },
-            { label: "Item", value: job.item_desc },
-            { label: "Repair type", value: job.repair_type },
-            { label: "Weight at intake", value: <span className="num-tabular">{grams(job.weight_mg)} g</span> },
-            { label: "Condition at intake", value: <span className="whitespace-pre-line">{job.condition_in}</span> },
-            {
-              label: "Condition at collection",
-              value: job.condition_out ? <span className="whitespace-pre-line">{job.condition_out}</span> : "-",
-            },
-            { label: "Technician", value: userName(job.technician_id) },
-            { label: "Estimate", value: <span className="num-tabular">LKR {lkr(job.estimate_cents)}</span> },
-            {
-              label: "Actual",
-              value:
-                job.actual_cents == null ? (
-                  "-"
-                ) : (
-                  <span className="num-tabular">
-                    LKR {lkr(job.actual_cents)}
-                    {collectedEvent?.reason?.includes("estimate") ? (
-                      <Pill tone="neutral" className="ml-2">
-                        Billed at estimate
-                      </Pill>
-                    ) : null}
-                  </span>
-                ),
-            },
-            { label: "Journal entry", value: journal ? <span className="g-metric text-xs">{journal.entry_no}</span> : "-" },
-          ]}
-        />
-      </Panel>
-
-      <TableCard
-        title="Status history"
-        icon={<HistoryIcon size={17} />}
-        description="Append-only: every transition is recorded with who made it."
-      >
-        {events.length === 0 ? (
-          <EmptyBlock title="No history" description="No transitions have been recorded for this job." />
-        ) : (
-          <table className="g-table">
-            <thead>
-              <tr>
-                <th>When</th>
-                <th>Change</th>
-                <th>By</th>
-                <th>Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.map((e) => (
-                <tr key={e.id}>
-                  <td className="whitespace-nowrap text-ink-3">{when(e.created_at)}</td>
-                  <td>
-                    {e.from_status === e.to_status ? (
-                      <StatusPill status={e.to_status} label={statusLabel(e.to_status)} />
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                        <StatusPill status={e.from_status} label={statusLabel(e.from_status)} />
-                        <ArrowRightIcon size={12} className="text-ink-4" aria-label="to" />
-                        <StatusPill status={e.to_status} label={statusLabel(e.to_status)} />
-                      </span>
-                    )}
-                  </td>
-                  <td className="text-ink-3">{userName(e.actor_id)}</td>
-                  <td className="text-ink-3">{e.reason ?? "-"}</td>
-                </tr>
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0 space-y-4">
+          <Card>
+            <CardHead icon={ClipboardCheckIcon} title="Job ticket" sub="Estimate and actual are both kept on the ticket" />
+            <dl className="grid gap-px bg-ink/[0.06] sm:grid-cols-3">
+              {[
+                ["Item", job.item_desc],
+                ["Repair type", job.repair_type],
+                ["Branch", branchName],
+                ["Received", when(job.created_at)],
+                ["Technician", userName(job.technician_id)],
+                ["Journal entry", journal ? journal.entry_no : "-"],
+              ].map(([k, v]) => (
+                <div key={k} className="min-w-0 bg-paper px-4 py-2">
+                  <dt className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">{k}</dt>
+                  <dd className="mt-0.5 truncate text-[12.5px] font-medium text-ink">{v}</dd>
+                </div>
               ))}
-            </tbody>
-          </table>
-        )}
-      </TableCard>
+            </dl>
+            <div className="grid gap-px border-t border-ink/[0.06] bg-ink/[0.06] sm:grid-cols-2">
+              {[
+                ["Condition at intake", job.condition_in],
+                ["Condition at collection", job.condition_out ?? "-"],
+              ].map(([k, v]) => (
+                <div key={k} className="min-w-0 bg-paper px-4 py-2">
+                  <dt className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">{k}</dt>
+                  <dd className="mt-0.5 whitespace-pre-line text-[12.5px] leading-snug text-ink-2">{v}</dd>
+                </div>
+              ))}
+            </div>
+          </Card>
 
-      {dialog === "assign" ? (
-        <AssignDialog repairId={id} me={me.data} users={users} onClose={closeDialog} onDone={closeDialog} />
-      ) : null}
+          <Card>
+            <CardHead icon={HistoryIcon} title="Status history" sub="Append-only: every transition with who made it" />
+            {events.length === 0 ? (
+              <Empty icon={HistoryIcon} title="No history" desc="No transitions have been recorded for this job." />
+            ) : (
+              <div className="overflow-x-auto scrollbar-thin">
+                <table className="w-full text-[12.5px]">
+                  <thead className={thead}>
+                    <tr>
+                      <th className={cn(th, "pl-4")}>When</th>
+                      <th className={th}>Change</th>
+                      <th className={th}>By</th>
+                      <th className={cn(th, "pr-4")}>Note</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {events.map((e) => (
+                      <tr key={e.id} className={tr}>
+                        <td className="whitespace-nowrap py-1.5 pl-4 pr-2 text-ink-3">{when(e.created_at)}</td>
+                        <td className="px-2 py-1.5">
+                          {e.from_status === e.to_status ? (
+                            <RepairChip status={e.to_status} />
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                              <RepairChip status={e.from_status} />
+                              <ArrowRightIcon size={10} className="text-ink-4" aria-label="to" />
+                              <RepairChip status={e.to_status} />
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1.5 text-ink-3">{userName(e.actor_id)}</td>
+                        <td className="py-1.5 pl-2 pr-4 text-ink-3">{e.reason ?? "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </div>
+
+        <div className="min-w-0 space-y-4">
+          <Card>
+            <CardHead icon={UserCheckIcon} title="Customer" />
+            {customer.isLoading ? (
+              <div className="p-4">
+                <Skeleton className="h-10 rounded-lg" />
+              </div>
+            ) : customer.data ? (
+              <div className="flex items-center gap-3 px-4 py-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-gold-light to-gold text-[11px] font-bold text-void">
+                  {customer.data.name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[13px] font-semibold text-ink">{customer.data.name}</span>
+                  <span className="block truncate text-[11px] text-ink-4">
+                    <span className="g-metric">{customer.data.code}</span>
+                    {customer.data.phone ? ` · ${customer.data.phone}` : ""}
+                  </span>
+                </span>
+              </div>
+            ) : (
+              <p className="px-4 py-3 text-[12px] text-ink-4">Customer not found.</p>
+            )}
+          </Card>
+
+          <Card>
+            <CardHead icon={BanknoteIcon} title="Charges" sub="LKR" />
+            <dl className="divide-y divide-ink/[0.05] text-[12.5px]">
+              <div className="flex items-center justify-between px-4 py-1.5">
+                <dt className="text-ink-4">Estimate</dt>
+                <dd className="g-metric text-ink">{lkr(job.estimate_cents)}</dd>
+              </div>
+              <div className="flex items-center justify-between px-4 py-1.5">
+                <dt className="text-ink-4">Actual</dt>
+                <dd className="g-metric text-ink">
+                  {job.actual_cents == null ? "-" : lkr(job.actual_cents)}
+                  {collectedEvent?.reason?.includes("estimate") ? (
+                    <Pill tone="neutral" className="ml-2">
+                      Billed at estimate
+                    </Pill>
+                  ) : null}
+                </dd>
+              </div>
+              <div className={cn("flex items-center justify-between px-4 py-2", variance && variance > 0 ? "bg-amber-500/[0.07]" : "bg-gold-pale/40")}>
+                <dt className="text-[9.5px] font-semibold uppercase tracking-[0.16em] text-gold-dark">Variance</dt>
+                <dd className={cn("g-metric text-[14px]", variance && variance > 0 ? "text-amber-800" : "text-gold-deep")}>
+                  {variance == null ? "—" : `${variance > 0 ? "+" : variance < 0 ? "−" : ""}${lkr(Math.abs(variance))}`}
+                </dd>
+              </div>
+            </dl>
+          </Card>
+
+          <Card>
+            <CardHead icon={HistoryIcon} title="Time by stage" sub={`${days} day${days === 1 ? "" : "s"} ${live ? "so far" : "in all"}`} />
+            <ul className="space-y-2 p-4">
+              {stageDays.map((d) => (
+                <li key={d.status}>
+                  <div className="flex items-baseline justify-between text-[12px]">
+                    <span className="text-ink-2">{d.label}</span>
+                    <span className="g-metric text-ink">{d.days < 1 ? `${Math.round(d.days * 24)}h` : `${d.days.toFixed(1)}d`}</span>
+                  </div>
+                  <ShareBar value={(d.days / maxStage) * 100} className="mt-1 h-1" />
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+      </div>
+
+      {dialog === "assign" ? <AssignDialog repairId={id} me={me.data} users={users} onClose={closeDialog} onDone={closeDialog} /> : null}
       {dialog === "finish" ? <FinishDialog repairId={id} onClose={closeDialog} onDone={closeDialog} /> : null}
-      {dialog === "qc-pass" || dialog === "qc-fail" ? (
-        <QcDialog repairId={id} pass={dialog === "qc-pass"} onClose={closeDialog} onDone={closeDialog} />
-      ) : null}
+      {dialog === "qc-pass" || dialog === "qc-fail" ? <QcDialog repairId={id} pass={dialog === "qc-pass"} onClose={closeDialog} onDone={closeDialog} /> : null}
       {dialog === "collect" ? (
-        <CollectDialog
-          repairId={id}
-          branchId={job.branch_id}
-          estimateCents={job.estimate_cents}
-          onClose={closeDialog}
-          onDone={closeDialog}
-        />
+        <CollectDialog repairId={id} branchId={job.branch_id} estimateCents={job.estimate_cents} onClose={closeDialog} onDone={closeDialog} />
       ) : null}
       {dialog === "cancel" ? <CancelDialog repairId={id} onClose={closeDialog} onDone={closeDialog} /> : null}
     </Page>

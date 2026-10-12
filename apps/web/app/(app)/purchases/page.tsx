@@ -5,29 +5,10 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { BarList, Page, Skeleton, StatusPill } from "@/components/ui";
-import {
-  Card,
-  CardHead,
-  Empty,
-  HeadLink,
-  ListSkeleton,
-  ModuleHero,
-  Shortcut,
-  SectionHead,
-  StatusBoard,
-  ago,
-  count,
-  grams,
-  lkr,
-  type BoardState,
-  type IconCmp,
-} from "@/components/module-dashboard";
+import { Page, Skeleton } from "@/components/ui";
 import {
   ArrowRightIcon,
-  BanknoteIcon,
   CheckCircleIcon,
-  CoinsIcon,
   CreditCardIcon,
   FileTextIcon,
   GemIcon,
@@ -38,6 +19,33 @@ import {
   TrendingUpIcon,
   TruckIcon,
 } from "@/components/icons";
+import {
+  BILL_META,
+  BILL_STATUSES,
+  BillChip,
+  Card,
+  CardHead,
+  Empty,
+  GoldHero,
+  HeadLink,
+  HeroBadge,
+  ORDER_META,
+  ORDER_STATUSES,
+  PoChip,
+  RowsSkeleton,
+  ShareBar,
+  ago,
+  count,
+  grams,
+  heroGhost,
+  heroGold,
+  lkr,
+  pretty,
+  th,
+  thead,
+  tr,
+  type IconCmp,
+} from "./kit";
 
 /* ------------------------------------------------------------------ types */
 
@@ -47,27 +55,47 @@ type Order = { id: string; number: string; supplier_name: string; status: string
 type Bill = { id: string; number: string; supplier_name: string; total_cents: number; paid_cents: number; status: string; created_at: number };
 type Paged<R> = { rows: R[]; total: number };
 
-type State = BoardState;
+/** One state row in a pipeline panel. */
+function Pipeline({
+  states,
+  meta,
+  counts,
+  loading,
+  href,
+}: {
+  states: readonly string[];
+  meta: Record<string, { label: string; hint: string; dot: string }>;
+  counts: (number | undefined)[];
+  loading: boolean;
+  href: (s: string) => string;
+}) {
+  const max = Math.max(1, ...counts.map((c) => c ?? 0));
+  return (
+    <ul className="flex-1 divide-y divide-ink/[0.05]">
+      {states.map((s, i) => {
+        const c = counts[i];
+        const m = meta[s]!;
+        return (
+          <li key={s}>
+            <Link href={href(s)} className="group flex items-center gap-3 px-4 py-2 transition-colors hover:bg-gold-pale/40">
+              <span className={cn("size-2 shrink-0 rounded-full", m.dot)} />
+              <span className="w-24 shrink-0 leading-tight">
+                <span className="block text-[12px] font-semibold text-ink group-hover:text-gold-dark">{m.label}</span>
+                <span className="block truncate text-[10px] text-ink-5">{m.hint}</span>
+              </span>
+              <span className="min-w-0 flex-1">
+                <ShareBar value={((c ?? 0) / max) * 100} color={m.dot} />
+              </span>
+              <span className="g-metric w-8 text-right text-[15px] text-ink">{loading ? "…" : c ?? "—"}</span>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
-/** A purchase order's life: drafted, sent to the supplier, then received into stock. */
-const ORDER_STATES: State[] = [
-  { status: "DRAFT", label: "Draft", hint: "Being prepared", bar: "bg-gold-light" },
-  { status: "SENT", label: "Sent", hint: "Waiting on supplier", bar: "bg-gold" },
-  { status: "RECEIVED", label: "Received", hint: "Stock posted", bar: "bg-emerald-500" },
-  { status: "CANCELLED", label: "Cancelled", hint: "Withdrawn", bar: "bg-ink-5" },
-];
-
-/** Supplier bills by settlement, most urgent first. */
-const BILL_STATES: State[] = [
-  { status: "UNPAID", label: "Unpaid", hint: "Nothing paid yet", bar: "bg-amber-400" },
-  { status: "PARTIAL", label: "Part-paid", hint: "Balance still owed", bar: "bg-gold" },
-  { status: "PAID", label: "Paid", hint: "Settled in full", bar: "bg-emerald-500" },
-  { status: "VOID", label: "Void", hint: "Cancelled", bar: "bg-ink-5" },
-];
-
-const pretty = (k: string | null, fallback: string) =>
-  k ? k.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) : fallback;
-
+/** Breakdown of this month's purchases one way. */
 function MixCard({
   icon,
   title,
@@ -85,97 +113,39 @@ function MixCard({
   fallback: string;
   by: "value" | "gold";
 }) {
-  const items = (rows ?? [])
-    .filter((r) => (by === "gold" ? r.gold_mg : r.value_cents) > 0)
-    .slice(0, 5)
-    .map((r) => ({
-      key: r.key ?? fallback,
-      label: pretty(r.key, fallback),
-      value: by === "gold" ? r.gold_mg : r.value_cents,
-      secondary:
-        by === "gold"
-          ? `${r.invoices} bill${r.invoices === 1 ? "" : "s"} · ${lkr(r.value_cents)} LKR`
-          : `${r.invoices} bill${r.invoices === 1 ? "" : "s"}${r.gold_mg ? ` · ${grams(r.gold_mg)} g` : ""}`,
-    }));
+  const items = (rows ?? []).filter((r) => (by === "gold" ? r.gold_mg : r.value_cents) > 0).slice(0, 6);
+  const total = items.reduce((n, r) => n + (by === "gold" ? r.gold_mg : r.value_cents), 0);
   return (
     <Card>
       <CardHead icon={icon} title={title} sub={sub} action={<HeadLink href="/purchases/reports">Report</HeadLink>} />
-      <div className="px-5 pb-5 sm:px-6">
-        {loading ? (
-          <ListSkeleton />
-        ) : (
-          <BarList
-            tone="light"
-            items={items}
-            format={(n) => (by === "gold" ? `${grams(n)} g` : `${lkr(n)} LKR`)}
-            empty={<Empty icon={icon} title="No purchases yet" desc="Supplier bills posted this month will be broken down here." />}
-          />
-        )}
-      </div>
-    </Card>
-  );
-}
-
-/** Hero side panel: what is owed to suppliers and how much of this month's spend is settled. */
-function PayablesPanel({
-  owed,
-  openBills,
-  paid,
-  spent,
-  awaiting,
-  loading,
-}: {
-  owed: number | undefined;
-  openBills: number;
-  paid: number | undefined;
-  spent: number | undefined;
-  awaiting: number | undefined;
-  loading: boolean;
-}) {
-  const pct = spent && paid ? Math.min(100, Math.round((paid / spent) * 100)) : 0;
-  return (
-    <div className="relative overflow-hidden rounded-2xl bg-paper/[0.04] p-5 ring-1 ring-gold/20 backdrop-blur-sm sm:p-6">
-      <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-light/60 to-transparent" />
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">Owed to suppliers</p>
       {loading ? (
-        <Skeleton className="mt-3 h-9 w-40 bg-paper/10" />
+        <RowsSkeleton />
+      ) : items.length === 0 ? (
+        <Empty icon={icon} title="No purchases yet" desc="Supplier bills posted this month will be broken down here." />
       ) : (
-        <p className="g-metric mt-2 flex items-baseline gap-2 text-[34px] leading-none text-paper">
-          <span className="text-xs font-medium tracking-normal text-paper/45">LKR</span>
-          {owed === undefined ? "—" : lkr(owed)}
-        </p>
+        <ul className="space-y-2 p-4">
+          {items.map((r) => {
+            const v = by === "gold" ? r.gold_mg : r.value_cents;
+            const share = total ? (v / total) * 100 : 0;
+            return (
+              <li key={r.key ?? fallback}>
+                <div className="flex items-baseline justify-between gap-2 text-[12px]">
+                  <span className="min-w-0 truncate font-semibold text-ink">{r.key ? pretty(r.key) : fallback}</span>
+                  <span className="g-metric shrink-0 text-ink">
+                    {by === "gold" ? `${grams(v)} g` : lkr(v)} <span className="text-[10px] text-ink-5">{share.toFixed(0)}%</span>
+                  </span>
+                </div>
+                <ShareBar value={share} className="mt-1" />
+                <div className="mt-0.5 text-[10px] text-ink-5">
+                  {r.invoices} bill{r.invoices === 1 ? "" : "s"}
+                  {by === "gold" ? ` · ${lkr(r.value_cents)} LKR` : r.gold_mg ? ` · ${grams(r.gold_mg)} g` : ""}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
-      <p className="mt-2 text-xs text-paper/50">
-        {openBills === 0 ? "Every supplier bill is settled" : `${openBills} bill${openBills === 1 ? "" : "s"} waiting for payment`}
-      </p>
-
-      <div className="mt-5">
-        <div className="flex items-baseline justify-between text-[11px] text-paper/50">
-          <span>Paid of this month&apos;s spend</span>
-          <span className="g-metric text-paper/85">{pct}%</span>
-        </div>
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-paper/[0.08]">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-gold-deep via-gold to-gold-light transition-[width] duration-700 ease-brand"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        <p className="g-metric mt-2 text-[11px] text-paper/40">
-          {lkr(paid ?? 0)} of {lkr(spent ?? 0)} LKR
-        </p>
-      </div>
-
-      <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-paper/[0.08] ring-1 ring-paper/[0.08]">
-        <Link href="/purchases/orders?status=SENT" className="group bg-void px-3.5 py-3 transition-colors hover:bg-paper/[0.06]">
-          <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-paper/40">With supplier</span>
-          <span className="g-metric mt-1 block text-lg leading-none text-paper group-hover:text-gold-light">{awaiting ?? "—"}</span>
-        </Link>
-        <Link href="/purchases/invoices?status=UNPAID" className="group bg-void px-3.5 py-3 transition-colors hover:bg-paper/[0.06]">
-          <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-paper/40">Bills to pay</span>
-          <span className="g-metric mt-1 block text-lg leading-none text-paper group-hover:text-gold-light">{openBills}</span>
-        </Link>
-      </div>
-    </div>
+    </Card>
   );
 }
 
@@ -198,7 +168,7 @@ export default function PurchasingDashboardPage() {
   const bySupplier = useQuery(breakdown("supplier"));
   const byPurity = useQuery(breakdown("purity"));
   const byCategory = useQuery(breakdown("category"));
-  const bills = useQuery({ ...opt, queryKey: ["pur-dash", "bills"], queryFn: () => api<Paged<Bill>>("/api/v1/purchases/invoices?limit=6") });
+  const bills = useQuery({ ...opt, queryKey: ["pur-dash", "bills", 8], queryFn: () => api<Paged<Bill>>("/api/v1/purchases/invoices?limit=8") });
   const suppliers = useQuery({
     ...opt,
     enabled: canSuppliers,
@@ -208,24 +178,25 @@ export default function PurchasingDashboardPage() {
 
   // Open orders (draft + sent) fetch a few rows for the worklist; the rest only need a count.
   const orderQueries = useQueries({
-    queries: ORDER_STATES.map((s) => ({
+    queries: ORDER_STATUSES.map((s) => ({
       ...opt,
-      queryKey: ["pur-dash", "order-state", s.status],
-      queryFn: () => api<Paged<Order>>(`/api/v1/purchases/orders?status=${s.status}&limit=${s.status === "DRAFT" || s.status === "SENT" ? 6 : 1}`),
+      queryKey: ["pur-dash", "order-state", s],
+      queryFn: () => api<Paged<Order>>(`/api/v1/purchases/orders?status=${s}&limit=${s === "DRAFT" || s === "SENT" ? 6 : 1}`),
     })),
   });
   const billQueries = useQueries({
-    queries: BILL_STATES.map((s) => ({
+    queries: BILL_STATUSES.map((s) => ({
       ...opt,
-      queryKey: ["pur-dash", "bill-state", s.status],
-      queryFn: () => api<Paged<Bill>>(`/api/v1/purchases/invoices?status=${s.status}&limit=1`),
+      queryKey: ["pur-dash", "bill-state", s],
+      queryFn: () => api<Paged<Bill>>(`/api/v1/purchases/invoices?status=${s}&limit=1`),
     })),
   });
   const orderCounts = orderQueries.map((q) => q.data?.total);
   const billCounts = billQueries.map((q) => q.data?.total);
   const ordersLoading = orderQueries.some((q) => q.isLoading);
   const billsLoading = billQueries.some((q) => q.isLoading);
-  const openCount = (orderCounts[0] ?? 0) + (orderCounts[1] ?? 0);
+  const sent = orderCounts[1] ?? 0;
+  const openCount = (orderCounts[0] ?? 0) + sent;
   const openBills = (billCounts[0] ?? 0) + (billCounts[1] ?? 0);
   const openOrders = [...(orderQueries[0]?.data?.rows ?? []), ...(orderQueries[1]?.data?.rows ?? [])]
     .sort((a, b) => b.created_at - a.created_at)
@@ -233,225 +204,256 @@ export default function PurchasingDashboardPage() {
 
   const m = month.data;
   const a = allTime.data;
+  const paidPct = m && m.value_cents ? Math.min(100, (m.paid_cents / m.value_cents) * 100) : undefined;
+  const avgBill = m && m.invoices ? m.value_cents / m.invoices : undefined;
 
   return (
-    <Page>
-      <ModuleHero
-        kicker="Purchasing"
-        title={
+    <Page className="space-y-4">
+      <GoldHero
+        icon={TruckIcon}
+        title="Purchasing"
+        accent="desk"
+        badge={
+          openBills > 0 ? (
+            <HeroBadge tone="warn">
+              {openBills} bill{openBills === 1 ? "" : "s"} to pay
+            </HeroBadge>
+          ) : (
+            <HeroBadge tone="good">All bills settled</HeroBadge>
+          )
+        }
+        sub={
           <>
-            Buy right, <span className="home-gold-text">pay on time.</span>
+            {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · raise orders, receive stock, pay every
+            supplier on time
           </>
         }
-        description="Raise orders to suppliers, receive stock straight into inventory, and keep every supplier bill paid and accounted for."
         actions={
           <>
             {canCreate ? (
-              <Link href="/purchases/orders?new=1" className="home-btn-gold h-10 px-4 text-sm">
-                <PlusIcon size={15} />
+              <Link href="/purchases/orders?new=1" className={heroGold}>
+                <PlusIcon size={13} />
                 New order
               </Link>
             ) : null}
             {canCreate ? (
-              <Link href="/purchases/invoices?new=1" className="home-btn-ghost h-10 px-4 text-sm">
-                <PackagePlusIcon size={15} />
+              <Link href="/purchases/invoices?new=1" className={heroGhost}>
+                <PackagePlusIcon size={13} />
                 Record a bill
               </Link>
             ) : null}
-            <Link href="/purchases/reports" className="home-btn-ghost h-10 px-4 text-sm">
-              <TrendingUpIcon size={15} />
+            {canSuppliers ? (
+              <Link href="/suppliers" className={heroGhost}>
+                <TruckIcon size={13} />
+                Suppliers
+              </Link>
+            ) : null}
+            <Link href="/purchases/reports" className={heroGhost}>
+              <TrendingUpIcon size={13} />
               Reports
             </Link>
           </>
         }
-        aside={
-          <PayablesPanel
-            owed={a?.outstanding_cents}
-            openBills={openBills}
-            paid={m?.paid_cents}
-            spent={m?.value_cents}
-            awaiting={orderCounts[1]}
-            loading={allTime.isLoading}
-          />
-        }
-        metrics={[
-          { label: "Spend · month", value: m?.value_cents, format: lkr, unit: "LKR", icon: BanknoteIcon, href: "/purchases/reports" },
-          { label: "Gold in · month", value: m?.gold_mg, format: grams, unit: "g", icon: GemIcon, href: "/purchases/reports" },
-          { label: "Paid · month", value: m?.paid_cents, format: lkr, unit: "LKR", icon: CoinsIcon, href: "/purchases/invoices?status=PAID" },
-          { label: "Open orders", value: ordersLoading ? undefined : openCount, format: count, icon: FileTextIcon, href: "/purchases/orders" },
+        stats={[
+          {
+            label: "Owed to suppliers",
+            value: a?.outstanding_cents,
+            format: lkr,
+            unit: "LKR",
+            accent: true,
+            href: "/purchases/invoices?status=UNPAID",
+            loading: allTime.isLoading,
+            sub: openBills ? `${openBills} open bill${openBills === 1 ? "" : "s"}` : "Every bill settled",
+          },
+          { label: "Spend · month", value: m?.value_cents, format: lkr, unit: "LKR", href: "/purchases/reports", loading: month.isLoading, sub: m ? `${m.invoices} bill${m.invoices === 1 ? "" : "s"}` : undefined },
+          {
+            label: "Paid · month",
+            value: m?.paid_cents,
+            format: lkr,
+            unit: "LKR",
+            tone: "good",
+            href: "/purchases/invoices?status=PAID",
+            loading: month.isLoading,
+            sub: paidPct !== undefined ? `${paidPct.toFixed(0)}% of spend` : "Of this month's bills",
+          },
+          { label: "Gold in · month", value: m?.gold_mg, format: grams, unit: "g", href: "/purchases/reports", loading: month.isLoading, sub: "Received fine weight" },
+          { label: "Avg bill · month", value: avgBill, format: lkr, unit: "LKR", loading: month.isLoading, sub: "Spend ÷ bills" },
+          { label: "Open orders", value: ordersLoading ? undefined : openCount, href: "/purchases/orders", loading: ordersLoading, sub: `${orderCounts[0] ?? 0} draft · ${sent} sent` },
+          { label: "With supplier", value: ordersLoading ? undefined : sent, tone: sent ? "warn" : undefined, href: "/purchases/orders?status=SENT", loading: ordersLoading, sub: "Waiting to receive" },
+          canSuppliers
+            ? { label: "Suppliers", value: suppliers.data?.total, href: "/suppliers", loading: suppliers.isLoading, sub: "On file" }
+            : { label: "Spend · all time", value: a?.value_cents, format: lkr, unit: "LKR", loading: allTime.isLoading, sub: a ? `${a.invoices} bills` : undefined },
         ]}
       />
 
-      {/* ------------------------------------------------------- workspaces */}
-      <div className={cn("grid gap-4 sm:grid-cols-2", canSuppliers || !me.data ? "xl:grid-cols-4" : "xl:grid-cols-3")}>
-        <Shortcut
-          href="/purchases/orders"
-          icon={FileTextIcon}
-          title="Orders"
-          desc="Draft, send and receive into stock"
-          metric={openCount}
-          label="Open"
-          loading={ordersLoading}
-          alert={(orderCounts[1] ?? 0) > 0}
-          delay={0}
-        />
-        <Shortcut
-          href="/purchases/invoices"
-          icon={CreditCardIcon}
-          title="Invoices"
-          desc="Supplier bills and payments"
-          metric={openBills}
-          label="To pay"
-          loading={billsLoading}
-          alert={openBills > 0}
-          delay={60}
-        />
-        <Shortcut
-          href="/purchases/reports"
-          icon={TrendingUpIcon}
-          title="Reports"
-          desc="Spend by supplier, purity, category"
-          metric={m ? lkr(m.value_cents) : "—"}
-          label="LKR this month"
-          loading={month.isLoading}
-          delay={120}
-        />
-        {canSuppliers || !me.data ? (
-          <Shortcut
-            href="/suppliers"
-            icon={TruckIcon}
-            title="Suppliers"
-            desc="Refiners, wholesalers and makers"
-            metric={suppliers.data ? count(suppliers.data.total) : "—"}
-            label="On file"
-            loading={suppliers.isLoading && canSuppliers}
-            delay={180}
-          />
-        ) : null}
-      </div>
-
-      {/* ---------------------------------------------------------- activity */}
-      <SectionHead index="01" title="Needs attention" sub="Orders waiting to be received and the latest supplier bills" />
-      <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-2">
+      {/* --------------------------------------------- worklists */}
+      <div className="grid gap-4 xl:grid-cols-12">
+        <Card className="xl:col-span-5">
           <CardHead
             icon={InboxIcon}
             title="Waiting to receive"
             sub={ordersLoading ? "Draft and sent orders" : `${openCount} open order${openCount === 1 ? "" : "s"}`}
-            action={<HeadLink href="/purchases/orders?status=SENT">Sent orders</HeadLink>}
+            action={
+              <>
+                {canCreate ? (
+                  <Link href="/purchases/orders?new=1" className="inline-flex items-center gap-1 rounded-md bg-void px-2 py-1 text-[11px] font-semibold text-gold-light hover:bg-void/90">
+                    <PlusIcon size={11} /> New
+                  </Link>
+                ) : null}
+                <HeadLink href="/purchases/orders">Orders</HeadLink>
+              </>
+            }
           />
-          <div className="px-5 pb-5 sm:px-6">
-            {ordersLoading ? (
-              <ListSkeleton />
-            ) : openOrders.length === 0 ? (
-              <Empty icon={CheckCircleIcon} title="Nothing on order" desc="Draft a purchase order and it will wait here until it is received." />
-            ) : (
-              <ul className="space-y-2">
+          {ordersLoading ? (
+            <RowsSkeleton />
+          ) : openOrders.length === 0 ? (
+            <Empty icon={CheckCircleIcon} title="Nothing on order" desc="Draft a purchase order and it will wait here until it is received." />
+          ) : (
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className={thead}>
+                  <th className={cn(th, "pl-4")}>Order</th>
+                  <th className={th}>Supplier</th>
+                  <th className={cn(th, "text-right")}>Items</th>
+                  <th className={cn(th, "pr-4 text-right")}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
                 {openOrders.map((o) => (
-                  <li key={o.id}>
-                    <Link
-                      href={`/purchases/orders?status=${o.status}`}
-                      className="group flex items-center gap-3 rounded-xl bg-bone/70 px-3.5 py-3 ring-1 ring-ink/[0.06] transition-colors hover:bg-gold-pale/60 hover:ring-gold-dark/20"
-                    >
-                      <span
-                        className={cn(
-                          "flex size-9 shrink-0 items-center justify-center rounded-lg ring-1",
-                          o.status === "SENT" ? "bg-amber-50 text-amber-600 ring-amber-200/70" : "bg-paper text-ink-4 ring-ink/[0.08]"
-                        )}
-                      >
-                        <FileTextIcon size={15} />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2">
-                          <span className="g-metric text-xs font-semibold text-ink">{o.number}</span>
-                          <span className="text-[11px] text-ink-5">{ago(o.created_at)}</span>
-                        </span>
-                        <span className="mt-0.5 block truncate text-xs text-ink-4">
-                          {o.supplier_name} · {o.items} item{o.items === 1 ? "" : "s"}
-                        </span>
-                      </span>
-                      <StatusPill status={o.status} />
-                      <ArrowRightIcon size={13} className="shrink-0 text-ink-5 transition-all group-hover:translate-x-0.5 group-hover:text-gold-dark" />
-                    </Link>
-                  </li>
+                  <tr key={o.id} className={tr}>
+                    <td className="whitespace-nowrap py-1.5 pl-4 pr-2">
+                      <Link href={`/purchases/orders?status=${o.status}`} className="g-metric font-semibold text-ink hover:text-gold-dark">
+                        {o.number}
+                      </Link>
+                      <span className="ml-1.5 text-[10px] text-ink-5">{ago(o.created_at)}</span>
+                    </td>
+                    <td className="max-w-[160px] truncate px-2 text-ink-3">{o.supplier_name}</td>
+                    <td className="g-metric px-2 text-right text-ink-3">{o.items}</td>
+                    <td className="py-1.5 pl-2 pr-4 text-right">
+                      <PoChip status={o.status} />
+                    </td>
+                  </tr>
                 ))}
-              </ul>
-            )}
-          </div>
+              </tbody>
+            </table>
+          )}
         </Card>
 
-        <Card className="lg:col-span-3">
-          <CardHead icon={CreditCardIcon} title="Latest bills" sub="Most recent supplier invoices" action={<HeadLink href="/purchases/invoices">All bills</HeadLink>} />
-          <div className="pb-2">
-            {bills.isLoading ? (
-              <div className="px-5 pb-4 sm:px-6">
-                <ListSkeleton rows={4} className="h-11 rounded-lg" />
-              </div>
-            ) : (bills.data?.rows ?? []).length === 0 ? (
-              <div className="px-5 pb-4 sm:px-6">
-                <Empty icon={InboxIcon} title="No bills yet" desc="Receive an order or record a direct purchase to see it here." />
-              </div>
+        <Card className="xl:col-span-7">
+          <CardHead
+            icon={CreditCardIcon}
+            title="Latest bills"
+            sub={bills.data ? `${count(bills.data.total)} on file · most recent supplier invoices` : "Most recent supplier invoices"}
+            action={<HeadLink href="/purchases/invoices">All bills</HeadLink>}
+          />
+          {bills.isLoading ? (
+            <RowsSkeleton />
+          ) : (bills.data?.rows ?? []).length === 0 ? (
+            <Empty icon={InboxIcon} title="No bills yet" desc="Receive an order or record a direct purchase to see it here." />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] text-[12px]">
+                <thead>
+                  <tr className={thead}>
+                    <th className={cn(th, "pl-4")}>Bill</th>
+                    <th className={th}>Supplier</th>
+                    <th className={cn(th, "text-right")}>Total LKR</th>
+                    <th className={cn(th, "text-right")}>Due LKR</th>
+                    <th className={cn(th, "pr-4 text-right")}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(bills.data?.rows ?? []).map((b) => {
+                    const due = b.status === "VOID" ? 0 : Math.max(0, b.total_cents - b.paid_cents);
+                    return (
+                      <tr key={b.id} className={cn(tr, b.status === "VOID" && "opacity-60")}>
+                        <td className="whitespace-nowrap py-1.5 pl-4 pr-2">
+                          <Link href={`/purchases/invoices/${b.id}`} className="g-metric font-semibold text-ink hover:text-gold-dark">
+                            {b.number}
+                          </Link>
+                          <span className="ml-1.5 text-[10px] text-ink-5">{ago(b.created_at)}</span>
+                        </td>
+                        <td className="max-w-[180px] truncate px-2 text-ink-3">{b.supplier_name}</td>
+                        <td className="g-metric px-2 text-right text-ink">{lkr(b.total_cents)}</td>
+                        <td className={cn("g-metric px-2 text-right", due > 0 ? "font-semibold text-amber-700" : "text-ink-6")}>{due > 0 ? lkr(due) : "—"}</td>
+                        <td className="py-1.5 pl-2 pr-4 text-right">
+                          <BillChip status={b.status} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* --------------------------------------------- pipelines + payables */}
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <Card>
+          <CardHead
+            icon={FileTextIcon}
+            title="Order pipeline"
+            sub={ordersLoading ? "Purchase orders by status" : `${openCount} open · ${orderCounts[2] ?? 0} received`}
+            action={<HeadLink href="/purchases/orders">All</HeadLink>}
+          />
+          <Pipeline states={ORDER_STATUSES} meta={ORDER_META} counts={orderCounts} loading={ordersLoading} href={(s) => `/purchases/orders?status=${s}`} />
+        </Card>
+        <Card>
+          <CardHead
+            icon={CreditCardIcon}
+            title="Supplier bills"
+            sub={a ? `${lkr(a.outstanding_cents)} LKR outstanding` : "Bills by payment status"}
+            action={<HeadLink href="/purchases/invoices">All</HeadLink>}
+          />
+          <Pipeline states={BILL_STATUSES} meta={BILL_META} counts={billCounts} loading={billsLoading} href={(s) => `/purchases/invoices?status=${s}`} />
+        </Card>
+        <Card className="lg:col-span-2 xl:col-span-1">
+          <CardHead icon={CreditCardIcon} title="Payables" sub="What this month's spend has cost in cash so far" />
+          <div className="flex-1 space-y-3 p-4">
+            {month.isLoading || allTime.isLoading ? (
+              <Skeleton className="h-28 rounded-xl" />
             ) : (
-              <ul className="divide-y divide-ink/[0.05] border-t border-ink/[0.05]">
-                {(bills.data?.rows ?? []).map((b) => {
-                  const due = Math.max(0, b.total_cents - b.paid_cents);
-                  return (
-                    <li key={b.id}>
-                      <Link href={`/purchases/invoices/${b.id}`} className="group flex items-center gap-3 px-5 py-3 transition-colors hover:bg-gold-pale/40 sm:px-6">
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-2">
-                            <span className="g-metric text-xs font-semibold text-ink group-hover:text-gold-dark">{b.number}</span>
-                            <span className="text-[11px] text-ink-5">{ago(b.created_at)}</span>
-                          </span>
-                          <span className="mt-0.5 block truncate text-xs text-ink-4">
-                            {b.supplier_name}
-                            {due > 0 && b.status !== "VOID" ? ` · ${lkr(due)} LKR due` : ""}
-                          </span>
-                        </span>
-                        <span className="g-metric shrink-0 text-sm text-ink">{lkr(b.total_cents)}</span>
-                        <StatusPill status={b.status} />
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
+              <>
+                <div>
+                  <div className="flex items-baseline justify-between text-[11px] text-ink-4">
+                    <span>Paid of this month&apos;s spend</span>
+                    <span className="g-metric text-ink">{paidPct !== undefined ? `${paidPct.toFixed(0)}%` : "—"}</span>
+                  </div>
+                  <ShareBar value={paidPct ?? 0} className="mt-1.5 h-2" color="bg-gradient-to-r from-emerald-700 to-emerald-400" />
+                  <p className="g-metric mt-1 text-[10.5px] text-ink-5">
+                    {lkr(m?.paid_cents ?? 0)} of {lkr(m?.value_cents ?? 0)} LKR
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-ink/[0.06] text-center">
+                  {[
+                    ["Owed now", a ? `${lkr(a.outstanding_cents)}` : "—", a && a.outstanding_cents > 0 ? "text-amber-700" : "text-ink"],
+                    ["Paid all time", a ? `${lkr(a.paid_cents)}` : "—", "text-ink"],
+                    ["Spend all time", a ? `${lkr(a.value_cents)}` : "—", "text-ink"],
+                    ["Gold all time", a ? `${grams(a.gold_mg)} g` : "—", "text-ink"],
+                  ].map(([k, v, tone]) => (
+                    <div key={k} className="bg-bone/70 px-2 py-2">
+                      <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-ink-5">{k}</div>
+                      <div className={cn("g-metric text-[13px]", tone)}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+                <Link href="/purchases/invoices?status=UNPAID" className="group flex items-center justify-center gap-1 rounded-lg py-1.5 text-[11.5px] font-medium text-ink-3 ring-1 ring-ink/[0.08] hover:bg-void hover:text-gold-light">
+                  Pay supplier bills <ArrowRightIcon size={11} className="transition-transform group-hover:translate-x-0.5" />
+                </Link>
+              </>
             )}
           </div>
         </Card>
-      </div>
-      {/* ------------------------------------------------------- pipelines */}
-      <SectionHead index="02" title="Orders & payables" sub="Where orders stand, and what is still owed — tap a state to open it" />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <StatusBoard
-          icon={FileTextIcon}
-          title="Order pipeline"
-          sub={ordersLoading ? "Purchase orders by status" : `${openCount} open · ${orderCounts[2] ?? 0} received`}
-          action={<HeadLink href="/purchases/orders">All orders</HeadLink>}
-          states={ORDER_STATES}
-          counts={orderCounts}
-          loading={ordersLoading}
-          href={(s) => `/purchases/orders?status=${s}`}
-        />
-        <StatusBoard
-          icon={CreditCardIcon}
-          title="Supplier bills"
-          sub={a ? `${lkr(a.outstanding_cents)} LKR outstanding across ${openBills} bill${openBills === 1 ? "" : "s"}` : "Bills by payment status"}
-          action={<HeadLink href="/purchases/invoices">All bills</HeadLink>}
-          states={BILL_STATES}
-          counts={billCounts}
-          loading={billsLoading}
-          href={(s) => `/purchases/invoices?status=${s}`}
-        />
       </div>
 
       {/* ---------------------------------------------------- where it goes */}
-      <SectionHead index="03" title="Where the money goes" sub="This month's purchases" />
       <div className="grid gap-4 lg:grid-cols-3">
-        <MixCard icon={TruckIcon} title="By supplier" sub="Top suppliers by spend" rows={bySupplier.data} loading={bySupplier.isLoading} fallback="Unknown" by="value" />
-        <MixCard icon={GemIcon} title="By purity" sub="Gold received" rows={byPurity.data} loading={byPurity.isLoading} fallback="Unspecified" by="gold" />
-        <MixCard icon={TagsIcon} title="By category" sub="What you are stocking" rows={byCategory.data} loading={byCategory.isLoading} fallback="Uncategorised" by="value" />
+        <MixCard icon={TruckIcon} title="By supplier" sub="This month · top suppliers by spend" rows={bySupplier.data} loading={bySupplier.isLoading} fallback="Unknown" by="value" />
+        <MixCard icon={GemIcon} title="By purity" sub="This month · fine gold received" rows={byPurity.data} loading={byPurity.isLoading} fallback="Unspecified" by="gold" />
+        <MixCard icon={TagsIcon} title="By category" sub="This month · what you are stocking" rows={byCategory.data} loading={byCategory.isLoading} fallback="Uncategorised" by="value" />
       </div>
-
     </Page>
   );
 }

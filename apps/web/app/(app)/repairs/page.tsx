@@ -9,7 +9,7 @@ import { hasPermission, PERMISSIONS } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
 import { lkr } from "@/lib/accounts";
 import { cn } from "@/lib/cn";
-import { Page, Callout, Skeleton, StatusPill } from "@/components/ui";
+import { Page, Callout } from "@/components/ui";
 import { Select } from "@/components/select";
 import {
   AlertCircleIcon,
@@ -18,25 +18,41 @@ import {
   Building2Icon,
   CheckCircleIcon,
   CheckIcon,
-  ClipboardCheckIcon,
   HammerIcon,
-  InboxIcon,
   PackageIcon,
   PlusIcon,
   ScaleIcon,
   SearchIcon,
-  UsersIcon,
   XIcon,
 } from "@/components/icons";
 import {
   CustomerName,
   branchDefault,
   errMsg,
+  META,
+  RepairChip,
   statusLabel,
   useBranches,
   type Customer,
   type RepairStatus,
 } from "./shared";
+import {
+  Card,
+  CardHead,
+  Empty,
+  FilterPills,
+  GoldHero,
+  HeroBadge,
+  RowsSkeleton,
+  ShareBar,
+  ago,
+  heroGold,
+  inputCls as kitInput,
+  stamp,
+  th,
+  thead,
+  tr,
+} from "../sales/kit";
 
 type RepairListRow = {
   id: string;
@@ -53,39 +69,18 @@ type RepairListRow = {
 
 const PAGE_SIZE = 20;
 
-const FILTERS: ReadonlyArray<{ key: "" | RepairStatus; label: string; dot: string }> = [
-  { key: "", label: "All", dot: "" },
-  { key: "RECEIVED", label: "Received", dot: "bg-sky-500" },
-  { key: "IN_PROGRESS", label: "In progress", dot: "bg-violet-500" },
-  { key: "QC", label: "Awaiting QC", dot: "bg-amber-500" },
-  { key: "READY", label: "Ready to collect", dot: "bg-emerald-500" },
-  { key: "COLLECTED", label: "Collected", dot: "bg-ink-5" },
-  { key: "CANCELLED", label: "Cancelled", dot: "bg-rose-400" },
-];
-
-// Hero counters: one `limit=1` request per status, reading only `total`.
-const COUNTED: ReadonlyArray<RepairStatus> = ["RECEIVED", "IN_PROGRESS", "QC", "READY"];
-
-const STAGES: ReadonlyArray<{ key: RepairStatus; label: string; sub: string; icon: ReactNode }> = [
-  { key: "RECEIVED", label: "Received", sub: "Awaiting technician", icon: <InboxIcon size={16} /> },
-  { key: "IN_PROGRESS", label: "In workshop", sub: "On the bench", icon: <HammerIcon size={16} /> },
-  { key: "QC", label: "Quality check", sub: "Awaiting sign-off", icon: <ClipboardCheckIcon size={16} /> },
-  { key: "READY", label: "Ready", sub: "To collect & pay", icon: <CheckCircleIcon size={16} /> },
-];
+const ALL_STATUSES: ReadonlyArray<RepairStatus> = ["RECEIVED", "IN_PROGRESS", "QC", "READY", "COLLECTED", "CANCELLED"];
+const LIVE: ReadonlyArray<RepairStatus> = ["RECEIVED", "IN_PROGRESS", "QC", "READY"];
 
 const REPAIR_TYPES = ["Resize", "Solder", "Polish", "Stone setting", "Clasp replacement", "Re-plating", "Chain repair"];
-
-const cardShadow =
-  "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]";
 
 const inputCls =
   "h-11 w-full rounded-xl bg-paper px-3.5 text-sm text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)] aria-[invalid=true]:shadow-[inset_0_0_0_1px_#e11d48,0_0_0_4px_rgba(225,29,72,0.12)]";
 
-const day = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-const time = (ms: number) => new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 const ageDays = (ms: number) => Math.max(0, Math.floor((Date.now() - ms) / 86_400_000));
 
 export default function RepairsPage() {
+  const router = useRouter();
   const [status, setStatus] = useState<"" | RepairStatus>("");
   const [branchId, setBranchId] = useState("");
   const [search, setSearch] = useState("");
@@ -107,30 +102,38 @@ export default function RepairsPage() {
 
   const list = useQuery({
     queryKey: ["repairs", "list", { status, branchId, search, page }],
-    queryFn: () =>
-      api<{ rows: RepairListRow[]; total: number }>(
-        `/api/v1/repairs?${qs({ page, limit: PAGE_SIZE, status, search: search.trim() })}`
-      ),
+    queryFn: () => api<{ rows: RepairListRow[]; total: number }>(`/api/v1/repairs?${qs({ page, limit: PAGE_SIZE, status, search: search.trim() })}`),
   });
 
+  // One `limit=1` request per status, reading only `total`; live stages also
+  // carry a few rows so the workload can be valued.
   const counts = useQueries({
-    queries: COUNTED.map((s) => ({
-      queryKey: ["repairs", "count", s, branchId],
-      queryFn: () => api<{ rows: RepairListRow[]; total: number }>(`/api/v1/repairs?${qs({ status: s, limit: 1 })}`),
+    queries: ALL_STATUSES.map((s) => ({
+      queryKey: ["repairs", "count", s, branchId, LIVE.includes(s) ? 100 : 1],
+      queryFn: () => api<{ rows: RepairListRow[]; total: number }>(`/api/v1/repairs?${qs({ status: s, limit: LIVE.includes(s) ? 100 : 1 })}`),
     })),
   });
-  const countOf = (s: RepairStatus) => counts[COUNTED.indexOf(s)]?.data?.total;
+  const countOf = (s: RepairStatus) => counts[ALL_STATUSES.indexOf(s)]?.data?.total;
   const countsReady = counts.every((c) => c.data !== undefined);
-  const activeTotal = countsReady ? COUNTED.reduce((n, s) => n + (countOf(s) ?? 0), 0) : null;
+  const activeTotal = countsReady ? LIVE.reduce((n, s) => n + (countOf(s) ?? 0), 0) : null;
+  const allTotal = countsReady ? ALL_STATUSES.reduce((n, s) => n + (countOf(s) ?? 0), 0) : null;
+  const liveRows = LIVE.flatMap((s) => counts[ALL_STATUSES.indexOf(s)]?.data?.rows ?? []);
+  const liveValue = liveRows.reduce((n, r) => n + (r.actual_cents ?? r.estimate_cents), 0);
+  const readyValue = liveRows.filter((r) => r.status === "READY").reduce((n, r) => n + (r.actual_cents ?? r.estimate_cents), 0);
+  const overdue = liveRows.filter((r) => ageDays(r.created_at) >= 14).length;
+  const avgAge = liveRows.length ? liveRows.reduce((n, r) => n + ageDays(r.created_at), 0) / liveRows.length : 0;
+  const oldest = [...liveRows].sort((a, b) => a.created_at - b.created_at).slice(0, 5);
+  const byType = [...liveRows.reduce((m, r) => m.set(r.repair_type, (m.get(r.repair_type) ?? 0) + 1), new Map<string, number>())].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const maxType = Math.max(1, ...byType.map((t) => t[1]));
 
   // The list endpoint does not filter on `search` yet, so narrow the loaded page here too.
   const term = search.trim().toLowerCase();
   const pageRows = list.data?.rows ?? [];
-  const rows = term
-    ? pageRows.filter((r) => [r.number, r.item_desc, r.repair_type].some((v) => v.toLowerCase().includes(term)))
-    : pageRows;
+  const rows = term ? pageRows.filter((r) => [r.number, r.item_desc, r.repair_type].some((v) => v.toLowerCase().includes(term))) : pageRows;
   const total = list.data?.total ?? 0;
   const pristine = total === 0 && !status && !branchId;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const from = pageRows.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
 
   const pick = (s: "" | RepairStatus) => {
     setStatus(s);
@@ -138,229 +141,144 @@ export default function RepairsPage() {
   };
 
   return (
-    <Page className="space-y-6">
-      {/* Hero */}
-      <section className="relative overflow-hidden rounded-[28px] bg-void text-paper shadow-5 ring-1 ring-gold/10">
-        <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-60" aria-hidden />
-        <div className="home-drift pointer-events-none absolute -right-24 -top-32 size-[22rem] rounded-full bg-gold/20 blur-[120px]" aria-hidden />
-        <div className="pointer-events-none absolute -bottom-40 -left-24 size-80 rounded-full bg-emerald-400/10 blur-[110px]" aria-hidden />
-        <div className="home-noise pointer-events-none absolute inset-0" aria-hidden />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" aria-hidden />
-
-        <div className="relative flex flex-col gap-6 px-5 py-6 sm:px-7 lg:flex-row lg:items-end lg:justify-between lg:px-8 lg:py-7">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/[0.08] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">
-                <span className="size-1.5 animate-pulse-soft rounded-full bg-gold" />
-                Sales · Workshop
-              </span>
-              {activeTotal !== null ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-paper/[0.06] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-paper/70 ring-1 ring-paper/10">
-                  <HammerIcon size={11} className="text-gold-light" />
-                  {activeTotal} active
-                  {branchId ? ` · ${branchName(branchId)}` : ""}
-                </span>
-              ) : null}
-            </div>
-            <h1 className="g-display mt-3.5 text-3xl text-paper sm:text-[2.6rem]">
-              Repairs, <span className="home-gold-text">bench to collection.</span>
-            </h1>
-            <p className="mt-2.5 max-w-xl text-sm leading-relaxed text-paper/60">
-              Customer pieces in for repair: intake, workshop, quality check and paid collection.
-            </p>
-          </div>
-          {canCreate ? (
-            <button type="button" onClick={() => setCreating(true)} className="home-btn-gold h-11 shrink-0 px-5 text-sm">
-              <PlusIcon size={15} /> New repair
+    <Page className="space-y-4">
+      <GoldHero
+        icon={HammerIcon}
+        title="Repairs,"
+        accent="bench to collection"
+        back={{ href: "/sales", label: "Sales" }}
+        badge={activeTotal !== null ? <HeroBadge tone={overdue ? "warn" : "gold"}>{activeTotal} active{branchId ? ` · ${branchName(branchId)}` : ""}</HeroBadge> : null}
+        sub="Customer pieces in for repair: intake, workshop, quality check and paid collection."
+        actions={
+          canCreate ? (
+            <button type="button" onClick={() => setCreating(true)} className={heroGold}>
+              <PlusIcon size={13} /> New repair
             </button>
-          ) : null}
-        </div>
-
-        {/* Pipeline */}
-        <div className="relative grid grid-cols-2 gap-px border-t border-paper/[0.08] bg-paper/[0.06] lg:grid-cols-4">
-          {STAGES.map((s, i) => {
-            const n = countOf(s.key);
-            const on = status === s.key;
-            const share = activeTotal && n !== undefined ? n / activeTotal : 0;
+          ) : null
+        }
+        stats={[
+          { label: "Active jobs", value: activeTotal, loading: !countsReady, sub: allTotal !== null ? `${allTotal} on file` : undefined },
+          { label: "Ready to collect", value: countOf("READY"), accent: true, loading: !countsReady, sub: readyValue ? `${lkr(readyValue)} to take` : "Nothing waiting" },
+          { label: "Work in shop", value: countsReady ? liveValue / 100 : null, format: (n) => Math.round(n).toLocaleString("en-US"), unit: "LKR", loading: !countsReady, sub: "Estimates and actuals" },
+          { label: "Overdue", value: countsReady ? overdue : null, tone: overdue ? "bad" : "good", loading: !countsReady, sub: "14+ days in shop" },
+          { label: "Average age", value: countsReady ? avgAge : null, format: (n) => n.toFixed(1), unit: "days", loading: !countsReady, sub: "Active jobs" },
+          { label: "Collected", value: countOf("COLLECTED"), tone: "good", loading: !countsReady, sub: `${countOf("CANCELLED") ?? 0} cancelled` },
+        ]}
+      >
+        <ol className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+          {LIVE.map((k, i) => {
+            const n = countOf(k);
+            const on = status === k;
+            const m = META[k];
             return (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => pick(on ? "" : s.key)}
-                aria-pressed={on}
-                className={cn(
-                  "group relative flex min-w-0 items-center gap-3.5 px-4 py-4 text-left transition-colors sm:px-6",
-                  on ? "bg-[#0d3a2c]" : "bg-void/95 hover:bg-void/80"
-                )}
-              >
-                {on ? <span aria-hidden className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-gold-dark via-gold to-gold-light" /> : null}
-                <span
+              <li key={k} className="relative">
+                <button
+                  type="button"
+                  onClick={() => pick(on ? "" : k)}
+                  aria-pressed={on}
                   className={cn(
-                    "relative flex size-10 shrink-0 items-center justify-center rounded-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 transition-colors",
-                    s.key === "READY" && n
-                      ? "bg-gradient-to-b from-gold-light to-gold text-void ring-gold/40"
-                      : on
-                        ? "bg-paper/[0.12] text-gold-light ring-gold/40"
-                        : "bg-gradient-to-b from-paper/[0.09] to-paper/[0.03] text-gold-light ring-paper/[0.09] group-hover:text-gold"
+                    "flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left ring-1 ring-inset transition-all duration-200",
+                    on ? "bg-gold/[0.14] ring-gold/50" : "bg-paper/[0.04] ring-paper/10 hover:bg-paper/[0.07] hover:ring-gold/30"
                   )}
                 >
-                  {s.icon}
-                  <span className="g-metric absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-void text-[9px] text-paper/60 ring-1 ring-paper/15">
-                    {i + 1}
+                  <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-lg", k === "READY" && n ? "bg-gradient-to-b from-gold-light to-gold text-void" : on ? "bg-paper/[0.12] text-gold-light" : "bg-paper/[0.07] text-gold-light")}>
+                    <m.icon size={13} />
                   </span>
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-paper/40">{s.label}</span>
-                  {n === undefined ? (
-                    <Skeleton className="mt-1 h-6 w-10 bg-paper/10" />
-                  ) : (
-                    <span className={cn("g-metric mt-0.5 block text-xl leading-tight", s.key === "READY" && n ? "text-gold-light" : "text-paper")}>
-                      {n}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[9.5px] font-semibold uppercase tracking-[0.14em] text-paper/45">
+                      {String(i + 1).padStart(2, "0")} · {statusLabel(k)}
                     </span>
-                  )}
-                  <span className="mt-1.5 block h-1 overflow-hidden rounded-full bg-paper/10">
-                    <span
-                      className="block h-full rounded-full bg-gradient-to-r from-gold-dark to-gold-light transition-[width] duration-700 ease-brand"
-                      style={{ width: `${Math.round(share * 100)}%` }}
-                    />
+                    <span className="flex items-baseline gap-1.5">
+                      <span className={cn("g-metric text-[16px] leading-tight", on || (k === "READY" && n) ? "text-gold-light" : "text-paper")}>{n ?? "—"}</span>
+                      <span className="truncate text-[10px] text-paper/35">{m.hint}</span>
+                    </span>
                   </span>
-                  <span className="mt-1 block truncate text-[10px] text-paper/35">{s.sub}</span>
-                </span>
-                {i < STAGES.length - 1 ? (
-                  <ArrowRightIcon size={12} className="absolute right-2 top-1/2 hidden -translate-y-1/2 text-paper/20 lg:block" />
+                </button>
+                {i < LIVE.length - 1 ? (
+                  <span aria-hidden className="pointer-events-none absolute -right-[9px] top-1/2 z-10 hidden size-3.5 -translate-y-1/2 items-center justify-center rounded-full bg-void text-gold/70 ring-1 ring-gold/25 sm:flex">
+                    <ArrowRightIcon size={8} />
+                  </span>
                 ) : null}
-              </button>
+              </li>
             );
           })}
-        </div>
-      </section>
+        </ol>
+      </GoldHero>
 
-      {/* Jobs */}
-      <section className={cn("relative rounded-[22px] bg-paper", cardShadow)}>
-        <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
-        <div className="space-y-4 border-b border-ink/[0.06] px-5 py-4 sm:px-6">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3.5">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_8px_18px_-10px_rgba(6,42,34,0.7)]">
-                <HammerIcon size={17} />
-              </span>
-              <div className="min-w-0">
-                <h2 className="truncate font-sans text-[15px] font-semibold tracking-normal text-ink">Repair jobs</h2>
-                <p className="truncate text-xs text-ink-4">{status ? `${statusLabel(status)} · newest first` : "Newest first"}</p>
-              </div>
-            </div>
-            <span className="g-metric hidden shrink-0 items-center gap-1.5 rounded-full bg-bone px-3 py-1 text-[11px] text-ink-3 ring-1 ring-ink/[0.06] sm:inline-flex">
-              <span className="font-semibold text-ink">{total.toLocaleString("en-US")}</span> on file
-              {list.isFetching && !list.isLoading ? (
-                <span className="ml-0.5 size-3 animate-spin rounded-full border-2 border-gold/30 border-t-gold" aria-label="Refreshing" />
-              ) : null}
-            </span>
-          </div>
-
-          <div role="tablist" aria-label="Filter by status" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 scrollbar-thin">
-            {FILTERS.map((f) => {
-              const on = f.key === status;
-              const c = f.key && COUNTED.includes(f.key) ? countOf(f.key) : undefined;
-              return (
-                <button
-                  key={f.key || "all"}
-                  type="button"
-                  role="tab"
-                  aria-selected={on}
-                  onClick={() => pick(f.key)}
-                  className={cn(
-                    "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-xs font-medium transition-all duration-200 ease-brand",
-                    on
-                      ? "bg-void text-paper shadow-[inset_0_0_0_1px_rgba(205,168,83,0.35),0_8px_18px_-10px_rgba(6,42,34,0.8)]"
-                      : "bg-paper text-ink-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.1)] hover:-translate-y-px hover:text-ink hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.24)]"
-                  )}
-                >
-                  {f.dot ? <span className={cn("size-1.5 rounded-full", f.dot)} /> : null}
-                  {f.label}
-                  {c !== undefined ? (
-                    <span className={cn("g-metric rounded-full px-1.5 text-[10px] leading-4", on ? "bg-paper/15 text-paper" : "bg-ink/[0.06] text-ink-4")}>
-                      {c}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <label className="group relative block min-w-0 flex-1 sm:max-w-md">
-              <span className="sr-only">Search repairs</span>
-              <SearchIcon size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-5 transition-colors group-focus-within:text-gold-dark" />
-              <input
-                id="repair-search"
-                type="search"
-                autoComplete="off"
-                placeholder="Search number, item or repair type…"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                className="h-11 w-full rounded-xl bg-bone/60 pl-10 pr-9 text-sm text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)] transition-all duration-200 placeholder:text-ink-5 hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] focus:bg-paper focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)] [&::-webkit-search-cancel-button]:hidden"
-              />
-              {search ? (
-                <button
-                  type="button"
-                  aria-label="Clear search"
-                  onClick={() => setSearch("")}
-                  className="absolute right-2 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-lg text-ink-4 hover:bg-ink/5 hover:text-ink"
-                >
-                  <XIcon size={13} />
-                </button>
-              ) : null}
-            </label>
-            <Select
-              id="repair-branch-filter"
-              ariaLabel="Branch"
-              className="w-full sm:w-60"
-              value={branchId}
-              onChange={(v) => {
-                setBranchId(v);
-                setPage(1);
-              }}
-              loading={branches.isLoading}
-              icon={<Building2Icon size={13} />}
-              options={[{ value: "", label: "All branches" }, ...branchRows.map((b) => ({ value: b.id, label: b.name }))]}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+        {/* No overflow clip here: the branch dropdown opens below the header. */}
+        <section className="relative flex min-w-0 flex-col rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-30px_rgba(16,32,27,0.28)]">
+          <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
+          <CardHead
+            icon={HammerIcon}
+            title="Repair jobs"
+            sub={`${total.toLocaleString("en-US")} ${status ? statusLabel(status).toLowerCase() : "jobs"} · newest first`}
+            action={
+              <>
+                <label className="relative">
+                  <span className="sr-only">Search repairs</span>
+                  <SearchIcon size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-5" />
+                  <input
+                    id="repair-search"
+                    type="search"
+                    autoComplete="off"
+                    placeholder="Number, item or type…"
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setPage(1);
+                    }}
+                    className={cn(kitInput, "w-48 pl-7 [&::-webkit-search-cancel-button]:hidden")}
+                  />
+                </label>
+                <Select
+                  id="repair-branch-filter"
+                  ariaLabel="Branch"
+                  size="sm"
+                  className="w-44"
+                  value={branchId}
+                  onChange={(v) => {
+                    setBranchId(v);
+                    setPage(1);
+                  }}
+                  loading={branches.isLoading}
+                  icon={<Building2Icon size={12} />}
+                  options={[{ value: "", label: "All branches" }, ...branchRows.map((b) => ({ value: b.id, label: b.name }))]}
+                />
+              </>
+            }
+          />
+          <div className="overflow-x-auto border-b border-ink/[0.06] px-4 py-2 scrollbar-thin">
+            <FilterPills
+              value={status}
+              onChange={pick}
+              items={[
+                { key: "" as const, label: "All", count: allTotal ?? undefined },
+                ...ALL_STATUSES.map((k) => ({ key: k, label: statusLabel(k), dot: META[k].dot, count: countOf(k) })),
+              ]}
             />
           </div>
-        </div>
 
-        {list.isLoading ? (
-          <div className="space-y-2.5 p-5 sm:p-6">
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-[4.5rem] rounded-2xl" />
-            ))}
-          </div>
-        ) : list.isError ? (
-          <div className="p-5 sm:p-6">
-            <Callout tone="danger" title="Could not load repairs">
-              {errMsg(list.error, "Check the API connection and retry.")}
-            </Callout>
-            <button type="button" onClick={() => void list.refetch()} className="g-btn g-btn-secondary mt-3 h-9 rounded-xl px-3.5 text-xs">
-              Retry
-            </button>
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="p-5 sm:p-6">
-            <div className="relative flex flex-col items-center overflow-hidden rounded-[22px] border border-dashed border-ink/15 bg-gradient-to-b from-bone/70 to-paper px-6 py-14 text-center">
-              <div className="pointer-events-none absolute -top-24 left-1/2 size-72 -translate-x-1/2 rounded-full bg-gold/10 blur-[80px]" aria-hidden />
-              <span className="relative mb-5 flex size-16 items-center justify-center rounded-2xl bg-void text-gold-light shadow-4">
-                <span className="absolute inset-0 animate-pulse-soft rounded-2xl ring-4 ring-gold/20" aria-hidden />
-                <HammerIcon size={26} />
-              </span>
-              <h3 className="relative font-sans text-lg font-semibold tracking-normal text-ink">
-                {pristine ? "No repairs yet" : "No repairs match"}
-              </h3>
-              <p className="relative mt-1.5 max-w-sm text-sm text-ink-4">
-                {pristine ? "Take in a customer's piece to open the first repair job." : "Try a different status, branch or search."}
-              </p>
-              <div className="relative mt-6 flex gap-2">
-                {!pristine ? (
+          {list.isLoading ? (
+            <RowsSkeleton rows={6} />
+          ) : list.isError ? (
+            <Empty
+              icon={AlertCircleIcon}
+              title="Could not load repairs"
+              desc={errMsg(list.error, "Check the API connection and retry.")}
+              action={
+                <button type="button" onClick={() => void list.refetch()} className="g-btn g-btn-secondary h-8 rounded-lg px-3 text-[12px]">
+                  Retry
+                </button>
+              }
+            />
+          ) : rows.length === 0 ? (
+            <Empty
+              icon={HammerIcon}
+              title={pristine ? "No repairs yet" : "No repairs match"}
+              desc={pristine ? "Take in a customer's piece to open the first repair job." : "Try a different status, branch or search."}
+              action={
+                !pristine ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -368,148 +286,176 @@ export default function RepairsPage() {
                       setBranchId("");
                       setSearch("");
                     }}
-                    className="g-btn g-btn-secondary h-10 rounded-xl px-4 text-sm"
+                    className="g-btn g-btn-secondary h-8 rounded-lg px-3 text-[12px]"
                   >
                     Clear filters
                   </button>
-                ) : null}
-                {canCreate && pristine ? (
-                  <button type="button" onClick={() => setCreating(true)} className="g-btn g-btn-primary h-10 rounded-xl px-4 text-sm">
-                    <PlusIcon size={15} /> New repair
+                ) : canCreate ? (
+                  <button type="button" onClick={() => setCreating(true)} className="g-btn g-btn-primary h-8 rounded-lg px-3 text-[12px]">
+                    <PlusIcon size={12} /> New repair
                   </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <ul className="divide-y divide-ink/[0.06]">
-            {rows.map((r, i) => {
-              const age = ageDays(r.created_at);
-              const live = r.status !== "COLLECTED" && r.status !== "CANCELLED";
-              const over = r.actual_cents != null && r.actual_cents > r.estimate_cents;
-              return (
-                <li key={r.id} className="animate-fade-in" style={{ animationDelay: `${Math.min(i, 10) * 30}ms` }}>
-                  <Link
-                    href={`/repairs/${r.id}`}
-                    aria-label={`Open repair ${r.number}`}
-                    className="group relative grid items-center gap-x-5 gap-y-3 px-5 py-4 transition-colors hover:bg-gold-pale/30 sm:px-6 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_auto]"
-                  >
-                    {r.status === "READY" ? (
-                      <span aria-hidden className="absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-gradient-to-b from-gold-light to-gold" />
-                    ) : null}
-
-                    {/* Job */}
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span
-                        className={cn(
-                          "flex size-11 shrink-0 items-center justify-center rounded-xl transition-transform duration-320 group-hover:scale-105",
-                          live
-                            ? "bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_8px_18px_-10px_rgba(6,42,34,0.7)]"
-                            : "bg-bone text-ink-4 ring-1 ring-ink/[0.06]"
-                        )}
-                      >
-                        <HammerIcon size={17} />
-                      </span>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="g-metric text-sm font-semibold text-ink transition-colors group-hover:text-gold-deep">{r.number}</span>
-                          <StatusPill status={r.status} label={statusLabel(r.status)} />
-                        </div>
-                        <p className="mt-0.5 truncate text-[13px] text-ink-2">{r.item_desc}</p>
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-4">
-                          <span className="rounded-md bg-gold-pale px-1.5 py-0.5 font-medium text-gold-deep ring-1 ring-gold-dark/15">{r.repair_type}</span>
-                          <span className="inline-flex items-center gap-1">
-                            <UsersIcon size={11} className="text-ink-5" />
-                            <CustomerName id={r.customer_id} />
-                          </span>
-                          <span className="inline-flex items-center gap-1">
-                            <Building2Icon size={11} className="text-ink-5" />
+                ) : null
+              }
+            />
+          ) : (
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full min-w-[760px] text-[12.5px]">
+                <thead className={thead}>
+                  <tr>
+                    <th className={cn(th, "pl-4")}>Job</th>
+                    <th className={th}>Item</th>
+                    <th className={th}>Customer</th>
+                    <th className={th}>Status</th>
+                    <th className={cn(th, "text-right")}>In shop</th>
+                    <th className={cn(th, "text-right")}>Amount LKR</th>
+                    <th className={cn(th, "w-8 pr-4")}>
+                      <span className="sr-only">Open</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => {
+                    const age = ageDays(r.created_at);
+                    const live = r.status !== "COLLECTED" && r.status !== "CANCELLED";
+                    const over = r.actual_cents != null && r.actual_cents > r.estimate_cents;
+                    const href = `/repairs/${r.id}`;
+                    return (
+                      <tr key={r.id} className={cn(tr, "group cursor-pointer", !live && "opacity-70")} onClick={() => router.push(href)}>
+                        <td className="relative whitespace-nowrap py-1.5 pl-4 pr-2">
+                          {r.status === "READY" ? <span aria-hidden className="absolute inset-y-1 left-0 w-[3px] rounded-r-full bg-gradient-to-b from-gold-light to-gold" /> : null}
+                          <Link href={href} onClick={(e) => e.stopPropagation()} aria-label={`Open repair ${r.number}`} className="g-metric font-semibold text-ink group-hover:text-gold-deep">
+                            {r.number}
+                          </Link>
+                          <span className="block text-[10px] text-ink-5" title={stamp(r.created_at)}>
                             {branchName(r.branch_id)}
                           </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Received */}
-                    <div className="min-w-0 text-xs text-ink-4">
-                      <div className="text-ink-3">
-                        {day(r.created_at)} <span className="text-ink-5">· {time(r.created_at)}</span>
-                      </div>
-                      {live ? (
-                        <span
-                          className={cn(
-                            "mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1",
-                            age >= 14
-                              ? "bg-rose-50 text-rose-700 ring-rose-600/15"
-                              : age >= 7
-                                ? "bg-amber-50 text-amber-700 ring-amber-600/15"
-                                : "bg-bone text-ink-4 ring-ink/[0.07]"
+                        </td>
+                        <td className="max-w-[16rem] px-2 py-1.5">
+                          <span className="block truncate text-ink-2">{r.item_desc}</span>
+                          <span className="text-[10.5px] font-medium text-gold-deep">{r.repair_type}</span>
+                        </td>
+                        <td className="max-w-[10rem] truncate px-2 py-1.5 text-ink-3">
+                          <CustomerName id={r.customer_id} />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <RepairChip status={r.status} />
+                        </td>
+                        <td className="px-2 py-1.5 text-right">
+                          {live ? (
+                            <span
+                              className={cn(
+                                "g-metric inline-flex rounded-full px-2 py-px text-[10.5px] font-semibold ring-1 ring-inset",
+                                age >= 14 ? "bg-rose-500/10 text-rose-800 ring-rose-500/25" : age >= 7 ? "bg-amber-500/10 text-amber-800 ring-amber-500/25" : "bg-ink/[0.04] text-ink-3 ring-ink/10"
+                              )}
+                            >
+                              {age === 0 ? "Today" : `${age}d`}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-ink-5">{ago(r.created_at)}</span>
                           )}
-                        >
-                          {age === 0 ? "In today" : `${age} day${age === 1 ? "" : "s"} in shop`}
+                        </td>
+                        <td className="px-2 py-1.5 text-right">
+                          <span className="g-metric text-ink">{r.actual_cents == null ? lkr(r.estimate_cents) : lkr(r.actual_cents)}</span>
+                          <span className={cn("block text-[10px]", over ? "font-medium text-amber-700" : "text-ink-5")}>
+                            {r.actual_cents == null ? "Estimate" : over ? `Over est. ${lkr(r.estimate_cents)}` : "Actual"}
+                          </span>
+                        </td>
+                        <td className="py-1.5 pl-2 pr-4 text-right">
+                          <ArrowRightIcon size={12} className="ml-auto text-ink-5 transition-all group-hover:translate-x-0.5 group-hover:text-gold-dark" />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {pageRows.length > 0 ? (
+            <div className="mt-auto flex flex-wrap items-center justify-between gap-2 rounded-b-2xl border-t border-ink/[0.06] bg-bone/40 px-4 py-2 text-[11.5px] text-ink-4">
+              <span>
+                Showing{" "}
+                <span className="g-metric font-medium text-ink">
+                  {from}–{from + pageRows.length - 1}
+                </span>{" "}
+                of <span className="g-metric font-medium text-ink">{total.toLocaleString("en-US")}</span> jobs
+                {list.isFetching && !list.isLoading ? <span className="ml-2 inline-block size-3 animate-spin rounded-full border-2 border-gold/30 border-t-gold align-middle" /> : null}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)} className={pagerBtn}>
+                  <ArrowLeftIcon size={11} /> Prev
+                </button>
+                <span className="g-metric px-1.5 text-ink-3">
+                  {page} / {pages}
+                </span>
+                <button type="button" disabled={pageRows.length < PAGE_SIZE} onClick={() => setPage(page + 1)} className={pagerBtn}>
+                  Next <ArrowRightIcon size={11} />
+                </button>
+              </span>
+            </div>
+          ) : null}
+        </section>
+
+        <div className="min-w-0 space-y-4">
+          <Card>
+            <CardHead icon={AlertCircleIcon} title="Longest in shop" sub={countsReady ? `${overdue} overdue · avg ${avgAge.toFixed(1)} days` : "Active jobs by age"} />
+            {!countsReady ? (
+              <RowsSkeleton rows={3} />
+            ) : oldest.length === 0 ? (
+              <Empty icon={CheckCircleIcon} title="Bench is clear" desc="No active repair jobs right now." />
+            ) : (
+              <ul className="divide-y divide-ink/[0.05]">
+                {oldest.map((r) => {
+                  const age = ageDays(r.created_at);
+                  return (
+                    <li key={r.id}>
+                      <Link href={`/repairs/${r.id}`} className="group flex items-center gap-2.5 px-4 py-1.5 transition-colors hover:bg-gold-pale/30">
+                        <span className="min-w-0 flex-1">
+                          <span className="g-metric block text-[12px] font-semibold text-ink group-hover:text-gold-deep">{r.number}</span>
+                          <span className="block truncate text-[10.5px] text-ink-4">{r.item_desc}</span>
                         </span>
-                      ) : null}
-                    </div>
+                        <span className="text-right">
+                          <span className={cn("g-metric block text-[12.5px]", age >= 14 ? "text-rose-700" : age >= 7 ? "text-amber-700" : "text-ink")}>{age}d</span>
+                          <span className="block text-[10px] text-ink-5">{statusLabel(r.status)}</span>
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Card>
 
-                    {/* Money */}
-                    <div className="flex items-center justify-between gap-4 md:justify-end">
-                      <div className="text-right">
-                        <div className="g-metric text-[15px] text-ink">
-                          {r.actual_cents == null ? lkr(r.estimate_cents) : lkr(r.actual_cents)}
-                        </div>
-                        <div className={cn("mt-0.5 text-[11px]", over ? "font-medium text-amber-700" : "text-ink-4")}>
-                          {r.actual_cents == null ? "Estimate" : over ? `Actual · est. ${lkr(r.estimate_cents)}` : "Actual"}
-                        </div>
-                      </div>
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.1)] transition-all group-hover:bg-void group-hover:text-gold-light group-hover:shadow-none">
-                        <ArrowRightIcon size={13} />
-                      </span>
+          <Card>
+            <CardHead icon={ScaleIcon} title="What's on the bench" sub="Active jobs by repair type" />
+            {!countsReady ? (
+              <RowsSkeleton rows={3} />
+            ) : byType.length === 0 ? (
+              <Empty icon={HammerIcon} title="Nothing on the bench" desc="Repair types appear once jobs come in." />
+            ) : (
+              <ul className="space-y-2 p-4">
+                {byType.map(([t, n]) => (
+                  <li key={t}>
+                    <div className="flex items-baseline justify-between text-[12px]">
+                      <span className="truncate text-ink-2">{t}</span>
+                      <span className="g-metric text-ink">{n}</span>
                     </div>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
-        {pageRows.length > 0 ? (
-          <PageNav page={page} onChange={setPage} count={pageRows.length} total={total} />
-        ) : null}
-      </section>
+                    <ShareBar value={(n / maxType) * 100} className="mt-1 h-1" />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
+      </div>
 
       {creating ? <NewRepairDialog me={me.data} onClose={() => setCreating(false)} /> : null}
     </Page>
   );
 }
 
-function PageNav({ page, onChange, count, total }: { page: number; onChange: (p: number) => void; count: number; total: number }) {
-  const from = count === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const to = (page - 1) * PAGE_SIZE + count;
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const btn =
-    "flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-medium text-ink transition-all shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] hover:-translate-y-px hover:bg-void hover:text-paper hover:shadow-none disabled:pointer-events-none disabled:opacity-40";
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-b-[22px] border-t border-ink/[0.06] bg-bone/40 px-5 py-3 sm:px-6">
-      <span className="text-xs text-ink-4">
-        Showing <span className="g-metric font-medium text-ink">{from}–{to}</span> of{" "}
-        <span className="g-metric font-medium text-ink">{total.toLocaleString("en-US")}</span> jobs
-      </span>
-      <div className="flex items-center gap-2">
-        <button type="button" disabled={page <= 1} onClick={() => onChange(page - 1)} className={btn}>
-          <ArrowLeftIcon size={12} /> Prev
-        </button>
-        <span className="g-metric flex h-9 min-w-[4.5rem] items-center justify-center rounded-xl bg-paper px-3 text-xs text-ink-3 ring-1 ring-ink/[0.06]">
-          <span className="text-ink">{page}</span>
-          <span className="mx-1 text-ink-5">/</span>
-          {pages}
-        </span>
-        <button type="button" disabled={count < PAGE_SIZE} onClick={() => onChange(page + 1)} className={btn}>
-          Next <ArrowRightIcon size={12} />
-        </button>
-      </div>
-    </div>
-  );
-}
+const pagerBtn =
+  "inline-flex h-7 items-center gap-1 rounded-lg px-2.5 font-medium text-ink ring-1 ring-inset ring-ink/10 hover:bg-void hover:text-paper disabled:pointer-events-none disabled:opacity-40";
 
 /* ---------------------------------------------------------------- New repair */
 

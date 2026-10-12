@@ -6,22 +6,22 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { LineageChain, type LineageNode, type LineageEdge } from "@/components/lineage-chain";
+import { Page, Modal, Skeleton, Callout, controlClass } from "@/components/ui";
 import {
-  Page,
-  Hero,
-  Panel,
-  CardLink,
-  Pill,
-  Modal,
-  Skeleton,
-  Callout,
-  EmptyBlock,
-  controlClass,
-  heroBtnPrimary,
-  heroBtnGhost,
-} from "@/components/ui";
-import { CheckIcon, PlusIcon, TrashIcon, GemIcon, PackageIcon, BookOpenIcon } from "@/components/icons";
+  CheckIcon,
+  PlusIcon,
+  TrashIcon,
+  GemIcon,
+  PackageIcon,
+  BookOpenIcon,
+  HammerIcon,
+  ClipboardCheckIcon,
+  LayersIcon,
+  PrinterIcon,
+  BanknoteIcon,
+} from "@/components/icons";
 import { cn } from "@/lib/cn";
+import { Card, CardHead, Empty, GoldHero, HeroBadge, ORDER_META, TypeChip, grams, heroGhost, heroGold, lkrFromCents, pretty, th, thead, tr } from "../../kit";
 
 type Detail = {
   order: {
@@ -34,7 +34,13 @@ type Detail = {
   ledger: { type: string; fine_mg: number }[];
 };
 
-const STAGES = ["Draft", "Allocated", "Production", "QC", "Complete"];
+const STAGES = [
+  { label: "Draft", hint: "Design briefed" },
+  { label: "Allocated", hint: "Gold issued" },
+  { label: "Production", hint: "On the bench" },
+  { label: "QC", hint: "Inspection" },
+  { label: "Complete", hint: "Finished" },
+];
 
 function stageOf(status: string): number {
   if (status === "DRAFT") return 0;
@@ -68,9 +74,12 @@ export default function MfgOrderDetailPage({ params }: { params: Promise<{ id: s
 
   if (detail.isLoading) {
     return (
-      <Page>
-        <Skeleton className="h-56" />
-        <Skeleton className="h-64" />
+      <Page className="space-y-4">
+        <Skeleton className="h-48 rounded-[20px]" />
+        <div className="grid gap-4 xl:grid-cols-2">
+          <Skeleton className="h-56 rounded-2xl" />
+          <Skeleton className="h-56 rounded-2xl" />
+        </div>
       </Page>
     );
   }
@@ -88,138 +97,284 @@ export default function MfgOrderDetailPage({ params }: { params: Promise<{ id: s
   const stage = stageOf(order.status);
   const allocatedMg = materials.reduce((n, m) => n + m.fine_mg, 0);
   const producedMg = outputs.reduce((n, o) => n + o.net_mg, 0);
+  const grossMg = outputs.reduce((n, o) => n + o.gross_mg, 0);
+  const outputCost = outputs.reduce((n, o) => n + o.cost_cents, 0);
+  const extraCost = order.labour_cents + order.making_cents + order.stone_cost_cents;
+  const yieldPct = allocatedMg > 0 && producedMg > 0 ? (producedMg / allocatedMg) * 100 : undefined;
+  const lossPct = allocatedMg > 0 ? (order.loss_mg / allocatedMg) * 100 : undefined;
+  const isVoid = order.status === "VOID";
+  const failed = order.status === "QC_FAILED";
+  const meta = ORDER_META[order.status];
+  const productIds = outputs.flatMap((o) => (o.product_id ? [o.product_id] : []));
 
   return (
-    <Page>
-      <Hero
+    <Page className="space-y-4">
+      <GoldHero
         back={{ href: "/manufacturing/orders", label: "Manufacturing orders" }}
-        kicker="Workshop"
-        title={order.number}
-        description={`${order.type} · ${order.design}${order.description ? ` — ${order.description}` : ""}`}
-        meta={
+        icon={HammerIcon}
+        title={<span className="g-metric tracking-tight">{order.number}</span>}
+        badge={
+          <span className="flex items-center gap-1.5">
+            <HeroBadge tone={isVoid ? "muted" : failed ? "bad" : order.status === "COMPLETE" ? "good" : order.status === "QC_PASSED" ? "warn" : "gold"}>
+              {meta?.label ?? order.status}
+            </HeroBadge>
+            <TypeChip type={order.type} />
+          </span>
+        }
+        sub={
           <>
-            <Pill tone="ghost" className="!text-paper">{order.status}</Pill>
-            <Pill tone="ghost" className="!text-paper">{order.type}</Pill>
+            <span className="text-paper/75">{order.design}</span>
+            {order.description ? ` — ${order.description}` : ""}
           </>
         }
-        stats={[
-          { label: "Allocated", value: `${g(allocatedMg)} g` },
-          { label: "Produced", value: `${g(producedMg)} g` },
-          { label: "Loss", value: `${order.loss_mg} mg` },
-          { label: "Labour+making", value: `${fmt(order.labour_cents + order.making_cents)} LKR` },
-        ]}
         actions={
           <>
             {order.status === "DRAFT" ? (
-              <button onClick={() => setDialog("materials")} className={heroBtnPrimary}>Add materials</button>
+              <button onClick={() => setDialog("materials")} className={heroGold}>
+                <GemIcon size={13} /> Add materials
+              </button>
             ) : null}
             {order.status === "ALLOCATED" || order.status === "QC_FAILED" ? (
-              <button onClick={() => setDialog("produce")} className={heroBtnPrimary}>Produce</button>
+              <button onClick={() => setDialog("produce")} className={heroGold}>
+                <HammerIcon size={13} /> {failed ? "Rework & produce" : "Produce"}
+              </button>
             ) : null}
             {order.status === "IN_PRODUCTION" ? (
-              <button onClick={() => setDialog("qc")} className={heroBtnPrimary}>QC check</button>
+              <button onClick={() => setDialog("qc")} className={heroGold}>
+                <ClipboardCheckIcon size={13} /> QC check
+              </button>
             ) : null}
-            {order.status === "QC_PASSED" ? (
-              <FinishButton id={id} onDone={refresh} />
+            {order.status === "QC_PASSED" ? <FinishButton id={id} onDone={refresh} /> : null}
+            {productIds.length ? (
+              <Link href={`/products/labels?ids=${productIds.join(",")}&back=${encodeURIComponent(`/manufacturing/orders/${id}`)}`} className={heroGhost}>
+                <PrinterIcon size={13} /> Labels
+              </Link>
             ) : null}
             {order.status === "DRAFT" || order.status === "ALLOCATED" ? (
-              <button onClick={() => setDialog("void")} className={`${heroBtnGhost} !text-rose-300`}>Void</button>
+              <button onClick={() => setDialog("void")} className={cn(heroGhost, "!text-rose-300")}>
+                Void
+              </button>
             ) : null}
           </>
         }
-      />
-
-      <ol className="flex flex-wrap gap-2">
-        {STAGES.map((s, i) => (
-          <li
-            key={s}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors",
-              i < stage
-                ? "bg-ink text-paper"
-                : i === stage
-                  ? "bg-gold-soft text-ink shadow-[inset_0_0_0_1px_rgba(168,138,62,0.3)]"
-                  : "bg-ink/[0.05] text-ink-4"
-            )}
-          >
-            {i < stage ? <CheckIcon size={12} className="text-gold" /> : null}
-            {s}
-          </li>
-        ))}
-      </ol>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel title="Materials" icon={<GemIcon size={17} />} description={`${materials.length} lot${materials.length === 1 ? "" : "s"} allocated`}>
-          {materials.length === 0 ? (
-            <EmptyBlock title="No materials" description="Allocate refined lots from approved melting batches." />
-          ) : (
-            <ul className="space-y-2.5 text-sm">
-              {materials.map((m) => (
-                <li key={`${m.lot_batch_id}:${m.lot_number}`} className="flex items-center justify-between gap-3">
-                  <span className="g-metric text-xs text-ink-3">{m.lot_number}</span>
-                  <span className="num-tabular font-medium text-ink">{g(m.fine_mg)}g fine</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-        {outputs.length > 0 ? (
-          <Panel
-            title="Outputs"
-            icon={<PackageIcon size={17} />}
-            description={`${outputs.length} produced`}
-            actions={
-              outputs.some((o) => o.product_id) ? (
-                <CardLink
-                  href={`/products/labels?ids=${outputs.flatMap((o) => (o.product_id ? [o.product_id] : [])).join(",")}&back=${encodeURIComponent(`/manufacturing/orders/${id}`)}`}
+        stats={[
+          { label: "Allocated fine", value: allocatedMg, format: grams, unit: "g", accent: true, sub: `${materials.length} lot${materials.length === 1 ? "" : "s"}` },
+          { label: "Produced fine", value: producedMg || null, format: grams, unit: "g", sub: outputs.length ? `${outputs.length} piece${outputs.length === 1 ? "" : "s"} · ${grams(grossMg)} g gross` : "Not produced yet" },
+          {
+            label: "Yield",
+            value: yieldPct,
+            format: (n) => n.toFixed(2),
+            unit: "%",
+            tone: yieldPct === undefined ? undefined : yieldPct >= 98 ? "good" : yieldPct >= 95 ? "warn" : "bad",
+            sub: "Produced ÷ allocated",
+          },
+          { label: "Loss", value: order.loss_mg, format: grams, unit: "g", tone: order.loss_mg > 0 ? "bad" : undefined, sub: lossPct !== undefined && order.loss_mg ? `${lossPct.toFixed(2)}% · ${order.loss_reason ?? "no reason"}` : "None recorded" },
+          { label: "Labour + making", value: order.labour_cents + order.making_cents, format: lkrFromCents, unit: "LKR", sub: order.stone_cost_cents ? `+ ${lkrFromCents(order.stone_cost_cents)} stones` : "No stones" },
+          { label: "Pieces cost", value: outputCost || null, format: lkrFromCents, unit: "LKR", sub: outputs.length && outputCost ? `≈ ${lkrFromCents(outputCost / outputs.length)} each` : "After production" },
+        ]}
+      >
+        <ol className="flex flex-wrap items-center gap-1.5">
+          {STAGES.map((st, i) => {
+            const done = !isVoid && i < stage;
+            const current = !isVoid && i === stage;
+            const bad = current && failed;
+            return (
+              <li key={st.label} className="flex items-center gap-1.5">
+                {i > 0 ? <span className={cn("h-px w-5 sm:w-10", done || current ? "bg-gold/60" : "bg-paper/15")} aria-hidden /> : null}
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ring-inset",
+                    bad
+                      ? "bg-rose-500 text-paper ring-rose-500"
+                      : current
+                        ? "bg-gold text-void ring-gold"
+                        : done
+                          ? "bg-gold/10 text-gold-light ring-gold/30"
+                          : "bg-paper/[0.03] text-paper/40 ring-paper/10"
+                  )}
                 >
-                  Print labels
-                </CardLink>
-              ) : null
-            }
-          >
-            <ul className="space-y-2.5 text-sm">
-              {outputs.map((o) => (
-                <li key={o.id} className="flex items-center justify-between gap-3">
-                  <span className="min-w-0 truncate text-ink-2">
-                    {o.product_id ? (
-                      <Link href={`/products/${o.product_id}`} className="font-medium text-ink hover:text-gold-700">{o.name}</Link>
-                    ) : (
-                      <span className="font-medium text-ink">{o.name}</span>
-                    )}{" "}
-                    · {g(o.net_mg)}g
+                  <span className={cn("g-metric flex size-4 items-center justify-center rounded-full text-[9px]", current ? "bg-void text-gold-light" : done ? "bg-gold/25" : "bg-paper/10")}>
+                    {done ? <CheckIcon size={9} /> : i + 1}
                   </span>
-                  <span className="num-tabular shrink-0 text-ink">{fmt(o.cost_cents)} LKR</span>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-3 border-t border-ink/10 pt-3 text-xs text-ink-4">
-              Loss {order.loss_mg}mg{order.loss_reason ? ` — ${order.loss_reason}` : ""}
-            </p>
-          </Panel>
-        ) : null}
+                  {bad ? "QC failed" : st.label}
+                  <span className={cn("hidden lg:inline", current ? "opacity-60" : "opacity-50")}>· {bad ? "Rework" : st.hint}</span>
+                </span>
+              </li>
+            );
+          })}
+          {isVoid ? <li className="ml-2 text-[11px] font-medium text-rose-300">Voided — gold returned, nothing produced</li> : null}
+        </ol>
+      </GoldHero>
+
+      <div className="grid gap-4 xl:grid-cols-12">
+        <Card className="xl:col-span-5">
+          <CardHead icon={GemIcon} title="Materials" sub={`${materials.length} refined lot${materials.length === 1 ? "" : "s"} · ${grams(allocatedMg)} g fine`} />
+          {materials.length === 0 ? (
+            <Empty
+              icon={GemIcon}
+              title="No materials"
+              desc="Allocate refined lots from approved melting batches."
+              action={
+                order.status === "DRAFT" ? (
+                  <button type="button" onClick={() => setDialog("materials")} className="inline-flex h-8 items-center gap-1 rounded-lg bg-void px-3 text-[12px] font-semibold text-gold-light">
+                    <PlusIcon size={12} /> Add
+                  </button>
+                ) : null
+              }
+            />
+          ) : (
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className={thead}>
+                  <th className={cn(th, "pl-4")}>Lot</th>
+                  <th className={cn(th, "text-right")}>Share</th>
+                  <th className={cn(th, "pr-4 text-right")}>Fine g</th>
+                </tr>
+              </thead>
+              <tbody>
+                {materials.map((m) => (
+                  <tr key={`${m.lot_batch_id}:${m.lot_number}`} className={tr}>
+                    <td className="py-1.5 pl-4 pr-2">
+                      <Link href={`/gold/melting/${m.lot_batch_id}`} className="g-metric font-semibold text-ink hover:text-gold-dark">
+                        {m.lot_number}
+                      </Link>
+                    </td>
+                    <td className="g-metric px-2 text-right text-[11px] text-ink-5">{allocatedMg ? `${((m.fine_mg / allocatedMg) * 100).toFixed(1)}%` : "—"}</td>
+                    <td className="g-metric py-1.5 pl-2 pr-4 text-right font-semibold text-ink">{grams(m.fine_mg)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-ink/[0.1] bg-bone text-[12px] font-semibold text-ink">
+                  <td className="py-1.5 pl-4" colSpan={2}>
+                    Total allocated
+                  </td>
+                  <td className="g-metric py-1.5 pr-4 text-right">{grams(allocatedMg)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </Card>
+
+        <Card className="xl:col-span-7">
+          <CardHead
+            icon={PackageIcon}
+            title="Outputs"
+            sub={outputs.length ? `${outputs.length} piece${outputs.length === 1 ? "" : "s"} produced` : "Recorded at production"}
+          />
+          {outputs.length === 0 ? (
+            <Empty icon={HammerIcon} title="Nothing produced yet" desc={order.status === "DRAFT" ? "Allocate materials, then produce the pieces." : "Record production to create the finished pieces."} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[520px] text-[12px]">
+                <thead>
+                  <tr className={thead}>
+                    <th className={cn(th, "pl-4")}>Piece</th>
+                    <th className={cn(th, "text-right")}>Gross g</th>
+                    <th className={cn(th, "text-right")}>Net g</th>
+                    <th className={cn(th, "pr-4 text-right")}>Cost LKR</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {outputs.map((o) => (
+                    <tr key={o.id} className={tr}>
+                      <td className="max-w-[240px] truncate py-1.5 pl-4 pr-2">
+                        {o.product_id ? (
+                          <Link href={`/products/${o.product_id}`} className="font-semibold text-ink hover:text-gold-dark">
+                            {o.name}
+                          </Link>
+                        ) : (
+                          <span className="font-semibold text-ink">{o.name}</span>
+                        )}
+                        {o.product_id ? null : <span className="ml-1.5 text-[10px] text-ink-5">not in stock yet</span>}
+                      </td>
+                      <td className="g-metric px-2 text-right text-ink-3">{grams(o.gross_mg)}</td>
+                      <td className="g-metric px-2 text-right text-ink">{grams(o.net_mg)}</td>
+                      <td className="g-metric py-1.5 pl-2 pr-4 text-right font-semibold text-ink">{lkrFromCents(o.cost_cents)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-ink/[0.1] bg-bone text-[12px] font-semibold text-ink">
+                    <td className="py-1.5 pl-4">Total</td>
+                    <td className="g-metric px-2 text-right">{grams(grossMg)}</td>
+                    <td className="g-metric px-2 text-right">{grams(producedMg)}</td>
+                    <td className="g-metric py-1.5 pr-4 text-right">{lkrFromCents(outputCost)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </Card>
       </div>
 
-      {ledger.length > 0 ? (
-        <Panel title="Gold postings" icon={<BookOpenIcon size={17} />}>
-          <ul className="space-y-2 g-metric text-xs">
-            {ledger.map((l, i) => (
-              <li key={i} className="flex items-center justify-between gap-3">
-                <span className="text-ink-3">{l.type}</span>
-                <span className="text-ink">{l.fine_mg}mg</span>
-              </li>
+      <div className="grid gap-4 xl:grid-cols-12">
+        <Card className="xl:col-span-4">
+          <CardHead icon={BanknoteIcon} title="Costs" sub="Workshop charges on this order" />
+          <dl className="flex-1 px-4 py-2 text-[12.5px]">
+            {[
+              ["Labour", order.labour_cents],
+              ["Making", order.making_cents],
+              ["Stones", order.stone_cost_cents],
+            ].map(([k, v]) => (
+              <div key={k as string} className="flex items-baseline justify-between border-b border-dashed border-ink/[0.08] py-1.5">
+                <dt className="text-ink-3">{k}</dt>
+                <dd className="g-metric text-ink">{lkrFromCents(v as number)} LKR</dd>
+              </div>
             ))}
-          </ul>
-        </Panel>
-      ) : null}
+            <div className="mt-1.5 flex items-baseline justify-between rounded-lg bg-bone px-3 py-2 font-semibold text-ink">
+              <dt>Total charges</dt>
+              <dd className="g-metric">{lkrFromCents(extraCost)} LKR</dd>
+            </div>
+          </dl>
+        </Card>
 
-      <Panel title="Gold lineage" description="From refined lot to finished piece">
-        {lineage.data ? (
-          <LineageChain nodes={lineage.data.nodes} edges={lineage.data.edges} />
-        ) : (
-          <Skeleton className="h-10" />
-        )}
-      </Panel>
+        <Card className="xl:col-span-4">
+          <CardHead icon={LayersIcon} title="Gold balance" sub="Allocated fine against produced fine" />
+          <dl className="flex-1 px-4 py-2 text-[12.5px]">
+            {[
+              { k: "Allocated", v: allocatedMg, sign: "" },
+              { k: "Produced", v: producedMg, sign: "−" },
+              { k: "Loss", v: order.loss_mg, sign: "−", tone: order.loss_mg > 0 ? "text-rose-700" : undefined },
+            ].map((r) => (
+              <div key={r.k} className="flex items-baseline justify-between border-b border-dashed border-ink/[0.08] py-1.5">
+                <dt className="text-ink-3">{r.k}</dt>
+                <dd className={cn("g-metric", r.tone ?? "text-ink")}>
+                  {r.sign}
+                  {grams(r.v)} g
+                </dd>
+              </div>
+            ))}
+            <div className="mt-1.5 flex items-baseline justify-between rounded-lg bg-bone px-3 py-2 font-semibold text-ink">
+              <dt>Still on the bench</dt>
+              <dd className="g-metric">{grams(Math.max(0, allocatedMg - producedMg - order.loss_mg))} g</dd>
+            </div>
+          </dl>
+        </Card>
+
+        <Card className="xl:col-span-4">
+          <CardHead icon={BookOpenIcon} title="Gold postings" sub={ledger.length ? `${ledger.length} ledger line${ledger.length === 1 ? "" : "s"}` : "Posted as gold moves"} />
+          {ledger.length === 0 ? (
+            <Empty icon={BookOpenIcon} title="Nothing posted yet" desc="Ledger lines appear as gold is issued and pieces are made." />
+          ) : (
+            <table className="w-full text-[12px]">
+              <tbody>
+                {ledger.map((l, i) => (
+                  <tr key={i} className={tr}>
+                    <td className="py-1.5 pl-4 font-medium text-ink-2">{pretty(l.type)}</td>
+                    <td className="g-metric py-1.5 pr-4 text-right text-ink">{grams(l.fine_mg)} g</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      </div>
+
+      <Card>
+        <CardHead icon={LayersIcon} title="Gold lineage" sub="From refined lot to finished piece" />
+        <div className="p-4">{lineage.data ? <LineageChain nodes={lineage.data.nodes} edges={lineage.data.edges} /> : <Skeleton className="h-10" />}</div>
+      </Card>
 
       {dialog === "materials" ? <MaterialsDialog orderId={id} onClose={refresh} /> : null}
       {dialog === "produce" ? <ProduceDialog orderId={id} onClose={refresh} /> : null}
@@ -244,8 +399,8 @@ function FinishButton({ id, onDone }: { id: string; onDone: () => void }) {
     }
   }
   return (
-    <button onClick={finish} disabled={pending} className={cn(heroBtnPrimary, "disabled:opacity-50")}>
-      {pending ? "Finishing…" : "Finish"}
+    <button onClick={finish} disabled={pending} className={cn(heroGold, "disabled:opacity-50")}>
+      <CheckIcon size={13} /> {pending ? "Finishing…" : "Finish into stock"}
     </button>
   );
 }

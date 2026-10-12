@@ -1,55 +1,54 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { centsToLkr, hasPermission, mgToG } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
-import { DataTable, EmptyBlock, Page, Pager, type DataColumn } from "@/components/ui";
+import { Page, Pager } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import {
   AlertCircleIcon,
   ArrowRightIcon,
   Building2Icon,
   ClipboardCheckIcon,
-  GemIcon,
-  TruckIcon,
   HistoryIcon,
   PackageIcon,
+  RefreshCwIcon,
+  ScanBarcodeIcon,
+  TruckIcon,
 } from "@/components/icons";
-import {
-  AttentionCard,
-  InventoryHero,
-  MovementFilters,
-  PieceDetail,
-  StockByBranch,
-  StockByKarat,
-} from "./panels";
+import { AttentionCard, MovementFilters, PieceDetail, StockByBranch, StockByKarat } from "./panels";
 import { MovementComposer } from "./movement-composer";
+import { MovementTypeIcon, humanize, type Insights, type Movement, type Piece, type StockRow } from "./columns";
 import {
-  humanize,
-  movementColumns,
-  stockColumns,
-  type Insights,
-  type Movement,
-  type Piece,
-  type StockRow,
-} from "./columns";
+  Card,
+  CardHead,
+  Empty,
+  FilterPills,
+  GoldHero,
+  HeroBadge,
+  PieceChip,
+  RowsSkeleton,
+  ShareBar,
+  ago,
+  heroGhost,
+  heroGold,
+  th,
+  thead,
+  tr,
+} from "./kit";
 
-const GROUP_LABEL: Record<"branch" | "purity" | "product", string> = {
-  branch: "branch",
-  purity: "purity",
-  product: "product",
-};
-
-const GROUP_NOUN: Record<"branch" | "purity" | "product", [string, string]> = {
+type GroupBy = "branch" | "purity" | "product";
+const GROUP_NOUN: Record<GroupBy, [string, string]> = {
   branch: ["branch", "branches"],
   purity: ["purity", "purities"],
   product: ["piece", "pieces"],
 };
 
 const g = (mg: number) => mgToG(mg).toLocaleString("en-US", { maximumFractionDigits: 3 });
+const lkr = (cents: number) => centsToLkr(cents).toLocaleString("en-US", { maximumFractionDigits: 0 });
 
 function useDebounced<T>(value: T, ms = 350): T {
   const [v, setV] = useState(value);
@@ -61,8 +60,8 @@ function useDebounced<T>(value: T, ms = 350): T {
 }
 
 export default function InventoryPage() {
-  const [groupBy, setGroupBy] = useState<"branch" | "purity" | "product">("branch");
-  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | undefined>(undefined);
+  const [groupBy, setGroupBy] = useState<GroupBy>("branch");
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | undefined>(undefined);
 
   const [barcode, setBarcode] = useState("");
   const [detail, setDetail] = useState<Piece | null>(null);
@@ -71,6 +70,11 @@ export default function InventoryPage() {
   const [mSearch, setMSearch] = useState("");
   const [mPage, setMPage] = useState(1);
   const barcodeRef = useRef<HTMLInputElement>(null);
+  const [today, setToday] = useState("");
+  // Render the date after mount so server and client timezones cannot disagree.
+  useEffect(() => {
+    setToday(new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }));
+  }, []);
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
   const canView = hasPermission(me.data?.permissions ?? [], "products:view");
@@ -91,47 +95,25 @@ export default function InventoryPage() {
 
   const branches = useQuery({
     queryKey: ["branches"],
-    queryFn: () =>
-      api<{ rows: Array<{ id: string; name: string }>; total: number }>(
-        "/api/v1/branches?limit=100"
-      ),
+    queryFn: () => api<{ rows: Array<{ id: string; name: string }>; total: number }>("/api/v1/branches?limit=100"),
     staleTime: 60_000,
   });
   const purities = useQuery({
     queryKey: ["purities-all"],
-    queryFn: () =>
-      api<{ rows: Array<{ id: string; karat: string }>; total: number }>(
-        "/api/v1/masters/purities?limit=100"
-      ),
+    queryFn: () => api<{ rows: Array<{ id: string; karat: string }>; total: number }>("/api/v1/masters/purities?limit=100"),
     staleTime: 60_000,
   });
-  const labelFor = useMemo(() => {
+  const branchName = (id: string | null) => (id ? branches.data?.rows.find((b) => b.id === id)?.name ?? id.slice(0, 8) : "—");
+
+  const nameFor = useMemo(() => {
     const bNames = new Map((branches.data?.rows ?? []).map((b) => [b.id, b.name]));
     const pKarat = new Map((purities.data?.rows ?? []).map((p) => [p.id, p.karat]));
-    return (row: StockRow): ReactNode => {
-      const key = row.key;
-      if (groupBy === "branch")
-        return (
-          <span className="flex items-center gap-2.5">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-bone text-ink-4 ring-1 ring-ink/[0.06]">
-              <Building2Icon size={13} />
-            </span>
-            <span className="font-medium text-ink">{bNames.get(key) ?? row.name ?? key.slice(0, 8)}</span>
-          </span>
-        );
-      if (groupBy === "purity")
-        return (
-          <span className="g-metric rounded-md bg-gold-pale px-2 py-0.5 text-xs font-semibold text-gold-deep ring-1 ring-gold-dark/15">
-            {pKarat.get(key) ?? row.name ?? key.slice(0, 8)}
-          </span>
-        );
-      return (
-        <span className="block min-w-0">
-          <span className="block truncate font-medium text-ink">{row.name ?? "Unnamed piece"}</span>
-          <span className="block font-mono text-[11px] text-ink-4">{row.barcode ?? key.slice(0, 10)}</span>
-        </span>
-      );
-    };
+    return (row: StockRow): string =>
+      groupBy === "branch"
+        ? bNames.get(row.key) ?? row.name ?? row.key.slice(0, 8)
+        : groupBy === "purity"
+          ? pKarat.get(row.key) ?? row.name ?? row.key.slice(0, 8)
+          : row.name ?? "Unnamed piece";
   }, [groupBy, branches.data, purities.data]);
 
   const mSearchDebounced = useDebounced(mSearch);
@@ -147,21 +129,18 @@ export default function InventoryPage() {
     enabled: canView,
   });
 
-  const columns = useMemo(() => stockColumns(groupBy, labelFor), [groupBy, labelFor]);
-
   const rows = useMemo(() => {
     const base = stock.data ?? [];
     if (!sort) return base;
-    const col = columns.find((c) => c.key === sort.key);
-    if (!col?.value) return base;
     const dir = sort.dir === "asc" ? 1 : -1;
+    const val = (r: StockRow): number | string => (sort.key === "name" ? nameFor(r) : sort.key === "value_cents" ? r.value_cents ?? -1 : r[sort.key]);
     return [...base].sort((a, b) => {
-      const av = col.value!(a);
-      const bv = col.value!(b);
+      const av = val(a);
+      const bv = val(b);
       if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
       return String(av).localeCompare(String(bv)) * dir;
     });
-  }, [stock.data, sort, columns]);
+  }, [stock.data, sort, nameFor]);
 
   const totals = useMemo(() => {
     const base = stock.data ?? [];
@@ -170,35 +149,18 @@ export default function InventoryPage() {
       net: base.reduce((s, r) => s + r.net_mg, 0),
       fine: base.reduce((s, r) => s + r.fine_mg, 0),
       value: base.reduce((s, r) => s + (r.value_cents ?? 0), 0),
-      hasValue: base.some((r) => (r.value_cents ?? 0) > 0),
     };
   }, [stock.data]);
 
-  const moveCols = useMemo(
-    () =>
-      movementColumns(
-        (id) =>
-          branches.data?.rows.find((b) => b.id === id)?.name ?? (id ? id.slice(0, 8) : "—")
-      ),
-    [branches.data]
-  );
-
-  function onSort(key: string) {
-    setSort((s) =>
-      s?.key === key
-        ? s.dir === "asc"
-          ? { key, dir: "desc" }
-          : undefined
-        : { key, dir: "desc" }
-    );
+  function onSort(key: SortKey) {
+    setSort((s) => (s?.key === key ? (s.dir === "desc" ? { key, dir: "asc" } : undefined) : { key, dir: "desc" }));
   }
 
-  // The stock row key is a branch id, purity id or product id depending on the
+  // The stock row key is a branch, purity or product id depending on the
   // grouping. Only the product grouping yields a fetchable product id.
   async function openPiece(key: string) {
     try {
-      const piece = await api<Piece>(`/api/v1/products/${encodeURIComponent(key)}`);
-      setDetail(piece);
+      setDetail(await api<Piece>(`/api/v1/products/${encodeURIComponent(key)}`));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not load the piece");
     }
@@ -218,161 +180,236 @@ export default function InventoryPage() {
   }
 
   const insightsError = insights.isError ? (insights.error as Error).message : undefined;
+  const t = insights.data?.totals;
+  const a = insights.data?.attention;
+  // An error must not render as "0 pieces": that reads as a real, wrong number.
+  const dash = insights.isLoading || !!insightsError;
+  const hasValue = (t?.value_cents ?? 0) > 0;
+  const avgPurity = t && t.net_mg > 0 ? (t.fine_mg / t.net_mg) * 100 : 0;
+  const perGram = t && hasValue && t.fine_mg > 0 ? centsToLkr(t.value_cents) / mgToG(t.fine_mg) : 0;
+  const openItems = (a?.transfer_pending ?? 0) + (a?.in_repair ?? 0) + (a?.reserved ?? 0);
+  const v = (n: number | undefined) => (dash ? null : n ?? 0);
 
   return (
-    <Page className="space-y-6">
-      <InventoryHero
-        insights={insights.data}
-        loading={insights.isLoading}
-        error={insightsError}
-        onRecord={() =>
-          document.getElementById("record-movement")?.scrollIntoView({ behavior: "smooth" })
+    <Page className="space-y-4">
+      <GoldHero
+        icon={PackageIcon}
+        title="Every gram,"
+        accent="accounted for"
+        badge={
+          insightsError ? (
+            <HeroBadge tone="bad">Data unavailable</HeroBadge>
+          ) : a ? (
+            openItems > 0 ? (
+              <HeroBadge tone="warn">{openItems} off the shelf</HeroBadge>
+            ) : (
+              <HeroBadge tone="good">All clear</HeroBadge>
+            )
+          ) : (
+            <HeroBadge>Inventory</HeroBadge>
+          )
         }
+        sub={
+          insightsError ? (
+            <span className="inline-flex items-center gap-2">
+              {insightsError}
+              <button type="button" onClick={() => void insights.refetch()} className="inline-flex items-center gap-1 text-gold-light hover:text-paper">
+                <RefreshCwIcon size={10} /> Retry
+              </button>
+            </span>
+          ) : (
+            <>
+              {today ? `${today} · ` : ""}Live weights, fine gold and value across every branch
+            </>
+          )
+        }
+        actions={
+          <>
+            <Link href="/scan" className={heroGold}>
+              <ScanBarcodeIcon size={13} /> Scan to move
+            </Link>
+            <button type="button" onClick={() => document.getElementById("record-movement")?.scrollIntoView({ behavior: "smooth" })} className={heroGhost}>
+              Record movement
+            </button>
+            <Link href="/inventory/counts" className={heroGhost}>
+              <ClipboardCheckIcon size={13} /> Counts
+            </Link>
+            <Link href="/inventory/transfers" className={heroGhost}>
+              <TruckIcon size={13} /> Transfers
+            </Link>
+            <Link href="/inventory/discrepancies" className={heroGhost}>
+              <AlertCircleIcon size={13} /> Discrepancies
+            </Link>
+          </>
+        }
+        stats={[
+          { label: "Pieces on hand", value: v(t?.pieces), sub: dash ? undefined : `${insights.data?.byBranch.length ?? 0} branches`, loading: insights.isLoading },
+          { label: "Net weight", value: v(t?.net_mg), format: g, unit: "g", sub: dash ? undefined : `${insights.data?.byKarat.length ?? 0} purities`, loading: insights.isLoading },
+          {
+            label: "Fine gold",
+            value: v(t?.fine_mg),
+            format: g,
+            unit: "g",
+            accent: true,
+            sub: dash || !avgPurity ? undefined : `${avgPurity.toFixed(1)}% average purity`,
+            loading: insights.isLoading,
+          },
+          {
+            label: "Stock value",
+            value: dash ? null : hasValue ? centsToLkr(t!.value_cents) : null,
+            text: !dash && !hasValue ? "Not priced" : undefined,
+            format: (n) => Math.round(n).toLocaleString("en-US"),
+            unit: hasValue ? "LKR" : undefined,
+            sub: dash ? undefined : hasValue ? `≈ LKR ${Math.round(perGram).toLocaleString("en-US")} / g fine` : "Set board rates",
+            href: hasValue ? undefined : "/gold-rates",
+            loading: insights.isLoading,
+          },
+          {
+            label: "In transit",
+            value: v(a?.transfer_pending),
+            tone: a?.transfer_pending ? "warn" : undefined,
+            sub: "Between branches",
+            href: "/inventory/transfers",
+            loading: insights.isLoading,
+          },
+          { label: "In repair", value: v(a?.in_repair), sub: "At the workshop", href: "/products?status=IN_REPAIR", loading: insights.isLoading },
+          { label: "Reserved", value: v(a?.reserved), sub: "Held for customers", href: "/products?status=RESERVED", loading: insights.isLoading },
+          {
+            label: "Moves · 24h",
+            value: v(a?.movements_24h),
+            sub: dash ? undefined : a?.last_movement_at ? `Last ${ago(a.last_movement_at)}` : "None logged yet",
+            loading: insights.isLoading,
+          },
+        ]}
       />
 
-      <WorkflowLinks />
-
-      <div className="grid gap-5 lg:grid-cols-3">
-        <StockByKarat
-          data={insights.data}
-          loading={insights.isLoading}
-          error={insightsError}
-          onRetry={() => void insights.refetch()}
-        />
-        <StockByBranch
-          data={insights.data}
-          loading={insights.isLoading}
-          error={insightsError}
-          onRetry={() => void insights.refetch()}
-        />
-        <AttentionCard
-          data={insights.data}
-          loading={insights.isLoading}
-          error={insightsError}
-          onRetry={() => void insights.refetch()}
-          onFilter={focusHistory}
-        />
+      <div className="grid gap-4 lg:grid-cols-3">
+        <StockByKarat data={insights.data} loading={insights.isLoading} error={insightsError} onRetry={() => void insights.refetch()} />
+        <StockByBranch data={insights.data} loading={insights.isLoading} error={insightsError} onRetry={() => void insights.refetch()} />
+        <AttentionCard data={insights.data} loading={insights.isLoading} error={insightsError} onRetry={() => void insights.refetch()} onFilter={focusHistory} />
       </div>
 
-      <LuxeTableCard
-        title="Stock on hand"
-        description={
-          stock.data
-            ? `${rows.length.toLocaleString("en-US")} ${GROUP_NOUN[groupBy][rows.length === 1 ? 0 : 1]} in stock${
-                groupBy === "product" ? " · click a row for details" : ""
-              }`
-            : `Grouped by ${GROUP_LABEL[groupBy]}`
-        }
-        icon={<PackageIcon size={16} />}
-        toolbar={
-          <Segmented
-            ariaLabel="Group stock by"
-            items={[
-              { key: "branch" as const, label: "By branch", icon: <Building2Icon size={15} /> },
-              { key: "purity" as const, label: "By purity", icon: <GemIcon size={15} /> },
-              { key: "product" as const, label: "By product", icon: <PackageIcon size={15} /> },
-            ]}
-            value={groupBy}
-            onChange={setGroupBy}
-          />
-        }
-      >
-        <StockTableBody
+      <Card>
+        <CardHead
+          icon={PackageIcon}
+          title="Stock on hand"
+          sub={
+            stock.data
+              ? `${rows.length.toLocaleString("en-US")} ${GROUP_NOUN[groupBy][rows.length === 1 ? 0 : 1]}${groupBy === "product" ? " · click a row for details" : ""}`
+              : `Grouped by ${groupBy}`
+          }
+          action={
+            <FilterPills
+              items={[
+                { key: "branch" as const, label: "By branch" },
+                { key: "purity" as const, label: "By purity" },
+                { key: "product" as const, label: "By product" },
+              ]}
+              value={groupBy}
+              onChange={(k) => {
+                setGroupBy(k);
+                setSort(undefined);
+              }}
+            />
+          }
+        />
+        <StockTable
           rows={rows}
-          columns={columns}
+          groupBy={groupBy}
+          nameFor={nameFor}
           sort={sort}
           onSort={onSort}
           loading={stock.isLoading}
           totals={totals}
           onRowClick={groupBy === "product" ? (r) => void openPiece(r.key) : undefined}
         />
-      </LuxeTableCard>
+      </Card>
 
-      <MovementComposer
-        barcode={barcode}
-        onBarcode={setBarcode}
-        inputRef={barcodeRef}
-        branchName={(id) => branches.data?.rows.find((b) => b.id === id)?.name ?? id.slice(0, 8)}
-      />
+      <MovementComposer barcode={barcode} onBarcode={setBarcode} inputRef={barcodeRef} branchName={(id) => branchName(id)} />
 
       <div id="movement-history" className="scroll-mt-24">
-        <LuxeTableCard
-          title="Movement history"
-          description={
-            moves.data
-              ? `${moves.data.total.toLocaleString("en-US")} ${mType ? humanize(mType).toLowerCase() : ""} movements${
-                  mBranch ? ` at ${branches.data?.rows.find((b) => b.id === mBranch)?.name ?? "this branch"}` : ""
-                }`.replace(/\s+/g, " ")
-              : "Latest movements"
-          }
-          icon={<HistoryIcon size={16} />}
-          toolbar={
-            <MovementFilters
-              type={mType}
-              branch={mBranch}
-              search={mSearch}
-              onType={(t) => {
-                setMType(t);
-                setMPage(1);
-              }}
-              onBranch={(b) => {
-                setMBranch(b);
-                setMPage(1);
-              }}
-              onSearch={setMSearch}
-              onClear={() => {
-                setMType("");
-                setMBranch("");
-                setMSearch("");
-                setMPage(1);
-              }}
-              branches={branches.data?.rows ?? []}
-            />
-          }
-          footer={
-            moves.data ? (
-              <Pager
-                page={mPage}
-                onChange={setMPage}
-                pageSize={25}
-                count={moves.data.rows.length}
-                total={moves.data.total}
-                unit="movements"
-              />
-            ) : null
-          }
-        >
-          <DataTable
-            columns={moveCols}
-            rows={moves.data?.rows ?? []}
-            rowKey={(m) => m.id}
-            loading={moves.isLoading}
-            caption="Inventory movement history"
-            empty={
-              <EmptyBlock
-                title="No movements"
-                description="Nothing matches these filters. Clear them to see the full ledger."
-              />
+        <Card>
+          <CardHead
+            icon={HistoryIcon}
+            title="Movement history"
+            sub={
+              moves.data
+                ? `${moves.data.total.toLocaleString("en-US")} ${mType ? humanize(mType).toLowerCase() : ""} movements${mBranch ? ` at ${branchName(mBranch)}` : ""}`.replace(/\s+/g, " ")
+                : "Latest movements"
             }
           />
-        </LuxeTableCard>
+          <MovementFilters
+            type={mType}
+            branch={mBranch}
+            search={mSearch}
+            onType={(x) => {
+              setMType(x);
+              setMPage(1);
+            }}
+            onBranch={(b) => {
+              setMBranch(b);
+              setMPage(1);
+            }}
+            onSearch={(s) => {
+              setMSearch(s);
+              setMPage(1);
+            }}
+            onClear={() => {
+              setMType("");
+              setMBranch("");
+              setMSearch("");
+              setMPage(1);
+            }}
+            branches={branches.data?.rows ?? []}
+          />
+          <MovementTable rows={moves.data?.rows ?? []} loading={moves.isLoading} branchName={branchName} />
+          {moves.data && moves.data.total > 0 ? (
+            <div className="border-t border-ink/[0.06] bg-bone/40 px-4 py-2 text-xs text-ink-4">
+              <Pager page={mPage} onChange={setMPage} pageSize={25} count={moves.data.rows.length} total={moves.data.total} unit="movements" />
+            </div>
+          ) : null}
+        </Card>
       </div>
 
-      {detail ? (
-        <PieceDetail
-          piece={detail}
-          onClose={() => setDetail(null)}
-          onMove={focusMovement}
-          branchName={(id) => branches.data?.rows.find((b) => b.id === id)?.name ?? id.slice(0, 8)}
-        />
-      ) : null}
+      {detail ? <PieceDetail piece={detail} onClose={() => setDetail(null)} onMove={focusMovement} branchName={(id) => branchName(id)} /> : null}
     </Page>
   );
 }
 
-function StockTableBody({
+/* ---------------------------------------------------------------- tables */
+
+type SortKey = "name" | "pieces" | "net_mg" | "fine_mg" | "value_cents";
+
+function SortTh({
+  k,
+  label,
+  sort,
+  onSort,
+  right,
+  className,
+}: {
+  k: SortKey;
+  label: string;
+  sort?: { key: SortKey; dir: "asc" | "desc" };
+  onSort: (k: SortKey) => void;
+  right?: boolean;
+  className?: string;
+}) {
+  const on = sort?.key === k;
+  return (
+    <th className={cn(th, right && "text-right", className)} aria-sort={on ? (sort!.dir === "asc" ? "ascending" : "descending") : "none"}>
+      <button type="button" onClick={() => onSort(k)} className={cn("inline-flex items-center gap-1 uppercase hover:text-ink", right && "flex-row-reverse", on && "text-ink")}>
+        {label}
+        <span className={cn("text-[8px]", on ? "text-gold-dark" : "text-ink-5/60")}>{on && sort!.dir === "asc" ? "▲" : "▼"}</span>
+      </button>
+    </th>
+  );
+}
+
+function StockTable({
   rows,
-  columns,
+  groupBy,
+  nameFor,
   sort,
   onSort,
   loading,
@@ -380,220 +417,153 @@ function StockTableBody({
   onRowClick,
 }: {
   rows: StockRow[];
-  columns: ReadonlyArray<DataColumn<StockRow>>;
-  sort: { key: string; dir: "asc" | "desc" } | undefined;
-  onSort: (key: string) => void;
+  groupBy: GroupBy;
+  nameFor: (r: StockRow) => string;
+  sort?: { key: SortKey; dir: "asc" | "desc" };
+  onSort: (k: SortKey) => void;
   loading: boolean;
-  totals: { pieces: number; net: number; fine: number; value: number; hasValue: boolean };
+  totals: { pieces: number; net: number; fine: number; value: number };
   onRowClick?: (r: StockRow) => void;
 }) {
+  if (loading) return <RowsSkeleton rows={5} />;
+  if (rows.length === 0)
+    return (
+      <Empty
+        icon={PackageIcon}
+        title="No stock on hand"
+        desc="No pieces are in stock for this grouping."
+        action={
+          <Link href="/products" className="g-btn g-btn-primary h-8 rounded-lg px-3 text-[12px]">
+            Open catalog
+          </Link>
+        }
+      />
+    );
+  const first = groupBy === "branch" ? "Branch" : groupBy === "purity" ? "Purity" : "Product";
   return (
-    <DataTable
-      columns={columns}
-      rows={rows}
-      rowKey={(r) => r.key}
-      sort={sort}
-      onSort={onSort}
-      onRowClick={onRowClick}
-      loading={loading}
-      caption="Stock on hand, grouped"
-      empty={
-        <EmptyBlock
-          title="No stock on hand"
-          description="No pieces are in stock for this grouping."
-          action={
-            <Link href="/products" className="g-btn g-btn-primary h-10 px-4 text-sm">
-              Open catalog
-            </Link>
-          }
-        />
-      }
-      totals={
-        <div className="flex flex-wrap items-center gap-2 text-xs text-ink-4">
-          <span className="mr-1 inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-gold-dark">
-            <span className="size-1.5 rounded-full bg-gold" />
-            Total
-          </span>
-          {[
-            ["Pieces", totals.pieces.toLocaleString("en-US"), false],
-            ["Net", `${g(totals.net)} g`, false],
-            ["Fine", `${g(totals.fine)} g`, true],
-            [
-              "Value",
-              totals.hasValue
-                ? `LKR ${centsToLkr(totals.value).toLocaleString("en-US", { maximumFractionDigits: 0 })}`
-                : "—",
-              false,
-            ],
-          ].map(([k, v, gold]) => (
-            <span
-              key={String(k)}
-              className={cn(
-                "inline-flex items-baseline gap-1.5 rounded-lg px-2.5 py-1.5 ring-1",
-                gold ? "bg-gold-pale text-gold-deep ring-gold-dark/15" : "bg-paper ring-ink/[0.07]"
-              )}
-            >
-              {k}
-              <span className={cn("g-metric text-sm", gold ? "text-gold-deep" : "text-ink")}>{v}</span>
-            </span>
+    <div className="max-h-[30rem] overflow-auto scrollbar-thin">
+      <table className="w-full text-[12.5px]">
+        <thead className={cn(thead, "sticky top-0 z-10 backdrop-blur")}>
+          <tr>
+            <SortTh k="name" label={first} sort={sort} onSort={onSort} className="pl-4" />
+            <SortTh k="pieces" label="Pieces" sort={sort} onSort={onSort} right />
+            <SortTh k="net_mg" label="Net g" sort={sort} onSort={onSort} right />
+            <SortTh k="fine_mg" label="Fine g" sort={sort} onSort={onSort} right />
+            <th className={cn(th, "hidden text-right md:table-cell")}>Purity</th>
+            <th className={cn(th, "hidden md:table-cell")}>Share of fine</th>
+            <SortTh k="value_cents" label="Value LKR" sort={sort} onSort={onSort} right className="pr-4" />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const purity = r.net_mg > 0 ? (r.fine_mg / r.net_mg) * 100 : 0;
+            const share = totals.fine > 0 ? (r.fine_mg / totals.fine) * 100 : 0;
+            return (
+              <tr key={r.key} onClick={onRowClick ? () => onRowClick(r) : undefined} className={cn(tr, onRowClick && "cursor-pointer")}>
+                <td className="py-1.5 pl-4 pr-2">
+                  {groupBy === "purity" ? (
+                    <span className="g-metric rounded-md bg-gold-pale px-1.5 py-px text-[11px] font-semibold text-gold-deep ring-1 ring-gold-dark/15">{nameFor(r)}</span>
+                  ) : groupBy === "branch" ? (
+                    <span className="flex items-center gap-2">
+                      <Building2Icon size={12} className="shrink-0 text-ink-5" />
+                      <span className="font-medium text-ink">{nameFor(r)}</span>
+                    </span>
+                  ) : (
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate font-medium text-ink">{nameFor(r)}</span>
+                      <span className="shrink-0 font-mono text-[10.5px] text-ink-5">{r.barcode ?? r.key.slice(0, 10)}</span>
+                    </span>
+                  )}
+                </td>
+                <td className="g-metric px-2 py-1.5 text-right text-ink-3">{r.pieces.toLocaleString("en-US")}</td>
+                <td className="g-metric px-2 py-1.5 text-right text-ink-3">{g(r.net_mg)}</td>
+                <td className="g-metric px-2 py-1.5 text-right font-medium text-ink">{g(r.fine_mg)}</td>
+                <td className="g-metric hidden px-2 py-1.5 text-right text-ink-4 md:table-cell">{purity ? `${purity.toFixed(1)}%` : "—"}</td>
+                <td className="hidden px-2 py-1.5 md:table-cell">
+                  <span className="flex items-center gap-2">
+                    <ShareBar value={share} className="h-1 w-24" />
+                    <span className="g-metric text-[10.5px] text-ink-5">{share.toFixed(1)}%</span>
+                  </span>
+                </td>
+                <td className="g-metric py-1.5 pl-2 pr-4 text-right text-ink-2">
+                  {r.value_cents ? lkr(r.value_cents) : <span className="text-ink-5" title="No board rate for this purity">—</span>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot className="sticky bottom-0 bg-bone/90 backdrop-blur">
+          <tr className="border-t border-ink/10 text-[12px] font-semibold">
+            <td className="py-1.5 pl-4 pr-2 text-[9.5px] uppercase tracking-[0.14em] text-gold-dark">Total</td>
+            <td className="g-metric px-2 py-1.5 text-right text-ink">{totals.pieces.toLocaleString("en-US")}</td>
+            <td className="g-metric px-2 py-1.5 text-right text-ink">{g(totals.net)}</td>
+            <td className="g-metric px-2 py-1.5 text-right text-gold-deep">{g(totals.fine)}</td>
+            <td className="g-metric hidden px-2 py-1.5 text-right text-ink-4 md:table-cell">{totals.net > 0 ? `${((totals.fine / totals.net) * 100).toFixed(1)}%` : "—"}</td>
+            <td className="hidden md:table-cell" />
+            <td className="g-metric py-1.5 pl-2 pr-4 text-right text-ink">{totals.value ? lkr(totals.value) : "—"}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+function MovementTable({ rows, loading, branchName }: { rows: Movement[]; loading: boolean; branchName: (id: string | null) => string }) {
+  if (loading) return <RowsSkeleton rows={6} />;
+  if (rows.length === 0) return <Empty icon={HistoryIcon} title="No movements" desc="Nothing matches these filters. Clear them to see the full ledger." />;
+  return (
+    <div className="overflow-x-auto scrollbar-thin">
+      <table className="w-full text-[12.5px]">
+        <thead className={thead}>
+          <tr>
+            <th className={cn(th, "pl-4")}>Type</th>
+            <th className={th}>Barcode</th>
+            <th className={th}>From → to</th>
+            <th className={th}>Branch</th>
+            <th className={cn(th, "text-right")}>Weight g</th>
+            <th className={cn(th, "hidden lg:table-cell")}>Reason</th>
+            <th className={cn(th, "pr-4 text-right")}>When</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((m) => (
+            <tr key={m.id} className={tr}>
+              <td className="py-1.5 pl-4 pr-2">
+                <span className="flex items-center gap-2 whitespace-nowrap">
+                  <span className="scale-[0.85]">
+                    <MovementTypeIcon type={m.type} />
+                  </span>
+                  <span className="text-[12px] font-medium text-ink">{humanize(m.type)}</span>
+                </span>
+              </td>
+              <td className="px-2 py-1.5">
+                <span className="rounded bg-bone px-1.5 py-px font-mono text-[10.5px] text-ink-2 ring-1 ring-ink/[0.06]">{m.barcode ?? m.product_id.slice(0, 8)}</span>
+              </td>
+              <td className="px-2 py-1.5">
+                <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-ink-4">
+                  {m.from_status ? humanize(m.from_status) : "New"}
+                  <ArrowRightIcon size={10} className="text-ink-5" />
+                  <PieceChip status={m.to_status} />
+                </span>
+              </td>
+              <td className="whitespace-nowrap px-2 py-1.5 text-[11.5px] text-ink-3">{branchName(m.to_branch ?? m.from_branch)}</td>
+              <td className="g-metric px-2 py-1.5 text-right text-ink">{g(m.weight_mg)}</td>
+              <td className="hidden max-w-[16rem] px-2 py-1.5 lg:table-cell">
+                {m.reason ? (
+                  <span className="line-clamp-1 text-[11.5px] text-ink-3" title={m.reason}>
+                    {m.reason}
+                  </span>
+                ) : (
+                  <span className="text-ink-5">—</span>
+                )}
+              </td>
+              <td className="whitespace-nowrap py-1.5 pl-2 pr-4 text-right text-[11px] text-ink-4" title={new Date(m.created_at).toLocaleString()}>
+                {new Date(m.created_at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+              </td>
+            </tr>
           ))}
-        </div>
-      }
-    />
-  );
-}
-
-const WORKFLOWS = [
-  {
-    href: "/inventory/counts",
-    title: "Stock counts",
-    body: "Scan the shelf against a frozen snapshot; approve write-offs with a second person.",
-    icon: ClipboardCheckIcon,
-  },
-  {
-    href: "/inventory/transfers",
-    title: "Branch transfers",
-    body: "Request, approve, dispatch and receive pieces between branches by scan.",
-    icon: TruckIcon,
-  },
-  {
-    href: "/inventory/discrepancies",
-    title: "Discrepancies",
-    body: "Missing and unexpected pieces, overdue transfers and gold consistency.",
-    icon: AlertCircleIcon,
-  },
-] as const;
-
-function WorkflowLinks() {
-  return (
-    <nav aria-label="Inventory workflows" className="grid gap-4 sm:grid-cols-3">
-      {WORKFLOWS.map(({ href, title, body, icon: Icon }, i) => (
-        <Link
-          key={href}
-          href={href}
-          className={cn(
-            "group relative flex animate-fade-in flex-col overflow-hidden rounded-[22px] bg-paper p-5 transition-all duration-320 ease-brand",
-            "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]",
-            "hover:-translate-y-1 hover:shadow-[inset_0_0_0_1px_rgba(168,138,62,0.4),0_30px_60px_-30px_rgba(126,98,35,0.45)]"
-          )}
-          style={{ animationDelay: `${i * 60}ms` }}
-        >
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-gold/70 to-transparent opacity-0 transition-opacity duration-320 group-hover:opacity-100"
-          />
-          <span
-            aria-hidden
-            className="pointer-events-none absolute -right-14 -top-14 size-36 rounded-full bg-gold/10 opacity-0 blur-2xl transition-opacity duration-320 group-hover:opacity-100"
-          />
-          <span className="relative flex items-center justify-between">
-            <span className="flex size-11 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_10px_20px_-12px_rgba(6,42,34,0.8)] transition-transform duration-320 group-hover:scale-105">
-              <Icon size={18} />
-            </span>
-            <span className="flex size-8 items-center justify-center rounded-full text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.1)] transition-all duration-320 group-hover:bg-gradient-to-b group-hover:from-gold-light group-hover:to-gold group-hover:text-void group-hover:shadow-none">
-              <ArrowRightIcon size={14} className="transition-transform duration-320 group-hover:-rotate-45" />
-            </span>
-          </span>
-          <span className="relative mt-4 text-[15px] font-semibold text-ink transition-colors group-hover:text-gold-deep">
-            {title}
-          </span>
-          <span className="relative mt-1 block text-xs leading-relaxed text-ink-4">{body}</span>
-        </Link>
-      ))}
-    </nav>
-  );
-}
-
-/** Page-local table shell: the shared TableCard with the catalog's premium chrome. */
-function LuxeTableCard({
-  title,
-  description,
-  icon,
-  toolbar,
-  footer,
-  children,
-}: {
-  title: ReactNode;
-  description?: ReactNode;
-  icon: ReactNode;
-  toolbar?: ReactNode;
-  footer?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section className="relative overflow-hidden rounded-[22px] bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]">
-      <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
-      <div className="flex flex-col gap-4 border-b border-ink/[0.06] px-5 py-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex min-w-0 items-center gap-3.5">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_8px_18px_-10px_rgba(6,42,34,0.7)]">
-            {icon}
-          </span>
-          <div className="min-w-0">
-            <h2 className="font-sans tracking-normal truncate text-[15px] font-semibold text-ink">{title}</h2>
-            {description ? <p className="truncate text-xs text-ink-4">{description}</p> : null}
-          </div>
-        </div>
-        {toolbar ? <div className="min-w-0 xl:max-w-[70%]">{toolbar}</div> : null}
-      </div>
-      <div className="overflow-x-auto scrollbar-thin">{children}</div>
-      {footer ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink/[0.06] bg-bone/40 px-5 py-3 text-xs text-ink-4 sm:px-6">
-          {footer}
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-/** Sliding-pill segmented control for the stock grouping. */
-function Segmented<K extends string>({
-  items,
-  value,
-  onChange,
-  ariaLabel,
-}: {
-  items: ReadonlyArray<{ key: K; label: string; icon: ReactNode }>;
-  value: K;
-  onChange: (k: K) => void;
-  ariaLabel: string;
-}) {
-  const idx = Math.max(
-    0,
-    items.findIndex((i) => i.key === value)
-  );
-  return (
-    <div className="-mx-1 overflow-x-auto px-1 scrollbar-thin">
-      <div
-        role="tablist"
-        aria-label={ariaLabel}
-        className="relative grid min-w-max rounded-xl bg-bone p-1 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]"
-        style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
-      >
-        <span
-          aria-hidden
-          className="absolute inset-y-1 left-1 rounded-lg bg-void shadow-[inset_0_0_0_1px_rgba(205,168,83,0.3),0_8px_18px_-10px_rgba(6,42,34,0.8)] transition-transform duration-320 ease-brand"
-          style={{ width: `calc((100% - 0.5rem) / ${items.length})`, transform: `translateX(${idx * 100}%)` }}
-        />
-        {items.map((t) => {
-          const active = t.key === value;
-          return (
-            <button
-              key={t.key}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => onChange(t.key)}
-              className={cn(
-                "relative inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 text-[13px] font-medium transition-colors duration-200",
-                active ? "text-paper" : "text-ink-4 hover:text-ink"
-              )}
-            >
-              <span className={active ? "text-gold-light" : "text-ink-5"}>{t.icon}</span>
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
+        </tbody>
+      </table>
     </div>
   );
 }
