@@ -1,5 +1,6 @@
 import { businessDateFor } from "./busdate";
 import { buildEntryStmts } from "./journal";
+import { postGoldStmts } from "./gold";
 
 const INVENTORY = "1100";
 const OPENING = "3100";
@@ -112,5 +113,142 @@ export async function backfillOpeningStock(
       skipped.push({ productId: p.id, reason: (e as Error).message });
     }
   }
+  return { posted, skipped };
+}
+
+export type IntakeBackfillPosted = {
+  productId: string;
+  barcode: string;
+  type: string;
+  refId: string;
+  fineMg: number;
+};
+
+export type IntakeBackfillReport = {
+  posted: IntakeBackfillPosted[];
+  skipped: { productId: string; reason: string }[];
+};
+
+/**
+ * Bring direct-intake products that predate OPENING gold-row posting onto the
+ * gold ledger. The shop's shelf from day one (created straight on Products,
+ * with no purchase invoice or manufacturing order) had no inflow posted, so
+ * `gold_stock_consistency` — a close gate — failed by exactly their fine
+ * weight and every day close was blocked. Sold (and other exited) pieces are
+ * included on purpose: their exit rows already left the ledger, so the
+ * missing intake is what keeps it out of balance. Idempotent: only products
+ * with no product_intake row are posted, so it can be re-run safely. VOID
+ * products are skipped — they hold nothing and their intake would have been
+ * reversed by the void flow.
+ *
+ * A second gap the same deployments left behind is a *received purchase
+ * invoice whose PURCHASE gold row was never written* (the money journal was,
+ * so only the metal is missing). The OPENING bucket correctly skips those
+ * products — an invoice document owns their intake — so the invoice bucket
+ * here posts the PURCHASE row the day cross-foot matches it against.
+ */
+export async function backfillIntakeLedger(
+  db: D1Database,
+  actorId: string
+): Promise<IntakeBackfillReport> {
+  const posted: IntakeBackfillPosted[] = [];
+  const skipped: { productId: string; reason: string }[] = [];
+  const stmts: D1PreparedStatement[] = [];
+
+  // Bucket 1: direct intakes with no intake row on the books.
+  const direct = await db
+    .prepare(
+      `SELECT p.id, p.barcode, p.branch_id, p.net_mg, pu.permille, p.created_at FROM products p
+       JOIN purities pu ON pu.id = p.purity_id
+       WHERE p.status <> 'VOID' AND p.net_mg > 0
+         AND NOT EXISTS (SELECT 1 FROM gold_ledger g WHERE g.ref_entity = 'product_intake' AND g.ref_id = p.id)
+         -- bought or manufactured pieces left through their own postings:
+         -- they are not intakes and must not get one.
+         AND NOT EXISTS (SELECT 1 FROM purchase_invoice_items pi WHERE pi.product_id = p.id)
+         AND NOT EXISTS (SELECT 1 FROM manufacturing_outputs mo WHERE mo.product_id = p.id)`
+    )
+    .all<{ id: string; barcode: string; branch_id: string; net_mg: number; permille: number; created_at: number }>();
+  for (const p of direct.results ?? []) {
+    try {
+      stmts.push(
+        ...(await postGoldStmts(
+          db,
+          [
+            {
+              occurredAt: p.created_at,
+              branchId: p.branch_id,
+              source: "opening",
+              destination: `branch:${p.branch_id}`,
+              type: "OPENING",
+              weightMg: p.net_mg,
+              permille: p.permille,
+              refEntity: "product_intake",
+              refId: p.id,
+              productId: p.id,
+              notes: `Backfill of direct intake ${p.barcode}`,
+            },
+          ],
+          { actorId, auditAction: "product.intake.gold.backfill", auditEntity: "product", auditEntityId: p.id, branchId: p.branch_id }
+        ))
+      );
+      posted.push({ productId: p.id, barcode: p.barcode, type: "OPENING", refId: p.id, fineMg: Math.round((p.net_mg * p.permille) / 1000) });
+    } catch (e) {
+      skipped.push({ productId: p.id, reason: (e as Error).message });
+    }
+  }
+
+  // Bucket 2: received invoices whose PURCHASE rows never landed.
+  const invoices = await db
+    .prepare(
+      `SELECT pi.id, pi.number, pi.branch_id, pi.created_at
+       FROM purchase_invoices pi
+       WHERE pi.status NOT IN ('VOID','DRAFT')
+         AND NOT EXISTS (
+           SELECT 1 FROM gold_ledger g
+           WHERE g.ref_entity = 'purchase_invoice' AND g.ref_id = pi.id AND g.type = 'PURCHASE'
+         )`
+    )
+    .all<{ id: string; number: string; branch_id: string; created_at: number }>();
+  for (const inv of invoices.results ?? []) {
+    const items = await db
+      .prepare(
+        `SELECT it.id, it.product_id, it.net_mg, pu.permille, p.barcode FROM purchase_invoice_items it
+         JOIN purities pu ON pu.id = it.purity_id
+         JOIN products p ON p.id = it.product_id
+         WHERE it.invoice_id = ?`
+      )
+      .bind(inv.id)
+      .all<{ id: string; product_id: string; net_mg: number; permille: number; barcode: string }>();
+    for (const it of items.results ?? []) {
+      try {
+        stmts.push(
+          ...(await postGoldStmts(
+            db,
+            [
+              {
+                occurredAt: inv.created_at,
+                branchId: inv.branch_id,
+                source: `purchase:${inv.number}`,
+                destination: `branch:${inv.branch_id}`,
+                type: "PURCHASE",
+                weightMg: it.net_mg,
+                permille: it.permille,
+                refEntity: "purchase_invoice",
+                refId: inv.id,
+                productId: it.product_id,
+                notes: `Backfill of Purchase ${inv.number}`,
+              },
+            ],
+            { actorId, auditAction: "purchase.intake.gold.backfill", auditEntity: "purchase_invoice", auditEntityId: inv.id, branchId: inv.branch_id }
+          ))
+        );
+        posted.push({ productId: it.product_id, barcode: it.barcode, type: "PURCHASE", refId: inv.id, fineMg: Math.round((it.net_mg * it.permille) / 1000) });
+      } catch (e) {
+        skipped.push({ productId: it.product_id, reason: (e as Error).message });
+      }
+    }
+  }
+
+  if (stmts.length) await db.batch(stmts);
   return { posted, skipped };
 }

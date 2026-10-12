@@ -323,8 +323,16 @@ a piece still on the shelf posts the difference; a void posts the reverse of
 the carried value **and an OPENING gold row out** (`branch → opening`) —
 without it a voided piece left stock on hand while its intake inflow stayed,
 and `gold_stock_consistency` failed for good. `POST
-/accounts/opening-stock/backfill` brings earlier direct intake onto the books,
-idempotently.
+/accounts/opening-stock/backfill` brings earlier direct intake onto the books
+(monetary side), idempotently. The **gold side** has the same failure mode for
+intakes taken in before the OPENING row existed — the ledger misses the metal
+and `gold_stock_consistency` fails by its fine weight, blocking every day
+close. `POST /accounts/intake-gold/backfill` repairs that: one `OPENING` row
+(`opening → branch:`) per direct-intake product that has no `product_intake`
+row, plus the `PURCHASE` row of any received invoice whose gold posting never
+landed. Sold pieces are included (their sale already left the ledger), void
+and bought/manufactured pieces are not. Idempotent — only missing rows are
+posted.
 
 ## Book cost chain
 

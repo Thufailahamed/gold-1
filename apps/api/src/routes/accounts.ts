@@ -12,7 +12,7 @@ import {
   updateAccountSchema,
 } from "@goldos/shared";
 import { closeFiscalYear, getFiscalClose, listFiscalYears, reopenFiscalYear } from "../services/fiscal";
-import { backfillOpeningStock } from "../services/openingstock";
+import { backfillIntakeLedger, backfillOpeningStock } from "../services/openingstock";
 import { listPayables, supplierOpenInvoices } from "../services/payables";
 import { createTaxPayment, getTaxConfig, listTaxPayments, setTaxConfig, taxReport } from "../services/taxes";
 import { balanceSheet, dailyCashSummary, profitAndLoss } from "../services/statements";
@@ -147,6 +147,15 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .post("/opening-stock/backfill", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
     try {
       return c.json({ success: true, data: await backfillOpeningStock(c.env.DB, c.get("userId")) }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  // Missing OPENING gold rows for direct intakes taken in before that posting
+  // existed — the gap behind a failing gold_stock_consistency close gate.
+  .post("/intake-gold/backfill", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
+    try {
+      return c.json({ success: true, data: await backfillIntakeLedger(c.env.DB, c.get("userId")) }, 200);
     } catch (err) {
       return serviceError(c, err);
     }
