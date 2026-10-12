@@ -3,7 +3,8 @@
 // Visual building blocks for the Live Rates board. Everything here draws from
 // the Emerald Vault tokens (void / gold / ink / paper / bone) and the shared
 // surfaces in globals.css, so the board reads as part of the console.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
 import { RefreshCwIcon } from "@/components/icons";
 
@@ -148,30 +149,49 @@ export function LiveNumber({
 
 /* ---------------------------------------------------------------- chips & glyphs */
 
+/**
+ * Short label for how far back a change is measured: nothing for a full day,
+ * otherwise "3h" / "40m" so a young feed's figure is read honestly.
+ */
+export function changeWindow(from: number | null | undefined, now = Date.now()) {
+  if (from == null) return null;
+  const m = Math.max(1, Math.round((now - from) / 60_000));
+  if (m >= 20 * 60) return null;
+  return m < 60 ? `${m}m` : `${Math.round(m / 60)}h`;
+}
+
 export function ChangeChip({
   pct,
   tone = "light",
   className,
   suffix,
+  from,
 }: {
   pct: number | null | undefined;
   tone?: "light" | "dark";
   className?: string;
   suffix?: ReactNode;
+  /** Baseline timestamp; under ~a day the window is shown next to the figure. */
+  from?: number | null;
 }) {
   if (pct == null)
     return (
       <span
         className={cn(
-          "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
-          tone === "dark" ? "bg-paper/[0.06] text-paper/40" : "bg-ink/[0.05] text-ink-5",
+          "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+          tone === "dark" ? "bg-sky-400/10 text-sky-200/80 shadow-[inset_0_0_0_1px_rgba(125,211,252,0.18)]" : "bg-sky-600/[0.08] text-sky-800",
           className
         )}
-        title="Not enough history yet"
+        title="The first price sample is in; the change appears once a second sample is recorded"
       >
-        24h —
+        <span className="relative flex size-1.5">
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-sky-400 opacity-60" />
+          <span className="relative inline-flex size-1.5 rounded-full bg-sky-400" />
+        </span>
+        Tracking
       </span>
     );
+  const win = changeWindow(from);
   const up = pct > 0;
   const flat = pct === 0;
   const cls =
@@ -187,13 +207,17 @@ export function ChangeChip({
           ? "bg-emerald-700/10 text-emerald-700"
           : "bg-rose-700/10 text-rose-700";
   return (
-    <span className={cn("g-metric inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold", cls, className)}>
+    <span
+      className={cn("g-metric inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold", cls, className)}
+      title={win ? `Change over the last ${win} — the feed has less than a day of history` : "Change over 24 hours"}
+    >
       {flat ? null : (
         <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden className={cn(!up && "rotate-180")}>
           <path d="M4 1 7.5 6.5h-7z" fill="currentColor" />
         </svg>
       )}
       {Math.abs(pct).toFixed(2)}%{suffix}
+      {win && !suffix ? <span className="ml-0.5 font-sans font-medium opacity-60">{win}</span> : null}
     </span>
   );
 }
@@ -340,15 +364,20 @@ export function spreadTone(pct: number) {
 export function Kpi({
   label,
   value,
+  text,
   unit,
   format = money,
   sub,
   accent,
   tone,
   className,
+  spark,
+  detail,
 }: {
   label: ReactNode;
   value: number | null | undefined;
+  /** Shown in place of a missing value once loaded, instead of a shimmer. */
+  text?: ReactNode;
   unit?: ReactNode;
   format?: (n: number) => string;
   sub?: ReactNode;
@@ -356,19 +385,34 @@ export function Kpi({
   /** Accent colour: a hairline across the top and a wash in the corner. */
   tone?: string;
   className?: string;
+  /** Recent values, drawn as a faint line along the bottom of the tile. */
+  spark?: number[];
+  /** Hover card body. */
+  detail?: ReactNode;
 }) {
+  const hover = useHoverCard(300);
   return (
     <div
-      className={cn("relative min-w-0 px-4 py-3", className)}
+      {...(detail ? hover.bind : {})}
+      tabIndex={detail ? 0 : undefined}
+      className={cn("group/kpi relative min-w-0 overflow-hidden px-4 pb-3 pt-3 transition-colors", detail && "cursor-default hover:bg-[#0a3a2f] focus:outline-none", className)}
       style={tone ? { backgroundImage: `radial-gradient(120% 90% at 100% 0%, ${tone}26, transparent 60%)` } : undefined}
     >
+      {detail ? hover.render(detail) : null}
+      {spark && spark.length >= 2 ? (
+        <Sparkline
+          values={spark}
+          color={tone}
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-9 opacity-40 transition-opacity group-hover/kpi:opacity-80 [&>span]:hidden"
+        />
+      ) : null}
       {tone ? <span className="absolute inset-x-0 top-0 h-[2px]" style={{ background: `linear-gradient(90deg, ${tone}, ${tone}00)` }} aria-hidden /> : null}
-      <div className="flex items-center gap-1.5 truncate text-[9.5px] font-semibold uppercase tracking-[0.16em] text-paper/45">
+      <div className="relative flex items-center gap-1.5 truncate text-[9.5px] font-semibold uppercase tracking-[0.16em] text-paper/45">
         {tone ? <span className="size-1.5 shrink-0 rounded-full" style={{ background: tone, boxShadow: `0 0 8px ${tone}` }} /> : null}
         {label}
       </div>
       {value != null && Number.isFinite(value) ? (
-        <div className="mt-1 flex items-baseline gap-1">
+        <div className="relative mt-1 flex items-baseline gap-1">
           <LiveNumber
             value={value}
             format={format}
@@ -377,10 +421,12 @@ export function Kpi({
           />
           {unit ? <span className="shrink-0 text-[9.5px] font-semibold text-paper/35">{unit}</span> : null}
         </div>
+      ) : text != null ? (
+        <div className={cn("g-metric relative mt-1 truncate leading-none", accent ? "text-[22px] text-gold-light" : "text-[17px] text-paper/80")}>{text}</div>
       ) : (
         <Shimmer dark className="mt-1.5 h-4 w-20" />
       )}
-      {sub ? <div className="mt-1.5 flex min-h-[18px] items-center text-[10.5px] text-paper/40">{sub}</div> : null}
+      {sub ? <div className="relative mt-1.5 flex min-h-[18px] items-center text-[10.5px] text-paper/40">{sub}</div> : null}
     </div>
   );
 }
@@ -435,6 +481,217 @@ export function ChartTip({
         <span className="text-[11px] text-paper/50">{unit}</span>
       </div>
       <div className="mt-0.5 text-[11px] text-paper/45">{name}</div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- hover cards */
+
+/**
+ * Rich hover detail for any element (tiles, table rows, list items). The card
+ * is portalled to <body> with fixed positioning, so rounded `overflow-hidden`
+ * panels and scrolling tables never clip it.
+ */
+export function useHoverCard(width = 300) {
+  const [pos, setPos] = useState<{ x: number; y: number; up: boolean } | null>(null);
+  const timer = useRef<number | undefined>(undefined);
+  const el = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!pos) return;
+    const close = () => setPos(null);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [pos]);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const open = () => {
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      const r = el.current?.getBoundingClientRect();
+      if (!r) return;
+      const up = r.bottom + 320 > window.innerHeight && r.top > 320;
+      const x = Math.min(Math.max(8, r.left + r.width / 2 - width / 2), window.innerWidth - width - 8);
+      setPos({ x, y: up ? r.top - 8 : r.bottom + 8, up });
+    }, 140);
+  };
+  const close = () => {
+    window.clearTimeout(timer.current);
+    setPos(null);
+  };
+  return {
+    bind: {
+      ref: (n: HTMLElement | null) => {
+        el.current = n;
+      },
+      onMouseEnter: open,
+      onMouseLeave: close,
+      onFocus: open,
+      onBlur: close,
+    },
+    render: (content: ReactNode) =>
+      pos && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              role="tooltip"
+              style={{ left: pos.x, top: pos.y, width, transform: pos.up ? "translateY(-100%)" : undefined }}
+              className="pointer-events-none fixed z-[100] animate-pop-in overflow-hidden rounded-2xl bg-void/[0.97] text-paper shadow-[0_32px_64px_-20px_rgba(0,0,0,0.65),inset_0_0_0_1px_rgba(226,194,122,0.22)] backdrop-blur-md"
+            >
+              <span className="absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-gold/70 to-transparent" aria-hidden />
+              {content}
+            </div>,
+            document.body
+          )
+        : null,
+  };
+}
+
+/** Wrapper form of useHoverCard for block elements. */
+export function HoverCard({ content, width, className, children }: { content: ReactNode; width?: number; className?: string; children: ReactNode }) {
+  const h = useHoverCard(width);
+  return (
+    <div {...h.bind} className={className}>
+      {children}
+      {h.render(content)}
+    </div>
+  );
+}
+
+/** Table-row form of useHoverCard. */
+export function HoverRow({ content, width, className, children }: { content: ReactNode; width?: number; className?: string; children: ReactNode }) {
+  const h = useHoverCard(width);
+  return (
+    <tr {...h.bind} className={className}>
+      {children}
+      {h.render(content)}
+    </tr>
+  );
+}
+
+/** Standard body of a hover card: kicker, headline figure, optional sparkline and rows. */
+export function CardBody({
+  kicker,
+  value,
+  unit,
+  chip,
+  spark,
+  color,
+  rows,
+  note,
+}: {
+  kicker: ReactNode;
+  value?: ReactNode;
+  unit?: ReactNode;
+  chip?: ReactNode;
+  spark?: number[];
+  color?: string;
+  rows?: { k: ReactNode; v: ReactNode; tone?: string }[];
+  note?: ReactNode;
+}) {
+  return (
+    <div className="p-3.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-[9.5px] font-semibold uppercase tracking-[0.16em] text-gold-light/80">{kicker}</span>
+        {chip}
+      </div>
+      {value != null ? (
+        <div className="mt-1.5 flex items-baseline gap-1.5">
+          <span className="g-metric text-[22px] leading-none text-paper">{value}</span>
+          {unit ? <span className="text-[10.5px] font-semibold text-paper/45">{unit}</span> : null}
+        </div>
+      ) : null}
+      {spark && spark.length >= 2 ? (
+        <div className="mt-2.5">
+          <Sparkline values={spark} color={color} className="h-14" />
+          <SeriesStrip values={spark} />
+        </div>
+      ) : null}
+      {rows?.length ? (
+        <div className="mt-2.5 divide-y divide-paper/[0.06] border-t border-paper/[0.08]">
+          {rows.map((r, i) => (
+            <div key={i} className="flex items-center justify-between gap-3 py-[5px] text-[11.5px]">
+              <span className="truncate text-paper/50">{r.k}</span>
+              <span className={cn("g-metric shrink-0 text-paper", r.tone)}>{r.v}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {note ? <p className="mt-2 text-[10.5px] leading-snug text-paper/40">{note}</p> : null}
+    </div>
+  );
+}
+
+/** Open / low / high / change for a series, as tiny figures under a sparkline. */
+export function seriesStats(values: number[]) {
+  if (values.length < 2) return null;
+  const open = values[0]!;
+  const last = values[values.length - 1]!;
+  return { open, last, lo: Math.min(...values), hi: Math.max(...values), chg: last - open, pct: open ? ((last - open) / open) * 100 : 0 };
+}
+
+function SeriesStrip({ values }: { values: number[] }) {
+  const s = seriesStats(values);
+  if (!s) return null;
+  const cell = (k: string, v: string, tone?: string) => (
+    <div className="min-w-0">
+      <div className="text-[8.5px] font-semibold uppercase tracking-[0.14em] text-paper/35">{k}</div>
+      <div className={cn("g-metric truncate text-[11px] text-paper/85", tone)}>{v}</div>
+    </div>
+  );
+  return (
+    <div className="mt-1.5 grid grid-cols-4 gap-2">
+      {cell("Open", money(s.open))}
+      {cell("Low", money(s.lo), "text-rose-300")}
+      {cell("High", money(s.hi), "text-emerald-300")}
+      {cell("Chg", `${s.pct >= 0 ? "+" : ""}${s.pct.toFixed(2)}%`, s.pct > 0 ? "text-emerald-300" : s.pct < 0 ? "text-rose-300" : undefined)}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- sparkline */
+
+/**
+ * Tiny area line for a hero figure. With fewer than two samples it draws a
+ * calm flat line through the middle so the tile never reads as broken.
+ */
+export function Sparkline({ values, color = "#E2C27A", className }: { values: number[]; color?: string; className?: string }) {
+  const id = `spark${useId().replace(/:/g, "")}`;
+  const w = 200;
+  const h = 48;
+  const pts = values.length >= 2 ? values : [1, 1];
+  const lo = Math.min(...pts);
+  const hi = Math.max(...pts);
+  const span = hi - lo || 1;
+  const xy = pts.map((v, i) => [(i / (pts.length - 1)) * w, hi === lo ? h / 2 : h - 4 - ((v - lo) / span) * (h - 8)] as const);
+  const line = xy.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  const last = xy[xy.length - 1]!;
+  return (
+    <div className={cn("relative h-12 w-full", className)} aria-hidden>
+      <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="absolute inset-0 size-full overflow-visible">
+        <defs>
+          <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor={color} stopOpacity="0.35" />
+            <stop offset="1" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={`${line} L${w} ${h} L0 ${h}Z`} fill={`url(#${id})`} />
+        <path
+          d={line}
+          fill="none"
+          stroke={color}
+          strokeWidth="1.6"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+          strokeDasharray={values.length >= 2 ? undefined : "3 4"}
+        />
+      </svg>
+      <span className="absolute size-2 -translate-x-1/2 -translate-y-1/2" style={{ left: `${(last[0] / w) * 100}%`, top: `${(last[1] / h) * 100}%` }}>
+        <span className="absolute inset-0 animate-ping rounded-full opacity-60" style={{ background: color }} />
+        <span className="absolute inset-0 rounded-full ring-2 ring-void" style={{ background: color }} />
+      </span>
     </div>
   );
 }

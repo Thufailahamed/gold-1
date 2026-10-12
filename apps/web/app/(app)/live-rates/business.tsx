@@ -493,7 +493,7 @@ export function BuyBackDesk({
                       <LiveNumber value={conv(buy * w)} className="font-semibold text-ink" />
                     </td>
                     <td className="g-metric px-2 text-right font-semibold text-sky-800">{money(conv(pawn * w))}</td>
-                    <td className="g-metric px-2 text-right text-ink-3">{sell != null ? money(conv(sell * w)) : <span className="text-ink-6">—</span>}</td>
+                    <td className="g-metric px-2 text-right text-ink-3">{sell != null ? money(conv(sell * w)) : <span className="font-sans text-[10.5px] text-ink-5">not set</span>}</td>
                     <td className="px-3 pr-4">
                       {/* buy, market and board on one scale */}
                       <div className="relative h-2 rounded-full bg-ink/[0.05]">
@@ -778,7 +778,11 @@ export function BoardHistory({
         }
       />
       <div className="grid grid-cols-3 gap-px border-b border-ink/[0.06] bg-ink/[0.05]">
-        <Stat label="Current board" value={k?.boardRate != null ? money(conv(k.boardRate)) : "—"} sub={last ? `set ${new Date(last.effective_from).toLocaleDateString()}` : "Not published"} />
+        <Stat
+          label="Current board"
+          value={k?.boardRate != null ? money(conv(k.boardRate)) : <span className="font-sans text-[13px] text-ink-4">Not set</span>}
+          sub={last ? `set ${new Date(last.effective_from).toLocaleDateString()}` : k ? `market ${money(conv(k.lkrPerGram))}` : "Not published"}
+        />
         <Stat
           label="Avg board vs market"
           value={<span className={model?.avgSpread == null ? undefined : model.avgSpread >= 0 ? "text-emerald-700" : "text-rose-700"}>{pct(model?.avgSpread, 2)}</span>}

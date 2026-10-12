@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { hasPermission } from "@goldos/shared";
@@ -37,8 +37,14 @@ import {
   PanelHead,
   RefreshRing,
   Segmented,
+  CardBody,
+  HoverCard,
+  HoverRow,
   Shimmer,
+  Sparkline,
   SpreadMeter,
+  seriesStats,
+  useHoverCard,
   ago,
   currencyName,
   ccyTone,
@@ -51,6 +57,7 @@ import {
   usd,
 } from "./parts";
 import { BoardHistory, BuyBackDesk, GoldPerformance, RetailQuote, VaultValue } from "./business";
+import { GoldMoves, KaratBars, RelativePerformance } from "./insights";
 
 type Quote = {
   symbol: string;
@@ -63,6 +70,7 @@ type Quote = {
   updatedAt: number;
   stale: boolean;
   change24hPct: number | null;
+  changeFrom?: number | null;
 };
 
 type Karat = {
@@ -72,6 +80,7 @@ type Karat = {
   lkrPerGram: number;
   lkrPerPawn: number;
   change24hPct: number | null;
+  changeFrom?: number | null;
   boardRate: number | null;
   boardEffectiveFrom: number | null;
   boardDiffPct: number | null;
@@ -97,6 +106,9 @@ type History = {
 };
 
 type Range = "1d" | "7d" | "30d" | "1y";
+type Pt = History["points"][number];
+/** Every market the feed quotes; each gets a 24h history for sparklines and hover cards. */
+const SYMBOLS = ["XAU", "XAG", "XPT", "XPD", "HG", "BTC", "ETH"];
 
 const REFRESH_MS = 60_000;
 const CCY_KEY = "goldos.liveRates.currency";
@@ -281,10 +293,68 @@ export default function LiveRatesPage() {
     value: conv(q.lkrPerGram ?? q.priceLkr),
     unit: q.lkrPerGram != null ? `${display}/g` : `${display}/${unitWord(q.unit)}`,
     change: q.change24hPct,
+    from: q.changeFrom,
   }));
   const goldSilverRatio = gold && silver && silver.priceUsd > 0 ? gold.priceUsd / silver.priceUsd : null;
   const boarded = (data?.karats ?? []).filter((k) => k.boardDiffPct != null);
   const avgSpread = boarded.length ? boarded.reduce((a, k) => a + k.boardDiffPct!, 0) / boarded.length : null;
+  /**
+   * A karat without its own board rate is read off the nearest published one
+   * by purity (same price per gram of fine gold), so every row has a figure.
+   */
+  const impliedBoard = (k: Karat): { rate: number; from: string } | null => {
+    if (k.boardRate != null) return null;
+    const ref = [...boarded].sort((a, b) => Math.abs(a.purity - k.purity) - Math.abs(b.purity - k.purity))[0];
+    return ref?.boardRate != null ? { rate: (ref.boardRate / ref.purity) * k.purity, from: ref.karat } : null;
+  };
+
+  /* ---------- the last day for every market: sparklines, hover cards, insights */
+  const dayHists = useQueries({
+    queries: SYMBOLS.map((s) => ({
+      queryKey: ["market-history", s, "1d"],
+      queryFn: () => api<History>(`/api/v1/market/history?symbol=${s}&range=1d`),
+      refetchInterval: REFRESH_MS * 5,
+      staleTime: 60_000,
+    })),
+  });
+  /** Day points per symbol, closed at the live quote so lines end at the cards' price. */
+  const dayBy: Record<string, Pt[]> = {};
+  SYMBOLS.forEach((s, i) => {
+    const pts = [...(dayHists[i]?.data?.points ?? [])];
+    const q = data?.quotes.find((x) => x.symbol === s);
+    if (q && (!pts.length || q.updatedAt > pts[pts.length - 1]!.t))
+      pts.push({ t: Math.max(q.updatedAt, pts[pts.length - 1]?.t ?? 0), priceUsd: q.priceUsd, priceLkr: q.priceLkr, lkrPerGram: q.lkrPerGram });
+    dayBy[s] = pts;
+  });
+  /** Fine-gold LKR/g through the day, scaled to a purity and the display currency. */
+  const goldLine = (purity: number, grams = 1) => dayBy.XAU!.filter((p) => p.lkrPerGram != null).map((p) => conv(p.lkrPerGram! * purity * grams));
+  const spark = goldLine(k24?.purity ?? 1);
+  const sparkLo = spark.length ? Math.min(...spark) : null;
+  const sparkHi = spark.length ? Math.max(...spark) : null;
+  const fxLine = dayBy.XAU!.map((p) => p.priceLkr / p.priceUsd);
+  const ratioLine = (() => {
+    const ag = new Map(dayBy.XAG!.map((p) => [p.t, p.priceUsd]));
+    return dayBy.XAU!.flatMap((p) => (ag.get(p.t) ? [p.priceUsd / ag.get(p.t)!] : []));
+  })();
+  const spreadLine = boarded.length
+    ? dayBy.XAU!.filter((p) => p.lkrPerGram != null).map(
+        (p) => boarded.reduce((a, k) => a + ((k.boardRate! - p.lkrPerGram! * k.purity) / (p.lkrPerGram! * k.purity)) * 100, 0) / boarded.length
+      )
+    : [];
+  const signed = (n: number, f: (n: number) => string = money) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${f(Math.abs(n))}`;
+  /** Standard rows for a priced-gold hover card. */
+  const goldRows = (k: Karat) => {
+    const s = seriesStats(goldLine(k.purity));
+    return [
+      { k: "Per gram", v: money(conv(k.lkrPerGram)) },
+      { k: "Pawn · 8 g", v: money(conv(k.lkrPerPawn)) },
+      { k: "10 grams", v: money(conv(k.lkrPerGram * 10)) },
+      { k: "Tola · 11.66 g", v: money(conv(k.lkrPerGram * UNIT_G.tola)) },
+      { k: "Troy ounce", v: money(conv(k.lkrPerGram * UNIT_G.oz)) },
+      { k: "Fine gold in a pawn", v: `${(8 * k.purity).toFixed(3)} g` },
+      ...(s ? [{ k: "Move today / gram", v: signed(s.chg), tone: s.chg > 0 ? "text-emerald-300" : s.chg < 0 ? "text-rose-300" : undefined }] : []),
+    ];
+  };
   const fxTarget = display === "USD" ? "LKR" : display;
   const fxValue = data ? (fxTarget === "LKR" ? data.usdLkr : perUsd(fxTarget)) : null;
 
@@ -295,7 +365,9 @@ export default function LiveRatesPage() {
   const calcK = data?.karats.find((k) => k.purityId === calcKarat) ?? k22 ?? k24;
   const grams = (Number(calcW) || 0) * UNIT_G[calcUnit];
   const calcMarket = calcK ? conv(grams * calcK.lkrPerGram) : null;
-  const calcBoard = calcK?.boardRate != null ? conv(grams * calcK.boardRate) : null;
+  const calcImplied = calcK ? impliedBoard(calcK) : null;
+  const calcBoardRate = calcK?.boardRate ?? calcImplied?.rate ?? null;
+  const calcBoard = calcBoardRate != null ? conv(grams * calcBoardRate) : null;
 
   /* ---------- market pulse: movers, weight ladder, cross-market ratios */
   const movers = useMemo(
@@ -403,21 +475,65 @@ export default function LiveRatesPage() {
           </div>
         </div>
 
-        {/* KPI strip */}
-        <div className="relative mx-4 mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-paper/[0.08] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] sm:mx-5 sm:grid-cols-4 2xl:grid-cols-8">
-          <Kpi
-            accent
-            tone="#E2C27A"
-            className="bg-void"
-            label={
-              <span className="flex items-center gap-1.5">
-                <GoldBarIcon size={14} /> {k24?.karat ?? "24K"} · per gram
-              </span>
+        {/* KPI strip: a featured 24K tile, then the supporting figures */}
+        <div className="relative mx-4 mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-paper/[0.08] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07),0_30px_60px_-30px_rgba(0,0,0,0.6)] sm:mx-5 sm:grid-cols-4 xl:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,1fr))]">
+          <HoverCard
+            width={320}
+            className="relative col-span-2 flex min-w-0 cursor-default flex-col overflow-hidden bg-void px-5 pb-3 pt-4 sm:col-span-4 xl:col-span-1 xl:row-span-2"
+            content={
+              k24 ? (
+                <CardBody
+                  kicker={`${k24.karat} · ${(k24.purity * 1000).toFixed(0)}‰ fine · ${display}`}
+                  value={money(conv(k24.lkrPerGram))}
+                  unit={`${display}/g`}
+                  chip={<ChangeChip pct={k24.change24hPct} from={k24.changeFrom} tone="dark" className="px-1.5 py-px text-[10px]" />}
+                  spark={spark}
+                  color="#E2C27A"
+                  rows={goldRows(k24)}
+                  note={`Spot ${gold ? `$${usd(gold.priceUsd)}/oz` : "—"} × USD/LKR ${data ? data.usdLkr.toFixed(2) : "—"} ÷ 31.1035 g × purity.`}
+                />
+              ) : (
+                <CardBody kicker="24K gold" note="Waiting for the spot price…" />
+              )
             }
-            value={k24 ? conv(k24.lkrPerGram) : null}
-            unit={display}
-            sub={<ChangeChip pct={k24?.change24hPct} tone="dark" className="px-1.5 py-px text-[10px]" />}
-          />
+          >
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_0%_0%,rgba(226,194,122,0.22),transparent_60%)]" />
+            <span className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-gold-light via-gold to-gold/0" aria-hidden />
+            <div className="relative flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-gold-light/80">
+                <GoldBarIcon size={14} /> {k24?.karat ?? "24K"} · fine gold per gram
+              </span>
+              <ChangeChip pct={k24?.change24hPct} from={k24?.changeFrom} tone="dark" className="px-1.5 py-px text-[10px]" />
+            </div>
+            <div className="relative mt-2 flex items-baseline gap-1.5">
+              {k24 ? (
+                <LiveNumber value={conv(k24.lkrPerGram)} tone="dark" className="home-gold-text truncate text-[38px] font-semibold leading-none" />
+              ) : (
+                <Shimmer dark className="h-9 w-40" />
+              )}
+              <span className="text-[11px] font-semibold text-paper/45">{display}</span>
+            </div>
+            <div className="relative mt-1 text-[10.5px] text-paper/45">
+              {k24 ? (
+                <>
+                  Pawn <span className="g-metric text-paper/75">{money(conv(k24.lkrPerPawn))}</span> · 10 g{" "}
+                  <span className="g-metric text-paper/75">{money(conv(k24.lkrPerGram * 10))}</span>
+                </>
+              ) : (
+                "Waiting for spot…"
+              )}
+            </div>
+            <Sparkline values={spark} className="relative mt-auto pt-3" />
+            <div className="relative mt-1.5 flex items-center justify-between text-[10px] text-paper/40">
+              <span>
+                Low <span className="g-metric text-rose-300/80">{sparkLo != null ? money(sparkLo) : "—"}</span>
+              </span>
+              <span className="uppercase tracking-[0.16em]">{spark.length >= 2 ? "Last 24 h" : "Recording"}</span>
+              <span>
+                High <span className="g-metric text-emerald-300/80">{sparkHi != null ? money(sparkHi) : "—"}</span>
+              </span>
+            </div>
+          </HoverCard>
           <Kpi
             className="bg-void"
             tone="#F59E0B"
@@ -428,7 +544,25 @@ export default function LiveRatesPage() {
             }
             value={k22 ? conv(k22.lkrPerGram) : null}
             unit={display}
-            sub={<ChangeChip pct={k22?.change24hPct} tone="dark" className="px-1.5 py-px text-[10px]" />}
+            sub={<ChangeChip pct={k22?.change24hPct} from={k22?.changeFrom} tone="dark" className="px-1.5 py-px text-[10px]" />}
+            spark={k22 ? goldLine(k22.purity) : undefined}
+            detail={
+              k22 ? (
+                <CardBody
+                  kicker={`22K · ${(k22.purity * 1000).toFixed(0)}‰ · ${display}/g`}
+                  value={money(conv(k22.lkrPerGram))}
+                  unit={`${display}/g`}
+                  chip={<ChangeChip pct={k22.change24hPct} from={k22.changeFrom} tone="dark" className="px-1.5 py-px text-[10px]" />}
+                  spark={goldLine(k22.purity)}
+                  color="#F59E0B"
+                  rows={[
+                    ...goldRows(k22),
+                    ...(k24 ? [{ k: "Discount to 24K / g", v: money(conv(k24.lkrPerGram - k22.lkrPerGram)) }] : []),
+                    ...(k22.boardRate != null ? [{ k: "Your board / g", v: money(conv(k22.boardRate)) }] : []),
+                  ]}
+                />
+              ) : null
+            }
           />
           <Kpi
             className="bg-void"
@@ -440,7 +574,28 @@ export default function LiveRatesPage() {
             }
             value={k22 ? conv(k22.lkrPerPawn) : null}
             unit={display}
-            sub={k24 ? <>24K pawn <span className="g-metric ml-1 text-paper/70">{money(conv(k24.lkrPerPawn))}</span></> : null}
+            sub={k22 ? <>10 g <span className="g-metric ml-1 text-paper/70">{money(conv(k22.lkrPerGram * 10))}</span></> : null}
+            spark={k22 ? goldLine(k22.purity, 8) : undefined}
+            detail={
+              k22 ? (
+                <CardBody
+                  kicker={`22K sovereign · 8 g · ${display}`}
+                  value={money(conv(k22.lkrPerPawn))}
+                  unit={display}
+                  spark={goldLine(k22.purity, 8)}
+                  color="#FB923C"
+                  rows={[
+                    { k: "Fine gold content", v: `${(8 * k22.purity).toFixed(3)} g` },
+                    { k: "Alloy content", v: `${(8 * (1 - k22.purity)).toFixed(3)} g` },
+                    { k: "2 pawn · 16 g", v: money(conv(k22.lkrPerPawn * 2)) },
+                    { k: "5 pawn · 40 g", v: money(conv(k22.lkrPerPawn * 5)) },
+                    { k: "10 pawn · 80 g", v: money(conv(k22.lkrPerPawn * 10)) },
+                    ...(k22.boardRate != null ? [{ k: "At your board", v: money(conv(k22.boardRate * 8)) }] : []),
+                  ]}
+                  note="A Sri Lankan pawn (sovereign) is 8 grams."
+                />
+              ) : null
+            }
           />
           <Kpi
             className="bg-void"
@@ -453,7 +608,27 @@ export default function LiveRatesPage() {
             value={gold?.priceUsd}
             format={usd}
             unit="USD"
-            sub={<ChangeChip pct={gold?.change24hPct} tone="dark" className="px-1.5 py-px text-[10px]" />}
+            sub={<ChangeChip pct={gold?.change24hPct} from={gold?.changeFrom} tone="dark" className="px-1.5 py-px text-[10px]" />}
+            spark={dayBy.XAU!.map((p) => p.priceUsd)}
+            detail={
+              gold ? (
+                <CardBody
+                  kicker="International spot · XAU / USD"
+                  value={`$${usd(gold.priceUsd)}`}
+                  unit="/ troy oz"
+                  chip={<ChangeChip pct={gold.change24hPct} from={gold.changeFrom} tone="dark" className="px-1.5 py-px text-[10px]" />}
+                  spark={dayBy.XAU!.map((p) => p.priceUsd)}
+                  color="#FACC15"
+                  rows={[
+                    { k: "Per gram (USD)", v: `$${usd(gold.priceUsd / UNIT_G.oz)}` },
+                    { k: "Per kilo (USD)", v: `$${money((gold.priceUsd / UNIT_G.oz) * 1000)}` },
+                    { k: `Per oz (${display})`, v: money(conv(gold.priceLkr)) },
+                    { k: "Updated", v: ago(gold.updatedAt, now) },
+                  ]}
+                  note={gold.stale ? "Feed delayed — showing the last stored price." : "Source: gold-api.com"}
+                />
+              ) : null
+            }
           />
           <Kpi
             className="bg-void"
@@ -465,7 +640,27 @@ export default function LiveRatesPage() {
             }
             value={silver?.lkrPerGram != null ? conv(silver.lkrPerGram) : null}
             unit={display}
-            sub={<ChangeChip pct={silver?.change24hPct} tone="dark" className="px-1.5 py-px text-[10px]" />}
+            sub={<ChangeChip pct={silver?.change24hPct} from={silver?.changeFrom} tone="dark" className="px-1.5 py-px text-[10px]" />}
+            spark={dayBy.XAG!.filter((p) => p.lkrPerGram != null).map((p) => conv(p.lkrPerGram!))}
+            detail={
+              silver?.lkrPerGram != null ? (
+                <CardBody
+                  kicker={`Silver · XAG · ${display}`}
+                  value={money(conv(silver.lkrPerGram))}
+                  unit={`${display}/g`}
+                  chip={<ChangeChip pct={silver.change24hPct} from={silver.changeFrom} tone="dark" className="px-1.5 py-px text-[10px]" />}
+                  spark={dayBy.XAG!.filter((p) => p.lkrPerGram != null).map((p) => conv(p.lkrPerGram!))}
+                  color="#CBD5E1"
+                  rows={[
+                    { k: "Spot (USD/oz)", v: `$${usd(silver.priceUsd)}` },
+                    { k: "10 grams", v: money(conv(silver.lkrPerGram * 10)) },
+                    { k: "100 grams", v: money(conv(silver.lkrPerGram * 100)) },
+                    { k: "1 kilo", v: money(conv(silver.lkrPerGram * 1000)) },
+                    { k: "Sterling 925 / g", v: money(conv(silver.lkrPerGram * 0.925)) },
+                  ]}
+                />
+              ) : null
+            }
           />
           <Kpi
             className="bg-void"
@@ -478,6 +673,28 @@ export default function LiveRatesPage() {
             value={fxValue}
             unit={fxTarget}
             sub={data ? <>{data.fx.length + 1} currencies tracked</> : null}
+            spark={fxTarget === "LKR" ? fxLine : undefined}
+            detail={
+              data ? (
+                <CardBody
+                  kicker={`Exchange · USD / ${fxTarget}`}
+                  value={fxValue != null ? money(fxValue) : "—"}
+                  unit={fxTarget}
+                  spark={fxTarget === "LKR" ? fxLine : undefined}
+                  color="#38BDF8"
+                  rows={[
+                    { k: `1 ${fxTarget} in USD`, v: fxValue ? `$${(1 / fxValue).toFixed(6)}` : "—" },
+                    { k: "USD 100", v: fxValue ? money(fxValue * 100) : "—" },
+                    { k: "USD 1,000", v: fxValue ? money(fxValue * 1000) : "—" },
+                    { k: "EUR → LKR", v: perUsd("EUR") > 0 ? money(data.usdLkr / perUsd("EUR")) : "—" },
+                    { k: "GBP → LKR", v: perUsd("GBP") > 0 ? money(data.usdLkr / perUsd("GBP")) : "—" },
+                    { k: "AED → LKR", v: perUsd("AED") > 0 ? money(data.usdLkr / perUsd("AED")) : "—" },
+                    { k: "FX updated", v: ago(data.fxUpdatedAt, now) },
+                  ]}
+                  note="Source: ExchangeRate-API · refreshed daily."
+                />
+              ) : null
+            }
           />
           <Kpi
             className="bg-void"
@@ -491,6 +708,25 @@ export default function LiveRatesPage() {
             format={(n) => n.toFixed(1)}
             unit=": 1"
             sub="oz of silver per oz of gold"
+            spark={ratioLine}
+            detail={
+              goldSilverRatio != null ? (
+                <CardBody
+                  kicker="Gold / silver ratio"
+                  value={goldSilverRatio.toFixed(2)}
+                  unit=": 1"
+                  spark={ratioLine}
+                  color="#A78BFA"
+                  rows={[
+                    { k: "Gold / platinum", v: gold && plat ? `${(gold.priceUsd / plat.priceUsd).toFixed(2)} : 1` : "—" },
+                    { k: "Gold / palladium", v: gold && pall ? `${(gold.priceUsd / pall.priceUsd).toFixed(2)} : 1` : "—" },
+                    { k: "Long-run average", v: "≈ 60 : 1" },
+                    { k: "Reading", v: goldSilverRatio > 80 ? "Silver cheap vs gold" : goldSilverRatio < 50 ? "Silver rich vs gold" : "Near normal" },
+                  ]}
+                  note="Ounces of silver one ounce of gold buys. A high ratio means silver is cheap relative to gold."
+                />
+              ) : null
+            }
           />
           <Kpi
             className="bg-void"
@@ -501,6 +737,7 @@ export default function LiveRatesPage() {
               </span>
             }
             value={avgSpread}
+            text={data && avgSpread == null ? "Not set" : undefined}
             format={(n) => `${n > 0 ? "+" : ""}${n.toFixed(2)}%`}
             sub={
               data ? (
@@ -509,8 +746,57 @@ export default function LiveRatesPage() {
                     avg of {boarded.length} karat{boarded.length === 1 ? "" : "s"}
                   </span>
                 ) : (
-                  "No board published"
+                  <Link href="/gold-rates" className="text-gold-light/80 hover:text-gold-light">
+                    Publish a board rate →
+                  </Link>
                 )
+              ) : null
+            }
+            spark={spreadLine}
+            detail={
+              data ? (
+                <CardBody
+                  kicker="Your board vs live market"
+                  value={avgSpread != null ? `${avgSpread > 0 ? "+" : ""}${avgSpread.toFixed(2)}%` : "Not set"}
+                  spark={spreadLine}
+                  color={avgSpread == null ? "#94A3B8" : avgSpread >= 0 ? "#34D399" : "#FB7185"}
+                  rows={data.karats.map((k) => {
+                    const imp = impliedBoard(k);
+                    const d = k.boardDiffPct ?? (imp ? ((imp.rate - k.lkrPerGram) / k.lkrPerGram) * 100 : null);
+                    return {
+                      k: `${k.karat}${k.boardRate == null ? (imp ? " · implied" : " · not set") : ""}`,
+                      v: d == null ? "—" : `${d > 0 ? "+" : ""}${d.toFixed(2)}%`,
+                      tone: d == null ? "text-paper/40" : d >= 0 ? "text-emerald-300" : "text-rose-300",
+                    };
+                  })}
+                  note="Positive: your board sells above spot (normal margin). Negative: the board is below market and should be raised."
+                />
+              ) : null
+            }
+          />
+          <Kpi
+            className="bg-void"
+            tone="#F472B6"
+            label={
+              <span className="flex items-center gap-1.5">
+                <GoldCoinIcon size={14} /> {k24?.karat ?? "24K"} · tola
+              </span>
+            }
+            value={k24 ? conv(k24.lkrPerGram * UNIT_G.tola) : null}
+            unit={display}
+            sub={k24 ? <>11.66 g · troy oz <span className="g-metric ml-1 text-paper/70">{money(conv(k24.lkrPerGram * UNIT_G.oz))}</span></> : null}
+            spark={k24 ? goldLine(k24.purity, UNIT_G.tola) : undefined}
+            detail={
+              k24 ? (
+                <CardBody
+                  kicker={`Tola · 11.6638 g · ${display}`}
+                  value={money(conv(k24.lkrPerGram * UNIT_G.tola))}
+                  unit={display}
+                  spark={goldLine(k24.purity, UNIT_G.tola)}
+                  color="#F472B6"
+                  rows={(data?.karats ?? []).map((k) => ({ k: `${k.karat} tola`, v: money(conv(k.lkrPerGram * UNIT_G.tola)) }))}
+                  note="The tola is the traditional South Asian weight, common in Gulf and Indian gold quotes."
+                />
               ) : null
             }
           />
@@ -532,7 +818,7 @@ export default function LiveRatesPage() {
                     <span className="font-semibold text-paper/80">{t.label}</span>
                     <span className="g-metric text-paper">{money(t.value)}</span>
                     <span className="text-[9.5px] text-paper/35">{t.unit}</span>
-                    <ChangeChip pct={t.change} tone="dark" className="px-1.5 py-px text-[10px]" />
+                    <ChangeChip pct={t.change} from={t.from} tone="dark" className="px-1.5 py-px text-[10px]" />
                   </button>
                 ))}
               </div>
@@ -573,135 +859,193 @@ export default function LiveRatesPage() {
         <PanelHead
           kicker="Gold by karat"
           title={`Market vs your board · ${display}`}
-          right={<span className="text-[11px] text-ink-5">Spot × purity · excludes duty, premium and making</span>}
+          right={
+            <div className="flex flex-wrap items-center gap-3 text-[10.5px] text-ink-5">
+              {data?.karats.length ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-ink/[0.04] px-2 py-0.5 font-semibold text-ink-3">
+                  <span className="g-metric text-ink">{boarded.length}</span> of {data.karats.length} published
+                </span>
+              ) : null}
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-void" /> Published
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full border border-dashed border-ink-4" /> Implied by purity
+              </span>
+              <span className="hidden xl:inline">Spot × purity · excludes duty, premium and making</span>
+            </div>
+          }
         />
         {!live.isLoading && !data?.karats.length ? (
           <EmptyBlock title="No gold price" description="Gold spot is unavailable or no purities are active." />
         ) : (
           <div className="overflow-x-auto scrollbar-thin">
-            <table className="w-full min-w-[960px] text-[12.5px]">
+            <table className="w-full min-w-[980px] text-[12.5px]">
               <thead>
                 <tr className="bg-bone/60 text-left text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">
-                  <th className="py-2 pl-4 pr-2 font-semibold">Karat</th>
+                  <th className="py-2.5 pl-5 pr-2 font-semibold">Karat</th>
                   <th className="px-2 text-right font-semibold">Per gram</th>
-                  <th className="px-2 text-right font-semibold">24h</th>
                   <th className="px-2 text-right font-semibold">Pawn · 8 g</th>
                   <th className="px-2 text-right font-semibold">10 g</th>
                   <th className="px-2 text-right font-semibold">Tola · 11.66 g</th>
                   <th className="px-2 text-right font-semibold">Troy oz</th>
                   <th className="border-l border-ink/[0.06] px-3 text-right font-semibold">Your board / g</th>
                   <th className="w-[220px] px-3 font-semibold">Board vs market</th>
-                  {canPublish ? <th className="w-px pr-4" /> : null}
+                  {canPublish ? <th className="w-px pr-5" /> : null}
                 </tr>
               </thead>
               <tbody>
                 {live.isLoading
                   ? [0, 1, 2, 3].map((i) => (
                       <tr key={i} className="border-t border-ink/[0.05]">
-                        <td colSpan={canPublish ? 10 : 9} className="px-4 py-2.5">
-                          <Shimmer className="h-7 w-full" />
+                        <td colSpan={canPublish ? 9 : 8} className="px-5 py-3">
+                          <Shimmer className="h-9 w-full" />
                         </td>
                       </tr>
                     ))
                   : data!.karats.map((k, i) => {
                       const top = i === 0;
                       const kt = karatTone(k.purity);
+                      const implied = impliedBoard(k);
+                      const boardV = k.boardRate ?? implied?.rate ?? null;
+                      const diff = k.boardDiffPct ?? (implied ? ((implied.rate - k.lkrPerGram) / k.lkrPerGram) * 100 : null);
                       return (
-                        <tr
+                        <HoverRow
                           key={k.purityId}
+                          width={320}
+                          content={
+                            <CardBody
+                              kicker={`${k.karat} gold · ${(k.purity * 1000).toFixed(0)}‰ · ${display}`}
+                              value={money(conv(k.lkrPerGram))}
+                              unit={`${display}/g`}
+                              chip={<ChangeChip pct={k.change24hPct} from={k.changeFrom} tone="dark" className="px-1.5 py-px text-[10px]" />}
+                              spark={goldLine(k.purity)}
+                              color={kt.hex}
+                              rows={[
+                                ...goldRows(k),
+                                ...(boardV != null
+                                  ? [
+                                      { k: k.boardRate != null ? "Your board / g" : `Implied board (from ${implied!.from})`, v: money(conv(boardV)) },
+                                      { k: "Board − market / g", v: signed(conv(boardV - k.lkrPerGram)), tone: boardV >= k.lkrPerGram ? "text-emerald-300" : "text-rose-300" },
+                                      { k: "Board − market / pawn", v: signed(conv((boardV - k.lkrPerGram) * 8)), tone: boardV >= k.lkrPerGram ? "text-emerald-300" : "text-rose-300" },
+                                    ]
+                                  : [{ k: "Your board", v: "Not set", tone: "text-amber-300" }]),
+                              ]}
+                              note={
+                                k.boardEffectiveFrom
+                                  ? `Board published ${new Date(k.boardEffectiveFrom).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}.`
+                                  : "Market = spot × purity; excludes duty, premium and making."
+                              }
+                            />
+                          }
                           className={cn(
                             "group border-t border-ink/[0.05] transition-colors duration-150",
-                            top ? "bg-gold-pale/40 hover:bg-gold-pale/70" : "hover:bg-bone/70"
+                            top ? "bg-gradient-to-r from-gold-pale/70 via-gold-pale/30 to-transparent hover:from-gold-pale" : "hover:bg-bone/70"
                           )}
                         >
-                          <td className="relative py-2 pl-4 pr-2">
-                            <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full" style={{ background: kt.hex }} aria-hidden />
-                            <div className="flex items-center gap-2.5">
+                          <td className="relative py-3 pl-5 pr-2">
+                            <span className="absolute inset-y-2 left-0 w-[3px] rounded-r-full" style={{ background: kt.hex }} aria-hidden />
+                            <div className="flex items-center gap-3">
                               <span
                                 className={cn(
-                                  "flex h-7 w-10 items-center justify-center rounded-lg font-display text-[11.5px] font-extrabold tracking-tight shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_4px_10px_-6px_rgba(16,32,27,0.5)]",
+                                  "relative flex h-9 w-12 items-center justify-center overflow-hidden rounded-xl font-display text-[12.5px] font-extrabold tracking-tight shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_8px_16px_-8px_rgba(16,32,27,0.55)]",
                                   kt.badge
                                 )}
                               >
-                                {k.karat}
+                                <span className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" aria-hidden />
+                                <span className="relative">{k.karat}</span>
                               </span>
-                              <div className="w-[100px] leading-tight">
+                              <div className="w-[112px] leading-tight">
                                 <div className="flex items-baseline justify-between gap-1">
-                                  <span className="flex items-center gap-1 text-[12.5px] font-semibold text-ink">
-                                    <GoldCoinIcon size={13} />
-                                    {k.karat} gold
-                                  </span>
+                                  <span className="text-[13px] font-semibold text-ink">{k.karat} gold</span>
                                   <span className="g-metric text-[10px] text-ink-5">{(k.purity * 1000).toFixed(0)}‰</span>
                                 </div>
-                                <div className="mt-1 h-1 overflow-hidden rounded-full bg-ink/[0.07]">
+                                <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-ink/[0.07]">
                                   <div className={cn("h-full rounded-full", kt.bar)} style={{ width: `${k.purity * 100}%` }} />
                                 </div>
                               </div>
                             </div>
                           </td>
                           <td className="px-2 text-right">
-                            <LiveNumber value={conv(k.lkrPerGram)} className="text-[15px] font-semibold text-ink" />
+                            <div className="flex flex-col items-end gap-1 leading-none">
+                              <LiveNumber value={conv(k.lkrPerGram)} className="text-[16px] font-semibold text-ink" />
+                              <ChangeChip pct={k.change24hPct} from={k.changeFrom} className="px-1.5 py-px text-[9.5px]" />
+                            </div>
                           </td>
-                          <td className="px-2 text-right">
-                            <ChangeChip pct={k.change24hPct} className="px-1.5 py-px text-[10px]" />
-                          </td>
-                          <td className="g-metric px-2 text-right text-ink-2">{money(conv(k.lkrPerPawn))}</td>
+                          <td className="g-metric px-2 text-right font-semibold text-ink-2">{money(conv(k.lkrPerPawn))}</td>
                           <td className="g-metric px-2 text-right text-ink-3">{money(conv(k.lkrPerGram * 10))}</td>
                           <td className="g-metric px-2 text-right text-ink-3">{money(conv(k.lkrPerGram * UNIT_G.tola))}</td>
                           <td className="g-metric px-2 text-right text-ink-3">{money(conv(k.lkrPerGram * UNIT_G.oz))}</td>
                           <td className="border-l border-ink/[0.06] px-3 text-right">
                             {k.boardRate != null ? (
                               <div className="leading-tight">
-                                <span className="g-metric font-semibold text-ink">{money(conv(k.boardRate))}</span>
-                                {k.boardEffectiveFrom ? (
-                                  <div className="text-[10px] text-ink-5" title={new Date(k.boardEffectiveFrom).toLocaleString()}>
-                                    set {ago(k.boardEffectiveFrom, now)}
-                                  </div>
-                                ) : null}
+                                <span className="g-metric text-[13.5px] font-semibold text-ink">{money(conv(k.boardRate))}</span>
+                                <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-ink-5" title={k.boardEffectiveFrom ? new Date(k.boardEffectiveFrom).toLocaleString() : undefined}>
+                                  <span className="size-1.5 rounded-full bg-void" />
+                                  {k.boardEffectiveFrom ? `set ${ago(k.boardEffectiveFrom, now)}` : "published"}
+                                </div>
+                              </div>
+                            ) : implied ? (
+                              <div className="leading-tight" title={`Not published — ${implied.from} board rate scaled to ${(k.purity * 1000).toFixed(0)}‰`}>
+                                <span className="g-metric text-[13.5px] font-semibold text-ink-4">≈ {money(conv(implied.rate))}</span>
+                                <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-ink-5">
+                                  <span className="size-1.5 rounded-full border border-dashed border-ink-4" />
+                                  implied from {implied.from}
+                                </div>
                               </div>
                             ) : (
-                              <span className="text-[11px] text-ink-5">Not published</span>
+                              <div className="leading-tight">
+                                <span className="inline-flex rounded-full border border-dashed border-gold/50 bg-gold-pale/50 px-2 py-0.5 text-[10.5px] font-semibold text-gold-deep">
+                                  Not set
+                                </span>
+                                <div className="mt-0.5 text-[10px] text-ink-5">market {money(conv(k.lkrPerGram))}</div>
+                              </div>
                             )}
                           </td>
                           <td className="px-3">
-                            {k.boardDiffPct != null ? (
-                              <div className="flex items-center gap-2.5">
-                                <SpreadMeter pct={k.boardDiffPct} className="flex-1" />
-                                <span className="w-[78px] text-right leading-tight">
-                                  <span className={cn("g-metric block text-[11px] font-semibold", spreadTone(k.boardDiffPct))}>
-                                    {k.boardDiffPct > 0 ? "+" : ""}
-                                    {k.boardDiffPct.toFixed(2)}%
+                            {diff != null && boardV != null ? (
+                              <div className={cn("flex items-center gap-2.5", k.boardRate == null && "opacity-60")}>
+                                <SpreadMeter pct={diff} className="flex-1" />
+                                <span className="w-[84px] text-right leading-tight">
+                                  <span className={cn("g-metric block text-[11.5px] font-semibold", spreadTone(diff))}>
+                                    {diff > 0 ? "+" : ""}
+                                    {diff.toFixed(2)}%
                                   </span>
-                                  {k.boardRate != null ? (
-                                    <span className="g-metric block text-[9.5px] text-ink-5" title="Board minus market, per 8 g pawn">
-                                      {k.boardRate - k.lkrPerGram > 0 ? "+" : ""}
-                                      {money(conv((k.boardRate - k.lkrPerGram) * 8))}/pawn
-                                    </span>
-                                  ) : null}
+                                  <span className="g-metric block text-[9.5px] text-ink-5" title="Board minus market, per 8 g pawn">
+                                    {boardV - k.lkrPerGram > 0 ? "+" : ""}
+                                    {money(conv((boardV - k.lkrPerGram) * 8))}/pawn
+                                  </span>
                                 </span>
                               </div>
                             ) : (
-                              <span className="text-[11px] text-ink-6">—</span>
+                              <div className="flex items-center gap-2.5">
+                                <div className="relative h-1 flex-1 rounded-full border border-dashed border-ink/15">
+                                  <span className="absolute -top-1 bottom-[-4px] left-1/2 w-px bg-ink/20" aria-hidden />
+                                </div>
+                                <span className="w-[84px] text-right text-[10.5px] leading-tight text-ink-5">Publish to compare</span>
+                              </div>
                             )}
                           </td>
                           {canPublish ? (
-                            <td className="py-2 pr-4">
+                            <td className="py-3 pr-5">
                               <button
                                 type="button"
                                 onClick={() => setPublish({ karat: k, rate: String(Math.round(k.lkrPerGram)) })}
                                 className={cn(
-                                  "inline-flex h-7 items-center gap-1 whitespace-nowrap rounded-md px-2.5 text-[11.5px] font-semibold transition-all duration-200 ease-brand",
-                                  top
-                                    ? "bg-void text-gold-light hover:bg-void/90"
-                                    : "bg-bone text-ink-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)] hover:bg-void hover:text-gold-light"
+                                  "inline-flex h-8 items-center gap-1 whitespace-nowrap rounded-lg px-3 text-[11.5px] font-semibold transition-all duration-200 ease-brand",
+                                  k.boardRate == null
+                                    ? "home-btn-gold !rounded-lg"
+                                    : top
+                                      ? "bg-void text-gold-light hover:bg-void/90"
+                                      : "bg-bone text-ink-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)] hover:bg-void hover:text-gold-light"
                                 )}
                               >
-                                Set rate
+                                {k.boardRate == null ? "Publish" : "Update"}
                                 <ArrowRightIcon size={11} className="transition-transform duration-200 group-hover:translate-x-0.5" />
                               </button>
                             </td>
                           ) : null}
-                        </tr>
+                        </HoverRow>
                       );
                     })}
               </tbody>
@@ -709,6 +1053,13 @@ export default function LiveRatesPage() {
           </div>
         )}
       </section>
+
+      {/* ================================================================ INSIGHTS */}
+      <div className="grid gap-4 xl:grid-cols-12">
+        <RelativePerformance dayBy={dayBy} quotes={data?.quotes ?? []} className="xl:col-span-7" />
+        <KaratBars karats={data?.karats ?? []} conv={conv} display={display} implied={(k) => impliedBoard(k as Karat)} className="xl:col-span-5" />
+      </div>
+      <GoldMoves conv={conv} display={display} purity={k24?.purity ?? 1} />
 
       {/* ================================================================ PERFORMANCE */}
       <GoldPerformance pureLkrPerGram={gold?.lkrPerGram ?? null} change24hPct={gold?.change24hPct ?? null} conv={conv} display={display} />
@@ -763,7 +1114,7 @@ export default function LiveRatesPage() {
                           p == null ? "text-ink-6" : p > 0 ? "text-emerald-700" : p < 0 ? "text-rose-700" : "text-ink-4"
                         )}
                       >
-                        {p == null ? "—" : `${p > 0 ? "+" : ""}${p.toFixed(2)}%`}
+                        {p == null ? <span className="font-sans text-[10px] font-medium text-sky-700">tracking</span> : `${p > 0 ? "+" : ""}${p.toFixed(2)}%`}
                       </span>
                     </button>
                   );
@@ -847,7 +1198,15 @@ export default function LiveRatesPage() {
                       )}
                     </td>
                     <td className="g-metric px-2 pr-4 text-right text-ink-3">
-                      {ladderK?.boardRate != null ? money(conv(l.g * ladderK.boardRate)) : <span className="text-ink-6">—</span>}
+                      {ladderK?.boardRate != null ? (
+                        money(conv(l.g * ladderK.boardRate))
+                      ) : ladderK && impliedBoard(ladderK) ? (
+                        <span className="text-ink-5" title={`Implied from the ${impliedBoard(ladderK)!.from} board rate`}>
+                          ≈ {money(conv(l.g * impliedBoard(ladderK)!.rate))}
+                        </span>
+                      ) : (
+                        <span className="text-[10.5px] text-ink-5">not set</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1092,9 +1451,39 @@ export default function LiveRatesPage() {
               ? [0, 1, 2, 3, 4, 5, 6].map((i) => <Shimmer key={i} className="m-1.5 h-10" />)
               : (data?.quotes ?? []).map((q) => {
                   const on = q.symbol === symbol;
+                  const line = (dayBy[q.symbol] ?? []).map((p) => conv(p.lkrPerGram ?? p.priceLkr));
+                  const usdLine = (dayBy[q.symbol] ?? []).map((p) => p.priceUsd);
+                  const us = seriesStats(usdLine);
                   return (
-                    <button
+                    <HoverCard
                       key={q.symbol}
+                      width={300}
+                      content={
+                        <CardBody
+                          kicker={`${q.name} · ${q.symbol} · ${q.kind === "crypto" ? "crypto" : "metal"}`}
+                          value={money(conv(q.lkrPerGram ?? q.priceLkr))}
+                          unit={`${display}/${q.lkrPerGram != null ? "g" : unitWord(q.unit)}`}
+                          chip={<ChangeChip pct={q.change24hPct} from={q.changeFrom} tone="dark" className="px-1.5 py-px text-[10px]" />}
+                          spark={line}
+                          color={symbolTone(q.symbol)}
+                          rows={[
+                            { k: `USD / ${unitWord(q.unit)}`, v: `$${usd(q.priceUsd)}` },
+                            { k: `${display} / ${unitWord(q.unit)}`, v: money(conv(q.priceLkr)) },
+                            ...(q.lkrPerGram != null
+                              ? [
+                                  { k: `${display} / 10 g`, v: money(conv(q.lkrPerGram * 10)) },
+                                  { k: `${display} / kilo`, v: money(conv(q.lkrPerGram * 1000)) },
+                                ]
+                              : []),
+                            ...(us ? [{ k: "Day range (USD)", v: `${usd(us.lo)} – ${usd(us.hi)}` }] : []),
+                            ...(gold && q.symbol !== "XAU" ? [{ k: "Gold equivalent", v: `${(q.priceUsd / gold.priceUsd).toFixed(4)} oz` }] : []),
+                            { k: "Updated", v: ago(q.updatedAt, now) },
+                          ]}
+                          note={q.stale ? "Feed delayed — last stored price." : "Click to open in the main chart."}
+                        />
+                      }
+                    >
+                    <button
                       type="button"
                       onClick={() => setSymbol(q.symbol)}
                       className={cn(
@@ -1118,14 +1507,16 @@ export default function LiveRatesPage() {
                           {q.symbol} · ${usd(q.priceUsd)}/{unitWord(q.unit)}
                         </div>
                       </div>
+                      <Sparkline values={line} color={symbolTone(q.symbol)} className="hidden h-7 w-16 shrink-0 sm:block [&>span]:hidden" />
                       <div className="text-right leading-tight">
                         <div className="flex items-baseline justify-end gap-1">
                           <LiveNumber value={conv(q.lkrPerGram ?? q.priceLkr)} className="text-[13px] font-semibold text-ink" />
                           <span className="text-[9.5px] font-semibold text-ink-5">/{q.lkrPerGram != null ? "g" : unitWord(q.unit)}</span>
                         </div>
-                        <ChangeChip pct={q.change24hPct} className="mt-0.5 px-1.5 py-px text-[10px]" />
+                        <ChangeChip pct={q.change24hPct} from={q.changeFrom} className="mt-0.5 px-1.5 py-px text-[10px]" />
                       </div>
                     </button>
+                    </HoverCard>
                   );
                 })}
           </div>
@@ -1208,8 +1599,10 @@ export default function LiveRatesPage() {
               </div>
               <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-paper/[0.08] text-[10.5px]">
                 <div className="bg-void px-2.5 py-2">
-                  <div className="text-paper/40">At your board</div>
-                  <div className="g-metric mt-0.5 text-[12.5px] text-paper">{calcBoard != null ? money(calcBoard) : "—"}</div>
+                  <div className="text-paper/40">{calcImplied ? `At board · implied from ${calcImplied.from}` : "At your board"}</div>
+                  <div className="g-metric mt-0.5 text-[12.5px] text-paper">
+                    {calcBoard != null ? `${calcImplied ? "≈ " : ""}${money(calcBoard)}` : <span className="font-sans text-paper/50">No board yet</span>}
+                  </div>
                 </div>
                 <div className="bg-void px-2.5 py-2">
                   <div className="text-paper/40">Fine gold content</div>
@@ -1317,13 +1710,36 @@ export default function LiveRatesPage() {
                       <Shimmer className="h-7" />
                     </div>
                   ))
-                : shownFx.map((f) => (
-                    <button
+                : shownFx.map((f) => {
+                    const inCcy = (lkr: number) => (data ? (lkr / data.usdLkr) * f.perUsd : NaN);
+                    const region = REGIONS.find((r) => (r.codes as readonly string[]).includes(f.code));
+                    return (
+                    <HoverCard
                       key={f.code}
+                      width={290}
+                      className="flex"
+                      content={
+                        <CardBody
+                          kicker={`${currencyName(f.code)} · ${f.code}${region ? ` · ${region.label}` : ""}`}
+                          value={money(f.value)}
+                          unit={`${display} per 1 ${f.code}`}
+                          rows={[
+                            { k: `1 ${display} in ${f.code}`, v: f.value > 0 ? money(1 / f.value) : "—" },
+                            { k: `100 ${f.code}`, v: `${money(f.value * 100)} ${display}` },
+                            { k: `1,000 ${f.code}`, v: `${money(f.value * 1000)} ${display}` },
+                            { k: "Per USD", v: f.perUsd.toLocaleString("en-US", { maximumFractionDigits: 4 }) },
+                            ...(k24 ? [{ k: `24K / g in ${f.code}`, v: money(inCcy(k24.lkrPerGram)) }] : []),
+                            ...(k22 ? [{ k: `22K pawn in ${f.code}`, v: money(inCcy(k22.lkrPerPawn)) }] : []),
+                            ...(k22 ? [{ k: `22K tola in ${f.code}`, v: money(inCcy(k22.lkrPerGram * UNIT_G.tola)) }] : []),
+                          ]}
+                          note={`Click to show every price on this page in ${f.code}.`}
+                        />
+                      }
+                    >
+                    <button
                       type="button"
                       onClick={() => setCcy(f.code)}
-                      title={`Show all prices in ${f.code}`}
-                      className="group flex items-center gap-2.5 bg-paper px-3 py-2 text-left transition-colors duration-150 hover:bg-gold-pale/40"
+                      className="group flex w-full items-center gap-2.5 bg-paper px-3 py-2 text-left transition-colors duration-150 hover:bg-gold-pale/40"
                     >
                       <CurrencyBadge code={f.code} />
                       <div className="min-w-0 flex-1 leading-tight">
@@ -1334,7 +1750,9 @@ export default function LiveRatesPage() {
                       </div>
                       <span className="g-metric text-[12.5px] font-semibold text-ink">{money(f.value)}</span>
                     </button>
-                  ))}
+                    </HoverCard>
+                    );
+                  })}
               {/* pad the last grid row so the hairlines stay even */}
               {!live.isLoading && shownFx.length % 3
                 ? Array.from({ length: 3 - (shownFx.length % 3) }, (_, i) => <div key={`pad-${i}`} className="hidden bg-paper lg:block" />)

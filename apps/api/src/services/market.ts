@@ -110,14 +110,18 @@ async function latestSnapshots(db: D1Database): Promise<Record<string, SnapshotR
   return Object.fromEntries((results ?? []).map((r) => [r.symbol, r]));
 }
 
-/** The snapshot nearest to 24h ago, if one was taken between 18h and 30h ago. */
+/**
+ * The snapshot nearest to 24h ago, taken within the last 30h. A young feed
+ * with less than a day of history falls back to its oldest sample (at least
+ * 15 min old), so the change is never blank; `changeFrom` says how far back.
+ */
 async function dayAgoSnapshots(db: D1Database, now: number): Promise<Record<string, SnapshotRow>> {
   const target = now - DAY_MS;
   const { results } = await db
     .prepare(
       "SELECT symbol, price_usd, usd_lkr, captured_at FROM market_snapshots WHERE captured_at BETWEEN ? AND ? ORDER BY ABS(captured_at - ?)"
     )
-    .bind(now - 30 * 3_600_000, now - 18 * 3_600_000, target)
+    .bind(now - 30 * 3_600_000, now - 15 * 60_000, target)
     .all<SnapshotRow>();
   const out: Record<string, SnapshotRow> = {};
   for (const r of results ?? []) out[r.symbol] ??= r;
@@ -171,6 +175,8 @@ export type LiveMarket = {
     updatedAt: number;
     stale: boolean;
     change24hPct: number | null;
+    /** When the baseline for the change was captured (≈24h ago, or the oldest sample on a young feed). */
+    changeFrom: number | null;
   }[];
   karats: {
     purityId: string;
@@ -179,6 +185,7 @@ export type LiveMarket = {
     lkrPerGram: number;
     lkrPerPawn: number;
     change24hPct: number | null;
+    changeFrom: number | null;
     boardRate: number | null;
     boardEffectiveFrom: number | null;
     /** Board vs market, % of market. Positive = board above market. */
@@ -219,6 +226,7 @@ export async function liveMarket(db: D1Database, opts: MarketOpts = {}): Promise
       updatedAt: q.updatedAt,
       stale: !live,
       change24hPct: prev ? pct(q.priceUsd, prev.price_usd) : null,
+      changeFrom: prev?.captured_at ?? null,
     });
   }
 
@@ -246,6 +254,7 @@ export async function liveMarket(db: D1Database, opts: MarketOpts = {}): Promise
         lkrPerGram,
         lkrPerPawn: r2(lkrPerGram * PAWN_G),
         change24hPct: prevLkrG ? pct(fineLkrG, prevLkrG) : null,
+        changeFrom: goldPrev?.captured_at ?? null,
         boardRate,
         boardEffectiveFrom: b?.effective_from ?? null,
         boardDiffPct: boardRate != null ? pct(boardRate, lkrPerGram) : null,

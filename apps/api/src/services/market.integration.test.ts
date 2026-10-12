@@ -67,6 +67,17 @@ describe.skipIf(!sqliteAvailable)("market rates over real SQLite", () => {
     expect(h.points[1]!.lkrPerGram).toBeCloseTo((4200 * 300) / TROY_OZ_G, 2);
   });
 
+  it("measures change from the oldest sample while the feed is under a day old", async () => {
+    const young = migratedDb().db;
+    expect((await liveMarket(young, { fetcher: fakeFetch(PRICES, 300), now: T0 })).quotes[0]!.change24hPct).toBeNull();
+    resetMarketCache();
+    const m = await liveMarket(young, { fetcher: fakeFetch({ ...PRICES, XAU: 4040 }, 300), now: T0 + 3 * 3_600_000 });
+    const gold = m.quotes.find((q) => q.symbol === "XAU")!;
+    expect(gold.change24hPct).toBe(1);
+    expect(gold.changeFrom).toBe(T0);
+    expect(m.karats[0]!.changeFrom).toBe(T0);
+  });
+
   it("falls back to the last snapshot when the feed is down", async () => {
     const m = await liveMarket(db, { fetcher: fakeFetch({ XAG: 55 }, null), now: T0 + 2 * 86_400_000 });
     expect(m.stale).toBe(true);
