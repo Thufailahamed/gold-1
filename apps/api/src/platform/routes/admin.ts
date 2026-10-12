@@ -28,8 +28,10 @@ import {
   collectAllUsage,
   housekeeping,
   JOBS,
+  listActiveImpersonations,
   listJobRuns,
   listPlatformAudit,
+  revokeImpersonation,
   runJob,
   systemHealth,
   updatePlatformSettings,
@@ -123,6 +125,20 @@ export const platformAudit = new Hono<PlatformEnv>()
   .get("/export.csv", requirePlatformPerm(P.AUDIT_VIEW), async (c) => {
     const { rows } = await listPlatformAudit(c.get("pdb"), { ...auditFilter(c), search: c.req.query("search") || undefined, page: 1, limit: 10000 });
     return csv(auditCsv(rows), `platform-audit-${new Date().toISOString().slice(0, 10)}.csv`);
+  });
+
+export const platformImpersonations = new Hono<PlatformEnv>()
+  .use(requirePlatformAuth)
+  .get("/active", requirePlatformPerm(P.TENANTS_IMPERSONATE), async (c) => ok(c, await listActiveImpersonations(c.get("pdb"))))
+  .delete("/:id", requirePlatformPerm(P.TENANTS_IMPERSONATE), async (c) => {
+    const p = await parseBody(c, platformReasonSchema);
+    if (!p.ok) return p.res;
+    try {
+      await revokeImpersonation(c.get("pdb"), c.req.param("id"), p.data.reason, actor(c));
+      return ok(c, { ok: true });
+    } catch (e) {
+      return serviceError(c, e);
+    }
   });
 
 export const platformSystem = new Hono<PlatformEnv>()

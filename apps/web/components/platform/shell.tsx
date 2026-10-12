@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PLATFORM_PERMISSIONS as P, PLATFORM_ROLES } from "@goldos/shared";
 import { cn } from "@/lib/cn";
 import { can, papi, type PlatformMe } from "@/lib/platform";
+import { CommandPalette } from "@/components/platform/command-palette";
 import {
   AlertCircleIcon,
   Building2Icon,
@@ -259,8 +260,19 @@ function StaffMenu({ me }: { me: PlatformMe }) {
 
 export function PlatformShell({ me, children }: { me: PlatformMe; children: ReactNode }) {
   const [drawer, setDrawer] = useState(false);
+  const [palette, setPalette] = useState(false);
   const pathname = usePathname();
   useEffect(() => setDrawer(false), [pathname]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPalette((o) => !o);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div className="min-h-dvh bg-bone text-ink lg:flex">
@@ -288,6 +300,14 @@ export function PlatformShell({ me, children }: { me: PlatformMe; children: Reac
               <ShieldIcon size={12} className="text-gold-dark" />
               <span className="g-metric text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-4">Staff only · every action audited</span>
             </span>
+            <button
+              type="button"
+              onClick={() => setPalette(true)}
+              title="Search everything (Ctrl/⌘ K)"
+              className="hidden items-center gap-2 rounded-lg border border-ink/10 bg-paper px-2.5 py-1.5 text-xs text-ink-4 hover:text-ink md:inline-flex"
+            >
+              Search… <kbd className="rounded border border-ink/10 bg-bone px-1 font-mono text-[10px]">⌘K</kbd>
+            </button>
             <div className="flex-1" />
             <StaffMenu me={me} />
           </div>
@@ -308,6 +328,7 @@ export function PlatformShell({ me, children }: { me: PlatformMe; children: Reac
           {children}
         </main>
       </div>
+      <CommandPalette open={palette} onClose={() => setPalette(false)} />
       {drawer ? (
         <div className="fixed inset-0 z-50 bg-ink/60 backdrop-blur-sm lg:hidden" onClick={() => setDrawer(false)}>
           <div

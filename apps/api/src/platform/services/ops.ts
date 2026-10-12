@@ -275,6 +275,43 @@ export async function listImpersonations(db: D1Database, tenantId: string) {
   return results ?? [];
 }
 
+/** Every grant that could still be redeemed — the kill-switch list. */
+export async function listActiveImpersonations(db: D1Database) {
+  const now = Date.now();
+  const { results } = await db
+    .prepare(
+      `SELECT g.id, g.tenant_id, t.name AS tenant_name, t.slug AS tenant_slug, g.target_email, g.reason, g.expires_at, g.created_at, a.name AS admin_name, a.email AS admin_email
+       FROM impersonation_grants g JOIN tenants t ON t.id = g.tenant_id JOIN platform_admins a ON a.id = g.admin_id
+       WHERE g.consumed_at IS NULL AND g.expires_at > ? ORDER BY g.created_at DESC LIMIT 100`
+    )
+    .bind(now)
+    .all();
+  return results ?? [];
+}
+
+/** Revokes a single grant. Idempotent: revoking a consumed/expired grant is ok. */
+export async function revokeImpersonation(db: D1Database, grantId: string, reason: string, actor: Actor): Promise<void> {
+  const g = await db.prepare("SELECT id, tenant_id, target_email FROM impersonation_grants WHERE id = ?").bind(grantId).first<{ id: string; tenant_id: string; target_email: string }>();
+  if (!g) fail("NOT_FOUND", "Impersonation grant not found");
+  await db.batch([
+    db.prepare("DELETE FROM impersonation_grants WHERE id = ?").bind(grantId),
+    buildPlatformAudit(db, { adminId: actor.id, action: "tenant.impersonate_revoke", entity: "impersonation_grant", entityId: grantId, tenantId: g.tenant_id, prev: { targetEmail: g.target_email }, reason, ip: actor.ip }),
+  ]);
+}
+
+/** Revokes every outstanding grant for an account. Returns count revoked. */
+export async function revokeAllImpersonations(db: D1Database, tenantId: string, reason: string, actor: Actor): Promise<{ revoked: number }> {
+  await loadTenant(db, tenantId);
+  const now = Date.now();
+  const existing = await db.prepare("SELECT COUNT(*) AS n FROM impersonation_grants WHERE tenant_id = ? AND consumed_at IS NULL AND expires_at > ?").bind(tenantId, now).first<{ n: number }>();
+  const revoked = existing?.n ?? 0;
+  await db.prepare("DELETE FROM impersonation_grants WHERE tenant_id = ? AND consumed_at IS NULL AND expires_at > ?").bind(tenantId, now).run();
+  await db.batch([
+    buildPlatformAudit(db, { adminId: actor.id, action: "tenant.impersonate_revoke_all", entity: "tenant", entityId: tenantId, tenantId, next: { revoked }, reason, ip: actor.ip }),
+  ]);
+  return { revoked };
+}
+
 /* ------------------------------------------------------------------ System */
 
 async function ping(db: D1Database | undefined): Promise<{ ok: boolean; latencyMs: number | null; error?: string }> {

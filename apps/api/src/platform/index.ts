@@ -5,7 +5,8 @@ import type { PlatformEnv } from "./core";
 import { platformAuth } from "./routes/auth";
 import { platformBilling } from "./routes/billing";
 import { platformAnnouncements, platformFlags, platformPlans } from "./routes/catalog";
-import { platformAudit, platformOverviewRoutes, platformSystem, platformTeam } from "./routes/admin";
+import { platformAudit, platformImpersonations, platformOverviewRoutes, platformSystem, platformTeam } from "./routes/admin";
+import { platformSearch } from "./routes/search";
 import { platformSupport } from "./routes/support";
 import { platformTenants } from "./routes/tenants";
 import { runBillingCycle } from "./services/billing";
@@ -17,6 +18,7 @@ export const platform = new Hono<PlatformEnv>()
   .get("/", (c) => c.json({ success: true, data: { service: "goldos-platform", version: "v1" } }, 200))
   .route("/auth", platformAuth)
   .route("/overview", platformOverviewRoutes)
+  .route("/search", platformSearch)
   .route("/tenants", platformTenants)
   .route("/billing", platformBilling)
   .route("/plans", platformPlans)
@@ -25,6 +27,7 @@ export const platform = new Hono<PlatformEnv>()
   .route("/support", platformSupport)
   .route("/team", platformTeam)
   .route("/audit", platformAudit)
+  .route("/impersonations", platformImpersonations)
   .route("/system", platformSystem);
 
 /**

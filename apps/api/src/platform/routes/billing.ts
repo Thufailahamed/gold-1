@@ -5,6 +5,7 @@ import {
   PLATFORM_PERMISSIONS as P,
   platformReasonSchema,
   recordPaymentSchema,
+  refundPaymentSchema,
 } from "@goldos/shared";
 import { serviceError } from "../../routes/http";
 import { requirePlatformAuth, requirePlatformPerm } from "../auth";
@@ -22,6 +23,7 @@ import {
   runBillingCycle,
   setCouponActive,
   voidInvoice,
+  voidPayment,
 } from "../services/billing";
 import { runJob } from "../services/ops";
 
@@ -86,6 +88,24 @@ export const platformBilling = new Hono<PlatformEnv>()
   .get("/payments", requirePlatformPerm(P.BILLING_VIEW), async (c) =>
     ok(c, await listPayments(c.get("pdb"), { ...page(c), tenantId: c.req.query("tenantId") || undefined }))
   )
+  .post("/payments/:id/void", requirePlatformPerm(P.BILLING_MANAGE), async (c) => {
+    const p = await parseBody(c, refundPaymentSchema);
+    if (!p.ok) return p.res;
+    try {
+      return ok(c, await voidPayment(c.get("pdb"), c.req.param("id"), p.data.reason, actor(c)));
+    } catch (e) {
+      return serviceError(c, e);
+    }
+  })
+  .post("/payments/:id/refund", requirePlatformPerm(P.BILLING_MANAGE), async (c) => {
+    const p = await parseBody(c, refundPaymentSchema);
+    if (!p.ok) return p.res;
+    try {
+      return ok(c, await voidPayment(c.get("pdb"), c.req.param("id"), p.data.reason, actor(c)));
+    } catch (e) {
+      return serviceError(c, e);
+    }
+  })
   .post("/run-cycle", requirePlatformPerm(P.BILLING_MANAGE), async (c) => {
     try {
       const pdb = c.get("pdb");

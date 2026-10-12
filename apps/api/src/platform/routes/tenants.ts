@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import {
   applyDiscountSchema,
+  bulkTenantActionSchema,
   cancelSubscriptionSchema,
   changePlanSchema,
   createTenantSchema,
@@ -17,7 +18,7 @@ import { requirePlatformAuth, requirePlatformPerm } from "../auth";
 import type { PlatformEnv } from "../core";
 import { actor, csv, ok, page, parseBody } from "../http";
 import { listInvoices } from "../services/billing";
-import { createImpersonation, listImpersonations, listPlatformAudit, resolveDataPlane, snapshotUsage } from "../services/ops";
+import { createImpersonation, listActiveImpersonations, listImpersonations, listPlatformAudit, resolveDataPlane, revokeAllImpersonations, revokeImpersonation, snapshotUsage } from "../services/ops";
 import {
   applyDiscount,
   cancelSubscription,
@@ -30,12 +31,15 @@ import {
 import {
   addNote,
   archiveTenant,
+  bulkTenants,
   createTenant,
   deleteNote,
   editTenant,
+  exportTenant,
   getTenantDetail,
   listTenants,
   loadTenant,
+  purgeTenant,
   restoreTenant,
   setFlagOverride,
   suspendTenant,
@@ -78,6 +82,22 @@ export const platformTenants = new Hono<PlatformEnv>()
   .get("/export.csv", requirePlatformPerm(P.TENANTS_VIEW), async (c) => {
     const { rows } = await listTenants(c.get("pdb"), { ...filters(c), search: c.req.query("search") || undefined, page: 1, limit: 10000 });
     return csv(tenantsCsv(rows), `accounts-${new Date().toISOString().slice(0, 10)}.csv`);
+  })
+  .post("/bulk", requirePlatformPerm(P.TENANTS_VIEW), async (c) => {
+    const p = await parseBody(c, bulkTenantActionSchema);
+    if (!p.ok) return p.res;
+    // Bulk re-checks the specific perm for the action — viewing alone is not enough.
+    const need =
+      p.data.action === "suspend" || p.data.action === "unsuspend" ? P.TENANTS_SUSPEND
+      : p.data.action === "archive" || p.data.action === "restore" ? P.TENANTS_DELETE
+      : P.BILLING_MANAGE;
+    if (!(c.get("platformPermissions") ?? []).includes(need))
+      return c.json({ success: false, error: { code: "FORBIDDEN", message: "Missing permission" } }, 403);
+    try {
+      return ok(c, await bulkTenants(c.get("pdb"), p.data, actor(c)));
+    } catch (e) {
+      return serviceError(c, e);
+    }
   })
   .post("/", requirePlatformPerm(P.TENANTS_MANAGE), async (c) => {
     const p = await parseBody(c, createTenantSchema);
@@ -211,6 +231,31 @@ export const platformTenants = new Hono<PlatformEnv>()
       if (!data)
         return c.json({ success: false, error: { code: "CONFLICT", message: "This account's data plane is not reachable from this worker" } }, 409);
       return ok(c, await snapshotUsage(c.get("pdb"), data, t.id));
+    } catch (e) {
+      return serviceError(c, e);
+    }
+  })
+  .get("/:id/export.json", requirePlatformPerm(P.TENANTS_VIEW), async (c) => {
+    try {
+      return ok(c, await exportTenant(c.get("pdb"), c.req.param("id")));
+    } catch (e) {
+      return serviceError(c, e);
+    }
+  })
+  .delete("/:id/purge", requirePlatformPerm(P.TENANTS_DELETE), async (c) => {
+    const p = await parseBody(c, platformReasonSchema);
+    if (!p.ok) return p.res;
+    try {
+      return ok(c, await purgeTenant(c.get("pdb"), c.req.param("id"), p.data.reason, actor(c)));
+    } catch (e) {
+      return serviceError(c, e);
+    }
+  })
+  .delete("/:id/impersonations", requirePlatformPerm(P.TENANTS_IMPERSONATE), async (c) => {
+    const p = await parseBody(c, platformReasonSchema);
+    if (!p.ok) return p.res;
+    try {
+      return ok(c, await revokeAllImpersonations(c.get("pdb"), c.req.param("id"), p.data.reason, actor(c)));
     } catch (e) {
       return serviceError(c, e);
     }

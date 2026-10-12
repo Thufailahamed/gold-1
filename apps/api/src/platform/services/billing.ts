@@ -224,6 +224,30 @@ export async function listPayments(db: D1Database, opts: { tenantId?: string; pa
   return { rows: results ?? [], total: total?.n ?? 0 };
 }
 
+/**
+ * Reverses a recorded payment (duplicate entry, refund, gateway reversal).
+ * The payment row is removed and the invoice balance is restored; a PAID
+ * invoice reopens to OPEN. Fully audited with a mandatory reason.
+ */
+export async function voidPayment(db: D1Database, paymentId: string, reason: string, actor: Actor): Promise<{ invoiceId: string; status: string }> {
+  const pay = await db
+    .prepare("SELECT id, invoice_id, tenant_id, amount_cents, method, reference FROM payments WHERE id = ?")
+    .bind(paymentId)
+    .first<{ id: string; invoice_id: string; tenant_id: string; amount_cents: number; method: string; reference: string | null }>();
+  if (!pay) fail("NOT_FOUND", "Payment not found");
+  const inv = await db.prepare("SELECT id, status, amount_paid_cents FROM invoices WHERE id = ?").bind(pay.invoice_id).first<{ id: string; status: string; amount_paid_cents: number }>();
+  if (!inv) fail("NOT_FOUND", "Invoice not found");
+  const now = Date.now();
+  const nextPaid = Math.max(0, inv.amount_paid_cents - pay.amount_cents);
+  const nextStatus = inv.status === "PAID" ? "OPEN" : inv.status;
+  await db.batch([
+    db.prepare("DELETE FROM payments WHERE id = ?").bind(paymentId),
+    db.prepare("UPDATE invoices SET amount_paid_cents = ?, status = ?, paid_at = NULL WHERE id = ?").bind(nextPaid, nextStatus, inv.id),
+    buildPlatformAudit(db, { adminId: actor.id, action: "invoice.refund", entity: "payment", entityId: paymentId, tenantId: pay.tenant_id, prev: { invoiceId: inv.id, amountCents: pay.amount_cents, method: pay.method, reference: pay.reference, invoiceStatus: inv.status }, next: { invoiceStatus: nextStatus, amountPaidCents: nextPaid }, reason, ip: actor.ip }),
+  ]);
+  return { invoiceId: inv.id, status: nextStatus };
+}
+
 /* ------------------------------------------------------------------ Coupons */
 
 export async function listCoupons(db: D1Database) {

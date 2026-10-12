@@ -945,7 +945,68 @@ function ProfileTab({ d, onChange }: { d: Detail; onChange: () => void }) {
           Set <code className="font-mono">TENANT_ID</code> on the shop&rsquo;s API worker to this ID so the gate, plan limits and announcements apply to it.
         </p>
       </Panel>
+      <DangerZone d={d} onChange={onChange} />
     </div>
+  );
+}
+
+function DangerZone({ d, onChange }: { d: Detail; onChange: () => void }) {
+  const me = usePlatformMe();
+  const t = d.tenant;
+  const canDelete = can(me.data, P.TENANTS_DELETE);
+  const canImpersonate = can(me.data, P.TENANTS_IMPERSONATE);
+  const exportJson = async () => {
+    try {
+      const data = await papi<unknown>(`/tenants/${t.id}/export.json`);
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${t.slug}-export.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Export failed");
+    }
+  };
+  const revokeAll = async () => {
+    const reason = window.prompt("Reason for revoking all sign-in grants? (audited)");
+    if (!reason || reason.trim().length < 3) return;
+    try {
+      const r = await papi<{ revoked: number }>(`/tenants/${t.id}/impersonations`, { method: "DELETE", json: { reason: reason.trim() } });
+      toast.success(`Revoked ${r.revoked} grant(s)`);
+      onChange();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Revoke failed");
+    }
+  };
+  const purge = async () => {
+    if (t.status !== "ARCHIVED") {
+      toast.error("Archive the account first — purge is only for archived accounts");
+      return;
+    }
+    const reason = window.prompt(`Type a reason to PERMANENTLY purge ${t.name}. This deletes all billing, tickets and history. Export first!`);
+    if (!reason || reason.trim().length < 3) return;
+    if (window.confirm(`Purge ${t.name} forever? This cannot be undone.`) !== true) return;
+    try {
+      await papi(`/tenants/${t.id}/purge`, { method: "DELETE", json: { reason: reason.trim() } });
+      toast.success("Account purged");
+      window.location.href = "/platform/tenants";
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Purge failed");
+    }
+  };
+  return (
+    <Panel className="lg:col-span-3" title="Danger zone — full control" icon={<AlertCircleIcon size={16} />} description="Export before purge. Every action here is audited.">
+      <div className="flex flex-wrap gap-2">
+        <button onClick={exportJson} className="g-btn g-btn-secondary h-9 px-3 text-xs">Export JSON snapshot</button>
+        {canImpersonate ? <button onClick={revokeAll} className="g-btn g-btn-secondary h-9 px-3 text-xs">Revoke all sign-in grants</button> : null}
+        {canDelete ? (
+          <button onClick={purge} disabled={t.status !== "ARCHIVED"} title={t.status !== "ARCHIVED" ? "Archive first" : "Permanently delete"} className="g-btn h-9 px-3 text-xs text-rose-700 ring-1 ring-rose-200 hover:bg-rose-50 disabled:opacity-40">
+            Purge permanently{t.status !== "ARCHIVED" ? " (archive first)" : ""}
+          </button>
+        ) : null}
+      </div>
+    </Panel>
   );
 }
 

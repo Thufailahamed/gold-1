@@ -65,6 +65,7 @@ function TenantsInner() {
   const [sort, setSort] = useState("");
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(params.get("new") === "1");
+  const [selected, setSelected] = useState<string[]>([]);
 
   const qs = new URLSearchParams({ page: String(page), limit: String(PAGE), search, status, subStatus, planId, sort }).toString();
   const list = useQuery({ queryKey: ["p-tenants", qs], queryFn: () => papi<{ rows: TenantRow[]; total: number }>(`/tenants?${qs}`) });
@@ -72,6 +73,27 @@ function TenantsInner() {
   const rows = list.data?.rows ?? [];
 
   useEffect(() => setPage(1), [search, status, subStatus, planId, sort]);
+  useEffect(() => setSelected([]), [qs]);
+
+  const toggle = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  const bulk = useMutation({
+    mutationFn: (input: { action: string; reason: string }) =>
+      papi<{ results: Array<{ id: string; ok: boolean; error?: string }> }>("/tenants/bulk", { method: "POST", json: { ids: selected, ...input } }),
+    onSuccess: (r) => {
+      const okCount = r.results.filter((x) => x.ok).length;
+      const fail = r.results.filter((x) => !x.ok);
+      if (okCount) toast.success(`${okCount} account${okCount === 1 ? "" : "s"} updated`);
+      fail.forEach((f) => toast.error(`${f.id.slice(0, 8)}: ${f.error ?? "failed"}`));
+      setSelected([]);
+      qc.invalidateQueries({ queryKey: ["p-tenants"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Bulk failed"),
+  });
+  const runBulk = (action: string) => {
+    const reason = window.prompt(`Reason for bulk ${action} on ${selected.length} account(s)? (audited, min 3 chars)`);
+    if (!reason || reason.trim().length < 3) return;
+    bulk.mutate({ action, reason: reason.trim() });
+  };
 
   return (
     <Page className="max-w-[88rem]">
@@ -154,6 +176,16 @@ function TenantsInner() {
                 { key: "ARCHIVED", label: "Archived" },
               ]}
             />
+            {selected.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-xl bg-ink px-3 py-2 text-xs text-paper">
+                <span className="font-semibold">{selected.length} selected</span>
+                <button onClick={() => runBulk("suspend")} disabled={bulk.isPending} className="rounded-md bg-paper/10 px-2 py-1 hover:bg-paper/20">Suspend</button>
+                <button onClick={() => runBulk("unsuspend")} disabled={bulk.isPending} className="rounded-md bg-paper/10 px-2 py-1 hover:bg-paper/20">Unsuspend</button>
+                <button onClick={() => runBulk("archive")} disabled={bulk.isPending} className="rounded-md bg-paper/10 px-2 py-1 hover:bg-paper/20">Archive</button>
+                <button onClick={() => runBulk("restore")} disabled={bulk.isPending} className="rounded-md bg-paper/10 px-2 py-1 hover:bg-paper/20">Restore</button>
+                <button onClick={() => setSelected([])} className="ml-auto underline">Clear</button>
+              </div>
+            ) : null}
           </div>
         }
         footer={<Pager page={page} onChange={setPage} pageSize={PAGE} count={rows.length} total={list.data?.total ?? 0} unit="accounts" />}
@@ -166,6 +198,14 @@ function TenantsInner() {
           <table className="g-table">
             <thead>
               <tr>
+                <th aria-label="Select" className="w-8">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all on page"
+                    checked={rows.length > 0 && rows.every((r) => selected.includes(r.id))}
+                    onChange={(e) => setSelected(e.target.checked ? rows.map((r) => r.id) : [])}
+                  />
+                </th>
                 <th>Account</th>
                 <th>Plan</th>
                 <th>Subscription</th>
@@ -178,6 +218,9 @@ function TenantsInner() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="cursor-pointer" onClick={() => router.push(`/platform/tenants/${r.id}`)}>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <input type="checkbox" aria-label={`Select ${r.name}`} checked={selected.includes(r.id)} onChange={() => toggle(r.id)} />
+                  </td>
                   <td>
                     <Link href={`/platform/tenants/${r.id}`} className="group flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
                       <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-ink font-mono text-[10px] font-bold text-gold group-hover:bg-gold group-hover:text-ink">

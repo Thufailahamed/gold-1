@@ -498,3 +498,90 @@ export function tenantsCsv(rows: TenantListRow[]): string {
   );
   return [cols.join(","), ...lines].join("\n");
 }
+
+/* ------------------------------------------------------------------ Bulk + purge + export (full admin control) */
+
+export type BulkTenantAction = "suspend" | "unsuspend" | "archive" | "restore" | "change-plan";
+
+export async function bulkTenants(
+  db: D1Database,
+  input: { ids: string[]; action: BulkTenantAction; reason: string; planId?: string; interval?: "MONTH" | "YEAR" },
+  actor: Actor
+): Promise<{ results: Array<{ id: string; ok: boolean; error?: string }> }> {
+  const results: Array<{ id: string; ok: boolean; error?: string }> = [];
+  for (const id of input.ids) {
+    try {
+      if (input.action === "suspend") await suspendTenant(db, id, input.reason, actor);
+      else if (input.action === "unsuspend") await unsuspendTenant(db, id, input.reason, actor);
+      else if (input.action === "archive") await archiveTenant(db, id, input.reason, actor);
+      else if (input.action === "restore") await restoreTenant(db, id, input.reason, actor);
+      else if (input.action === "change-plan") {
+        if (!input.planId) fail("VALIDATION", "planId is required for change-plan");
+        const { loadSub } = await import("./subcore");
+        const sub = await loadSub(db, id);
+        if (sub.status === "CANCELED") fail("CONFLICT", "Reactivate the subscription before changing plan");
+        const plan = await loadPlan(db, input.planId);
+        if (!plan.is_active) fail("VALIDATION", "That plan is archived");
+        const interval = input.interval ?? (sub.billing_interval as "MONTH" | "YEAR");
+        const price = planPrice(plan, interval);
+        const now = Date.now();
+        await db.batch([
+          db.prepare("UPDATE subscriptions SET plan_id = ?, billing_interval = ?, price_cents = ?, updated_at = ? WHERE id = ?").bind(plan.id, interval, price, now, sub.id),
+          subEventStmt(db, { tenantId: id, subscriptionId: sub.id, type: "PLAN_CHANGED", before: sub, after: { ...sub, plan_id: plan.id, billing_interval: interval, price_cents: price }, reason: input.reason, actorId: actor.id, at: now }),
+          buildPlatformAudit(db, { adminId: actor.id, action: "subscription.change_plan", entity: "subscription", entityId: sub.id, tenantId: id, prev: { plan_id: sub.plan_id }, next: { plan_id: plan.id, interval, price_cents: price }, reason: input.reason, ip: actor.ip }),
+        ]);
+      }
+      results.push({ id, ok: true });
+    } catch (e) {
+      results.push({ id, ok: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return { results };
+}
+
+/**
+ * Hard delete of an archived account and every control-plane row that
+ * references it. Only ARCHIVED accounts can be purged — this is the
+ * irreversible half of deletion (GDPR erase). Callers should export first.
+ */
+export async function purgeTenant(db: D1Database, id: string, reason: string, actor: Actor): Promise<{ purged: string }> {
+  const t = await loadTenant(db, id);
+  if (t.status !== "ARCHIVED") fail("CONFLICT", "Only archived accounts can be purged — archive first");
+  const sub = await db.prepare("SELECT id FROM subscriptions WHERE tenant_id = ?").bind(id).first<{ id: string }>();
+  const subId = sub?.id;
+  const stmts: D1PreparedStatement[] = [];
+  if (subId) {
+    const invs = await db.prepare("SELECT id FROM invoices WHERE tenant_id = ?").bind(id).all<{ id: string }>();
+    for (const inv of invs.results ?? []) {
+      stmts.push(db.prepare("DELETE FROM invoice_lines WHERE invoice_id = ?").bind(inv.id));
+    }
+    stmts.push(
+      db.prepare("DELETE FROM payments WHERE tenant_id = ?").bind(id),
+      db.prepare("DELETE FROM invoices WHERE tenant_id = ?").bind(id),
+      db.prepare("DELETE FROM subscription_events WHERE subscription_id = ?").bind(subId),
+      db.prepare("DELETE FROM subscriptions WHERE id = ?").bind(subId)
+    );
+  }
+  stmts.push(
+    db.prepare("DELETE FROM tenant_notes WHERE tenant_id = ?").bind(id),
+    db.prepare("DELETE FROM tenant_feature_overrides WHERE tenant_id = ?").bind(id),
+    db.prepare("DELETE FROM usage_snapshots WHERE tenant_id = ?").bind(id),
+    db.prepare("DELETE FROM impersonation_grants WHERE tenant_id = ?").bind(id),
+    db.prepare("DELETE FROM support_messages WHERE ticket_id IN (SELECT id FROM support_tickets WHERE tenant_id = ?)").bind(id),
+    db.prepare("DELETE FROM support_tickets WHERE tenant_id = ?").bind(id),
+    db.prepare("DELETE FROM tenants WHERE id = ?").bind(id),
+    buildPlatformAudit(db, { adminId: actor.id, action: "tenant.purge", entity: "tenant", entityId: id, tenantId: null, prev: { slug: t.slug, name: t.name, status: t.status }, reason, ip: actor.ip })
+  );
+  await db.batch(stmts);
+  return { purged: id };
+}
+
+/** Full JSON snapshot of an account for export-before-purge / compliance. */
+export async function exportTenant(db: D1Database, id: string) {
+  const detail = await getTenantDetail(db, id);
+  const { results: invoices } = await db.prepare("SELECT * FROM invoices WHERE tenant_id = ? ORDER BY issued_at").bind(id).all();
+  const { results: payments } = await db.prepare("SELECT * FROM payments WHERE tenant_id = ? ORDER BY received_at").bind(id).all();
+  const { results: tickets } = await db.prepare("SELECT * FROM support_tickets WHERE tenant_id = ? ORDER BY created_at").bind(id).all();
+  const { results: audit } = await db.prepare("SELECT * FROM platform_audit_logs WHERE tenant_id = ? ORDER BY created_at").bind(id).all();
+  return { ...detail, invoices: invoices ?? [], payments: payments ?? [], tickets: tickets ?? [], audit: audit ?? [], exportedAt: Date.now() };
+}

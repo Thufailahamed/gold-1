@@ -318,6 +318,24 @@ export const impersonateSchema = z.object({
   reason,
 });
 
+/** Global command-palette search. */
+export const platformSearchSchema = z.object({
+  q: z.string().trim().min(1).max(100),
+  limit: z.number().int().min(1).max(25).default(8),
+});
+
+/** Bulk lifecycle / plan operations across many accounts. */
+export const bulkTenantActionSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(100),
+  action: z.enum(["suspend", "unsuspend", "archive", "restore", "change-plan"]),
+  reason,
+  planId: z.string().min(1).optional(),
+  interval: z.enum(BILLING_INTERVALS).optional(),
+});
+
+/** Reversing a recorded payment (duplicate / error / refund). */
+export const refundPaymentSchema = z.object({ reason });
+
 /** Platform settings the portal edits. Every key has a default, so reads never miss. */
 export const PLATFORM_SETTING_DEFAULTS = {
   company_name: "GoldOS",

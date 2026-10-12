@@ -172,6 +172,62 @@ export default function SystemPage() {
           </table>
         )}
       </TableCard>
+
+      <ActiveGrantsPanel />
     </Page>
+  );
+}
+
+type Grant = { id: string; tenant_id: string; tenant_name: string; tenant_slug: string; target_email: string; reason: string; expires_at: number; created_at: number; admin_name: string; admin_email: string };
+
+function ActiveGrantsPanel() {
+  const me = usePlatformMe();
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["p-active-grants"], queryFn: () => papi<Grant[]>("/impersonations/active"), refetchInterval: 30_000 });
+  if (!can(me.data, P.TENANTS_IMPERSONATE)) return null;
+  const revoke = async (id: string) => {
+    const reason = window.prompt("Reason for revoking this sign-in grant? (audited)");
+    if (!reason || reason.trim().length < 3) return;
+    try {
+      await papi(`/impersonations/${id}`, { method: "DELETE", json: { reason: reason.trim() } });
+      toast.success("Grant revoked");
+      qc.invalidateQueries({ queryKey: ["p-active-grants"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Revoke failed");
+    }
+  };
+  return (
+    <TableCard title="Active sign-in grants — kill switch" description="Every unredeemed impersonation link. Revoking kills it instantly." icon={<ServerIcon size={16} />}>
+      {q.isLoading ? (
+        <TableSkeleton rows={3} cols={4} />
+      ) : (q.data ?? []).length === 0 ? (
+        <EmptyBlock title="No active grants" description="Sign-in links appear here until redeemed, expired or revoked." />
+      ) : (
+        <table className="g-table">
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th>Target</th>
+              <th>Issued by</th>
+              <th>Expires</th>
+              <th aria-label="Actions" />
+            </tr>
+          </thead>
+          <tbody>
+            {q.data!.map((g) => (
+              <tr key={g.id}>
+                <td>{g.tenant_name} <span className="font-mono text-[11px] text-ink-4">{g.tenant_slug}</span></td>
+                <td className="font-mono text-xs">{g.target_email}</td>
+                <td className="text-xs text-ink-3">{g.admin_name}</td>
+                <td className="text-xs text-ink-3">{relative(g.expires_at)}</td>
+                <td className="!text-right">
+                  <button onClick={() => revoke(g.id)} className="rounded-md px-2 py-1 text-[11px] font-medium text-rose-700 ring-1 ring-rose-200 hover:bg-rose-50">Revoke</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </TableCard>
   );
 }

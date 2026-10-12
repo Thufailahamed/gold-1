@@ -162,7 +162,28 @@ export function InvoiceDrawer({ id, onClose }: { id: string; onClose: () => void
                         <div className="font-medium">{titleCase(p.method)}{p.reference ? ` · ${p.reference}` : ""}</div>
                         <div className="text-[11px] text-ink-4">{dateTime(p.received_at)} · by {p.recorded_by ?? "system"}</div>
                       </div>
-                      <span className="g-metric">{money(p.amount_cents, inv.currency)}</span>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="g-metric">{money(p.amount_cents, inv.currency)}</span>
+                        {manage ? (
+                          <button
+                            onClick={async () => {
+                              const reason = window.prompt(`Reason for refunding ${money(p.amount_cents, inv.currency)}? (audited)`);
+                              if (!reason || reason.trim().length < 3) return;
+                              try {
+                                await papi(`/billing/payments/${p.id}/refund`, { method: "POST", json: { reason: reason.trim() } });
+                                toast.success("Payment refunded");
+                                refresh();
+                              } catch (e) {
+                                toast.error(e instanceof Error ? e.message : "Refund failed");
+                              }
+                            }}
+                            title="Refund / reverse this payment"
+                            className="rounded-md px-2 py-1 text-[11px] font-medium text-rose-700 ring-1 ring-rose-200 hover:bg-rose-50"
+                          >
+                            Refund
+                          </button>
+                        ) : null}
+                      </div>
                     </li>
                   ))}
                 </ul>
