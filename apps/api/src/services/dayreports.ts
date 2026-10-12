@@ -1,6 +1,6 @@
 import { addDays, explainingAmounts } from "@goldos/shared";
 import { buildClosingReport, type ClosingReport, type ClosingRow } from "./dayclose";
-import { LOCAL_DAY, reconcile } from "./reconcile";
+import { LOCAL_DAY, reconcile, type ReconcileReport } from "./reconcile";
 
 /* ------------------------------------------------------------ investigate */
 
@@ -65,13 +65,15 @@ const all = async <T = Row>(db: D1Database, sql: string, vals: unknown[]): Promi
  */
 export async function investigateDay(
   db: D1Database,
-  opts: { branchId: string; date: string; actualCents?: number }
+  opts: { branchId: string; date: string; actualCents?: number },
+  // A caller that has already built these (the day survey) passes them in
+  // rather than paying for a second full reconciliation.
+  pre?: { report: ClosingReport; recon: ReconcileReport }
 ): Promise<DayInvestigation> {
   const { branchId, date } = opts;
-  const [report, recon] = await Promise.all([
-    buildClosingReport(db, { branchId, date }),
-    reconcile(db, { date, branchId }),
-  ]);
+  const [report, recon] = pre
+    ? [pre.report, pre.recon]
+    : await Promise.all([buildClosingReport(db, { branchId, date }), reconcile(db, { date, branchId })]);
   const expectedCents = report.closing.expectedCents;
   const differenceCents = opts.actualCents === undefined ? null : opts.actualCents - expectedCents;
 

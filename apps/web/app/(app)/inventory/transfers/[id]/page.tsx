@@ -62,21 +62,18 @@ type TransferDetail = {
   reason: string | null;
   requestedBy: string | null;
   requestedByName: string | null;
-  approvedBy: string | null;
-  approvedByName: string | null;
   createdAt: number | null;
   totalNetMg: number;
   lines: TransferLine[];
 };
 
-type Approver = { id: string; name: string };
 type Reconcile = { passed: boolean; warnings: string[] };
 type ReceiveResult = { received: string[]; skipped: string[] };
 type ScanLog = { key: number; code: string; outcome: "received" | "skipped" | "error"; message: string };
 
 const STATUS_LABEL: Record<TransferStatus, string> = {
-  REQUESTED: "Awaiting approval",
-  APPROVED: "Approved",
+  REQUESTED: "Requested",
+  APPROVED: "Requested",
   DISPATCHED: "In transit",
   PARTIAL: "Partially received",
   COMPLETE: "Complete",
@@ -90,20 +87,19 @@ const LINE_LABEL: Record<LineStatus, string> = {
   RECALLED: "Recalled",
 };
 
-const STEPS = ["Requested", "Approved", "Dispatched", "Received"];
+const STEPS = ["Requested", "Dispatched", "Received"];
 
 /** Index of the step currently in progress; steps before it are done. */
 function stepOf(status: TransferStatus): number {
   switch (status) {
     case "REQUESTED":
-      return 1;
     case "APPROVED":
-      return 2;
+      return 1;
     case "DISPATCHED":
     case "PARTIAL":
-      return 3;
+      return 2;
     case "COMPLETE":
-      return 4;
+      return 3;
     default:
       return -1;
   }
@@ -116,7 +112,7 @@ const errMsg = (e: unknown, fallback: string) => (e instanceof Error ? e.message
 export default function TransferDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const qc = useQueryClient();
-  const [dialog, setDialog] = useState<null | "approve" | "dispatch" | "cancel" | "recall">(null);
+  const [dialog, setDialog] = useState<null | "dispatch" | "cancel" | "recall">(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
@@ -137,7 +133,6 @@ export default function TransferDetailPage({ params }: { params: Promise<{ id: s
   function refresh() {
     qc.invalidateQueries({ queryKey: ["transfer", id] });
     qc.invalidateQueries({ queryKey: ["transfer-reconcile", id] });
-    qc.invalidateQueries({ queryKey: ["transfer-approvers", id] });
     qc.invalidateQueries({ queryKey: ["transfers"] });
     qc.invalidateQueries({ queryKey: ["products"] });
   }
@@ -174,13 +169,11 @@ export default function TransferDetailPage({ params }: { params: Promise<{ id: s
   const isSender = manage || myBranches.includes(t.fromBranchId);
   const isReceiver = manage || myBranches.includes(t.toBranchId);
   const canEdit = hasPermission(perms, "products:edit");
-  const canApprove = hasPermission(perms, "products:cancel");
 
   const inTransitLines = t.lines.filter((l) => l.status === "IN_TRANSIT");
   const receivedCount = t.lines.filter((l) => l.status === "RECEIVED").length;
   const inTransit = t.status === "DISPATCHED" || t.status === "PARTIAL";
-  const showApprove = t.status === "REQUESTED" && isSender && canApprove;
-  const showDispatch = t.status === "APPROVED" && isSender && canEdit;
+  const showDispatch = (t.status === "REQUESTED" || t.status === "APPROVED") && isSender && canEdit;
   const showCancel = (t.status === "REQUESTED" || t.status === "APPROVED") && isSender && canEdit;
   const showReceive = inTransit && isReceiver && canEdit;
   const showRecall = inTransit && isSender && canEdit;
@@ -223,11 +216,6 @@ export default function TransferDetailPage({ params }: { params: Promise<{ id: s
             <Pill tone="ghost" className="!text-paper">
               Requested by {t.requestedByName ?? "-"}
             </Pill>
-            {t.approvedByName ? (
-              <Pill tone="ghost" className="!text-paper">
-                Approved by {t.approvedByName}
-              </Pill>
-            ) : null}
             <Pill tone="ghost" className="!text-paper">
               {t.createdAt ? new Date(t.createdAt).toLocaleString() : "-"}
             </Pill>
@@ -241,11 +229,6 @@ export default function TransferDetailPage({ params }: { params: Promise<{ id: s
         ]}
         actions={
           <>
-            {showApprove ? (
-              <button type="button" onClick={() => setDialog("approve")} className={heroBtnPrimary}>
-                <CheckIcon size={15} /> Approve
-              </button>
-            ) : null}
             {showDispatch ? (
               <button type="button" onClick={() => setDialog("dispatch")} className={heroBtnPrimary}>
                 <TruckIcon size={15} /> Dispatch
@@ -278,7 +261,7 @@ export default function TransferDetailPage({ params }: { params: Promise<{ id: s
                     done
                       ? "bg-ink text-paper"
                       : current
-                        ? "bg-gold-soft text-ink shadow-[inset_0_0_0_1px_rgba(168,134,27,0.3)]"
+                        ? "bg-gold-soft text-ink shadow-[inset_0_0_0_1px_rgba(168,138,62,0.3)]"
                         : "bg-ink/[0.05] text-ink-4"
                   )}
                 >
@@ -295,11 +278,11 @@ export default function TransferDetailPage({ params }: { params: Promise<{ id: s
 
       {t.status === "REQUESTED" && !isSender && me.data ? (
         <Callout tone="info" title="Waiting on the sending branch">
-          {t.fromBranchName} must approve and dispatch this transfer.
+          {t.fromBranchName} must dispatch this transfer.
         </Callout>
       ) : null}
       {t.status === "APPROVED" && !isSender && me.data ? (
-        <Callout tone="info" title="Approved — awaiting dispatch">
+        <Callout tone="info" title="Awaiting dispatch">
           {t.fromBranchName} will dispatch the pieces. You can receive them once they are in transit.
         </Callout>
       ) : null}
@@ -447,17 +430,6 @@ export default function TransferDetailPage({ params }: { params: Promise<{ id: s
         </Panel>
       ) : null}
 
-      {dialog === "approve" ? (
-        <ApproveDialog
-          transferId={id}
-          fromBranchName={t.fromBranchName}
-          onClose={closeDialog}
-          onDone={() => {
-            closeDialog();
-            refresh();
-          }}
-        />
-      ) : null}
       {dialog === "dispatch" ? (
         <DispatchDialog
           transferId={id}
@@ -633,88 +605,6 @@ function ReceiveSelectedButton({
 }
 
 /* ---------------------------------------------------------------- Dialogs */
-
-function ApproveDialog({
-  transferId,
-  fromBranchName,
-  onClose,
-  onDone,
-}: {
-  transferId: string;
-  fromBranchName: string;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const [approvedBy, setApprovedBy] = useState("");
-  const approvers = useQuery({
-    queryKey: ["transfer-approvers", transferId],
-    queryFn: () => api<Approver[]>(`/api/v1/transfers/${transferId}/approvers`),
-  });
-  const approve = useMutation({
-    mutationFn: () =>
-      api(`/api/v1/transfers/${transferId}/approve`, {
-        method: "POST",
-        body: JSON.stringify({ approvedBy }),
-      }),
-    onSuccess: () => {
-      toast.success("Transfer approved");
-      onDone();
-    },
-    onError: (e) => toast.error(errMsg(e, "Approve failed")),
-  });
-  const list = approvers.data ?? [];
-  return (
-    <Modal
-      kicker="Branch transfer"
-      title="Approve transfer"
-      onClose={onClose}
-      onSubmit={list.length > 0 ? () => approve.mutate() : undefined}
-      pending={approve.isPending}
-      submitDisabled={!approvedBy}
-      submitLabel="Approve"
-    >
-      {approvers.isLoading ? (
-        <Skeleton className="h-10" />
-      ) : approvers.isError ? (
-        <Callout tone="danger" title="Could not load approvers">
-          {errMsg(approvers.error, "Retry in a moment.")}
-        </Callout>
-      ) : list.length === 0 ? (
-        <Callout tone="warning" title="No eligible approver">
-          Someone else at {fromBranchName} with the products:cancel permission must approve this transfer. The
-          requester cannot approve their own request.
-        </Callout>
-      ) : (
-        <Field
-          label="Approver"
-          htmlFor="transfer-approver"
-          hint={`A ${fromBranchName} member other than the requester.`}
-        >
-          <select
-            id="transfer-approver"
-            value={approvedBy}
-            onChange={(e) => setApprovedBy(e.target.value)}
-            className={`w-full ${controlClass}`}
-          >
-            <option value="">Select approver…</option>
-            {list.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-      )}
-      {list.length === 0 && !approvers.isLoading ? (
-        <div className="flex justify-end pt-1">
-          <button type="button" onClick={onClose} className="g-btn g-btn-secondary h-10 px-4 text-sm">
-            Close
-          </button>
-        </div>
-      ) : null}
-    </Modal>
-  );
-}
 
 function DispatchDialog({
   transferId,

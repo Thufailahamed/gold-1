@@ -698,7 +698,7 @@ function FeaturesTab({ d, onChange }: { d: Detail; onChange: () => void }) {
                   disabled={!manage || set.isPending}
                   value={f.override === null ? "" : f.override ? "on" : "off"}
                   onChange={(e) => set.mutate({ flagKey: f.key, enabled: e.target.value === "" ? null : e.target.value === "on" })}
-                  className="h-8 rounded-lg bg-paper px-2 text-xs shadow-[inset_0_0_0_1px_rgba(28,25,23,0.14)]"
+                  className="h-8 rounded-lg bg-paper px-2 text-xs shadow-[inset_0_0_0_1px_rgba(16,32,27,0.14)]"
                 >
                   <option value="">Inherit</option>
                   <option value="on">Force on</option>

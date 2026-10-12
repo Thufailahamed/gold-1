@@ -25,6 +25,8 @@ import {
   setExpenseCategoryActive,
 } from "../services/expenses";
 import { businessDateFor } from "../services/busdate";
+import { scanBill, ScanUnavailableError, SCAN_MAX_BYTES, SCAN_TYPES } from "../ai/billscan";
+import { bumpUsage, checkQuota } from "../assistant/agent";
 import { pagination, serviceError } from "./http";
 
 type Ctx = Context<{ Bindings: Env; Variables: AppVariables }>;
@@ -79,6 +81,30 @@ export const expenses = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       status: q("status"),
     });
     return c.json({ success: true, data }, 200);
+  })
+  // Reads a photographed bill and suggests the form fields. Posts nothing.
+  .post("/scan", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
+    const form = await c.req.parseBody();
+    const file = form["file"];
+    if (!(file instanceof File)) return invalid(c, "Attach a photo of the bill under 'file'");
+    if (!(SCAN_TYPES as readonly string[]).includes(file.type)) return invalid(c, "The bill photo must be a jpeg, png or webp image");
+    if (file.size > SCAN_MAX_BYTES) return invalid(c, "The bill photo must be under 4MB");
+    try {
+      const today = await businessDateFor(c.env.DB, Date.now());
+      await checkQuota(c.env, c.get("userId"), today);
+      const categories = (await listExpenseCategories(c.env.DB)).filter((x) => x.is_active).map((x) => ({ id: x.id, name: x.name }));
+      const data = await scanBill(c.env, { bytes: new Uint8Array(await file.arrayBuffer()), type: file.type }, categories, today);
+      await bumpUsage(c.env.DB, c.get("userId"), today);
+      return c.json({ success: true, data }, 200);
+    } catch (err) {
+      const code = (err as { code?: string } | null)?.code;
+      if (err instanceof ScanUnavailableError) {
+        console.error("bill scan failure", err);
+        return c.json({ success: false, error: { code, message: err.message.startsWith("The model did not") ? err.message : "The bill reader is not responding right now. Enter the expense by hand or try again." } }, 503);
+      }
+      if (code === "RATE_LIMITED") return c.json({ success: false, error: { code, message: (err as Error).message } }, 429);
+      return serviceError(c, err);
+    }
   })
   .post("/", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
     const parsed = createExpenseSchema.safeParse(await c.req.json().catch(() => null));

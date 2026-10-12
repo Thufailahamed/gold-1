@@ -23,7 +23,6 @@ describe.skipIf(!sqliteAvailable)("in-transit gold over real SQLite", () => {
   const ship = async (productId: string) => {
     const t = await import("./transfers");
     const { id } = await t.requestTransfer(db, { fromBranchId: "b1", toBranchId: "b2", productIds: [productId] }, "u1");
-    await t.approveTransfer(db, id, "u2", "u1");
     await t.dispatchTransfer(db, id, "u1");
     return id;
   };

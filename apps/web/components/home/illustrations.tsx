@@ -10,10 +10,10 @@ const pts = (...p: [number, number][]) => p.map(([x, y]) => `${x},${y}`).join(" 
 function GoldStops({ id }: { id: string }) {
   return (
     <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stopColor="#FFF4C7" />
-      <stop offset="0.35" stopColor="#E7C65A" />
-      <stop offset="0.7" stopColor="#C9A227" />
-      <stop offset="1" stopColor="#8C6D1F" />
+      <stop offset="0" stopColor="#FBF0D5" />
+      <stop offset="0.35" stopColor="#E2C27A" />
+      <stop offset="0.7" stopColor="#CDA853" />
+      <stop offset="1" stopColor="#7E6223" />
     </linearGradient>
   );
 }
@@ -25,7 +25,7 @@ function Sparkle({ x, y, s = 1, delay = 0 }: { x: number; y: number; s?: number;
         className="home-twinkle"
         style={{ transformBox: "fill-box", transformOrigin: "center", animationDelay: `${delay}s` }}
         d="M0 -10 C1 -2 2 -1 10 0 C2 1 1 2 0 10 C-1 2 -2 1 -10 0 C-2 -1 -1 -2 0 -10Z"
-        fill="#FFF4C7"
+        fill="#FBF0D5"
       />
     </g>
   );
@@ -57,16 +57,16 @@ const GEM = {
   E: [260, 338],
 } satisfies Record<string, [number, number]>;
 const FACETS: { p: [number, number][]; f: string }[] = [
-  { p: [GEM.D, GEM.A, GEM.G1], f: "#E7C65A" },
-  { p: [GEM.A, GEM.M, GEM.G1], f: "#FFF4C7" },
-  { p: [GEM.M, GEM.G1, GEM.G2], f: "#F1D676" },
-  { p: [GEM.M, GEM.G2, GEM.G3], f: "#C9A227" },
-  { p: [GEM.M, GEM.B, GEM.G3], f: "#E7C65A" },
-  { p: [GEM.B, GEM.G3, GEM.Cc], f: "#A8861B" },
-  { p: [GEM.D, GEM.G1, GEM.E], f: "#C9A227" },
-  { p: [GEM.G1, GEM.G2, GEM.E], f: "#F1D676" },
-  { p: [GEM.G2, GEM.G3, GEM.E], f: "#A8861B" },
-  { p: [GEM.G3, GEM.Cc, GEM.E], f: "#8C6D1F" },
+  { p: [GEM.D, GEM.A, GEM.G1], f: "#E2C27A" },
+  { p: [GEM.A, GEM.M, GEM.G1], f: "#FBF0D5" },
+  { p: [GEM.M, GEM.G1, GEM.G2], f: "#EBD08F" },
+  { p: [GEM.M, GEM.G2, GEM.G3], f: "#CDA853" },
+  { p: [GEM.M, GEM.B, GEM.G3], f: "#E2C27A" },
+  { p: [GEM.B, GEM.G3, GEM.Cc], f: "#A88A3E" },
+  { p: [GEM.D, GEM.G1, GEM.E], f: "#CDA853" },
+  { p: [GEM.G1, GEM.G2, GEM.E], f: "#EBD08F" },
+  { p: [GEM.G2, GEM.G3, GEM.E], f: "#A88A3E" },
+  { p: [GEM.G3, GEM.Cc, GEM.E], f: "#7E6223" },
 ];
 
 export function HeroEmblem({ className }: { className?: string }) {
@@ -76,9 +76,9 @@ export function HeroEmblem({ className }: { className?: string }) {
       <defs>
         <GoldStops id="he-gold" />
         <radialGradient id="he-glow" cx="0.5" cy="0.5" r="0.5">
-          <stop offset="0" stopColor="#E7C65A" stopOpacity="0.35" />
-          <stop offset="0.55" stopColor="#C9A227" stopOpacity="0.08" />
-          <stop offset="1" stopColor="#C9A227" stopOpacity="0" />
+          <stop offset="0" stopColor="#E2C27A" stopOpacity="0.35" />
+          <stop offset="0.55" stopColor="#CDA853" stopOpacity="0.08" />
+          <stop offset="1" stopColor="#CDA853" stopOpacity="0" />
         </radialGradient>
         <clipPath id="he-gem-clip">
           <polygon points={pts(GEM.D, GEM.A, GEM.B, GEM.Cc, GEM.E)} />
@@ -91,8 +91,8 @@ export function HeroEmblem({ className }: { className?: string }) {
       <circle cx={C} cy={C} r="250" fill="url(#he-glow)" />
 
       <g className="home-spin" style={origin}>
-        <circle cx={C} cy={C} r="232" fill="none" stroke="rgba(231,198,90,0.25)" strokeDasharray="2 8" />
-        <circle cx={C} cy={C - 232} r="4" fill="#E7C65A" />
+        <circle cx={C} cy={C} r="232" fill="none" stroke="rgba(226,194,122,0.25)" strokeDasharray="2 8" />
+        <circle cx={C} cy={C - 232} r="4" fill="#E2C27A" />
       </g>
 
       <g className="home-spin-rev" style={origin}>
@@ -104,7 +104,7 @@ export function HeroEmblem({ className }: { className?: string }) {
             y1={t.a.y}
             x2={t.b.x}
             y2={t.b.y}
-            stroke={t.long ? "#E7C65A" : "rgba(255,255,255,0.22)"}
+            stroke={t.long ? "#E2C27A" : "rgba(255,255,255,0.22)"}
             strokeWidth={t.long ? 1.6 : 1}
           />
         ))}
@@ -115,7 +115,7 @@ export function HeroEmblem({ className }: { className?: string }) {
             y={k.y}
             textAnchor="middle"
             dominantBaseline="central"
-            fill="rgba(255,244,199,0.75)"
+            fill="rgba(251,240,213,0.75)"
             fontSize="13"
             fontWeight="600"
             letterSpacing="2"
@@ -142,15 +142,15 @@ export function HeroEmblem({ className }: { className?: string }) {
       <g className="home-spin-fast" style={origin}>
         {ORBIT_DOTS.map((d, i) => (
           <g key={i}>
-            <circle cx={d.x} cy={d.y} r="9" fill="#E7C65A" opacity="0.35" filter="url(#he-blur)" />
-            <circle cx={d.x} cy={d.y} r="3.5" fill="#FFF4C7" />
+            <circle cx={d.x} cy={d.y} r="9" fill="#E2C27A" opacity="0.35" filter="url(#he-blur)" />
+            <circle cx={d.x} cy={d.y} r="3.5" fill="#FBF0D5" />
           </g>
         ))}
       </g>
 
       <g className="home-float">
         <ellipse cx={C} cy="372" rx="70" ry="8" fill="#000" opacity="0.45" filter="url(#he-blur)" />
-        <polygon points={pts(GEM.D, GEM.A, GEM.B, GEM.Cc, GEM.E)} fill="#E7C65A" filter="url(#he-blur)" opacity="0.55" />
+        <polygon points={pts(GEM.D, GEM.A, GEM.B, GEM.Cc, GEM.E)} fill="#E2C27A" filter="url(#he-blur)" opacity="0.55" />
         {FACETS.map((f, i) => (
           <polygon
             key={i}
@@ -213,9 +213,9 @@ export function Barcode({
     >
       <defs>
         <linearGradient id={`bc-laser-${height}`} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stopColor="#E7C65A" stopOpacity="0" />
-          <stop offset="0.5" stopColor="#FFF4C7" />
-          <stop offset="1" stopColor="#E7C65A" stopOpacity="0" />
+          <stop offset="0" stopColor="#E2C27A" stopOpacity="0" />
+          <stop offset="0.5" stopColor="#FBF0D5" />
+          <stop offset="1" stopColor="#E2C27A" stopOpacity="0" />
         </linearGradient>
       </defs>
       {BAR_RECTS.map((b, i) => (
@@ -251,7 +251,7 @@ export function ScanIllustration({ className }: { className?: string }) {
         x="160"
         y="150"
         textAnchor="middle"
-        fill="rgba(255,244,199,0.8)"
+        fill="rgba(251,240,213,0.8)"
         fontSize="11"
         letterSpacing="3"
         style={{ fontFamily: "var(--font-mono)" }}
@@ -274,8 +274,8 @@ export function RateChart({ className }: { className?: string }) {
       <defs>
         <GoldStops id="rc-gold" />
         <linearGradient id="rc-area" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#C9A227" stopOpacity="0.35" />
-          <stop offset="1" stopColor="#C9A227" stopOpacity="0" />
+          <stop offset="0" stopColor="#CDA853" stopOpacity="0.35" />
+          <stop offset="1" stopColor="#CDA853" stopOpacity="0" />
         </linearGradient>
       </defs>
       {[30, 60, 90, 120].map((y) => (
@@ -291,10 +291,10 @@ export function RateChart({ className }: { className?: string }) {
         className="home-draw"
         style={{ "--len": 420 } as CSSProperties}
       />
-      <circle r="10" fill="#E7C65A" opacity="0.25">
+      <circle r="10" fill="#E2C27A" opacity="0.25">
         <animateMotion dur="5s" repeatCount="indefinite" path={RATE_PATH} keyPoints="0;1;1" keyTimes="0;0.55;1" calcMode="linear" />
       </circle>
-      <circle r="4" fill="#FFF4C7">
+      <circle r="4" fill="#FBF0D5">
         <animateMotion dur="5s" repeatCount="indefinite" path={RATE_PATH} keyPoints="0;1;1" keyTimes="0;0.55;1" calcMode="linear" />
       </circle>
     </svg>
@@ -315,7 +315,7 @@ function Pan({ x, label, cls }: { x: number; label: string; cls: string }) {
         x={x}
         y="120"
         textAnchor="middle"
-        fill="#FFF4C7"
+        fill="#FBF0D5"
         fontSize="12"
         fontWeight="600"
         letterSpacing="1.5"
@@ -337,13 +337,13 @@ export function LedgerScale({ className }: { className?: string }) {
       <path d="M118 184 H202 Q196 170 160 170 Q124 170 118 184Z" fill="url(#lb-gold)" />
       <g className="home-tilt" style={{ transformOrigin: "160px 60px" }}>
         <rect x="68" y="57" width="184" height="6" rx="3" fill="url(#lb-gold)" />
-        <circle cx="68" cy="60" r="5" fill="#E7C65A" />
-        <circle cx="252" cy="60" r="5" fill="#E7C65A" />
+        <circle cx="68" cy="60" r="5" fill="#E2C27A" />
+        <circle cx="252" cy="60" r="5" fill="#E2C27A" />
       </g>
       <Pan x={68} label="GRAMS" cls="home-pan-l" />
       <Pan x={252} label="LKR" cls="home-pan-r" />
-      <circle cx="160" cy="58" r="9" fill="#120f0d" stroke="url(#lb-gold)" strokeWidth="3" />
-      <circle cx="160" cy="58" r="2.5" fill="#FFF4C7" />
+      <circle cx="160" cy="58" r="9" fill="#072b23" stroke="url(#lb-gold)" strokeWidth="3" />
+      <circle cx="160" cy="58" r="2.5" fill="#FBF0D5" />
     </svg>
   );
 }
@@ -373,10 +373,10 @@ export function LifecycleFlow({ className }: { className?: string }) {
       <path d={FLOW_PATH} fill="none" stroke="url(#lf-gold)" strokeWidth="2" strokeLinecap="round" className="home-flow" />
       {[0, 1.2, 2.4].map((begin) => (
         <g key={begin}>
-          <circle r="8" fill="#E7C65A" filter="url(#lf-blur)">
+          <circle r="8" fill="#E2C27A" filter="url(#lf-blur)">
             <animateMotion dur="3.6s" begin={`${begin}s`} repeatCount="indefinite" path={FLOW_PATH} />
           </circle>
-          <circle r="3.5" fill="#FFF4C7">
+          <circle r="3.5" fill="#FBF0D5">
             <animateMotion dur="3.6s" begin={`${begin}s`} repeatCount="indefinite" path={FLOW_PATH} />
           </circle>
         </g>
@@ -388,16 +388,16 @@ export function LifecycleFlow({ className }: { className?: string }) {
             cy={n.y}
             r="14"
             fill="none"
-            stroke="#E7C65A"
+            stroke="#E2C27A"
             className="home-pulse-ring"
             style={{ animationDelay: `${i * 0.6}s` }}
           />
-          <circle cx={n.x} cy={n.y} r="9" fill="#120f0d" stroke="url(#lf-gold)" strokeWidth="2.5" />
+          <circle cx={n.x} cy={n.y} r="9" fill="#072b23" stroke="url(#lf-gold)" strokeWidth="2.5" />
           <text
             x={n.x}
             y={n.y + (i % 2 === 0 ? 30 : -22)}
             textAnchor="middle"
-            fill="rgba(255,244,199,0.75)"
+            fill="rgba(251,240,213,0.75)"
             fontSize="10"
             letterSpacing="2"
             style={{ fontFamily: "var(--font-mono)" }}
@@ -429,7 +429,7 @@ export function AuditShield({ className }: { className?: string }) {
           cy="100"
           r="60"
           fill="none"
-          stroke="#E7C65A"
+          stroke="#E2C27A"
           strokeWidth="1"
           className="home-pulse-ring"
           style={{ animationDelay: `${i}s` }}
@@ -437,7 +437,7 @@ export function AuditShield({ className }: { className?: string }) {
       ))}
       <path
         d="M90 44 L132 60 V98 C132 128 112 148 90 158 C68 148 48 128 48 98 V60 Z"
-        fill="rgba(201,162,39,0.12)"
+        fill="rgba(205,168,83,0.12)"
         stroke="url(#as-gold)"
         strokeWidth="2.5"
         strokeLinejoin="round"
@@ -445,7 +445,7 @@ export function AuditShield({ className }: { className?: string }) {
       <path
         d="M72 100 L86 114 L110 88"
         fill="none"
-        stroke="#FFF4C7"
+        stroke="#FBF0D5"
         strokeWidth="4"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -498,22 +498,22 @@ export function BranchNetwork({ className }: { className?: string }) {
         return (
           <g key={i}>
             <path d={d} stroke="rgba(255,255,255,0.1)" strokeWidth="1.5" />
-            <circle r="5" fill="#E7C65A" filter="url(#bn-blur)">
+            <circle r="5" fill="#E2C27A" filter="url(#bn-blur)">
               <animateMotion dur="2.4s" begin={`${i * 0.45}s`} repeatCount="indefinite" path={d} />
             </circle>
-            <circle r="2.2" fill="#FFF4C7">
+            <circle r="2.2" fill="#FBF0D5">
               <animateMotion dur="2.4s" begin={`${i * 0.45}s`} repeatCount="indefinite" path={d} />
             </circle>
-            <circle cx={b.x} cy={b.y} r="8" fill="#120f0d" stroke="rgba(231,198,90,0.7)" strokeWidth="1.5" />
-            <circle cx={b.x} cy={b.y} r="2.5" fill="#E7C65A" />
+            <circle cx={b.x} cy={b.y} r="8" fill="#072b23" stroke="rgba(226,194,122,0.7)" strokeWidth="1.5" />
+            <circle cx={b.x} cy={b.y} r="2.5" fill="#E2C27A" />
           </g>
         );
       })}
-      <circle cx={HUB.x} cy={HUB.y} r="26" fill="none" stroke="#E7C65A" className="home-pulse-ring" />
+      <circle cx={HUB.x} cy={HUB.y} r="26" fill="none" stroke="#E2C27A" className="home-pulse-ring" />
       <circle cx={HUB.x} cy={HUB.y} r="22" fill="url(#bn-gold)" />
       <path
         d={`M${HUB.x - 8} ${HUB.y - 4} L${HUB.x - 4} ${HUB.y - 9} H${HUB.x + 4} L${HUB.x + 8} ${HUB.y - 4} L${HUB.x} ${HUB.y + 8} Z`}
-        fill="#120f0d"
+        fill="#072b23"
       />
     </svg>
   );
@@ -538,14 +538,14 @@ export function FooterWordmark({ className }: { className?: string }) {
     <svg viewBox="0 0 1200 250" className={className} aria-hidden>
       <defs>
         <linearGradient id="fw-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#E7C65A" stopOpacity="0.22" />
-          <stop offset="0.75" stopColor="#C9A227" stopOpacity="0.04" />
-          <stop offset="1" stopColor="#C9A227" stopOpacity="0" />
+          <stop offset="0" stopColor="#E2C27A" stopOpacity="0.22" />
+          <stop offset="0.75" stopColor="#CDA853" stopOpacity="0.04" />
+          <stop offset="1" stopColor="#CDA853" stopOpacity="0" />
         </linearGradient>
         <linearGradient id="fw-sheen" gradientUnits="userSpaceOnUse" x1="-400" y1="0" x2="0" y2="0">
-          <stop offset="0" stopColor="#FFF4C7" stopOpacity="0" />
-          <stop offset="0.5" stopColor="#FFF4C7" stopOpacity="0.9" />
-          <stop offset="1" stopColor="#FFF4C7" stopOpacity="0" />
+          <stop offset="0" stopColor="#FBF0D5" stopOpacity="0" />
+          <stop offset="0.5" stopColor="#FBF0D5" stopOpacity="0.9" />
+          <stop offset="1" stopColor="#FBF0D5" stopOpacity="0" />
           <animateTransform
             attributeName="gradientTransform"
             type="translate"
@@ -565,7 +565,7 @@ export function FooterWordmark({ className }: { className?: string }) {
         </mask>
       </defs>
       <g mask="url(#fw-mask)">
-        <text {...text} fill="url(#fw-fill)" stroke="rgba(231,198,90,0.28)" strokeWidth="1.2">
+        <text {...text} fill="url(#fw-fill)" stroke="rgba(226,194,122,0.28)" strokeWidth="1.2">
           GoldOS
         </text>
         <text {...text} fill="none" stroke="url(#fw-sheen)" strokeWidth="2">
@@ -584,13 +584,13 @@ function Ingot({ x, y, delay }: { x: number; y: number; delay: number }) {
   return (
     <g transform={`translate(${x} ${y})`}>
       <polygon points="14,0 106,0 120,34 0,34" fill="url(#ig-top)" />
-      <polygon points="0,34 120,34 120,44 0,44" fill="#8C6D1F" />
+      <polygon points="0,34 120,34 120,44 0,44" fill="#7E6223" />
       <polygon points="14,0 106,0 120,34 0,34" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="0.8" />
       <text
         x="60"
         y="22"
         textAnchor="middle"
-        fill="rgba(92,70,16,0.75)"
+        fill="rgba(82,66,25,0.75)"
         fontSize="9"
         fontWeight="700"
         letterSpacing="2"
@@ -619,9 +619,9 @@ export function IngotStack({ className }: { className?: string }) {
     <svg viewBox="0 0 300 200" className={className} aria-hidden>
       <defs>
         <linearGradient id="ig-top" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#FFF4C7" />
-          <stop offset="0.5" stopColor="#E7C65A" />
-          <stop offset="1" stopColor="#C9A227" />
+          <stop offset="0" stopColor="#FBF0D5" />
+          <stop offset="0.5" stopColor="#E2C27A" />
+          <stop offset="1" stopColor="#CDA853" />
         </linearGradient>
         <clipPath id="ig-clip">
           <polygon points="14,0 106,0 120,34 0,34" />

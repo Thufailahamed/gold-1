@@ -77,8 +77,8 @@ export default function TaxPage() {
   return (
     <Page>
       <Hero
+        compact
         kicker="Accounts"
-        back={{ href: "/accounts", label: "Accounts dashboard" }}
         title={`${cfg?.label ?? "VAT"} on sales`}
         description="Output tax charged on sales, refunded on returns and paid to the revenue authority — read straight from the Tax Payable account."
         stats={[

@@ -15,10 +15,6 @@ describe("stock count compare", () => {
     expect(r.duplicates).toEqual(["p1"]);
     expect(r.unexpected).toEqual(["ZZ-000000"]);
   });
-  it("refuses self-approval without touching the database", async () => {
-    const { approveCount } = await import("./counts");
-    await expect(approveCount({} as D1Database, "c1", { reason: "short", approvedBy: "u1" }, "u1")).rejects.toMatchObject({ code: "FORBIDDEN" });
-  });
   it("posts nothing for an unexpected-only count", async () => {
     const { approveCount } = await import("./counts");
     const db = {

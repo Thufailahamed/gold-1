@@ -115,7 +115,7 @@ export default function FlagsPage() {
                           onChange={(e) => setRollout((r) => ({ ...r, [f.key]: Number(e.target.value) }))}
                           onPointerUp={() => pct !== f.rollout_pct && edit.mutate({ key: f.key, rolloutPct: pct })}
                           onKeyUp={() => pct !== f.rollout_pct && edit.mutate({ key: f.key, rolloutPct: pct })}
-                          className="w-full accent-[#A8861B]"
+                          className="w-full accent-[#A88A3E]"
                         />
                         <span className="g-metric w-10 text-right text-xs">{pct}%</span>
                       </div>
@@ -178,7 +178,7 @@ function NewFlagDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
           <Toggle checked={defaultEnabled} onChange={setDefault} label="On by default" /> On by default
         </label>
         <F label={`Rollout ${rolloutPct}%`} className="w-48">
-          <input type="range" min={0} max={100} step={5} value={rolloutPct} onChange={(e) => setPct(Number(e.target.value))} className="w-full accent-[#A8861B]" />
+          <input type="range" min={0} max={100} step={5} value={rolloutPct} onChange={(e) => setPct(Number(e.target.value))} className="w-full accent-[#A88A3E]" />
         </F>
       </div>
     </Modal>

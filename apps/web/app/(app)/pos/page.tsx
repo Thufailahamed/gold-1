@@ -5,10 +5,11 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { toast } from "sonner";
 import { salesTaxCents } from "@goldos/shared";
-import { api, errorCode, PendingApprovalError } from "@/lib/api";
+import { api, errorCode } from "@/lib/api";
 import { extractScanCode, looksLikeCode } from "@/lib/barcode";
 import { cn } from "@/lib/cn";
 import { CameraScanButton } from "@/components/camera-scan";
+import { Select } from "@/components/select";
 import {
   Page,
   Hero,
@@ -73,7 +74,10 @@ type CartLine = {
   name: string;
   karat: string;
   netMg: number;
+  /** The price charged — the cashier may move it off the shelf price. */
   priceCents: number;
+  /** The shelf price at scan time; the server checks it is still current. */
+  listPriceCents: number;
   discountCents: number;
   /** Set when the piece is held: it sells only to this customer. */
   reservedFor?: { id: string; name: string };
@@ -96,7 +100,6 @@ type BankAccount = { id: string; name: string; bank_name: string | null; account
 /** The replacement half of an exchange, handed over from the invoice page. */
 type Exchange = { returnId: string; number: string };
 
-type Pending = { approvalId: string; entityId: string; sig: string };
 
 type Draft = { cart: CartLine[]; customer: Customer | null; exchange: Exchange | null; notes?: string };
 
@@ -151,17 +154,16 @@ export default function PosPage() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [customerSearch, setCustomerSearch] = useState("");
   const [exchange, setExchange] = useState<Exchange | null>(null);
-  const [approver, setApprover] = useState("");
   const [pays, setPays] = useState<PayRow[]>([{ method: "cash", amountLkr: "" }]);
   const [tendered, setTendered] = useState("");
   const [notes, setNotes] = useState("");
   const [done, setDone] = useState<Done | null>(null);
-  const [pending, setPending] = useState<Pending | null>(null);
   const [stale, setStale] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const scanRef = useRef<HTMLInputElement>(null);
+  const autoAmount = useRef(false);
   const cartRef = useRef(cart);
   cartRef.current = cart;
   const customerRef = useRef(customer);
@@ -229,11 +231,6 @@ export default function PosPage() {
     retry: false,
   });
 
-  const approvers = useQuery({
-    queryKey: ["pos-approvers"],
-    queryFn: () => api<{ id: string; name: string }[]>("/api/v1/sales/approvers"),
-    staleTime: 5 * 60_000,
-  });
 
   function refocus() {
     setScan("");
@@ -271,6 +268,7 @@ export default function PosPage() {
         karat: d.product.karat,
         netMg: d.product.net_mg,
         priceCents: ok.price,
+        listPriceCents: ok.price,
         discountCents: 0,
         reservedFor: held,
       };
@@ -320,7 +318,7 @@ export default function PosPage() {
       const raw = window.sessionStorage.getItem(DRAFT_KEY);
       if (raw) {
         const d = JSON.parse(raw) as Draft;
-        setCart(d.cart ?? []);
+        setCart((d.cart ?? []).map((l) => ({ ...l, listPriceCents: l.listPriceCents ?? l.priceCents })));
         setCustomer(d.customer ?? null);
         setExchange(d.exchange ?? null);
         setNotes(d.notes ?? "");
@@ -368,7 +366,10 @@ export default function PosPage() {
   const total = subtotal - discount + tax;
   const netMg = cart.reduce((s, l) => s + l.netMg, 0);
   const paidSum = pays.reduce((s, p) => s + cents(p.amountLkr), 0);
-  const pct = subtotal > 0 ? (discount / subtotal) * 100 : 0;
+  // Charging under the shelf price is a discount too; it counts against the same limits.
+  const markdown = cart.reduce((s, l) => s + Math.max(0, l.listPriceCents - l.priceCents), 0);
+  const listSubtotal = cart.reduce((s, l) => s + l.listPriceCents, 0);
+  const pct = listSubtotal > 0 ? ((discount + markdown) / listSubtotal) * 100 : 0;
   const cashDue = pays.filter((p) => p.method === "cash").reduce((s, p) => s + cents(p.amountLkr), 0);
   const creditDue = pays.filter((p) => p.method === "credit").reduce((s, p) => s + cents(p.amountLkr), 0);
   const change = tendered ? cents(tendered) - cashDue : null;
@@ -384,9 +385,6 @@ export default function PosPage() {
     credit.data.creditLimitCents > 0 &&
     credit.data.balanceCents + creditDue > credit.data.creditLimitCents;
 
-  // An approval binds the exact terms it was asked for; any cart edit voids it.
-  const sig = JSON.stringify(cart.map((l) => [l.productId, l.priceCents, l.discountCents]));
-  const approval = pending && pending.sig === sig ? pending : null;
   const canComplete =
     cart.length > 0 &&
     paidSum === total &&
@@ -400,6 +398,7 @@ export default function PosPage() {
     Boolean(branchId);
 
   function resetSale() {
+    autoAmount.current = false;
     setCart([]);
     setCustomer(null);
     setCustomerSearch("");
@@ -407,8 +406,6 @@ export default function PosPage() {
     setPays([{ method: "cash", amountLkr: "" }]);
     setTendered("");
     setNotes("");
-    setApprover("");
-    setPending(null);
     setStale(false);
   }
 
@@ -422,6 +419,7 @@ export default function PosPage() {
           items: cart.map((l) => ({
             productId: l.productId,
             priceLkr: l.priceCents / 100,
+            listPriceLkr: l.listPriceCents / 100,
             discountLkr: l.discountCents / 100,
           })),
           payments: pays.map((p) => ({
@@ -433,9 +431,6 @@ export default function PosPage() {
           })),
           tenderedLkr: cashDue > 0 && tendered ? Number(tendered) : undefined,
           notes: notes.trim() || undefined,
-          approvedBy: approval ? undefined : approver || undefined,
-          approvalId: approval?.approvalId,
-          approvalEntityId: approval?.entityId,
           exchangeReturnId: exchange?.returnId,
         }),
       }),
@@ -451,13 +446,6 @@ export default function PosPage() {
       toast.success(`Sale ${d.number} complete`);
     },
     onError: (e) => {
-      if (e instanceof PendingApprovalError && e.approvalId) {
-        setPending({ approvalId: e.approvalId, entityId: e.entityId ?? "", sig });
-        toast.message("Discount sent for approval", {
-          description: "Once a manager approves it in the Approval Center, complete the sale again.",
-        });
-        return;
-      }
       if (errorCode(e) === "CONFLICT" && e instanceof Error && e.message.includes("refresh the cart")) setStale(true);
       toast.error(e instanceof Error ? e.message : "Sale failed");
     },
@@ -476,8 +464,10 @@ export default function PosPage() {
           toast.error(`Removed: ${ok.error}`);
           continue;
         }
-        if (ok.price !== l.priceCents) changed++;
-        next.push({ ...l, priceCents: ok.price, discountCents: Math.min(l.discountCents, ok.price) });
+        if (ok.price !== l.listPriceCents) changed++;
+        // A price the cashier negotiated survives a refresh; one left at shelf follows it.
+        const price = l.priceCents === l.listPriceCents ? ok.price : l.priceCents;
+        next.push({ ...l, priceCents: price, listPriceCents: ok.price, discountCents: Math.min(l.discountCents, price) });
       }
       setCart(next);
       setStale(false);
@@ -501,6 +491,19 @@ export default function PosPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // A single payment row the cashier did not type (auto-filled or "All cash")
+  // follows the total, so scanning another piece or changing a discount
+  // never leaves a stale amount behind.
+  useEffect(() => {
+    if (!autoAmount.current) return;
+    setPays((ps) => {
+      const only = ps[0];
+      if (ps.length !== 1 || !only) return ps;
+      const next = total > 0 ? String(total / 100) : "";
+      return only.amountLkr === next ? ps : [{ ...only, amountLkr: next }];
+    });
+  }, [total]);
+
   function setLine(i: number, patch: Partial<CartLine>) {
     setCart((c) => c.map((l, j) => (j === i ? { ...l, ...patch } : l)));
   }
@@ -516,6 +519,7 @@ export default function PosPage() {
 
   /** One tap: the whole bill on a single method. */
   function payAll(method: string) {
+    autoAmount.current = true;
     setPays([{ method, amountLkr: total > 0 ? String(total / 100) : "" }]);
     if (method !== "cash") setTendered("");
   }
@@ -577,7 +581,7 @@ export default function PosPage() {
               aria-expanded={showResults}
               aria-controls="pos-results"
               aria-label="Scan barcode or search products"
-              className="h-13 w-full rounded-xl bg-paper/10 py-3.5 pl-11 pr-4 font-mono text-lg text-paper placeholder:font-sans placeholder:text-paper/35 shadow-[inset_0_0_0_1px_rgba(201,162,39,0.45)] transition-shadow focus:outline-none focus:shadow-[inset_0_0_0_2px_#C9A227,0_0_0_4px_rgba(201,162,39,0.2)]"
+              className="h-13 w-full rounded-xl bg-paper/10 py-3.5 pl-11 pr-4 font-mono text-lg text-paper placeholder:font-sans placeholder:text-paper/35 shadow-[inset_0_0_0_1px_rgba(205,168,83,0.45)] transition-shadow focus:outline-none focus:shadow-[inset_0_0_0_2px_#CDA853,0_0_0_4px_rgba(205,168,83,0.2)]"
             />
             {showResults ? (
               <ul
@@ -671,21 +675,6 @@ export default function PosPage() {
         </Callout>
       ) : null}
 
-      {approval ? (
-        <Callout
-          tone="warning"
-          title="Discount waiting for approval"
-          action={
-            <Link href="/approvals" className="g-btn g-btn-secondary h-8 px-3 text-xs">
-              Approval Center
-            </Link>
-          }
-        >
-          A {pct.toFixed(2)}% discount needs sign-off. Once it is approved, press <b>Complete sale</b> again —
-          changing the cart cancels this request.
-        </Callout>
-      ) : null}
-
       <TableCard
         title="Cart"
         icon={<ScanBarcodeIcon size={17} />}
@@ -720,7 +709,7 @@ export default function PosPage() {
                 <th>Barcode</th>
                 <th>Item</th>
                 <th className="!text-right">Net g</th>
-                <th className="!text-right">Price</th>
+                <th className="!text-right">Price (editable)</th>
                 <th className="!text-right">Discount</th>
                 <th className="!text-right">Line total</th>
                 <th />
@@ -737,7 +726,35 @@ export default function PosPage() {
                     ) : null}
                   </td>
                   <td className="!text-right num-tabular">{(l.netMg / 1000).toLocaleString("en-US")}</td>
-                  <td className="!text-right num-tabular">{fmt(l.priceCents)}</td>
+                  <td className="!text-right">
+                    <input
+                      type="number"
+                      step="any"
+                      min={0}
+                      value={l.priceCents / 100}
+                      aria-label={`Price of ${l.barcode}`}
+                      onChange={(e) => {
+                        const price = Math.max(0, cents(e.target.value));
+                        setLine(i, { priceCents: price, discountCents: Math.min(l.discountCents, price) });
+                      }}
+                      className={cn(
+                        `${controlSmClass} w-28 !text-right num-tabular`,
+                        l.priceCents < l.listPriceCents && "!text-amber-700",
+                        l.priceCents > l.listPriceCents && "!text-emerald-700"
+                      )}
+                    />
+                    {l.priceCents !== l.listPriceCents ? (
+                      <button
+                        type="button"
+                        onClick={() => setLine(i, { priceCents: l.listPriceCents })}
+                        className="mt-1 block w-full text-right text-[11px] text-ink-4 hover:text-ink"
+                        title="Back to the shelf price"
+                      >
+                        Shelf {fmt(l.listPriceCents)} · {l.priceCents < l.listPriceCents ? "−" : "+"}
+                        {((Math.abs(l.priceCents - l.listPriceCents) / l.listPriceCents) * 100).toFixed(1)}% · reset
+                      </button>
+                    ) : null}
+                  </td>
                   <td className="!text-right">
                     <input
                       type="number"
@@ -814,7 +831,7 @@ export default function PosPage() {
                 placeholder="Search name or phone…"
                 value={customerSearch}
                 onChange={(e) => setCustomerSearch(e.target.value)}
-                className={`w-full ${controlClass}`}
+                className={`w-full !h-11 !rounded-xl !px-3.5 ${controlClass}`}
               />
               {customerSearch.trim() ? (
                 <ul className="mt-2 max-h-48 space-y-0.5 overflow-y-auto scrollbar-thin">
@@ -842,7 +859,9 @@ export default function PosPage() {
                   ) : null}
                 </ul>
               ) : (
-                <p className="mt-2 text-xs text-ink-4">Walk-in sale</p>
+                <p className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-bone px-2.5 py-1 text-xs font-medium text-ink-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
+                  <span className="size-1.5 rounded-full bg-gold" /> Walk-in sale
+                </p>
               )}
             </>
           )}
@@ -851,37 +870,39 @@ export default function PosPage() {
               <ArrowLeftRightIcon size={12} /> Exchange for {exchange.number}
             </p>
           ) : null}
-          <label className="mt-4 block text-sm text-ink-2">Invoice note
+          <label className="mt-5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-gold-dark">Invoice note
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value.slice(0, 500))}
-              rows={2}
+              rows={3}
               placeholder="Printed on the bill (optional)"
-              className={`mt-1 w-full resize-none ${controlClass} !h-auto py-2`}
+              className={`mt-1.5 w-full resize-none ${controlClass} !h-auto !rounded-xl !px-3.5 py-2.5 text-sm font-normal normal-case tracking-normal`}
             />
           </label>
         </Panel>
-        <Panel title="Discount" icon={<TagsIcon size={17} />} description={`${pct.toFixed(1)}% of subtotal`}>
-          <p className="num-tabular text-lg font-semibold text-ink">{fmt(discount)} LKR</p>
-          <label className="mt-3 block text-sm text-ink-2">Counter approver (over your limit)
-            <select
-              value={approver}
-              onChange={(e) => setApprover(e.target.value)}
-              disabled={Boolean(approval)}
-              className={`mt-1 w-full ${controlClass}`}
-            >
-              <option value="">None</option>
-              {(approvers.data ?? []).map((u) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </label>
-          <p className="mt-2 text-xs text-ink-4">
-            Discounts above the approval threshold go to the Approval Center instead.
+        <Panel title="Discount" icon={<TagsIcon size={17} />} description={`${pct.toFixed(1)}% of subtotal`} className="!overflow-visible">
+          <div className="rounded-xl bg-gradient-to-br from-void to-[#0b3a2e] px-4 py-3.5 shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25)]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">Discount given</p>
+            <p className="num-tabular mt-1 text-2xl font-semibold text-paper">
+              {fmt(discount + markdown)} <span className="text-sm font-medium text-gold-light">LKR</span>
+            </p>
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-bone/70 px-3.5 py-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Of shelf price</p>
+              <p className="num-tabular mt-1 text-lg font-semibold text-ink">{pct.toFixed(1)}%</p>
+            </div>
+            <div className="rounded-xl bg-bone/70 px-3.5 py-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Sale total</p>
+              <p className="num-tabular mt-1 text-lg font-semibold text-ink">{fmt(total)}</p>
+            </div>
+          </div>
+          <p className="mt-3 rounded-lg bg-gold/10 px-3 py-2 text-xs leading-relaxed text-ink-3">
+            Edit a price or discount in the cart. What you enter is what is charged and booked.
           </p>
         </Panel>
-        <Panel title="Payment" icon={<CreditCardIcon size={17} />} description={`Total ${fmt(total)} LKR`}>
-          <dl className="mb-2 grid grid-cols-2 gap-y-1 text-sm num-tabular">
+        <Panel title="Payment" icon={<CreditCardIcon size={17} />} description={`Total ${fmt(total)} LKR`} className="!overflow-visible">
+          <dl className="mb-3 grid grid-cols-2 gap-y-1.5 rounded-xl bg-bone/70 px-4 py-3 text-sm num-tabular shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
             <dt className="text-ink-3">Subtotal</dt>
             <dd className="text-right text-ink">{fmt(subtotal)}</dd>
             {discount > 0 ? (
@@ -896,8 +917,8 @@ export default function PosPage() {
                 <dd className="text-right text-ink">{fmt(tax)}</dd>
               </>
             ) : null}
-            <dt className="font-medium text-ink">Total due</dt>
-            <dd className="text-right font-semibold text-ink">{fmt(total)}</dd>
+            <dt className="mt-1 border-t border-ink/[0.08] pt-2 font-semibold text-ink">Total due</dt>
+            <dd className="mt-1 border-t border-ink/[0.08] pt-2 text-right text-base font-semibold text-ink">{fmt(total)}</dd>
           </dl>
           {total > 0 ? (
             <div className="mb-1 flex flex-wrap gap-1.5">
@@ -922,16 +943,14 @@ export default function PosPage() {
             {pays.map((p, i) => (
               <div key={i} className="mt-2">
                 <div className="flex gap-2">
-                  <select
+                  <Select
                     value={p.method}
-                    onChange={(e) => setPay(i, { method: e.target.value, bankAccountId: undefined })}
-                    className={cn(controlClass, "capitalize")}
-                    aria-label="Payment method"
-                  >
-                    {METHODS.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
+                    onChange={(v) => setPay(i, { method: v, bankAccountId: undefined })}
+                    className="w-32 shrink-0"
+                    ariaLabel="Payment method"
+                    capitalize
+                    options={METHODS.map((m) => ({ value: m, label: m }))}
+                  />
                   <input
                     id={i === 0 ? "pos-pay-0" : undefined}
                     type="number"
@@ -939,12 +958,18 @@ export default function PosPage() {
                     min={0}
                     placeholder="Amount"
                     value={p.amountLkr}
-                    onChange={(e) => setPay(i, { amountLkr: e.target.value })}
+                    onChange={(e) => {
+                      autoAmount.current = false;
+                      setPay(i, { amountLkr: e.target.value });
+                    }}
                     onFocus={() => {
                       // A single payment row is almost always the whole bill.
-                      if (pays.length === 1 && !p.amountLkr && total > 0) setPay(0, { amountLkr: String(total / 100) });
+                      if (pays.length === 1 && !p.amountLkr && total > 0) {
+                        autoAmount.current = true;
+                        setPay(0, { amountLkr: String(total / 100) });
+                      }
                     }}
-                    className={`num-tabular min-w-0 flex-1 ${controlClass}`}
+                    className={`num-tabular min-w-0 flex-1 ${controlClass} !h-11 !rounded-xl !px-3.5`}
                   />
                   {pays.length > 1 ? (
                     <button
@@ -958,19 +983,19 @@ export default function PosPage() {
                   ) : null}
                 </div>
                 {p.method === "bank" && bankRows.length > 1 ? (
-                  <select
+                  <Select
                     value={p.bankAccountId ?? ""}
-                    onChange={(e) => setPay(i, { bankAccountId: e.target.value || undefined })}
-                    aria-label="Bank account"
-                    className={cn(controlClass, "mt-1.5 w-full", !p.bankAccountId && "ring-1 ring-amber-400")}
-                  >
-                    <option value="">Which bank account?</option>
-                    {bankRows.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}{b.bank_name ? ` · ${b.bank_name}` : ""}{b.account_number ? ` ${b.account_number}` : ""}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => setPay(i, { bankAccountId: v || undefined })}
+                    ariaLabel="Bank account"
+                    className="mt-1.5"
+                    invalid={!p.bankAccountId}
+                    placeholder="Which bank account?"
+                    options={bankRows.map((b) => ({
+                      value: b.id,
+                      label: b.name,
+                      hint: [b.bank_name, b.account_number].filter(Boolean).join(" · ") || undefined,
+                    }))}
+                  />
                 ) : p.method === "bank" && bankRows.length === 1 ? (
                   <p className="mt-1 text-xs text-ink-4">Into {bankRows[0]!.name}</p>
                 ) : null}
@@ -980,11 +1005,11 @@ export default function PosPage() {
               <button
                 type="button"
                 onClick={() => setPays((ps) => [...ps, { method: "card", amountLkr: "" }])}
-                className="g-btn g-btn-secondary h-8 px-2.5 text-xs"
+                className="g-btn g-btn-secondary h-9 flex-1 rounded-xl px-3 text-xs"
               >
                 <PlusIcon size={12} /> Split
               </button>
-              <button type="button" onClick={autoBalance} className="g-btn g-btn-secondary h-8 px-2.5 text-xs">
+              <button type="button" onClick={autoBalance} className="g-btn g-btn-secondary h-9 flex-1 rounded-xl px-3 text-xs">
                 Auto-balance last
               </button>
             </div>
@@ -1026,9 +1051,9 @@ export default function PosPage() {
             <button
               type="submit"
               disabled={complete.isPending || !canComplete}
-              className="g-btn g-btn-primary mt-3 h-11 w-full text-sm"
+              className="g-btn g-btn-primary mt-4 h-12 w-full rounded-xl text-sm"
             >
-              {complete.isPending ? "Posting…" : approval ? "Complete approved sale (Enter)" : "Complete sale (Enter)"}
+              {complete.isPending ? "Posting…" : "Complete sale (Enter)"}
             </button>
           </form>
         </Panel>

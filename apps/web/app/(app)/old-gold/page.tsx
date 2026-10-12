@@ -54,14 +54,15 @@ type Item = {
 type Pending = { id: string; number: string; description: string; fine_mg: number; purchase_value_cents: number; status: string; customer_name: string | null };
 
 /** The life of a bought-in item, in order. VOID, RESOLD and TRANSFERRED sit outside the flow. */
+// Ordered stages read light → dark along one gold ramp; "In stock" is the one state change worth its own hue.
 const STAGES = [
-  { status: "RECEIVED", label: "Received", hint: "Awaiting test", bar: "bg-amber-400" },
-  { status: "TESTED", label: "Tested", hint: "Needs valuation", bar: "bg-gold-light" },
-  { status: "VALUED", label: "Valued", hint: "Offer to customer", bar: "bg-gold" },
-  { status: "PURCHASED", label: "Purchased", hint: "Bought in", bar: "bg-gold-dark" },
-  { status: "AVAILABLE", label: "In stock", hint: "Ready to melt / resell", bar: "bg-emerald-500" },
-  { status: "RESERVED_FOR_MELTING", label: "For melting", hint: "Reserved in a batch", bar: "bg-gold-deep" },
-  { status: "MELTED", label: "Melted", hint: "Recovered as fine", bar: "bg-ink-3" },
+  { status: "RECEIVED", label: "Received", hint: "Awaiting test", bar: "bg-gold-soft", icon: InboxIcon },
+  { status: "TESTED", label: "Tested", hint: "Needs valuation", bar: "bg-gold-light", icon: FlaskConicalIcon },
+  { status: "VALUED", label: "Valued", hint: "Offer to customer", bar: "bg-gold", icon: GemIcon },
+  { status: "PURCHASED", label: "Purchased", hint: "Bought in", bar: "bg-gold-dark", icon: BanknoteIcon },
+  { status: "AVAILABLE", label: "In stock", hint: "Ready to melt / resell", bar: "bg-emerald-500", icon: ArchiveIcon },
+  { status: "RESERVED_FOR_MELTING", label: "For melting", hint: "Reserved in a batch", bar: "bg-gold-deep", icon: ScaleIcon },
+  { status: "MELTED", label: "Melted", hint: "Recovered as fine", bar: "bg-ink-3", icon: CheckCircleIcon },
 ] as const;
 
 const TONES: Record<string, PillTone> = {
@@ -236,23 +237,37 @@ export default function OldGoldDashboardPage() {
       <SectionHead index="02" title="Pipeline" sub="Where every live item sits right now — tap a stage to see its items" />
       <Card>
         <div className="px-5 pt-5 sm:px-6">
-          <div className="flex items-baseline justify-between gap-3">
-            <span className="text-xs font-medium text-ink-4">
-              <span className="g-metric text-base text-ink">{stagesLoading ? "—" : count(inFlow)}</span> items in flow
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="flex items-center gap-3">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_8px_18px_-10px_rgba(6,42,34,0.7)]">
+                <TrendingUpIcon size={17} />
+              </span>
+              <span>
+                <span className="g-metric block text-2xl leading-none text-ink">{stagesLoading ? "—" : count(inFlow)}</span>
+                <span className="mt-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-4">Items in flow</span>
+              </span>
             </span>
             {valued > 0 ? (
-              <span className="text-xs font-medium text-gold-dark">{valued} valued, waiting on the customer</span>
+              <Link
+                href="/old-gold/items?status=VALUED"
+                className="inline-flex items-center gap-1.5 rounded-full bg-gold-pale px-3 py-1.5 text-xs font-medium text-gold-deep ring-1 ring-gold-dark/20 transition-all hover:-translate-y-px hover:ring-gold-dark/40"
+              >
+                <span className="size-1.5 animate-pulse-soft rounded-full bg-gold" />
+                {valued} valued, waiting on the customer
+                <ArrowRightIcon size={11} />
+              </Link>
             ) : null}
           </div>
-          <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-ink/[0.06]" aria-hidden>
+          <div className="mt-4 flex h-3 gap-[2px] overflow-hidden rounded-full bg-ink/[0.06] p-[2px]" aria-hidden>
             {inFlow > 0
               ? STAGES.map((s, i) => {
                   const c = counts[i] ?? 0;
                   return c > 0 ? (
                     <span
                       key={s.status}
-                      className={cn("h-full border-r-2 border-paper last:border-r-0 transition-[width] duration-700 ease-brand", s.bar)}
+                      className={cn("h-full rounded-full transition-[width] duration-700 ease-brand", s.bar)}
                       style={{ width: `${(c / inFlow) * 100}%` }}
+                      title={`${s.label}: ${c}`}
                     />
                   ) : null;
                 })
@@ -260,32 +275,45 @@ export default function OldGoldDashboardPage() {
           </div>
         </div>
         <ol className="mt-5 grid grid-cols-2 gap-px border-t border-ink/[0.06] bg-ink/[0.06] sm:grid-cols-4 lg:grid-cols-7">
-          {STAGES.map((s, i) => (
-            <li key={s.status} className="bg-paper">
-              <Link
-                href={`/old-gold/items?status=${s.status}`}
-                className="group relative flex h-full flex-col px-4 py-4 transition-colors hover:bg-gold-pale/50"
-              >
-                <span className="flex items-center gap-2">
-                  <span className={cn("size-2 rounded-full", s.bar)} />
-                  <span className="g-metric text-[10px] tracking-[0.2em] text-ink-5">{String(i + 1).padStart(2, "0")}</span>
-                </span>
-                <span className="mt-3 text-[13px] font-semibold text-ink transition-colors group-hover:text-gold-dark">{s.label}</span>
-                {stageCounts[i]?.isLoading ? (
-                  <Skeleton className="mt-2 h-7 w-10" />
-                ) : (
-                  <span className="g-metric mt-1 text-2xl leading-none text-ink">{counts[i] ?? "—"}</span>
-                )}
-                <span className="mt-2 text-[11px] text-ink-4">{s.hint}</span>
-                {i < STAGES.length - 1 ? (
-                  <ArrowRightIcon
-                    size={12}
-                    className="absolute right-3 top-4 hidden text-ink-6 transition-colors group-hover:text-gold-dark lg:block"
-                  />
-                ) : null}
-              </Link>
-            </li>
-          ))}
+          {STAGES.map((s, i) => {
+            const c = counts[i];
+            const busy = (c ?? 0) > 0;
+            return (
+              <li key={s.status} className="bg-paper">
+                <Link
+                  href={`/old-gold/items?status=${s.status}`}
+                  className="group relative flex h-full flex-col px-4 py-4 transition-colors hover:bg-gold-pale/50"
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <span
+                      className={cn(
+                        "flex size-8 items-center justify-center rounded-lg transition-colors",
+                        busy ? "bg-void text-gold-light" : "bg-bone text-ink-5 group-hover:text-gold-dark"
+                      )}
+                    >
+                      <s.icon size={14} />
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className={cn("size-2 rounded-full ring-2 ring-paper", s.bar)} />
+                      <span className="g-metric text-[10px] tracking-[0.2em] text-ink-5">{String(i + 1).padStart(2, "0")}</span>
+                    </span>
+                  </span>
+                  <span className="mt-3 text-[13px] font-semibold text-ink transition-colors group-hover:text-gold-deep">{s.label}</span>
+                  {stageCounts[i]?.isLoading ? (
+                    <Skeleton className="mt-2 h-7 w-10" />
+                  ) : (
+                    <span className={cn("g-metric mt-1 text-2xl leading-none", busy ? "text-ink" : "text-ink-5")}>{c ?? "—"}</span>
+                  )}
+                  <span className="mt-2 text-[11px] text-ink-4">{s.hint}</span>
+                  {i < STAGES.length - 1 ? (
+                    <span className="absolute -right-2.5 top-[1.6rem] z-[1] hidden size-5 items-center justify-center rounded-full bg-paper text-ink-5 ring-1 ring-ink/[0.08] lg:flex">
+                      <ArrowRightIcon size={10} />
+                    </span>
+                  ) : null}
+                </Link>
+              </li>
+            );
+          })}
         </ol>
       </Card>
 
@@ -310,9 +338,9 @@ export default function OldGoldDashboardPage() {
                   <li key={r.id}>
                     <Link
                       href={`/old-gold/items/${r.id}`}
-                      className="group flex items-center gap-3 rounded-xl bg-bone/70 px-3.5 py-3 ring-1 ring-ink/[0.06] transition-colors hover:bg-gold-pale/60 hover:ring-gold-dark/20"
+                      className="group flex items-center gap-3 rounded-2xl bg-bone/60 px-3.5 py-3 ring-1 ring-ink/[0.06] transition-all duration-200 hover:-translate-y-px hover:bg-gold-pale/60 hover:shadow-[0_12px_24px_-16px_rgba(126,98,35,0.45)] hover:ring-gold-dark/25"
                     >
-                      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600 ring-1 ring-amber-200/70">
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-100/80 text-amber-700 ring-1 ring-amber-600/15 transition-colors group-hover:bg-void group-hover:text-gold-light group-hover:ring-transparent">
                         <ScaleIcon size={15} />
                       </span>
                       <span className="min-w-0 flex-1">
@@ -374,7 +402,9 @@ export default function OldGoldDashboardPage() {
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-2">
                           <span className="g-metric text-xs font-semibold text-ink group-hover:text-gold-dark">{r.number}</span>
-                          {r.karat ? <span className="text-[11px] font-medium text-ink-4">{r.karat}</span> : null}
+                          {r.karat ? (
+                            <span className="g-metric rounded-md bg-gradient-to-b from-gold-light to-gold px-1.5 py-px text-[10px] font-bold text-void">{r.karat}</span>
+                          ) : null}
                         </span>
                         <span className="mt-0.5 block truncate text-xs text-ink-4">
                           {r.description} · {r.customer_name ?? "Walk-in"} · {ago(r.created_at)}

@@ -62,8 +62,12 @@ Decisions (user-confirmed):
   tested_permille/karat updated.
 - `POST /oldgold/items/:id/value` (buyPct?, stone/processing deductions?,
   negotiatedTotal?, reason for overrides): fine = net×permille/1000;
-  board rate = current rate for purity (snapshot); value = fine × rate ×
-  pct − deductions, or negotiated total (reason required). buyPct default
+  board rate = current rate for purity (snapshot; closest rated purity
+  if the tested one has none); value = fine × rate × 1000 / ratePermille
+  × pct − deductions (board rates are per gram of the rate's purity, so
+  for an exact purity match this is net × rate × pct), or negotiated
+  total (reason required). Only a `pass` test sets the purity; fail /
+  inconclusive sends the item back to RECEIVED. buyPct default
   from settings `oldgold_buy_pct` (default 92). Status →VALUED.
 - `POST /oldgold/items/:id/purchase` (paidCents, method cash/bank):
   remainder → customer payable. Atomic batch: status PURCHASED, purchase
@@ -95,10 +99,12 @@ Decisions (user-confirmed):
 ## 5. Data flow example
 
 5g chain, 22K tested (916), board 28,500, buy 92%, 2,000 processing:
-fine 4,580mg → 4.58×28,500×0.92 − 2,000 = 118,089 LKR... exact cents math
-in integers. Paid 100,000 cash → payable 18,089 on customer 1200.
-Batch: status, purchase row, journal (DR1100 118,089 / CR1000 100,000 +
-CR1200 18,089 party), gold IN 4,580mg, audit → 201.
+fine 4,580mg; value = 5g × 28,500 × 0.92 − 2,000 = 129,100 LKR (exact
+cents math in integers). Paid 100,000 cash → 29,100 owed on customer 1200.
+Batch: status, purchase row, journal (DR1100 129,100 / CR1000 100,000 +
+CR1200 29,100 party), gold IN 4,580mg fine, audit → 201.
+(Earlier drafts computed 4.58 × 28,500 × 0.92, which applies the 22K
+purity twice — the 22K rate already prices a gram of 22K metal.)
 
 ## 6. Testing
 

@@ -8,7 +8,9 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
+import { useAccountsScope } from "@/lib/accounts";
 import {
+  FilterChips,
   Page,
   Hero,
   TableCard,
@@ -17,6 +19,7 @@ import {
   StatusPill,
   Modal,
   controlClass,
+  controlSmClass,
   heroBtnPrimary,
 } from "@/components/ui";
 import { BookOpenIcon } from "@/components/icons";
@@ -34,6 +37,8 @@ const adjustSchema = z.object({
 
 export default function AccountsPage() {
   const [branch, setBranch] = useState("");
+  const [type, setType] = useState("all");
+  const { visibleBranches } = useAccountsScope();
   const [dialog, setDialog] = useState(false);
   const qc = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
@@ -72,13 +77,17 @@ export default function AccountsPage() {
 
   const rows = chart.data ?? [];
   const fmt = (c: number) => (c / 100).toLocaleString("en-US");
+  const types = Array.from(new Set(rows.map((r) => r.type)));
+  const activeType = types.includes(type) ? type : "all";
+  const shown = activeType === "all" ? rows : rows.filter((r) => r.type === activeType);
+  const typeLabel = (t: string) => t.charAt(0) + t.slice(1).toLowerCase();
   const byType = (t: string) => rows.filter((r) => r.type === t).reduce((n, r) => n + Math.abs(r.balance_cents), 0);
 
   return (
     <Page>
       <Hero
+        compact
         kicker="Accounts"
-        back={{ href: "/accounts", label: "Accounts dashboard" }}
         title="Chart of accounts"
         description="Double-entry books — every balance derives from a posted journal."
         note="Adjustments post a balanced journal entry: one debit, one credit, one amount, a required reason."
@@ -96,15 +105,26 @@ export default function AccountsPage() {
           ) : null
         }
       />
-      <div className="flex flex-wrap gap-2">
-        <input
-          placeholder="Filter by branch ID (optional)…"
-          value={branch}
-          onChange={(e) => setBranch(e.target.value)}
-          className={controlClass}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <FilterChips
+          ariaLabel="Account type"
+          value={activeType}
+          onChange={setType}
+          options={[
+            { key: "all", label: "All", count: rows.length },
+            ...types.map((t) => ({ key: t, label: typeLabel(t), count: rows.filter((r) => r.type === t).length })),
+          ]}
         />
+        <select value={branch} onChange={(e) => setBranch(e.target.value)} className={controlSmClass} aria-label="Branch">
+          <option value="">All branches</option>
+          {visibleBranches.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
       </div>
-      <TableCard title="Accounts" icon={<BookOpenIcon size={17} />} actions={<span className="g-metric text-[11px] font-medium uppercase tracking-[0.14em] text-ink-4">{String(rows.length).padStart(2, "0")} on file</span>}>
+      <TableCard title="Accounts" icon={<BookOpenIcon size={17} />} actions={<span className="g-metric text-[11px] font-medium uppercase tracking-[0.14em] text-ink-4">{String(shown.length).padStart(2, "0")} on file</span>}>
         {chart.isLoading ? (
           <TableSkeleton rows={8} cols={4} />
         ) : chart.isError ? (
@@ -122,9 +142,11 @@ export default function AccountsPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((a) => (
+              {shown.map((a) => (
                 <tr key={a.code}>
-                  <td className="g-metric text-xs">{a.code}</td>
+                  <td>
+                    <span className="g-metric inline-flex rounded-md bg-bone px-1.5 py-0.5 text-xs text-ink-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">{a.code}</span>
+                  </td>
                   <td className="font-medium text-ink">{a.name}</td>
                   <td><StatusPill status={a.type} /></td>
                   <td className={`!text-right num-tabular ${a.balance_cents < 0 ? "text-rose-600" : ""}`}>

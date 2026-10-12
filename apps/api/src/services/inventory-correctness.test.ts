@@ -105,27 +105,4 @@ describe("inventory correctness RED", () => {
     expect(seen.some((s) => s.includes("gold_ledger"))).toBe(true);
   });
 
-  it("count approve rejects opener as approver", async () => {
-    const { approveCount } = await import("./counts");
-    const db = {
-      prepare: (sql: string) => ({
-        bind: (..._v: unknown[]) => ({
-          first: async () => {
-            if (sql.includes("expected_json")) return { json: "[]" };
-            if (sql.includes("FROM stock_counts")) return { id: "c1", branch_id: "b1", status: "OPEN", opened_by: "u2" };
-            return null;
-          },
-          all: async () => {
-            if (sql.includes("user_roles")) return { results: [{ name: "gold:manage" }] };
-            if (sql.includes("FROM count_scans")) return { results: [] };
-            return { results: [] };
-          },
-        }),
-        first: async () => null,
-        all: async () => ({ results: [] }),
-      }),
-      batch: async (..._a: unknown[]) => {},
-    } as unknown as D1Database;
-    await expect(approveCount(db, "c1", { reason: "recount", approvedBy: "u2" }, "u1")).rejects.toMatchObject({ code: "FORBIDDEN" });
-  });
 });

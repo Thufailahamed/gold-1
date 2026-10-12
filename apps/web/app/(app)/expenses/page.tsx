@@ -28,7 +28,18 @@ import {
   PlusIcon,
   XIcon,
 } from "@/components/icons";
-import { api, type MeData } from "@/lib/api";
+import { api, formApi, type MeData } from "@/lib/api";
+import { SparklesIcon } from "@/components/icons";
+
+type BillScan = {
+  vendor: string | null;
+  date: string | null;
+  amountLkr: number | null;
+  description: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  warnings: string[];
+};
 
 type Category = {
   id: string;
@@ -90,6 +101,10 @@ function ExpensesView() {
   const [vendor, setVendor] = useState("");
   const [paidFrom, setPaidFrom] = useState<"cash" | "bank">("cash");
   const [bankAccountId, setBankAccountId] = useState("");
+  // A scanned bill: the photo is kept so it can be attached as the receipt once the expense exists.
+  const [scanFile, setScanFile] = useState<File | null>(null);
+  const [scanDate, setScanDate] = useState<string | null>(null);
+  const [scanNotes, setScanNotes] = useState<string[]>([]);
 
   useEffect(() => {
     const saved = document.cookie.split("; ").find((c) => c.startsWith("goldos_branch="))?.split("=")[1];
@@ -133,7 +148,7 @@ function ExpensesView() {
 
   const create = useMutation({
     mutationFn: () =>
-      api<{ status: string; requiresReceipt: boolean }>("/api/v1/expenses", {
+      api<{ id: string; status: string; requiresReceipt: boolean }>("/api/v1/expenses", {
         method: "POST",
         body: JSON.stringify({
           categoryId,
@@ -143,9 +158,19 @@ function ExpensesView() {
           vendor: vendor || undefined,
           paidFrom,
           bankAccountId: paidFrom === "bank" ? bankAccountId : undefined,
+          incurredOn: scanDate ?? undefined,
         }),
       }),
-    onSuccess: (r) => {
+    onSuccess: async (r) => {
+      if (scanFile) {
+        const form = new FormData();
+        form.set("file", scanFile);
+        try {
+          await formApi(`/api/v1/expenses/${r.id}/receipt`, form);
+        } catch {
+          toast.error("Recorded, but the bill photo could not be attached. Attach it from the expense page.");
+        }
+      }
       toast.success(
         r.status === "PENDING_APPROVAL"
           ? "Recorded — waiting for approval"
@@ -155,11 +180,35 @@ function ExpensesView() {
       setAmount("");
       setDescription("");
       setVendor("");
+      setScanFile(null);
+      setScanDate(null);
+      setScanNotes([]);
       qc.invalidateQueries({ queryKey: ["expenses"] });
       qc.invalidateQueries({ queryKey: ["expense-summary"] });
       qc.invalidateQueries({ queryKey: ["acct"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not record"),
+  });
+
+  const scan = useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData();
+      form.set("file", file);
+      return formApi<BillScan>("/api/v1/expenses/scan", form);
+    },
+    onSuccess: (r, file) => {
+      if (r.categoryId) setCategoryId(r.categoryId);
+      if (r.amountLkr !== null) setAmount(String(r.amountLkr));
+      if (r.description) setDescription(r.description);
+      if (r.vendor) setVendor(r.vendor);
+      setScanDate(r.date);
+      setScanFile(file);
+      const notes = [...r.warnings];
+      if (!r.categoryId) notes.push("Pick the category yourself, the bill did not match one.");
+      setScanNotes(notes);
+      toast.success("Bill read. Check every field before recording.");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not read the bill"),
   });
 
   const rows = list.data?.rows ?? [];
@@ -293,11 +342,47 @@ function ExpensesView() {
         <Modal
           kicker="Accounts"
           title="Record expense"
-          onClose={() => setOpen(false)}
+          onClose={() => {
+            setOpen(false);
+            setScanFile(null);
+            setScanDate(null);
+            setScanNotes([]);
+          }}
           onSubmit={() => create.mutate()}
           pending={create.isPending}
           submitDisabled={!categoryId || !branchId || !amount || !description || (paidFrom === "bank" && !bankAccountId)}
         >
+          <div className="rounded-2xl bg-gold-pale/50 p-3 ring-1 ring-inset ring-gold/25">
+            <label className="flex cursor-pointer items-center gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-void text-gold-light">
+                <SparklesIcon size={16} />
+              </span>
+              <span className="min-w-0 flex-1 text-sm text-ink-2">
+                <span className="block font-semibold text-ink">{scan.isPending ? "Reading the bill…" : scanFile ? "Scan a different bill" : "Scan a bill"}</span>
+                <span className="block text-xs text-ink-4">Take or choose a photo and the form fills itself. You review it before it is recorded.</span>
+              </span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                capture="environment"
+                className="sr-only"
+                disabled={scan.isPending}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (f) scan.mutate(f);
+                }}
+              />
+            </label>
+            {scanNotes.length > 0 ? (
+              <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-amber-800 marker:text-amber-500">
+                {scanNotes.map((n) => (
+                  <li key={n}>{n}</li>
+                ))}
+              </ul>
+            ) : null}
+            {scanDate ? <p className="mt-2 text-xs text-ink-3">Dated {scanDate}, from the bill.</p> : null}
+          </div>
           <label className="block text-sm text-ink-2">
             Category
             <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={controlClass}>

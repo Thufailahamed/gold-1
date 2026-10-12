@@ -1,10 +1,6 @@
 import { NativeTabs } from "expo-router/unstable-native-tabs";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { useTheme } from "@/theme";
-
-const APPROVER_PERMS = ["sales:approve", "oldgold:approve", "mfg:approve", "users:approve", "branches:approve", "accounts:manage", "gold:manage", "products:cancel", "purchases:cancel"];
 
 /**
  * The five native tabs (iOS tab bar with Liquid Glass / Material bottom nav):
@@ -13,18 +9,9 @@ const APPROVER_PERMS = ["sales:approve", "oldgold:approve", "mfg:approve", "user
  */
 export default function TabsLayout() {
   const { c } = useTheme();
-  const { can, canAny, me } = useSession();
+  const { can, canAny } = useSession();
   const canSell = canAny(["sales:view", "sales:create"]);
   const canCatalog = can("products:view");
-  const approver = canAny(APPROVER_PERMS);
-  const scope = can("branches:manage") ? "" : me?.branchIds[0] ? `&branchId=${encodeURIComponent(me.branchIds[0])}` : null;
-  const pending = useQuery({
-    queryKey: ["tabs", "approvals", scope],
-    queryFn: () => api<{ total: number }>(`/api/v1/approvals?status=PENDING&limit=1${scope ?? ""}`),
-    enabled: approver && scope !== null,
-    refetchInterval: 60_000,
-  });
-  const badge = pending.data?.total ? (pending.data.total > 99 ? "99+" : String(pending.data.total)) : undefined;
 
   return (
     <NativeTabs tintColor={c.gold} minimizeBehavior="onScrollDown">
@@ -47,7 +34,6 @@ export default function TabsLayout() {
       <NativeTabs.Trigger name="more">
         <NativeTabs.Trigger.Label>More</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: "square.grid.2x2", selected: "square.grid.2x2.fill" }} md="apps" />
-        {badge ? <NativeTabs.Trigger.Badge>{badge}</NativeTabs.Trigger.Badge> : null}
       </NativeTabs.Trigger>
     </NativeTabs>
   );

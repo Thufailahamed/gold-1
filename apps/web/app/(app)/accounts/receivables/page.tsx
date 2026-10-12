@@ -82,7 +82,7 @@ function ReceivablesView() {
   const rows = receivables.data?.rows ?? [];
   const aging = receivables.data?.aging;
 
-  // ?collect=<customerId> â€” the invoice page's "Collect payment" hand-off
+  // ?collect=<customerId> — the invoice page's "Collect payment" hand-off
   // opens the collect dialog for that customer once the dues have loaded.
   const collectParam = params.get("collect");
   const [collectHandled, setCollectHandled] = useState(false);
@@ -98,7 +98,7 @@ function ReceivablesView() {
     mutationFn: (v: { id: string; reason: string }) =>
       api<{ reversalEntryNo: string }>(`/api/v1/receipts/${v.id}/void`, { method: "POST", body: JSON.stringify({ reason: v.reason }) }),
     onSuccess: (r) => {
-      toast.success(`Receipt voided â€” reversed in ${r.reversalEntryNo}`);
+      toast.success(`Receipt voided — reversed in ${r.reversalEntryNo}`);
       setVoiding(null);
       qc.invalidateQueries({ queryKey: ["receivables"] });
       qc.invalidateQueries({ queryKey: ["receipts"] });
@@ -113,15 +113,15 @@ function ReceivablesView() {
   return (
     <Page>
       <Hero
+        compact
         kicker="Accounts"
-        back={{ href: "/accounts", label: "Accounts dashboard" }}
         title="Customer dues"
         description="Who owes the shop money from credit sales, how old the debt is, and every payment collected against it."
         stats={[
-          { label: "Owed to the shop", value: receivables.data ? `${lkr(receivables.data.totalCents)}` : "â€”" },
-          { label: "Customers owing", value: receivables.data ? rows.length.toLocaleString("en-US") : "â€”" },
-          { label: "Older than 90 days", value: aging ? lkr(aging["90+"]) : "â€”" },
-          { label: "Collected this month", value: monthReceipts.data ? lkr(monthReceipts.data.totalCents) : "â€”" },
+          { label: "Owed to the shop", value: receivables.data ? `${lkr(receivables.data.totalCents)}` : "—" },
+          { label: "Customers owing", value: receivables.data ? rows.length.toLocaleString("en-US") : "—" },
+          { label: "Older than 90 days", value: aging ? lkr(aging["90+"]) : "—" },
+          { label: "Collected this month", value: monthReceipts.data ? lkr(monthReceipts.data.totalCents) : "—" },
         ]}
         note="Collecting a payment clears the oldest bill first and posts straight to the ledger"
       />
@@ -172,9 +172,9 @@ function ReceivablesView() {
                   <th>Customer</th>
                   <th className="!text-right">Open bills</th>
                   <th>Oldest bill</th>
-                  <th className="!text-right">0â€“30 d</th>
-                  <th className="!text-right">31â€“60 d</th>
-                  <th className="!text-right">61â€“90 d</th>
+                  <th className="!text-right">0–30 d</th>
+                  <th className="!text-right">31–60 d</th>
+                  <th className="!text-right">61–90 d</th>
                   <th className="!text-right">90+ d</th>
                   <th className="!text-right">Owes</th>
                   {canManage ? <th /> : null}
@@ -188,11 +188,11 @@ function ReceivablesView() {
                       {r.phone ? <div className="text-xs text-ink-4">{r.phone}</div> : null}
                     </td>
                     <td className="!text-right num-tabular">{r.openInvoices}</td>
-                    <td className="text-ink-3">{r.oldestOpenDate ?? "â€”"}</td>
-                    <td className="!text-right num-tabular text-ink-3">{r.aging["0-30"] ? lkr(r.aging["0-30"]) : "â€”"}</td>
-                    <td className="!text-right num-tabular text-ink-3">{r.aging["31-60"] ? lkr(r.aging["31-60"]) : "â€”"}</td>
-                    <td className="!text-right num-tabular text-amber-700">{r.aging["61-90"] ? lkr(r.aging["61-90"]) : "â€”"}</td>
-                    <td className="!text-right num-tabular text-rose-700">{r.aging["90+"] ? lkr(r.aging["90+"]) : "â€”"}</td>
+                    <td className="text-ink-3">{r.oldestOpenDate ?? "—"}</td>
+                    <td className="!text-right num-tabular text-ink-3">{r.aging["0-30"] ? lkr(r.aging["0-30"]) : "—"}</td>
+                    <td className="!text-right num-tabular text-ink-3">{r.aging["31-60"] ? lkr(r.aging["31-60"]) : "—"}</td>
+                    <td className="!text-right num-tabular text-amber-700">{r.aging["61-90"] ? lkr(r.aging["61-90"]) : "—"}</td>
+                    <td className="!text-right num-tabular text-rose-700">{r.aging["90+"] ? lkr(r.aging["90+"]) : "—"}</td>
                     <td className="!text-right num-tabular font-semibold text-ink">{lkr(r.balanceCents)}</td>
                     {canManage ? (
                       <td className="!text-right">
@@ -211,7 +211,7 @@ function ReceivablesView() {
         <TableCard
           title="Payments received"
           icon={<BanknoteIcon size={17} />}
-          description="Money customers paid against what they owed. Void a mistake â€” it is reversed, never deleted."
+          description="Money customers paid against what they owed. Void a mistake — it is reversed, never deleted."
           footer={
             <Pager page={page} onChange={setPage} pageSize={20} count={receipts.data?.rows.length ?? 0} total={receipts.data?.total ?? 0} unit="receipts" />
           }
@@ -241,7 +241,7 @@ function ReceivablesView() {
                     <td className="text-ink-3">{r.receipt_date}</td>
                     <td className="text-ink-2">
                       {r.customer_name}
-                      {r.note ? <span className="text-ink-4"> â€” {r.note}</span> : null}
+                      {r.note ? <span className="text-ink-4"> — {r.note}</span> : null}
                       {r.void_reason ? <div className="text-xs text-rose-700">Voided: {r.void_reason}</div> : null}
                     </td>
                     <td className="text-ink-3">{branchName(r.branch_id)}</td>
@@ -331,7 +331,7 @@ function CollectModal({
   const cents = toCents(amount);
   const valid = Number.isFinite(cents) && cents > 0 && cents <= owed && (method !== "bank" || !!bankAccountId);
 
-  // Preview which bills this payment clears, oldest first â€” the same rule
+  // Preview which bills this payment clears, oldest first — the same rule
   // the server applies, so what the cashier sees is what gets posted.
   const preview = useMemo(() => {
     let left = Number.isFinite(cents) ? cents : 0;
@@ -356,7 +356,7 @@ function CollectModal({
         }),
       }),
     onSuccess: (r) => {
-      toast.success(`Payment recorded â€” ${r.number}`);
+      toast.success(`Payment recorded — ${r.number}`);
       onDone();
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not record the payment"),
@@ -376,7 +376,7 @@ function CollectModal({
       <label className="block text-sm text-ink-2">
         Branch collecting the money
         <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={`${controlClass} w-full`}>
-          <option value="">Choose a branchâ€¦</option>
+          <option value="">Choose a branch…</option>
           {branches.map((b) => (
             <option key={b.id} value={b.id}>
               {b.name}
@@ -388,7 +388,7 @@ function CollectModal({
       {branchId && open.data ? (
         owed <= 0 ? (
           <Callout tone="warning" title="Nothing owed at this branch">
-            Collect at the branch where the sale was made â€” each branch keeps its own books.
+            Collect at the branch where the sale was made — each branch keeps its own books.
           </Callout>
         ) : (
           <div className="rounded-xl bg-bone/60 p-4">
@@ -412,13 +412,13 @@ function CollectModal({
                       <td className="py-1.5 font-mono text-xs">{p.number}</td>
                       <td className="py-1.5 text-ink-3">{p.date}</td>
                       <td className="py-1.5 text-right num-tabular">{lkr(p.outstandingCents)}</td>
-                      <td className="py-1.5 text-right num-tabular font-medium text-emerald-700">{p.take ? lkr(p.take) : "â€”"}</td>
+                      <td className="py-1.5 text-right num-tabular font-medium text-emerald-700">{p.take ? lkr(p.take) : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             ) : (
-              <p className="mt-2 text-xs text-ink-4">No open bills â€” this balance is an opening balance.</p>
+              <p className="mt-2 text-xs text-ink-4">No open bills — this balance is an opening balance.</p>
             )}
           </div>
         )
@@ -454,7 +454,7 @@ function CollectModal({
         <label className="block text-sm text-ink-2">
           Bank account
           <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} className={`${controlClass} w-full`}>
-            <option value="">Choose an accountâ€¦</option>
+            <option value="">Choose an account…</option>
             {activeBanks.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name} ({b.account_code})
@@ -486,7 +486,7 @@ function VoidModal({
   return (
     <Modal
       kicker="Void receipt"
-      title={`${receipt.number} Â· ${lkr(receipt.amount_cents)}`}
+      title={`${receipt.number} · ${lkr(receipt.amount_cents)}`}
       danger
       submitLabel="Void receipt"
       onClose={onClose}

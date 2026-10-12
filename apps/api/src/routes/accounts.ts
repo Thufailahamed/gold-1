@@ -135,7 +135,7 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .post("/fiscal-years/:yearEnd/reopen", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
     const parsed = fiscalReopenSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success)
-      return c.json({ success: false, error: { code: "VALIDATION", message: "Reason and approver required" } }, 400);
+      return c.json({ success: false, error: { code: "VALIDATION", message: "A reason is required" } }, 400);
     try {
       await reopenFiscalYear(c.env.DB, c.req.param("yearEnd"), parsed.data, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);

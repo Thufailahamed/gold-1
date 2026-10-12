@@ -171,7 +171,7 @@ export function InvestigatePanel({ branchId, date, initialActual }: { branchId: 
         </TableCard>
       ) : null}
 
-      {r && (r.pending.expenses.length || r.pending.transfersIn.length || r.pending.approvals.length || r.lateEntries.length) ? (
+      {r && (r.pending.expenses.length || r.pending.transfersIn.length || r.lateEntries.length) ? (
         <div className="grid gap-4 lg:grid-cols-2">
           <Panel title="Waiting, not yet in the books" icon={<HistoryIcon size={17} />} className="space-y-1.5 text-sm">
             {r.pending.expenses.map((e) => (
@@ -186,12 +186,7 @@ export function InvestigatePanel({ branchId, date, initialActual }: { branchId: 
                 <span className="g-metric">{fmt(t.amountCents)}</span>
               </div>
             ))}
-            {r.pending.approvals.map((a) => (
-              <div key={a.id} className="text-ink-3">
-                Approval pending: {a.action.replace(/_/g, " ").toLowerCase()} — {a.reason}
-              </div>
-            ))}
-            {!r.pending.expenses.length && !r.pending.transfersIn.length && !r.pending.approvals.length ? <p className="text-ink-4">Nothing waiting.</p> : null}
+            {!r.pending.expenses.length && !r.pending.transfersIn.length ? <p className="text-ink-4">Nothing waiting.</p> : null}
           </Panel>
           <Panel title="Keyed today for an earlier day" icon={<HistoryIcon size={17} />} description="These changed an earlier close, and so today's opening" className="space-y-1.5 text-sm">
             {r.lateEntries.length === 0 ? (

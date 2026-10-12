@@ -95,8 +95,8 @@ function CashView() {
   return (
     <Page>
       <Hero
+        compact
         kicker="Accounts"
-        back={{ href: "/accounts", label: "Accounts dashboard" }}
         title="Cash & bank"
         description="What is in the drawer and the bank right now, and every rupee that moved in or out — with a running balance."
         actions={
@@ -126,7 +126,7 @@ function CashView() {
       />
 
       {/* ------------------------------------------------------------ accounts */}
-      <section aria-label="Money accounts" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section aria-label="Money accounts" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <AccountTile
           active={isCash}
           onClick={() => setAccount("1000")}
@@ -152,7 +152,7 @@ function CashView() {
                     e.stopPropagation();
                     setModal({ opening: b });
                   }}
-                  className="text-xs font-medium text-gold-dark hover:text-ink"
+                  className="text-xs font-medium text-gold-dark underline-offset-4 hover:text-gold-light hover:underline"
                 >
                   Set opening balance
                 </button>
@@ -164,9 +164,11 @@ function CashView() {
           <button
             type="button"
             onClick={() => setModal("bank")}
-            className="flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-ink/20 text-sm text-ink-3 transition-colors hover:border-gold hover:text-ink"
+            className="group flex min-h-[100px] flex-col items-center justify-center gap-2.5 rounded-[18px] border border-dashed border-ink/20 bg-paper/40 text-sm font-medium text-ink-3 transition-all duration-320 ease-brand hover:border-gold hover:bg-gold-pale/60 hover:text-ink"
           >
-            <PlusIcon size={18} />
+            <span className="flex size-10 items-center justify-center rounded-xl bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)] transition-colors group-hover:bg-void group-hover:text-gold-light">
+              <PlusIcon size={17} />
+            </span>
             Add bank account
           </button>
         ) : null}
@@ -220,18 +222,20 @@ function CashView() {
         description={from === to ? from : `${from} to ${to}`}
         actions={
           book.data ? (
-            <div className="flex flex-wrap gap-4 text-xs text-ink-4">
-              <span>
-                Opening <span className="g-metric text-ink">{lkr(book.data.opening)}</span>
-              </span>
-              <span>
-                In <span className="g-metric text-emerald-700">+{lkr(moneyIn)}</span>
-              </span>
-              <span>
-                Out <span className="g-metric text-rose-700">−{lkr(moneyOut)}</span>
-              </span>
-              <span>
-                Closing <span className="g-metric font-semibold text-ink">{lkr(book.data.closing)}</span>
+            <div className="flex flex-wrap overflow-hidden rounded-xl bg-bone/80 text-xs shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
+              {[
+                { k: "Opening", v: lkr(book.data.opening), cls: "text-ink" },
+                { k: "In", v: `+${lkr(moneyIn)}`, cls: "text-emerald-700" },
+                { k: "Out", v: `−${lkr(moneyOut)}`, cls: "text-rose-700" },
+              ].map((x) => (
+                <span key={x.k} className="flex flex-col border-r border-ink/[0.07] px-3 py-1.5">
+                  <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-ink-5">{x.k}</span>
+                  <span className={cn("g-metric", x.cls)}>{x.v}</span>
+                </span>
+              ))}
+              <span className="flex flex-col bg-void px-3 py-1.5 text-paper">
+                <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-gold-light/70">Closing</span>
+                <span className="g-metric font-semibold">{lkr(book.data.closing)}</span>
               </span>
             </div>
           ) : null
@@ -360,22 +364,58 @@ function AccountTile({
     <div
       role="button"
       tabIndex={0}
+      aria-pressed={active}
       onClick={onClick}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onClick()}
       className={cn(
-        "g-surface cursor-pointer p-4 transition-shadow",
-        active ? "shadow-[inset_0_0_0_2px_#C9A227]" : "hover:shadow-[inset_0_0_0_1px_rgba(201,162,39,0.6)]"
+        "group relative flex min-h-[100px] cursor-pointer flex-col overflow-hidden rounded-2xl p-4 outline-none transition-all duration-320 ease-brand focus-visible:shadow-[0_0_0_3px_rgba(205,168,83,0.35)]",
+        active
+          ? "bg-void text-paper shadow-[0_24px_48px_-24px_rgba(6,42,34,0.7)]"
+          : "bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-32px_rgba(16,32,27,0.3)] hover:-translate-y-0.5 hover:shadow-[inset_0_0_0_1px_rgba(205,168,83,0.55),0_24px_48px_-30px_rgba(126,98,35,0.45)]"
       )}
     >
-      <div className="flex items-center gap-2 text-ink-3">
-        <span className="flex size-8 items-center justify-center rounded-lg bg-bone">{icon}</span>
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-ink">{title}</div>
-          <div className="truncate text-xs text-ink-4">{sub}</div>
+      {active ? (
+        <>
+          <span className="home-grid-bg pointer-events-none absolute inset-0 opacity-40" />
+          <span className="pointer-events-none absolute -right-12 -top-14 size-36 rounded-full bg-gold/25 blur-3xl" />
+          <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
+        </>
+      ) : null}
+      <div className="relative flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            className={cn(
+              "flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors",
+              active
+                ? "bg-gradient-to-b from-gold-light to-gold-deep text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]"
+                : "bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,138,62,0.2)]"
+            )}
+          >
+            {icon}
+          </span>
+          <div className="min-w-0">
+            <div className={cn("truncate text-sm font-semibold", active ? "text-paper" : "text-ink")}>{title}</div>
+            <div className={cn("truncate text-xs", active ? "text-paper/50" : "text-ink-4")}>{sub}</div>
+          </div>
         </div>
+        {active ? (
+          <span className="mt-0.5 shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-gold-light">
+            Viewing
+          </span>
+        ) : null}
       </div>
-      <div className={cn("g-metric mt-3 text-xl", (cents ?? 0) < 0 ? "text-rose-700" : "text-ink")}>{cents === undefined ? "—" : lkrSigned(cents)}</div>
-      {action ? <div className="mt-1">{action}</div> : null}
+      <div className="relative mt-auto flex items-baseline gap-1.5 pt-3">
+        <span className={cn("text-[10px] font-medium", active ? "text-paper/40" : "text-ink-4")}>LKR</span>
+        <span
+          className={cn(
+            "g-metric truncate text-lg leading-none",
+            (cents ?? 0) < 0 ? (active ? "text-rose-300" : "text-rose-700") : active ? "text-paper" : "text-ink"
+          )}
+        >
+          {cents === undefined ? "—" : lkrSigned(cents)}
+        </span>
+      </div>
+      {action ? <div className="relative mt-2">{action}</div> : null}
     </div>
   );
 }

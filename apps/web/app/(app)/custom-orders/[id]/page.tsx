@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { toast } from "sonner";
 import { hasPermission, lkrToCents, mgToG, PERMISSIONS, salesTaxCents } from "@goldos/shared";
-import { api, PendingApprovalError, type MeData } from "@/lib/api";
+import { api, type MeData } from "@/lib/api";
 import { lkr, toCents, type BankAccount } from "@/lib/accounts";
 import { LineageChain, type LineageEdge, type LineageNode } from "@/components/lineage-chain";
 import {
@@ -137,15 +137,8 @@ function splitLotRef(ref: string): { batchId: string; lotNumber: string } | null
   return batchId && lotNumber && rest.length === 0 ? { batchId, lotNumber } : null;
 }
 
-/** Shared error handling: a 202 PENDING names its approval; everything else toasts. */
-function toastError(e: unknown, fallback: string, onPending?: (err: PendingApprovalError) => void) {
-  if (e instanceof PendingApprovalError) {
-    if (onPending) onPending(e);
-    toast.message("Sent for approval", {
-      description: "Once it is approved in the Approval Center, repeat the action.",
-    });
-    return;
-  }
+/** Shared error handling: toast the failure. */
+function toastError(e: unknown, fallback: string) {
   toast.error(errMsg(e, fallback));
 }
 
@@ -391,7 +384,7 @@ export default function CustomOrderDetailPage({ params }: { params: Promise<{ id
                     isDone
                       ? "bg-ink text-paper"
                       : current
-                        ? "bg-gold-soft text-ink shadow-[inset_0_0_0_1px_rgba(168,134,27,0.3)]"
+                        ? "bg-gold-soft text-ink shadow-[inset_0_0_0_1px_rgba(168,138,62,0.3)]"
                         : "bg-ink/[0.05] text-ink-4"
                   )}
                 >
@@ -632,7 +625,6 @@ export default function CustomOrderDetailPage({ params }: { params: Promise<{ id
       {dialog === "cancel" ? (
         <CancelDialog
           orderId={id}
-          needsApprover={workshop}
           advanceCents={o.advance_cents}
           onClose={() => setDialog(null)}
           onDone={done}
@@ -1178,32 +1170,28 @@ function DeliverDialog({
 
 function CancelDialog({
   orderId,
-  needsApprover,
   advanceCents,
   onClose,
   onDone,
 }: {
   orderId: string;
-  needsApprover: boolean;
   advanceCents: number;
   onClose: () => void;
   onDone: () => void;
 }) {
   const [reason, setReason] = useState("");
-  const [approvedBy, setApprovedBy] = useState("");
-  const [pending, setPending] = useState<string | null>(null);
 
   const cancel = useMutation({
     mutationFn: () =>
       api(`/api/v1/custom-orders/${orderId}/cancel`, {
         method: "POST",
-        body: JSON.stringify({ reason: reason.trim(), approvedBy: approvedBy.trim() || undefined }),
+        body: JSON.stringify({ reason: reason.trim() }),
       }),
     onSuccess: () => {
       toast.success("Custom order cancelled");
       onDone();
     },
-    onError: (e) => toastError(e, "Cancel failed", (err) => setPending(err.approvalId ?? err.message)),
+    onError: (e) => toastError(e, "Cancel failed"),
   });
 
   return (
@@ -1214,14 +1202,9 @@ function CancelDialog({
       onClose={onClose}
       onSubmit={() => cancel.mutate()}
       pending={cancel.isPending}
-      submitDisabled={!reason.trim() || (needsApprover && !approvedBy.trim())}
+      submitDisabled={!reason.trim()}
       submitLabel="Cancel order"
     >
-      {pending ? (
-        <Callout tone="warning" title="Waiting for approval">
-          Request {pending} is in the Approval Center. Cancel again once it is approved.
-        </Callout>
-      ) : null}
       {advanceCents > 0 ? (
         <p className="text-sm text-ink-3">
           {lkr(advanceCents)} LKR of advances will be refunded in cash through a reversing entry. Card or bank advances
@@ -1238,20 +1221,6 @@ function CancelDialog({
           className={`w-full ${controlClass}`}
         />
       </Field>
-      {needsApprover ? (
-        <Field
-          label="Approver user id"
-          htmlFor="co-cancel-approver"
-          hint="Production has started: a second person with mfg:approve must sign off. You cannot approve your own cancel."
-        >
-          <input
-            id="co-cancel-approver"
-            value={approvedBy}
-            onChange={(e) => setApprovedBy(e.target.value)}
-            className={`w-full g-metric ${controlClass}`}
-          />
-        </Field>
-      ) : null}
     </Modal>
   );
 }

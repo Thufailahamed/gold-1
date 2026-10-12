@@ -138,7 +138,7 @@ export default function MfgOrderDetailPage({ params }: { params: Promise<{ id: s
               i < stage
                 ? "bg-ink text-paper"
                 : i === stage
-                  ? "bg-gold-soft text-ink shadow-[inset_0_0_0_1px_rgba(168,134,27,0.3)]"
+                  ? "bg-gold-soft text-ink shadow-[inset_0_0_0_1px_rgba(168,138,62,0.3)]"
                   : "bg-ink/[0.05] text-ink-4"
             )}
           >
@@ -305,7 +305,6 @@ function ProduceDialog({ orderId, onClose }: { orderId: string; onClose: () => v
   const [stones, setStones] = useState("");
   const [loss, setLoss] = useState("");
   const [lossReason, setLossReason] = useState("");
-  const [approver, setApprover] = useState("");
   const [pending, setPending] = useState(false);
   const cats = useQuery({ queryKey: ["cats"], queryFn: () => api<{ rows: { id: string; name: string }[] }>("/api/v1/masters/categories?limit=100") });
   const metals = useQuery({ queryKey: ["metals"], queryFn: () => api<{ rows: { id: string; name: string }[] }>("/api/v1/masters/metal-types?limit=100") });
@@ -336,7 +335,6 @@ function ProduceDialog({ orderId, onClose }: { orderId: string; onClose: () => v
           stoneCostLkr: stones === "" ? 0 : Number(stones),
           lossMg: loss === "" ? 0 : Number(loss),
           lossReason: lossReason || undefined,
-          approvedBy: approver || undefined,
         }),
       });
       toast.success(`Produced ${g(res.outputFineMg)}g, loss ${res.lossPct.toFixed(2)}%`);
@@ -414,9 +412,6 @@ function ProduceDialog({ orderId, onClose }: { orderId: string; onClose: () => v
       </div>
       <label className="block text-sm text-ink-2">Loss reason (required if loss &gt; 0)
         <input value={lossReason} onChange={(e) => setLossReason(e.target.value)} className={controlClass} />
-      </label>
-      <label className="block text-sm text-ink-2">Approver ID (if over threshold)
-        <input value={approver} onChange={(e) => setApprover(e.target.value)} className={controlClass} />
       </label>
     </Modal>
   );

@@ -144,6 +144,7 @@ export function MasterCrud({
     <Page>
       <Hero
         kicker="Masters"
+        back={{ href: "/setup", label: "Setup" }}
         title={title}
         description={subtitle}
         actions={

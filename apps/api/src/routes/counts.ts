@@ -47,15 +47,6 @@ export const counts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return c.json({ success: true, data: await getCount(c.env.DB, c.req.param("id")) }, 200);
     } catch (err) { return serviceError(c, err); }
   })
-  .get("/:id/approvers", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
-    try {
-      await guardCount(c, c.req.param("id"));
-      const row = await c.env.DB.prepare("SELECT opened_by FROM stock_counts WHERE id = ?").bind(c.req.param("id")).first<{ opened_by: string | null }>();
-      // Majority scanner is also refused; the server names it if picked.
-      const data = await eligibleApprovers(c.env.DB, PERMISSIONS.GOLD_MANAGE, { exclude: [c.get("userId"), row?.opened_by] });
-      return c.json({ success: true, data }, 200);
-    } catch (err) { return serviceError(c, err); }
-  })
   .post("/:id/scans", requirePerm(PERMISSIONS.PRODUCTS_EDIT), async (c) => {
     const parsed = scanSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ success: false, error: { code: "VALIDATION", message: "barcode required" } }, 400);
@@ -82,7 +73,7 @@ export const counts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .post("/:id/approve", requirePerm(PERMISSIONS.PRODUCTS_CANCEL), async (c) => {
     const parsed = approveCountSchema.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ success: false, error: { code: "VALIDATION", message: "reason and approvedBy required" } }, 400);
+    if (!parsed.success) return c.json({ success: false, error: { code: "VALIDATION", message: "A reason is required" } }, 400);
     try {
       await guardCount(c, c.req.param("id"));
       const data = await approveCount(c.env.DB, c.req.param("id"), parsed.data, c.get("userId"));

@@ -14,9 +14,40 @@ import {
   listClosings,
   reopenDay,
 } from "../services/dayclose";
+import { autoCloseDay, surveyCsv, surveyDay, surveyPdf, type SurveyInput } from "../services/daysurvey";
+import { getSetting } from "../services/settings";
 import { pagination, serviceError } from "./http";
 
 type Ctx = Context<{ Bindings: Env; Variables: AppVariables }>;
+
+const autoCloseSchema = closeDaySchema.partial({ actualCents: true });
+
+/** The survey's inputs from a query string: what the closer has counted so far. */
+function surveyQuery(c: Ctx): SurveyInput | string {
+  const parsed = previewSchema.safeParse({ branchId: c.req.query("branchId"), date: c.req.query("date") });
+  if (!parsed.success || !parsed.data.date) return "branchId and date are required";
+  const cents = (k: string): number | undefined | null => {
+    const raw = c.req.query(k);
+    if (raw === undefined || raw === "") return undefined;
+    const n = Number(raw);
+    return Number.isInteger(n) ? n : null;
+  };
+  const actualCents = cents("actualCents");
+  const cardTerminalCents = cents("cardTerminalCents");
+  if (actualCents === null || cardTerminalCents === null) return "Amounts must be whole cents";
+  return {
+    branchId: parsed.data.branchId,
+    date: parsed.data.date,
+    actualCents,
+    cardTerminalCents,
+    differenceReason: c.req.query("reason") || undefined,
+  };
+}
+
+async function shopName(db: D1Database): Promise<string> {
+  const s = await getSetting(db, "shop_name");
+  return typeof s?.value === "string" && s.value.trim() ? s.value.trim() : "GoldOS";
+}
 
 const previewSchema = z.object({
   branchId: z.string().min(1),
@@ -137,6 +168,61 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
       return serviceError(c, err);
     }
   })
+  // The full pre-close survey: every check, document fault, pending item and
+  // earlier unclosed day, ranked by whether it stops the close.
+  .get("/survey", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    const input = surveyQuery(c);
+    if (typeof input === "string") return invalid(c, input);
+    try {
+      return c.json({ success: true, data: await surveyDay(c.env.DB, input) }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  .get("/survey.csv", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    const input = surveyQuery(c);
+    if (typeof input === "string") return invalid(c, input);
+    try {
+      const csv = surveyCsv(await surveyDay(c.env.DB, input));
+      return new Response(csv, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="day-close-survey-${input.date}.csv"`,
+        },
+      });
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  .get("/survey.pdf", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+    const input = surveyQuery(c);
+    if (typeof input === "string") return invalid(c, input);
+    try {
+      const [survey, shop] = await Promise.all([surveyDay(c.env.DB, input), shopName(c.env.DB)]);
+      return new Response(surveyPdf(survey, shop), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="day-close-survey-${input.date}.pdf"`,
+        },
+      });
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  // Survey, then close only if nothing blocks it. Returns the survey either
+  // way, so a refused auto-close still says every reason at once.
+  .post("/auto-close", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
+    const parsed = autoCloseSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return invalid(c, "Invalid auto-close");
+    try {
+      const data = await autoCloseDay(c.env.DB, parsed.data, c.get("userId"));
+      return c.json({ success: true, data }, data.closed ? 201 : 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
   .get("/:id", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     const parsed = idSchema.safeParse({ id: c.req.param("id") });
     if (!parsed.success) return invalid(c, "Invalid closing id");
@@ -174,7 +260,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
   .post("/:id/reopen", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
     const id = idSchema.safeParse({ id: c.req.param("id") });
     const body = reopenDaySchema.safeParse(await c.req.json().catch(() => null));
-    if (!id.success || !body.success) return invalid(c, "A re-open needs a reason and an approver");
+    if (!id.success || !body.success) return invalid(c, "A re-open needs a reason");
     try {
       const data = await reopenDay(c.env.DB, id.data.id, body.data, c.get("userId"));
       return c.json({ success: true, data }, 201);

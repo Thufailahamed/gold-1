@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/cn";
-import { ArrowRightIcon, GemIcon } from "@/components/icons";
+import { GemIcon } from "@/components/icons";
 
 export function Reveal({
   children,
@@ -72,6 +72,40 @@ export function SpotlightCard({
   );
 }
 
+/** Grows its child from 90% to full size as it scrolls into view. */
+export function ScrollScale({ children, className }: { children: ReactNode; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const vh = window.innerHeight;
+      const p = Math.min(1, Math.max(0, (vh - el.getBoundingClientRect().top) / (vh * 0.85)));
+      el.style.setProperty("--p", p.toFixed(3));
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
+
+  return (
+    <div ref={ref} className={cn("hx-scroll-scale", className)}>
+      {children}
+    </div>
+  );
+}
+
 const NAV_LINKS = [
   { href: "#features", label: "Features" },
   { href: "#workflow", label: "Workflow" },
@@ -80,56 +114,66 @@ const NAV_LINKS = [
 
 export function HomeNav() {
   const [scrolled, setScrolled] = useState(false);
+  const barRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
+    const onScroll = () => {
+      setScrolled(window.scrollY > 8);
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      if (barRef.current) barRef.current.style.transform = `scaleX(${max > 0 ? window.scrollY / max : 0})`;
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 px-4 pt-4 sm:px-6">
-      <nav
-        aria-label="Primary"
-        className={cn(
-          "mx-auto flex h-14 max-w-7xl items-center justify-between rounded-full px-3 pl-5 transition-all duration-320 ease-brand",
-          scrolled
-            ? "bg-void/75 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1),0_20px_40px_-20px_rgba(0,0,0,0.6)] backdrop-blur-xl"
-            : "bg-transparent"
-        )}
-      >
-        <Link href="/" className="flex items-center gap-2.5" aria-label="GoldOS home">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-b from-gold-light to-gold-deep shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
-            <GemIcon size={15} className="text-void" />
+    <header
+      className={cn(
+        "hx-nav-in fixed inset-x-0 top-0 z-50 transition-[background-color,box-shadow] duration-320 ease-brand",
+        scrolled && "hx-nav"
+      )}
+    >
+      <nav aria-label="Primary" className="mx-auto flex h-14 max-w-6xl items-center justify-between px-5 sm:px-6">
+        <Link href="/" className="flex items-center gap-2" aria-label="GoldOS home">
+          <span className="flex size-7 items-center justify-center rounded-[9px] bg-gradient-to-b from-gold-light to-gold-deep shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+            <GemIcon size={13} className="text-white" />
           </span>
-          <span className="g-display text-lg tracking-wide text-paper">
-            Gold<span className="text-gold">OS</span>
-          </span>
+          <span className="hx-display text-[17px] tracking-[-0.02em] text-[#10201b]">GoldOS</span>
         </Link>
 
-        <div className="hidden items-center gap-1 md:flex">
+        <div className="hidden items-center gap-8 md:flex">
           {NAV_LINKS.map((l) => (
             <a
               key={l.href}
               href={l.href}
-              className="rounded-full px-4 py-2 text-sm text-paper/60 transition-colors hover:bg-paper/[0.06] hover:text-paper"
+              className="text-[13px] text-[#10201b]/70 transition-colors duration-200 hover:text-[#10201b]"
             >
               {l.label}
             </a>
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
-          <Link href="/login" className="hidden px-3 text-sm text-paper/70 transition-colors hover:text-paper sm:block">
+        <div className="flex items-center gap-4">
+          <Link
+            href="/login"
+            className="hidden text-[13px] text-[#10201b]/70 transition-colors hover:text-[#10201b] sm:block"
+          >
             Sign in
           </Link>
-          <Link href="/dashboard" className="home-btn-gold h-10 px-4 text-sm sm:px-5">
+          <Link href="/dashboard" className="hx-btn hx-btn-dark h-8 px-4 text-[13px]">
             Open console
-            <ArrowRightIcon size={14} />
           </Link>
         </div>
       </nav>
+      <div
+        ref={barRef}
+        aria-hidden
+        className={cn(
+          "absolute inset-x-0 bottom-0 h-px origin-left scale-x-0 bg-gradient-to-r from-gold-dark via-gold-light to-gold transition-opacity duration-320",
+          scrolled ? "opacity-100" : "opacity-0"
+        )}
+      />
     </header>
   );
 }

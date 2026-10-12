@@ -36,8 +36,8 @@ export default function PayablesPage() {
   return (
     <Page>
       <Hero
+        compact
         kicker="Accounts"
-        back={{ href: "/accounts", label: "Accounts dashboard" }}
         title="Supplier dues"
         description="What the shop owes each supplier, straight from the payables account, with the unpaid bills behind it aged."
         stats={[

@@ -28,8 +28,6 @@ const PURPLE = "#AF52DE";
 const PINK = "#FF2D55";
 const GRAY = "#8E8E93";
 
-export const APPROVER_PERMS = ["sales:approve", "oldgold:approve", "mfg:approve", "users:approve", "branches:approve", "accounts:manage", "gold:manage", "products:cancel", "purchases:cancel"];
-
 export const NAV: NavSection[] = [
   {
     title: "Catalog",
@@ -100,7 +98,6 @@ export const NAV: NavSection[] = [
   {
     title: "System",
     items: [
-      { href: "/approvals", label: "Approvals", icon: "shield", color: ORANGE, perm: null, anyPerm: APPROVER_PERMS },
       { href: "/audit", label: "Audit Log", icon: "history", color: GRAY, perm: "audit:view" },
       { href: "/settings", label: "Settings", icon: "settings", color: GRAY, perm: "settings:view" },
       { href: "/support", label: "Help & Support", icon: "lifebuoy", color: BLUE, perm: null },

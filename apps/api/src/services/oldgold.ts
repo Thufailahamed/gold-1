@@ -15,18 +15,34 @@ import { getSetting } from "./settings";
 import { consumeApproval, pendingApproval, requestApproval } from "./approvals";
 import { postGoldStmts } from "./gold";
 import { allocateNumber } from "./counters";
+import { batchOrConflict, staleGuard } from "./guard";
 
+/**
+ * Board rates are quoted per gram of the purity they belong to (a 22K rate is
+ * the price of a gram of 22K metal — sales price net weight × that rate). So
+ * the item's fine gold is converted back to metal of the rate's purity before
+ * the rate applies: value = fine × rate × 1000 / ratePermille. Multiplying
+ * fine grams by a karat rate directly discounts the purity twice (a 22K piece
+ * at "92%" came out at ~84% of its board value; an 18K piece far worse).
+ */
 export function valuateOldGold(args: {
   netMg: number;
   permille: number;
   rateCentsPerG: number;
+  /** Permille of the purity the board rate is quoted for. */
+  ratePermille: number;
   buyPct: number;
   stoneDeductionCents: number;
   processingDeductionCents: number;
   negotiatedCents?: number;
 }): { fineMg: number; grossValueCents: number; valueCents: number } {
+  if (args.ratePermille <= 0 || args.ratePermille > 1000)
+    throw Object.assign(new Error("Invalid rate purity"), { code: "VALIDATION" });
   const fineMg = Math.round((args.netMg * args.permille) / 1000);
-  const gross = Math.round(((fineMg * args.rateCentsPerG) / 1000) * (args.buyPct / 100));
+  if (fineMg <= 0) throw Object.assign(new Error("Item has no fine gold"), { code: "VALIDATION" });
+  const gross = Math.round(
+    ((args.netMg * args.permille * args.rateCentsPerG) / (args.ratePermille * 1000)) * (args.buyPct / 100)
+  );
   const value =
     args.negotiatedCents !== undefined
       ? args.negotiatedCents
@@ -80,27 +96,26 @@ async function loadItem(db: D1Database, id: string): Promise<ItemRow> {
   return row;
 }
 
-async function nextOG(db: D1Database, stmts: D1PreparedStatement[]): Promise<string> {
+async function nextOG(db: D1Database): Promise<string> {
   return allocateNumber(db, "OG", "OG", 6, "old_gold_items");
 }
 
-async function requireApprover(db: D1Database, approverId: string, actorId: string): Promise<void> {
-  if (approverId === actorId)
-    throw Object.assign(new Error("Approver cannot be yourself"), { code: "FORBIDDEN" });
-  const target = await db
-    .prepare("SELECT id FROM users WHERE id = ? AND is_active = 1")
-    .bind(approverId)
-    .first();
-  if (!target) throw Object.assign(new Error("Approver not found"), { code: "NOT_FOUND" });
-  const { results } = await db
-    .prepare(
-      `SELECT p.name AS name FROM user_roles ur JOIN role_permissions rp ON rp.role_id = ur.role_id JOIN permissions p ON p.id = rp.permission_id WHERE ur.user_id = ?`
-    )
-    .bind(approverId)
-    .all<{ name: string }>();
-  if (!(results ?? []).some((r) => r.name === "oldgold:approve"))
-    throw Object.assign(new Error("Approval requires oldgold:approve"), { code: "FORBIDDEN" });
+/**
+ * A status change guarded on the status the caller read, followed by the
+ * stale guard: when two requests race, the loser changes no row and its whole
+ * batch (journal, gold ledger, audit) rolls back instead of posting twice.
+ */
+function moveStmts(db: D1Database, itemId: string, from: string[], set: string, binds: unknown[]): D1PreparedStatement[] {
+  return [
+    db
+      .prepare(`UPDATE old_gold_items SET ${set} WHERE id = ? AND status IN (${from.map(() => "?").join(", ")})`)
+      .bind(...binds, itemId, ...from),
+    staleGuard(db),
+  ];
 }
+
+const RACED = "Item changed while saving; reload and try again";
+
 
 export async function intakeItem(
   db: D1Database,
@@ -125,7 +140,7 @@ export async function intakeItem(
       code: "VALIDATION",
     });
   const stmts: D1PreparedStatement[] = [];
-  const number = await nextOG(db, stmts);
+  const number = await nextOG(db);
   const id = crypto.randomUUID();
   const now = Date.now();
   stmts.push(
@@ -157,31 +172,42 @@ export async function recordTest(
   rejectLocked(item.status);
   if (item.status !== "RECEIVED" && item.status !== "TESTED")
     throw Object.assign(new Error("Tests allowed in RECEIVED/TESTED only"), { code: "CONFLICT" });
-  const { results: prior } = await db
-    .prepare("SELECT tested_permille FROM gold_tests WHERE item_id = ?")
-    .bind(itemId)
-    .all<{ tested_permille: number }>();
-  const disagrees = (prior ?? []).some((t) => t.tested_permille !== input.permille);
-  if (disagrees) {
-    if (!input.approvedBy)
-      throw Object.assign(new Error("Disagreement requires approval"), { code: "FORBIDDEN" });
-    await requireApprover(db, input.approvedBy, actorId);
+  // approved_by is a foreign key: an unknown id used to surface as a raw 500.
+  if (input.approvedBy !== undefined) {
+    if (input.approvedBy === actorId)
+      throw Object.assign(new Error("Approver cannot be yourself"), { code: "FORBIDDEN" });
+    const approver = await db
+      .prepare("SELECT id FROM users WHERE id = ? AND is_active = 1")
+      .bind(input.approvedBy)
+      .first();
+    if (!approver) throw Object.assign(new Error("Approver not found"), { code: "NOT_FOUND" });
   }
-  const purity = await db
-    .prepare("SELECT id, karat FROM purities WHERE permille = ? AND is_active = 1")
-    .bind(input.permille)
-    .first<{ id: string; karat: string }>();
   const id = crypto.randomUUID();
   const now = Date.now();
-  await db.batch([
+  // Only a passing test sets the purity the item is valued and bought at. A
+  // failed or inconclusive reading is kept on the record but sends the item
+  // back to RECEIVED, so it cannot be valued on a purity nobody vouched for.
+  let move: D1PreparedStatement[];
+  if (input.result === "pass") {
+    const purity = await db
+      .prepare("SELECT id, karat FROM purities WHERE permille = ? AND is_active = 1")
+      .bind(input.permille)
+      .first<{ id: string; karat: string }>();
+    move = moveStmts(db, itemId, [item.status], "purity_id = ?, tested_permille = ?, karat = ?, status = 'TESTED'", [
+      purity?.id ?? null,
+      input.permille,
+      purity?.karat ?? null,
+    ]);
+  } else {
+    move = moveStmts(db, itemId, [item.status], "purity_id = NULL, tested_permille = NULL, karat = NULL, status = 'RECEIVED'", []);
+  }
+  await batchOrConflict(db, [
+    ...move,
     db
       .prepare(
         "INSERT INTO gold_tests (id, item_id, method, tested_permille, tester_id, result, approved_by, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       )
       .bind(id, itemId, input.method, input.permille, actorId, input.result, input.approvedBy ?? null, input.notes ?? null, now),
-    db
-      .prepare("UPDATE old_gold_items SET purity_id = ?, tested_permille = ?, karat = ?, status = 'TESTED' WHERE id = ?")
-      .bind(purity?.id ?? null, input.permille, purity?.karat ?? null, itemId),
     buildAuditStmt(db, {
       userId: actorId,
       action: "oldgold.test",
@@ -190,7 +216,7 @@ export async function recordTest(
       next: { method: input.method, permille: input.permille, result: input.result },
       branchId: item.branch_id,
     }),
-  ]);
+  ], RACED);
   return { testId: id };
 }
 
@@ -207,23 +233,24 @@ export async function valuateItem(
   if (item.tested_permille === null)
     throw Object.assign(new Error("No tested purity"), { code: "VALIDATION" });
 
-  let rate: number | null = null;
-  if (item.purity_id) {
-    const rates = await currentGoldRatesCents(db);
-    rate = rates.find((r) => r.purity_id === item.purity_id)?.rate_cents_per_g ?? null;
-  }
-  if (rate === null) {
-    const near = await db
-      .prepare("SELECT id FROM purities WHERE is_active = 1 ORDER BY ABS(permille - ?) LIMIT 1")
-      .bind(item.tested_permille)
-      .first<{ id: string }>();
-    if (near) {
-      const rates = await currentGoldRatesCents(db);
-      rate = rates.find((r) => r.purity_id === near.id)?.rate_cents_per_g ?? null;
-    }
-  }
-  if (rate === null)
+  // The item's own purity when it has a board rate, otherwise the closest
+  // purity that HAS one. (Picking the closest purity first and then looking
+  // for its rate failed whenever that purity had no rate posted.)
+  const rates = await currentGoldRatesCents(db);
+  const { results: purityRows } = await db
+    .prepare("SELECT id, permille FROM purities WHERE is_active = 1")
+    .all<{ id: string; permille: number }>();
+  const permilleOf = new Map((purityRows ?? []).map((p) => [p.id, p.permille]));
+  const rated = rates
+    .filter((r) => r.rate_cents_per_g > 0 && permilleOf.has(r.purity_id))
+    .map((r) => ({ rate: r.rate_cents_per_g, permille: permilleOf.get(r.purity_id)!, purityId: r.purity_id }));
+  const tested = item.tested_permille;
+  const board =
+    rated.find((r) => r.purityId === item.purity_id) ??
+    rated.sort((a, b) => Math.abs(a.permille - tested) - Math.abs(b.permille - tested))[0];
+  if (!board)
     throw Object.assign(new Error("No board rate available"), { code: "VALIDATION" });
+  const rate = board.rate;
 
   let buyPct = input.buyPct;
   let reasonRequired = false;
@@ -271,18 +298,21 @@ export async function valuateItem(
     netMg: item.net_mg,
     permille: item.tested_permille,
     rateCentsPerG: rate,
+    ratePermille: board.permille,
     buyPct,
     stoneDeductionCents: stoneDed,
     processingDeductionCents: procDed,
     negotiatedCents: input.negotiatedLkr !== undefined ? lkrToCents(input.negotiatedLkr) : undefined,
   });
+  // Price actually paid per gram of fine gold.
   const purchaseRate = Math.round((v.valueCents / v.fineMg) * 1000);
-  await db.batch([
-    db
-      .prepare(
-        "UPDATE old_gold_items SET rate_cents_per_g = ?, buy_pct = ?, purchase_rate_cents = ?, stone_deduction_cents = ?, processing_deduction_cents = ?, negotiated_cents = ?, purchase_value_cents = ?, fine_mg = ?, status = 'VALUED' WHERE id = ?"
-      )
-      .bind(
+  await batchOrConflict(db, [
+    ...moveStmts(
+      db,
+      itemId,
+      [item.status],
+      "rate_cents_per_g = ?, buy_pct = ?, purchase_rate_cents = ?, stone_deduction_cents = ?, processing_deduction_cents = ?, negotiated_cents = ?, purchase_value_cents = ?, fine_mg = ?, status = 'VALUED'",
+      [
         rate,
         buyPct,
         purchaseRate,
@@ -291,18 +321,18 @@ export async function valuateItem(
         input.negotiatedLkr !== undefined ? lkrToCents(input.negotiatedLkr) : null,
         v.valueCents,
         v.fineMg,
-        itemId
-      ),
+      ]
+    ),
     buildAuditStmt(db, {
       userId: actorId,
       action: "oldgold.value",
       entity: "old_gold",
       entityId: itemId,
-      next: { valueCents: v.valueCents, buyPct },
+      next: { valueCents: v.valueCents, buyPct, rateCentsPerG: rate, ratePermille: board.permille },
       reason: input.reason,
       branchId: item.branch_id,
     }),
-  ]);
+  ], RACED);
   return { valueCents: v.valueCents, fineMg: v.fineMg };
 }
 
@@ -332,10 +362,12 @@ export async function purchaseItem(
   const cash = opts.method === "cash" ? "1000" : "1010";
   const now = Date.now();
   const purchaseId = crypto.randomUUID();
-  const lines = [
+  const lines: { account: string; debitCents: number; creditCents: number; partyType?: "customer"; partyId?: string }[] = [
     { account: "1100", debitCents: item.purchase_value_cents, creditCents: 0, partyType: "customer" as const, partyId: item.customer_id },
-    { account: cash, debitCents: 0, creditCents: paidCents },
   ];
+  // A zero cash line is rejected by the journal ("debit XOR credit"), which
+  // made an all-on-credit purchase (paid 0) impossible.
+  if (paidCents > 0) lines.push({ account: cash, debitCents: 0, creditCents: paidCents });
   if (remainder > 0) {
     lines.push({ account: "1200", debitCents: 0, creditCents: remainder, partyType: "customer" as const, partyId: item.customer_id });
   }
@@ -356,13 +388,16 @@ export async function purchaseItem(
     },
     { entryDate: await businessDateFor(db, now) }
   );
-  await db.batch([
+  await batchOrConflict(db, [
+    // Guarded on VALUED and on the value the customer was quoted, so a racing
+    // second purchase (or a re-valuation that landed in between) rolls back.
+    db
+      .prepare("UPDATE old_gold_items SET paid_cents = ?, status = 'PURCHASED' WHERE id = ? AND status = 'VALUED' AND purchase_value_cents = ?")
+      .bind(paidCents, itemId, item.purchase_value_cents),
+    staleGuard(db),
     db
       .prepare("INSERT INTO old_gold_purchases (id, item_id, value_cents, paid_cents, method, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .bind(purchaseId, itemId, item.purchase_value_cents, paidCents, opts.method, now, actorId),
-    db
-      .prepare("UPDATE old_gold_items SET paid_cents = ?, status = 'PURCHASED' WHERE id = ?")
-      .bind(paidCents, itemId),
     db
       .prepare("INSERT INTO gold_movements (id, product_id, old_gold_id, direction, fine_mg, purity_permille, ref_entity, ref_id, branch_id, created_at, created_by) VALUES (?, NULL, ?, 'IN', ?, ?, 'old_gold_purchase', ?, ?, ?, ?)")
       .bind(crypto.randomUUID(), itemId, item.fine_mg, item.tested_permille ?? 0, purchaseId, item.branch_id, now, actorId),
@@ -391,7 +426,7 @@ export async function purchaseItem(
     db
       .prepare("UPDATE old_gold_purchases SET journal_entry_id = ? WHERE id = ?")
       .bind(journal.entryId, purchaseId),
-  ]);
+  ], "Item was already purchased or re-valued; reload and try again");
   return { purchaseId };
 }
 
@@ -400,8 +435,8 @@ export async function releaseItem(db: D1Database, itemId: string, actorId: strin
   rejectLocked(item.status);
   if (item.status !== "PURCHASED")
     throw Object.assign(new Error("Only purchased items can be released"), { code: "CONFLICT" });
-  await db.batch([
-    db.prepare("UPDATE old_gold_items SET status = 'AVAILABLE' WHERE id = ?").bind(itemId),
+  await batchOrConflict(db, [
+    ...moveStmts(db, itemId, ["PURCHASED"], "status = 'AVAILABLE'", []),
     buildAuditStmt(db, {
       userId: actorId,
       action: "oldgold.release",
@@ -411,7 +446,7 @@ export async function releaseItem(db: D1Database, itemId: string, actorId: strin
       next: { status: "AVAILABLE" },
       branchId: item.branch_id,
     }),
-  ]);
+  ], RACED);
 }
 
 export async function convertItem(
@@ -428,6 +463,16 @@ export async function convertItem(
     throw Object.assign(new Error("Conversion needs a matched purity"), { code: "VALIDATION" });
   if (item.purchase_value_cents === null)
     throw Object.assign(new Error("Item has no purchase value"), { code: "VALIDATION" });
+  // Gold earmarked as the customer's own metal for a live custom order must
+  // go to the melt for that order, not onto the shelf for someone else.
+  const holder = await db
+    .prepare(
+      "SELECT o.number FROM custom_order_gold g JOIN custom_orders o ON o.id = g.order_id WHERE g.kind = 'CUSTOMER_OLDGOLD' AND g.ref_id = ? AND o.status NOT IN ('CANCELLED', 'DELIVERED')"
+    )
+    .bind(itemId)
+    .first<{ number: string }>();
+  if (holder)
+    throw Object.assign(new Error(`Item is earmarked for custom order ${holder.number}`), { code: "CONFLICT" });
   const now = Date.now();
   const built = await buildCreateProductStmts(
     db,
@@ -449,11 +494,11 @@ export async function convertItem(
     item.branch_id,
     now
   );
+  // The product row goes first (converted_product_id references it), then the
+  // guarded move: a second, racing convert rolls back its product too.
   const stmts: D1PreparedStatement[] = [...built.stmts];
   stmts.push(
-    db
-      .prepare("UPDATE old_gold_items SET converted_product_id = ?, status = 'RESOLD' WHERE id = ?")
-      .bind(built.id, itemId),
+    ...moveStmts(db, itemId, ["AVAILABLE"], "converted_product_id = ?, status = 'RESOLD'", [built.id]),
     buildAuditStmt(db, {
       userId: actorId,
       action: "oldgold.convert",
@@ -464,7 +509,7 @@ export async function convertItem(
       branchId: item.branch_id,
     })
   );
-  await db.batch(stmts);
+  await batchOrConflict(db, stmts, RACED);
   return { productId: built.id, barcode: built.barcode };
 }
 
@@ -478,8 +523,8 @@ export async function voidItem(
   rejectLocked(item.status);
   if (!["RECEIVED", "TESTED", "VALUED"].includes(item.status))
     throw Object.assign(new Error("Only pre-purchase items can be voided"), { code: "CONFLICT" });
-  await db.batch([
-    db.prepare("UPDATE old_gold_items SET status = 'VOID' WHERE id = ?").bind(itemId),
+  await batchOrConflict(db, [
+    ...moveStmts(db, itemId, [item.status], "status = 'VOID'", []),
     buildAuditStmt(db, {
       userId: actorId,
       action: "oldgold.void",
@@ -490,7 +535,21 @@ export async function voidItem(
       reason,
       branchId: item.branch_id,
     }),
-  ]);
+  ], RACED);
+}
+
+const MAX_FILES = 10;
+
+/**
+ * Checked BEFORE anything is written to R2, so a locked item or a full slot
+ * refuses the upload instead of leaving orphan objects in the bucket.
+ */
+export async function assertCanAddFiles(db: D1Database, itemId: string, kind: "image" | "doc", count: number): Promise<void> {
+  const item = await loadItem(db, itemId);
+  rejectLocked(item.status);
+  const current = JSON.parse(kind === "image" ? item.image_keys : item.doc_keys) as string[];
+  if (current.length + count > MAX_FILES)
+    throw Object.assign(new Error(`Max ${MAX_FILES} files per kind`), { code: "VALIDATION" });
 }
 
 export async function addFiles(
@@ -503,12 +562,16 @@ export async function addFiles(
   const item = await loadItem(db, itemId);
   rejectLocked(item.status);
   const col = kind === "image" ? "image_keys" : "doc_keys";
-  const current = JSON.parse((kind === "image" ? item.image_keys : item.doc_keys) as string) as string[];
-  if (current.length + keys.length > 10)
-    throw Object.assign(new Error("Max 10 files per kind"), { code: "VALIDATION" });
+  const raw = kind === "image" ? item.image_keys : item.doc_keys;
+  const current = JSON.parse(raw) as string[];
+  if (current.length + keys.length > MAX_FILES)
+    throw Object.assign(new Error(`Max ${MAX_FILES} files per kind`), { code: "VALIDATION" });
   const next = [...current, ...keys];
-  await db.batch([
-    db.prepare(`UPDATE old_gold_items SET ${col} = ? WHERE id = ?`).bind(JSON.stringify(next), itemId),
+  // Guarded on the list we read: two uploads at once would otherwise each
+  // write their own list and one set of keys would vanish.
+  await batchOrConflict(db, [
+    db.prepare(`UPDATE old_gold_items SET ${col} = ? WHERE id = ? AND ${col} = ?`).bind(JSON.stringify(next), itemId, raw),
+    staleGuard(db),
     buildAuditStmt(db, {
       userId: actorId,
       action: "oldgold.files_add",
@@ -517,7 +580,7 @@ export async function addFiles(
       next: { kind, keys },
       branchId: item.branch_id,
     }),
-  ]);
+  ], "Another upload finished first; try again");
   return { keys: next };
 }
 
@@ -535,8 +598,15 @@ export async function getItem(db: D1Database, id: string) {
     .prepare("SELECT * FROM old_gold_purchases WHERE item_id = ?")
     .bind(id)
     .first();
+  // The posted lines (account, DR/CR), not just the entry headers: headers
+  // carry no account or amount, so the detail screen showed blank rows.
   const { results: journal } = await db
-    .prepare("SELECT * FROM journal_entries WHERE ref_entity = 'old_gold_purchase' AND ref_id IN (SELECT id FROM old_gold_purchases WHERE item_id = ?) ORDER BY created_at")
+    .prepare(
+      `SELECT l.id, l.entry_id, e.entry_no, e.entry_date, e.status AS entry_status, l.account_code, l.debit_cents, l.credit_cents, l.party_type, l.party_id
+       FROM journal_entries e JOIN journal_lines l ON l.entry_id = e.id
+       WHERE e.ref_entity = 'old_gold_purchase' AND e.ref_id IN (SELECT id FROM old_gold_purchases WHERE item_id = ?)
+       ORDER BY e.created_at, l.line_no`
+    )
     .bind(id)
     .all();
   const { results: gold } = await db
@@ -559,8 +629,7 @@ export async function getItem(db: D1Database, id: string) {
 
 export async function listItems(
   db: D1Database,
-  userId: string,
-  canManageAll: boolean,
+  scope: string[] | null,
   opts: PageOpts & { status?: string; purityId?: string; branchId?: string; customerId?: string; from?: number; to?: number }
 ) {
   const like = `%${opts.search ?? ""}%`;
@@ -579,12 +648,11 @@ export async function listItems(
     conds.push("o.customer_id = ?");
     vals.push(opts.customerId);
   }
-  if (opts.branchId) {
-    conds.push("o.branch_id = ?");
-    vals.push(opts.branchId);
-  } else if (!canManageAll) {
-    conds.push("o.branch_id IN (SELECT branch_id FROM branch_members WHERE user_id = ?)");
-    vals.push(userId);
+  // The route has already refused a branchId outside the caller's scope.
+  const b = branchFilter("o.branch_id", opts.branchId, scope);
+  if (b.sql) {
+    conds.push(b.sql.replace(/^ AND /, ""));
+    vals.push(...b.vals);
   }
   if (opts.from !== undefined) {
     conds.push("o.created_at >= ?");
@@ -617,27 +685,43 @@ export async function findByBarcode(db: D1Database, code: string) {
   return getItem(db, row.id);
 }
 
-export async function oldgoldSummary(db: D1Database, opts: { from: number; to: number; branchId?: string }) {
-  const conds = ["o.created_at >= ?", "o.created_at <= ?", "o.status != 'VOID'"];
-  const vals: unknown[] = [opts.from, opts.to];
-  if (opts.branchId) {
-    conds.push("o.branch_id = ?");
-    vals.push(opts.branchId);
-  }
-  const where = `WHERE ${conds.join(" AND ")}`;
+/** `scope` null = every branch; otherwise the caller's branches (see branchAccess). */
+type Scope = string[] | null;
+
+function branchFilter(col: string, branchId: string | undefined, scope: Scope): { sql: string; vals: unknown[] } {
+  if (branchId) return { sql: ` AND ${col} = ?`, vals: [branchId] };
+  if (scope === null) return { sql: "", vals: [] };
+  if (scope.length === 0) return { sql: " AND 1 = 0", vals: [] };
+  return { sql: ` AND ${col} IN (${scope.map(() => "?").join(", ")})`, vals: [...scope] };
+}
+
+/**
+ * Intake counts (items, gross) follow the intake date; money and fine gold
+ * follow the PURCHASE date and the purchase record. Filtering bought items by
+ * current status dropped every item from the totals the moment it went to the
+ * melt (RESERVED_FOR_MELTING / MELTED), so last month's buy-ins shrank daily.
+ */
+export async function oldgoldSummary(db: D1Database, opts: { from: number; to: number; branchId?: string; scope?: Scope }) {
+  const b = branchFilter("o.branch_id", opts.branchId, opts.scope ?? null);
   const head = await db
-    .prepare(`SELECT COUNT(*) AS items, COALESCE(SUM(o.gross_mg), 0) AS gross_mg FROM old_gold_items o ${where}`)
-    .bind(...vals)
+    .prepare(
+      `SELECT COUNT(*) AS items, COALESCE(SUM(o.gross_mg), 0) AS gross_mg FROM old_gold_items o
+       WHERE o.created_at >= ? AND o.created_at <= ? AND o.status != 'VOID'${b.sql}`
+    )
+    .bind(opts.from, opts.to, ...b.vals)
     .first<{ items: number; gross_mg: number }>();
   const bought = await db
     .prepare(
-      `SELECT COALESCE(SUM(o.fine_mg), 0) AS fine_mg, COALESCE(SUM(o.purchase_value_cents), 0) AS value_cents, COALESCE(SUM(o.paid_cents), 0) AS paid_cents FROM old_gold_items o ${where} AND o.status IN ('PURCHASED', 'AVAILABLE', 'RESOLD')`
+      `SELECT COUNT(*) AS bought, COALESCE(SUM(o.fine_mg), 0) AS fine_mg, COALESCE(SUM(p.value_cents), 0) AS value_cents, COALESCE(SUM(p.paid_cents), 0) AS paid_cents
+       FROM old_gold_purchases p JOIN old_gold_items o ON o.id = p.item_id
+       WHERE p.created_at >= ? AND p.created_at <= ?${b.sql}`
     )
-    .bind(...vals)
-    .first<{ fine_mg: number; value_cents: number; paid_cents: number }>();
+    .bind(opts.from, opts.to, ...b.vals)
+    .first<{ bought: number; fine_mg: number; value_cents: number; paid_cents: number }>();
   return {
     items: head?.items ?? 0,
     gross_mg: head?.gross_mg ?? 0,
+    bought: bought?.bought ?? 0,
     fine_mg: bought?.fine_mg ?? 0,
     value_cents: bought?.value_cents ?? 0,
     paid_cents: bought?.paid_cents ?? 0,
@@ -647,40 +731,63 @@ export async function oldgoldSummary(db: D1Database, opts: { from: number; to: n
 
 export async function oldgoldBreakdown(
   db: D1Database,
-  opts: { from: number; to: number; branchId?: string; groupBy: "purity" | "customer" | "branch" }
+  opts: { from: number; to: number; branchId?: string; scope?: Scope; groupBy: "purity" | "customer" | "branch" }
 ) {
-  const col = opts.groupBy === "purity" ? "COALESCE(o.karat, CAST(o.tested_permille AS TEXT))" : opts.groupBy === "customer" ? "c.name" : "o.branch_id";
-  const join = opts.groupBy === "customer" ? "JOIN customers c ON c.id = o.customer_id" : "";
-  const bcond = opts.branchId ? "AND o.branch_id = ?" : "";
-  const vals: unknown[] = opts.branchId ? [opts.from, opts.to, opts.branchId] : [opts.from, opts.to];
+  // Customers group by id (two people can share a name) and branches show
+  // their name rather than a raw id.
+  const key =
+    opts.groupBy === "purity"
+      ? "COALESCE(o.karat, CAST(o.tested_permille AS TEXT))"
+      : opts.groupBy === "customer"
+        ? "o.customer_id"
+        : "o.branch_id";
+  const label = opts.groupBy === "purity" ? key : opts.groupBy === "customer" ? "MAX(c.name)" : "MAX(br.name)";
+  const join =
+    opts.groupBy === "customer"
+      ? "LEFT JOIN customers c ON c.id = o.customer_id"
+      : opts.groupBy === "branch"
+        ? "LEFT JOIN branches br ON br.id = o.branch_id"
+        : "";
+  const b = branchFilter("o.branch_id", opts.branchId, opts.scope ?? null);
   const { results } = await db
     .prepare(
-      `SELECT ${col} AS key, COUNT(*) AS items, COALESCE(SUM(o.purchase_value_cents), 0) AS value_cents, COALESCE(SUM(o.fine_mg), 0) AS fine_mg FROM old_gold_items o ${join} WHERE o.created_at >= ? AND o.created_at <= ? AND o.status IN ('PURCHASED', 'AVAILABLE', 'RESOLD') ${bcond} GROUP BY ${col} ORDER BY value_cents DESC`
+      `SELECT ${label} AS key, ${key} AS group_id, COUNT(*) AS items, COALESCE(SUM(p.value_cents), 0) AS value_cents, COALESCE(SUM(o.fine_mg), 0) AS fine_mg
+       FROM old_gold_purchases p JOIN old_gold_items o ON o.id = p.item_id ${join}
+       WHERE p.created_at >= ? AND p.created_at <= ?${b.sql}
+       GROUP BY ${key} ORDER BY value_cents DESC`
     )
-    .bind(...vals)
+    .bind(opts.from, opts.to, ...b.vals)
     .all();
   return results ?? [];
 }
 
-export async function pendingList(db: D1Database, branchId?: string) {
-  const cond = branchId ? "AND o.branch_id = ?" : "";
-  const vals = branchId ? [branchId] : [];
+export async function pendingList(db: D1Database, branchId?: string, scope: Scope = null) {
+  const b = branchFilter("o.branch_id", branchId, scope);
   const { results } = await db
     .prepare(
-      `SELECT o.id, o.number, o.description, o.fine_mg, o.purchase_value_cents, o.status, o.created_at, c.name AS customer_name FROM old_gold_items o LEFT JOIN customers c ON c.id = o.customer_id WHERE o.status IN ('PURCHASED', 'AVAILABLE') ${cond} ORDER BY o.created_at DESC LIMIT 100`
+      `SELECT o.id, o.number, o.description, o.fine_mg, o.purchase_value_cents, o.status, o.created_at, c.name AS customer_name FROM old_gold_items o LEFT JOIN customers c ON c.id = o.customer_id WHERE o.status IN ('PURCHASED', 'AVAILABLE')${b.sql} ORDER BY o.created_at DESC LIMIT 100`
     )
-    .bind(...vals)
+    .bind(...b.vals)
     .all();
   return results ?? [];
 }
 
-export async function customerOldgold(db: D1Database, customerId: string) {
+export async function customerOldgold(db: D1Database, customerId: string, scope: Scope = null) {
+  const b = branchFilter("o.branch_id", undefined, scope);
   const { results: items } = await db
-    .prepare("SELECT id, number, description, net_mg, fine_mg, purchase_value_cents, paid_cents, status, created_at FROM old_gold_items WHERE customer_id = ? AND status != 'VOID' ORDER BY created_at DESC")
-    .bind(customerId)
+    .prepare(
+      `SELECT o.id, o.number, o.description, o.net_mg, o.fine_mg, o.purchase_value_cents, o.paid_cents, o.status, o.created_at,
+              CASE WHEN p.id IS NULL THEN 0 ELSE 1 END AS purchased
+       FROM old_gold_items o LEFT JOIN old_gold_purchases p ON p.item_id = o.id
+       WHERE o.customer_id = ? AND o.status != 'VOID'${b.sql} ORDER BY o.created_at DESC`
+    )
+    .bind(customerId, ...b.vals)
     .all();
-  const rows = (items ?? []) as { purchase_value_cents: number | null; paid_cents: number }[];
-  const value = rows.reduce((s, r) => s + (r.purchase_value_cents ?? 0), 0);
-  const paid = rows.reduce((s, r) => s + r.paid_cents, 0);
+  const rows = (items ?? []) as { purchase_value_cents: number | null; paid_cents: number; purchased: number }[];
+  // Only bought items are money owed: a VALUED item is a quote the customer
+  // may still walk away with, not a debt.
+  const bought = rows.filter((r) => r.purchased === 1);
+  const value = bought.reduce((s, r) => s + (r.purchase_value_cents ?? 0), 0);
+  const paid = bought.reduce((s, r) => s + r.paid_cents, 0);
   return { items: rows, totals: { items: rows.length, value_cents: value, paid_cents: paid, outstanding_cents: value - paid } };
 }

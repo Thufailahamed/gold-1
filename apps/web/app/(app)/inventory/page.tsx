@@ -6,15 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { centsToLkr, hasPermission, mgToG } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
-import {
-  DataTable,
-  EmptyBlock,
-  Page,
-  Pager,
-  TableCard,
-  Tabs,
-  type DataColumn,
-} from "@/components/ui";
+import { DataTable, EmptyBlock, Page, Pager, type DataColumn } from "@/components/ui";
+import { cn } from "@/lib/cn";
 import {
   AlertCircleIcon,
   ArrowRightIcon,
@@ -227,7 +220,7 @@ export default function InventoryPage() {
   const insightsError = insights.isError ? (insights.error as Error).message : undefined;
 
   return (
-    <Page className="space-y-5">
+    <Page className="space-y-6">
       <InventoryHero
         insights={insights.data}
         loading={insights.isLoading}
@@ -239,7 +232,7 @@ export default function InventoryPage() {
 
       <WorkflowLinks />
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-3">
         <StockByKarat
           data={insights.data}
           loading={insights.isLoading}
@@ -261,7 +254,7 @@ export default function InventoryPage() {
         />
       </div>
 
-      <TableCard
+      <LuxeTableCard
         title="Stock on hand"
         description={
           stock.data
@@ -272,7 +265,7 @@ export default function InventoryPage() {
         }
         icon={<PackageIcon size={16} />}
         toolbar={
-          <Tabs
+          <Segmented
             ariaLabel="Group stock by"
             items={[
               { key: "branch" as const, label: "By branch", icon: <Building2Icon size={15} /> },
@@ -293,7 +286,7 @@ export default function InventoryPage() {
           totals={totals}
           onRowClick={groupBy === "product" ? (r) => void openPiece(r.key) : undefined}
         />
-      </TableCard>
+      </LuxeTableCard>
 
       <MovementComposer
         barcode={barcode}
@@ -302,8 +295,8 @@ export default function InventoryPage() {
         branchName={(id) => branches.data?.rows.find((b) => b.id === id)?.name ?? id.slice(0, 8)}
       />
 
-      <div id="movement-history">
-        <TableCard
+      <div id="movement-history" className="scroll-mt-24">
+        <LuxeTableCard
           title="Movement history"
           description={
             moves.data
@@ -362,7 +355,7 @@ export default function InventoryPage() {
               />
             }
           />
-        </TableCard>
+        </LuxeTableCard>
       </div>
 
       {detail ? (
@@ -416,22 +409,32 @@ function StockTableBody({
         />
       }
       totals={
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-ink-4">
-          <span className="font-semibold uppercase tracking-[0.14em]">Total</span>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-ink-4">
+          <span className="mr-1 inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-gold-dark">
+            <span className="size-1.5 rounded-full bg-gold" />
+            Total
+          </span>
           {[
-            ["Pieces", totals.pieces.toLocaleString("en-US")],
-            ["Net", `${g(totals.net)} g`],
-            ["Fine", `${g(totals.fine)} g`],
+            ["Pieces", totals.pieces.toLocaleString("en-US"), false],
+            ["Net", `${g(totals.net)} g`, false],
+            ["Fine", `${g(totals.fine)} g`, true],
             [
               "Value",
               totals.hasValue
                 ? `LKR ${centsToLkr(totals.value).toLocaleString("en-US", { maximumFractionDigits: 0 })}`
                 : "—",
+              false,
             ],
-          ].map(([k, v]) => (
-            <span key={k} className="inline-flex items-baseline gap-1.5">
+          ].map(([k, v, gold]) => (
+            <span
+              key={String(k)}
+              className={cn(
+                "inline-flex items-baseline gap-1.5 rounded-lg px-2.5 py-1.5 ring-1",
+                gold ? "bg-gold-pale text-gold-deep ring-gold-dark/15" : "bg-paper ring-ink/[0.07]"
+              )}
+            >
               {k}
-              <span className="g-metric text-sm text-ink">{v}</span>
+              <span className={cn("g-metric text-sm", gold ? "text-gold-deep" : "text-ink")}>{v}</span>
             </span>
           ))}
         </div>
@@ -463,25 +466,134 @@ const WORKFLOWS = [
 
 function WorkflowLinks() {
   return (
-    <nav aria-label="Inventory workflows" className="grid gap-3 sm:grid-cols-3">
-      {WORKFLOWS.map(({ href, title, body, icon: Icon }) => (
+    <nav aria-label="Inventory workflows" className="grid gap-4 sm:grid-cols-3">
+      {WORKFLOWS.map(({ href, title, body, icon: Icon }, i) => (
         <Link
           key={href}
           href={href}
-          className="group flex items-start gap-3 rounded-xl bg-paper p-4 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.08)] transition-shadow hover:shadow-[inset_0_0_0_1px_rgba(28,25,23,0.2)]"
+          className={cn(
+            "group relative flex animate-fade-in flex-col overflow-hidden rounded-[22px] bg-paper p-5 transition-all duration-320 ease-brand",
+            "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]",
+            "hover:-translate-y-1 hover:shadow-[inset_0_0_0_1px_rgba(168,138,62,0.4),0_30px_60px_-30px_rgba(126,98,35,0.45)]"
+          )}
+          style={{ animationDelay: `${i * 60}ms` }}
         >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gold-pale text-gold-deep ring-1 ring-gold-dark/15">
-            <Icon size={16} />
-          </span>
-          <span className="min-w-0">
-            <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-              {title}
-              <ArrowRightIcon size={13} className="text-ink-4 transition-transform group-hover:translate-x-0.5" />
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-gold/70 to-transparent opacity-0 transition-opacity duration-320 group-hover:opacity-100"
+          />
+          <span
+            aria-hidden
+            className="pointer-events-none absolute -right-14 -top-14 size-36 rounded-full bg-gold/10 opacity-0 blur-2xl transition-opacity duration-320 group-hover:opacity-100"
+          />
+          <span className="relative flex items-center justify-between">
+            <span className="flex size-11 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_10px_20px_-12px_rgba(6,42,34,0.8)] transition-transform duration-320 group-hover:scale-105">
+              <Icon size={18} />
             </span>
-            <span className="mt-0.5 block text-xs leading-relaxed text-ink-4">{body}</span>
+            <span className="flex size-8 items-center justify-center rounded-full text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.1)] transition-all duration-320 group-hover:bg-gradient-to-b group-hover:from-gold-light group-hover:to-gold group-hover:text-void group-hover:shadow-none">
+              <ArrowRightIcon size={14} className="transition-transform duration-320 group-hover:-rotate-45" />
+            </span>
           </span>
+          <span className="relative mt-4 text-[15px] font-semibold text-ink transition-colors group-hover:text-gold-deep">
+            {title}
+          </span>
+          <span className="relative mt-1 block text-xs leading-relaxed text-ink-4">{body}</span>
         </Link>
       ))}
     </nav>
+  );
+}
+
+/** Page-local table shell: the shared TableCard with the catalog's premium chrome. */
+function LuxeTableCard({
+  title,
+  description,
+  icon,
+  toolbar,
+  footer,
+  children,
+}: {
+  title: ReactNode;
+  description?: ReactNode;
+  icon: ReactNode;
+  toolbar?: ReactNode;
+  footer?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="relative overflow-hidden rounded-[22px] bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]">
+      <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
+      <div className="flex flex-col gap-4 border-b border-ink/[0.06] px-5 py-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex min-w-0 items-center gap-3.5">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_8px_18px_-10px_rgba(6,42,34,0.7)]">
+            {icon}
+          </span>
+          <div className="min-w-0">
+            <h2 className="font-sans tracking-normal truncate text-[15px] font-semibold text-ink">{title}</h2>
+            {description ? <p className="truncate text-xs text-ink-4">{description}</p> : null}
+          </div>
+        </div>
+        {toolbar ? <div className="min-w-0 xl:max-w-[70%]">{toolbar}</div> : null}
+      </div>
+      <div className="overflow-x-auto scrollbar-thin">{children}</div>
+      {footer ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink/[0.06] bg-bone/40 px-5 py-3 text-xs text-ink-4 sm:px-6">
+          {footer}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/** Sliding-pill segmented control for the stock grouping. */
+function Segmented<K extends string>({
+  items,
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  items: ReadonlyArray<{ key: K; label: string; icon: ReactNode }>;
+  value: K;
+  onChange: (k: K) => void;
+  ariaLabel: string;
+}) {
+  const idx = Math.max(
+    0,
+    items.findIndex((i) => i.key === value)
+  );
+  return (
+    <div className="-mx-1 overflow-x-auto px-1 scrollbar-thin">
+      <div
+        role="tablist"
+        aria-label={ariaLabel}
+        className="relative grid min-w-max rounded-xl bg-bone p-1 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]"
+        style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
+      >
+        <span
+          aria-hidden
+          className="absolute inset-y-1 left-1 rounded-lg bg-void shadow-[inset_0_0_0_1px_rgba(205,168,83,0.3),0_8px_18px_-10px_rgba(6,42,34,0.8)] transition-transform duration-320 ease-brand"
+          style={{ width: `calc((100% - 0.5rem) / ${items.length})`, transform: `translateX(${idx * 100}%)` }}
+        />
+        {items.map((t) => {
+          const active = t.key === value;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => onChange(t.key)}
+              className={cn(
+                "relative inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 text-[13px] font-medium transition-colors duration-200",
+                active ? "text-paper" : "text-ink-4 hover:text-ink"
+              )}
+            >
+              <span className={active ? "text-gold-light" : "text-ink-5"}>{t.icon}</span>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }

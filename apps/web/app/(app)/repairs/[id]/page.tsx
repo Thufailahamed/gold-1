@@ -253,7 +253,7 @@ export default function RepairDetailPage({ params }: { params: Promise<{ id: str
                     done
                       ? "bg-ink text-paper"
                       : current
-                        ? "bg-gold-soft text-ink shadow-[inset_0_0_0_1px_rgba(168,134,27,0.3)]"
+                        ? "bg-gold-soft text-ink shadow-[inset_0_0_0_1px_rgba(168,138,62,0.3)]"
                         : "bg-ink/[0.05] text-ink-4"
                   )}
                 >

@@ -10,7 +10,6 @@ import {
   BanknoteIcon,
   BookOpenIcon,
   Building2Icon,
-  CheckCircleIcon,
   ClipboardCheckIcon,
   CoinsIcon,
   CreditCardIcon,
@@ -97,9 +96,8 @@ const WORKSPACES: Workspace[] = [
     art: <AuditShield className="h-full w-full" />,
     modules: [
       { name: "Accounts", desc: "Chart of accounts, cash and bank", href: "/accounts", icon: BanknoteIcon },
-      { name: "Expenses", desc: "Categorised, approval-gated", href: "/expenses", icon: TagsIcon },
+      { name: "Expenses", desc: "Categorised and posted instantly", href: "/expenses", icon: TagsIcon },
       { name: "Day Closing", desc: "Reconcile and lock the day", href: "/day-closing", icon: ClipboardCheckIcon },
-      { name: "Approvals", desc: "Sensitive actions, signed off", href: "/approvals", icon: CheckCircleIcon },
       { name: "Analytics", desc: "Sales, margin and gold trends", href: "/analytics", icon: TrendingUpIcon },
       { name: "Audit", desc: "Append-only trail of changes", href: "/audit", icon: HistoryIcon },
     ],
@@ -152,10 +150,10 @@ export function ModuleExplorer() {
               aria-controls="ws-panel"
               onClick={() => select(i)}
               className={cn(
-                "group relative overflow-hidden rounded-2xl p-4 text-left transition-all duration-320 ease-brand sm:p-5",
+                "group relative overflow-hidden rounded-[22px] p-4 text-left transition-all duration-320 ease-brand sm:p-5",
                 on
-                  ? "bg-paper shadow-[inset_0_0_0_1px_rgba(168,134,27,0.35),0_24px_48px_-24px_rgba(140,109,31,0.45)]"
-                  : "bg-paper/40 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.07)] hover:bg-paper/80"
+                  ? "bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_20px_44px_-22px_rgba(0,0,0,0.28)]"
+                  : "bg-white/50 hover:bg-white/90"
               )}
             >
               <div className="flex items-center gap-3.5">
@@ -163,8 +161,8 @@ export function ModuleExplorer() {
                   className={cn(
                     "hidden size-11 shrink-0 items-center justify-center rounded-xl transition-all duration-320 ease-brand sm:flex",
                     on
-                      ? "bg-void text-gold-light shadow-[0_10px_24px_-10px_rgba(140,109,31,0.8)]"
-                      : "bg-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.2)]"
+                      ? "bg-[#10201b] text-gold-light shadow-[0_10px_24px_-10px_rgba(126,98,35,0.7)]"
+                      : "bg-[#f6f5f0] text-gold-deep"
                   )}
                 >
                   <w.icon size={18} />
@@ -213,7 +211,7 @@ export function ModuleExplorer() {
         id="ws-panel"
         role="tabpanel"
         aria-labelledby={`ws-tab-${ws.key}`}
-        className="relative overflow-hidden rounded-[1.75rem] bg-void text-paper shadow-5"
+        className="relative overflow-hidden rounded-[28px] bg-black text-paper shadow-[0_30px_60px_-30px_rgba(0,0,0,0.55)]"
       >
         <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-60" />
         <div className="pointer-events-none absolute -right-24 -top-24 size-80 rounded-full bg-gold/20 blur-[100px]" />
@@ -249,7 +247,7 @@ export function ModuleExplorer() {
                   href={m.href}
                   className="group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors duration-200 hover:bg-paper/[0.06]"
                 >
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gold/10 text-gold-light shadow-[inset_0_0_0_1px_rgba(231,198,90,0.2)] transition-colors group-hover:bg-gold group-hover:text-void">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gold/10 text-gold-light shadow-[inset_0_0_0_1px_rgba(226,194,122,0.2)] transition-colors group-hover:bg-gold group-hover:text-void">
                     <m.icon size={16} />
                   </span>
                   <span className="min-w-0 flex-1">

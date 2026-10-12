@@ -4,7 +4,6 @@ import { postGoldStmts } from "./gold";
 import { buildEntryStmts } from "./journal";
 import { businessDateFor } from "./busdate";
 import { currentGoldRatesCents } from "./rates";
-import { recordInlineApproval } from "./approvals";
 
 export type CountScope = "FULL" | "CATEGORY" | "BRANCH" | "LOCATION";
 
@@ -148,29 +147,10 @@ export async function cancelCount(db: D1Database, countId: string, reason: strin
   ]);
 }
 
-export async function approveCount(db: D1Database, countId: string, input: { reason: string; approvedBy: string }, actorId: string): Promise<{ posted: number }> {
+export async function approveCount(db: D1Database, countId: string, input: { reason: string; approvedBy?: string | undefined }, actorId: string): Promise<{ posted: number }> {
   if (!input.reason?.trim()) throw Object.assign(new Error("Reason required"), { code: "VALIDATION" });
-  if (input.approvedBy === actorId) throw Object.assign(new Error("Approver cannot be yourself"), { code: "FORBIDDEN" });
-  // Inactive users hold no permissions: a disabled account cannot sign off.
-  const approver = await db.prepare(
-    `SELECT p.name AS name FROM user_roles ur JOIN users u ON u.id = ur.user_id AND u.is_active = 1 JOIN role_permissions rp ON rp.role_id = ur.role_id JOIN permissions p ON p.id = rp.permission_id WHERE ur.user_id = ?`
-  ).bind(input.approvedBy).all<{ name: string }>();
-  if (!(approver.results ?? []).some((r) => r.name === "gold:manage"))
-    throw Object.assign(new Error("Approval requires gold:manage"), { code: "FORBIDDEN" });
   const count = await db.prepare("SELECT id, branch_id, status, opened_by, result_json AS json FROM stock_counts WHERE id = ?").bind(countId).first<{ id: string; branch_id: string; status: string; opened_by: string | null; json?: string | null }>();
   if (!count || count.status !== "OPEN") throw Object.assign(new Error("Count not open"), { code: "CONFLICT" });
-  if (count.opened_by && input.approvedBy === count.opened_by)
-    throw Object.assign(new Error("Approver cannot be the opener"), { code: "FORBIDDEN" });
-  const { results: scanRows } = await db.prepare("SELECT scanned_by FROM count_scans WHERE count_id = ?").bind(countId).all<{ scanned_by: string | null }>();
-  if ((scanRows ?? []).length > 0) {
-    const tally = new Map<string, number>();
-    for (const r of scanRows ?? []) if (r.scanned_by) tally.set(r.scanned_by, (tally.get(r.scanned_by) ?? 0) + 1);
-    let top: string | null = null;
-    let topN = 0;
-    for (const [k, v] of tally) if (v > topN) { top = k; topN = v; }
-    if (top && input.approvedBy === top)
-      throw Object.assign(new Error("Approver cannot be the majority scanner"), { code: "FORBIDDEN" });
-  }
   const cmp = await compare(db, countId);
   const rates = await currentGoldRatesCents(db);
   const now = Date.now();
@@ -214,30 +194,10 @@ export async function approveCount(db: D1Database, countId: string, input: { rea
   const notes = parseResult(count.json).notes;
   stmts.push(
     db.prepare("UPDATE stock_counts SET status = 'COMPLETE', result_json = ?, closed_by = ? WHERE id = ? AND status = 'OPEN'").bind(JSON.stringify({ ...cmp, notes, posted: postedIds.length, postedIds }), actorId, countId),
-    buildAuditStmt(db, { userId: actorId, action: "count.approve", entity: "stock_count", entityId: countId, next: { posted: postedIds.length, approvedBy: input.approvedBy }, reason: input.reason, branchId: count.branch_id })
+    buildAuditStmt(db, { userId: actorId, action: "count.approve", entity: "stock_count", entityId: countId, next: { posted: postedIds.length }, reason: input.reason, branchId: count.branch_id })
   );
   await db.batch(stmts);
   const posted = postedIds.length;
-  // Count approval already mandates a second approver (gold:manage); record it
-  // in the unified Center — but only when something actually posted. A clean
-  // count adjusts nothing and earns no approval row.
-  if (posted > 0) {
-    await recordInlineApproval(
-      db,
-      {
-        action: "INVENTORY_ADJUST",
-        entity: "stock_count",
-        entityId: countId,
-        oldValue: { missing: cmp.missing.length },
-        newValue: { posted },
-        metric: posted,
-        reason: input.reason,
-        branchId: count.branch_id,
-        approverId: input.approvedBy,
-      },
-      actorId
-    );
-  }
   return { posted };
 }
 

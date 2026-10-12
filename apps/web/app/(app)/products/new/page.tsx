@@ -4,19 +4,29 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { Controller, useForm, type Control, type FieldPath } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { Page, controlClass } from "@/components/ui";
+import { Page } from "@/components/ui";
+import { Select, type SelectOption } from "@/components/select";
 import {
+  AlertCircleIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
   CheckIcon,
-  ChevronDownIcon,
+  CoinsIcon,
+  FileTextIcon,
+  GemIcon,
+  LayersIcon,
+  PackageIcon,
+  ScaleIcon,
   ScanBarcodeIcon,
+  SparklesIcon,
+  StoreIcon,
+  TagsIcon,
   XIcon,
 } from "@/components/icons";
 
@@ -54,75 +64,247 @@ function branchDefault(): Partial<FormValues> | undefined {
   return saved ? { branchId: saved } : undefined;
 }
 
-const fieldCls = cn(controlClass, "w-full");
+/** Matches the trigger of the themed <Select> so every control reads as one family. */
+const inputCls = cn(
+  "h-11 w-full rounded-xl bg-paper px-3.5 text-sm text-ink placeholder:text-ink-5",
+  "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-[box-shadow,background-color] duration-200",
+  "hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26),0_1px_2px_rgba(16,32,27,0.04)]",
+  "focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]",
+  "aria-[invalid=true]:shadow-[inset_0_0_0_1px_#e11d48,0_0_0_4px_rgba(225,29,72,0.12)]"
+);
+
+const fmtG = (v: number | null) => (v !== null && Number.isFinite(v) ? v.toFixed(3) : "—");
+const toOptions = (rows: Option[] | undefined, none?: string): SelectOption[] => [
+  ...(none ? [{ value: "", label: none }] : []),
+  ...(rows ?? []).map((r) => ({ value: r.id, label: r.name ?? r.karat ?? r.id })),
+];
 
 /* ---------------------------------------------------------------- controls */
 
 function Field({
   label,
   required,
+  optional,
   error,
+  hint,
   children,
   className,
 }: {
   label: string;
   required?: boolean;
+  optional?: boolean;
   error?: string;
+  hint?: string;
   children: ReactNode;
   className?: string;
 }) {
   return (
-    <label className={cn("block", className)}>
-      <span className="mb-1.5 block text-xs font-medium text-ink-3">
-        {label}
-        {required ? <span className="ml-0.5 text-gold-dark">*</span> : null}
+    <div className={cn("block min-w-0", className)}>
+      <span className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-[12.5px] font-medium text-ink-2">
+          {label}
+          {required ? <span className="ml-0.5 text-gold-dark">*</span> : null}
+        </span>
+        {optional ? <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-5">Optional</span> : null}
       </span>
       {children}
-      {error ? <span className="mt-1 block text-xs text-rose-700">{error}</span> : null}
-    </label>
+      {error ? (
+        <span role="alert" className="mt-1.5 flex items-center gap-1 text-xs font-medium text-rose-700">
+          <AlertCircleIcon size={12} />
+          {error}
+        </span>
+      ) : hint ? (
+        <span className="mt-1.5 block text-xs text-ink-4">{hint}</span>
+      ) : null}
+    </div>
   );
 }
 
-function FormSection({ id, n, title, children }: { id: string; n: string; title: string; children: ReactNode }) {
+function FormSection({
+  id,
+  n,
+  title,
+  description,
+  icon,
+  done,
+  required,
+  children,
+}: {
+  id: string;
+  n: string;
+  title: string;
+  description: string;
+  icon: ReactNode;
+  done: boolean;
+  required?: boolean;
+  children: ReactNode;
+}) {
   return (
     <fieldset
       id={id}
-      className="scroll-mt-24 rounded-2xl bg-paper p-4 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.07),0_16px_36px_-28px_rgba(28,25,23,0.3)] sm:p-6"
+      className={cn(
+        "relative scroll-mt-24 rounded-[22px] bg-paper transition-shadow duration-320",
+        "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]",
+        "focus-within:shadow-[inset_0_0_0_1px_rgba(205,168,83,0.45),0_1px_2px_rgba(16,32,27,0.04),0_28px_56px_-34px_rgba(16,32,27,0.45)]"
+      )}
     >
       <legend className="sr-only">{title}</legend>
-      <div className="mb-4 flex items-center gap-2.5">
-        <span className="g-metric flex size-6 items-center justify-center rounded-full bg-ink text-[10px] text-gold-light">
-          {n}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent to-transparent transition-opacity duration-320",
+          done ? "via-gold opacity-100" : "via-gold/40 opacity-60"
+        )}
+      />
+      <header className="flex items-center gap-3.5 border-b border-ink/[0.06] px-5 py-4 sm:px-6">
+        <span className="relative flex size-10 shrink-0 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_8px_18px_-10px_rgba(6,42,34,0.7)]">
+          {icon}
+          <span className="g-metric absolute -right-1.5 -top-1.5 flex size-[18px] items-center justify-center rounded-full bg-paper text-[9px] text-ink shadow-[0_0_0_1px_rgba(16,32,27,0.12)]">
+            {n}
+          </span>
         </span>
-        <span className="text-sm font-semibold text-ink">{title}</span>
-      </div>
-      {children}
+        <div className="min-w-0 flex-1">
+          <h2 className="font-sans tracking-normal truncate text-[15px] font-semibold text-ink">{title}</h2>
+          <p className="truncate text-xs text-ink-4">{description}</p>
+        </div>
+        {done ? (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-b from-gold-light to-gold px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+            <CheckIcon size={11} />
+            Done
+          </span>
+        ) : (
+          <span className="shrink-0 rounded-full bg-bone px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-4 ring-1 ring-ink/[0.06]">
+            {required ? "Required" : "Optional"}
+          </span>
+        )}
+      </header>
+      <div className="px-5 py-5 sm:px-6 sm:py-6">{children}</div>
     </fieldset>
   );
 }
 
-function Select({ className, children, ...rest }: React.ComponentProps<"select">) {
+function SelectField({
+  control,
+  name,
+  options,
+  placeholder,
+  icon,
+  invalid,
+  loading,
+  hintInTrigger,
+}: {
+  control: Control<FormValues>;
+  name: FieldPath<FormValues>;
+  options: SelectOption[];
+  placeholder?: string;
+  icon?: ReactNode;
+  invalid?: boolean;
+  loading?: boolean;
+  hintInTrigger?: boolean;
+}) {
   return (
-    <span className="relative block">
-      <select {...rest} className={cn(fieldCls, "appearance-none pr-9", className)}>
-        {children}
-      </select>
-      <ChevronDownIcon
-        size={14}
-        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-5"
+    <Controller
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <Select
+          buttonRef={field.ref}
+          value={(field.value as string | undefined) ?? ""}
+          onChange={field.onChange}
+          onBlur={field.onBlur}
+          options={options}
+          placeholder={placeholder}
+          icon={icon}
+          invalid={invalid}
+          loading={loading}
+          hintInTrigger={hintInTrigger}
+        />
+      )}
+    />
+  );
+}
+
+function UnitInput({
+  unit,
+  className,
+  ...rest
+}: React.ComponentProps<"input"> & { unit: string }) {
+  return (
+    <span className="group relative block">
+      <input
+        type="number"
+        step="any"
+        inputMode="decimal"
+        placeholder="0.00"
+        {...rest}
+        className={cn(inputCls, "g-metric pr-16 text-[15px]", className)}
       />
+      <span className="pointer-events-none absolute inset-y-1.5 right-1.5 flex items-center rounded-lg bg-bone px-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-4 ring-1 ring-ink/[0.05] transition-colors group-focus-within:bg-void group-focus-within:text-gold-light">
+        {unit}
+      </span>
     </span>
   );
 }
 
-function UnitInput({ unit, className, ...rest }: React.ComponentProps<"input"> & { unit: string }) {
+/** Purity as tactile karat chips — reads faster than a dropdown for a short list. */
+function KaratPicker({
+  control,
+  rows,
+  invalid,
+}: {
+  control: Control<FormValues>;
+  rows: Option[];
+  invalid?: boolean;
+}) {
   return (
-    <span className="relative block">
-      <input type="number" step="any" {...rest} className={cn(fieldCls, "num-tabular pr-11", className)} />
-      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[11px] font-medium text-ink-5">
-        {unit}
-      </span>
-    </span>
+    <Controller
+      control={control}
+      name="purityId"
+      render={({ field }) => (
+        <div
+          role="radiogroup"
+          aria-label="Purity"
+          aria-invalid={invalid || undefined}
+          className={cn(
+            "flex flex-wrap gap-2 rounded-xl p-1",
+            invalid && "shadow-[inset_0_0_0_1px_#e11d48,0_0_0_4px_rgba(225,29,72,0.12)]"
+          )}
+        >
+          {rows.map((p, i) => {
+            const on = field.value === p.id;
+            return (
+              <button
+                key={p.id}
+                ref={i === 0 ? field.ref : undefined}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => field.onChange(p.id)}
+                onBlur={field.onBlur}
+                className={cn(
+                  "group relative flex min-w-[5.25rem] flex-col items-start rounded-xl px-3.5 py-2.5 text-left transition-all duration-200",
+                  on
+                    ? "bg-void text-paper shadow-[inset_0_0_0_1px_rgba(205,168,83,0.5),0_12px_24px_-14px_rgba(6,42,34,0.8)]"
+                    : "bg-paper text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] hover:-translate-y-px hover:bg-gold-pale/50 hover:shadow-[inset_0_0_0_1px_rgba(168,138,62,0.45)]"
+                )}
+              >
+                <span className={cn("g-metric text-base font-semibold", on ? "text-gold-light" : "text-ink")}>
+                  {p.karat ?? p.name}
+                </span>
+                {p.permille ? (
+                  <span className={cn("g-metric text-[10px]", on ? "text-paper/55" : "text-ink-5")}>{p.permille}‰ fine</span>
+                ) : null}
+                {on ? (
+                  <span className="absolute right-2 top-2 flex size-4 items-center justify-center rounded-full bg-gold text-void">
+                    <CheckIcon size={9} />
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    />
   );
 }
 
@@ -173,10 +355,10 @@ function ImagePicker({
           add(e.dataTransfer?.files ?? null);
         }}
         className={cn(
-          "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed px-4 py-6 text-center transition-colors",
+          "group relative flex cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl border border-dashed px-4 py-8 text-center transition-all duration-200",
           drag
-            ? "border-gold-dark/60 bg-gold-pale"
-            : "border-ink/20 bg-bone/60 hover:border-gold-dark/40 hover:bg-gold-pale/40"
+            ? "scale-[1.01] border-gold-dark/70 bg-gold-pale"
+            : "border-ink/15 bg-gradient-to-b from-bone/40 to-bone/80 hover:border-gold-dark/50 hover:from-gold-pale/40 hover:to-gold-pale/70"
         )}
       >
         <input
@@ -191,24 +373,36 @@ function ImagePicker({
         />
         <span
           className={cn(
-            "flex size-10 items-center justify-center rounded-full transition-colors",
-            drag ? "bg-gold text-void" : "bg-ink text-gold-light"
+            "flex size-12 items-center justify-center rounded-2xl transition-all duration-200 group-hover:-translate-y-0.5",
+            drag
+              ? "bg-gradient-to-b from-gold-light to-gold text-void"
+              : "bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_10px_22px_-12px_rgba(6,42,34,0.8)]"
           )}
         >
-          <ImageIcon className="size-4" />
+          <ImageIcon className="size-5" />
         </span>
-        <span className="text-sm font-medium text-ink">
-          {drag ? "Drop to add" : "Drop photos here or browse"}
+        <span className="text-sm font-semibold text-ink">
+          {drag ? "Drop to add" : (
+            <>
+              Drop photos here or <span className="text-gold-deep underline decoration-gold/50 underline-offset-4">browse</span>
+            </>
+          )}
         </span>
-        <span className="text-xs text-ink-5">JPG · PNG · WebP — up to 5 MB each</span>
+        <span className="text-xs text-ink-5">JPG · PNG · WebP — up to 5 MB each · max 10 · first is the cover</span>
       </label>
       {files.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8">
           {previews.map((src, i) => (
-            <span key={src} className="group relative block size-16 overflow-hidden rounded-xl ring-1 ring-ink/10">
-              <img src={src} alt={files[i]?.name ?? ""} className="size-full object-cover" />
+            <span
+              key={src}
+              className={cn(
+                "group relative block aspect-square overflow-hidden rounded-xl",
+                i === 0 ? "ring-2 ring-gold" : "ring-1 ring-ink/10"
+              )}
+            >
+              <img src={src} alt={files[i]?.name ?? ""} className="size-full object-cover transition-transform duration-320 group-hover:scale-105" />
               {i === 0 ? (
-                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent pb-0.5 pt-3 text-center text-[8px] font-semibold uppercase tracking-[0.14em] text-gold-light">
+                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent pb-1 pt-4 text-center text-[8px] font-semibold uppercase tracking-[0.16em] text-gold-light">
                   Cover
                 </span>
               ) : null}
@@ -216,9 +410,9 @@ function ImagePicker({
                 type="button"
                 aria-label={`Remove ${files[i]?.name ?? "image"}`}
                 onClick={() => onChange(files.filter((_, j) => j !== i))}
-                className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-ink/80 text-paper opacity-0 backdrop-blur transition-opacity hover:bg-rose-700 group-hover:opacity-100"
+                className="absolute right-1 top-1 flex size-6 items-center justify-center rounded-full bg-ink/80 text-paper opacity-0 backdrop-blur transition-opacity hover:bg-rose-700 focus-visible:opacity-100 group-hover:opacity-100"
               >
-                <XIcon size={10} />
+                <XIcon size={11} />
               </button>
             </span>
           ))}
@@ -231,28 +425,56 @@ function ImagePicker({
 function PreviewGem({ karat }: { karat?: string }) {
   return (
     <div className="relative flex size-full items-center justify-center overflow-hidden bg-ink">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(231,198,90,0.28),transparent_60%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(226,194,122,0.3),transparent_60%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(205,168,83,0.18),transparent_55%)]" />
       <div className="home-grid-bg absolute inset-0 opacity-60" />
       {karat ? (
         <span className="g-display pointer-events-none absolute -bottom-3 -right-1 select-none text-[4.5rem] leading-none text-gold/[0.08]">
           {karat}
         </span>
       ) : null}
-      <svg viewBox="0 0 64 64" className="relative size-14 drop-shadow-[0_10px_20px_rgba(201,162,39,0.35)]" aria-hidden>
+      <svg viewBox="0 0 64 64" className="relative size-14 drop-shadow-[0_10px_20px_rgba(205,168,83,0.35)]" aria-hidden>
         <defs>
           <linearGradient id="np-g" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#FFF4C7" />
-            <stop offset="0.5" stopColor="#E7C65A" />
-            <stop offset="1" stopColor="#8C6D1F" />
+            <stop offset="0" stopColor="#FBF0D5" />
+            <stop offset="0.5" stopColor="#E2C27A" />
+            <stop offset="1" stopColor="#7E6223" />
           </linearGradient>
         </defs>
         <polygon points="18,20 46,20 56,30 32,56 8,30" fill="url(#np-g)" />
-        <polygon points="18,20 32,30 8,30" fill="#FFF4C7" opacity="0.7" />
-        <polygon points="46,20 56,30 32,30" fill="#A8861B" opacity="0.8" />
-        <polygon points="32,30 56,30 32,56" fill="#8C6D1F" opacity="0.55" />
+        <polygon points="18,20 32,30 8,30" fill="#FBF0D5" opacity="0.7" />
+        <polygon points="46,20 56,30 32,30" fill="#A88A3E" opacity="0.8" />
+        <polygon points="32,30 56,30 32,56" fill="#7E6223" opacity="0.55" />
         <polygon points="18,20 46,20 56,30 32,56 8,30" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="0.8" />
       </svg>
     </div>
+  );
+}
+
+function ProgressRing({ value, total }: { value: number; total: number }) {
+  const r = 15;
+  const c = 2 * Math.PI * r;
+  return (
+    <span className="relative flex size-10 shrink-0 items-center justify-center">
+      <svg viewBox="0 0 36 36" className="absolute inset-0 -rotate-90" aria-hidden>
+        <circle cx="18" cy="18" r={r} fill="none" stroke="rgba(16,32,27,0.08)" strokeWidth="3" />
+        <circle
+          cx="18"
+          cy="18"
+          r={r}
+          fill="none"
+          stroke="rgb(var(--c-gold))"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - value / total)}
+          className="transition-[stroke-dashoffset] duration-500 ease-brand"
+        />
+      </svg>
+      <span className="g-metric text-[10px] text-ink">
+        {value}/{total}
+      </span>
+    </span>
   );
 }
 
@@ -264,6 +486,7 @@ export default function NewProductPage() {
   const [images, setImages] = useState<File[]>([]);
   const {
     register,
+    control,
     handleSubmit,
     watch,
     formState: { errors },
@@ -337,16 +560,22 @@ export default function NewProductPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Create failed"),
   });
 
-  const karat = purs.data?.rows.find((p) => p.id === vals.purityId)?.karat;
+  const purity = purs.data?.rows.find((p) => p.id === vals.purityId);
+  const karat = purity?.karat;
+  const permille = purity?.permille;
   const catName = cats.data?.rows.find((c) => c.id === vals.categoryId)?.name;
   const metalName = metals.data?.rows.find((m) => m.id === vals.metalTypeId)?.name;
-  const permille = purs.data?.rows.find((p) => p.id === vals.purityId)?.permille;
+  const stoneName = stones.data?.rows.find((s) => s.id === vals.stoneTypeId)?.name;
   const grossN = Number(vals.grossG);
   const stoneN = Number(vals.stoneG);
   const net = Number.isFinite(grossN) && grossN > 0 ? grossN - (Number.isFinite(stoneN) ? stoneN : 0) : null;
   const fine = net !== null && permille ? (net * permille) / 1000 : null;
   const priceN = Number(vals.sellingPriceLkr);
   const price = Number.isFinite(priceN) && priceN > 0 ? priceN : null;
+  const costN = Number(vals.costLkr);
+  const cost = Number.isFinite(costN) && costN > 0 ? costN : null;
+  const margin = price !== null && cost !== null ? ((price - cost) / price) * 100 : null;
+  const stoneShare = net !== null && grossN > 0 ? Math.min(Math.max((grossN - net) / grossN, 0), 1) : 0;
 
   const scrollTo = (id: string) =>
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -366,48 +595,59 @@ export default function NewProductPage() {
     grossG: "np-s3",
     branchId: "np-s4",
   };
+  const purityRows = purs.data?.rows ?? [];
 
   return (
-    <Page className="space-y-5">
+    <Page className="space-y-6">
       <div className="flex items-center justify-between gap-3">
-        <Link href="/products" className="g-btn g-btn-secondary h-9 px-3.5 text-xs">
-          <ArrowLeftIcon size={13} />
+        <Link
+          href="/products"
+          className="g-btn group h-10 rounded-xl bg-paper px-4 text-sm text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.05)] hover:-translate-y-px hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.24),0_8px_18px_-12px_rgba(16,32,27,0.35)]"
+        >
+          <ArrowLeftIcon size={14} className="transition-transform duration-200 group-hover:-translate-x-0.5" />
           Catalog
         </Link>
-        <p className="hidden text-xs text-ink-4 sm:block">
+        <span className="hidden items-center gap-2 rounded-full bg-paper px-3.5 py-1.5 text-xs text-ink-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)] sm:inline-flex">
+          <span className="flex size-5 items-center justify-center rounded-full bg-gold-pale text-gold-deep">
+            <ScanBarcodeIcon size={11} />
+          </span>
           Barcode &amp; SKU are minted automatically on save
-        </p>
+        </span>
       </div>
 
       <form
+        noValidate
         onSubmit={handleSubmit(
           (v) => create.mutate(v),
           (errs) => {
             const key = (Object.keys(secOf) as (keyof FormValues)[]).find((k) => errs[k]);
             if (key) scrollTo(secOf[key] as string);
+            toast.error("A few required fields still need you");
           }
         )}
-        className="grid items-start gap-5 lg:grid-cols-[19rem_minmax(0,1fr)] xl:grid-cols-[21rem_minmax(0,1fr)]"
+        className="grid items-start gap-6 lg:grid-cols-[19rem_minmax(0,1fr)] xl:grid-cols-[21rem_minmax(0,1fr)]"
       >
         {/* Rail */}
-        <aside className="relative hidden overflow-hidden rounded-3xl bg-void text-paper shadow-5 lg:sticky lg:top-24 lg:block lg:max-h-[calc(100vh-8rem)]">
+        <aside className="relative hidden overflow-hidden rounded-[28px] bg-void text-paper shadow-5 ring-1 ring-gold/10 lg:sticky lg:top-24 lg:block lg:max-h-[calc(100vh-8rem)]">
           <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-70" />
           <div className="home-drift pointer-events-none absolute -left-24 -top-28 size-72 rounded-full bg-gold/20 blur-[100px]" />
+          <div className="pointer-events-none absolute -bottom-32 -right-24 size-64 rounded-full bg-emerald-400/10 blur-[90px]" />
           <div className="home-noise pointer-events-none absolute inset-0" />
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
 
           <div className="scrollbar-thin relative max-h-[calc(100vh-8rem)] overflow-y-auto p-5">
-            <span className="inline-flex items-center gap-2 rounded-full border border-gold/25 bg-gold/[0.08] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/[0.08] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">
+              <SparklesIcon size={11} />
               Catalog
             </span>
-            <h1 className="g-display mt-3 text-2xl text-paper">New product</h1>
-            <p className="mt-1 text-xs leading-relaxed text-paper/50">
+            <h1 className="g-display mt-3 text-[1.75rem] text-paper">New product</h1>
+            <p className="mt-1.5 text-xs leading-relaxed text-paper/55">
               Weigh it, tag it, shelve it — the barcode and SKU are minted on save.
             </p>
 
             {/* Live preview */}
-            <div className="mt-5 rounded-2xl bg-paper/[0.05] p-2.5 ring-1 ring-paper/10">
-              <div className="relative aspect-[16/10] overflow-hidden rounded-xl">
+            <div className="mt-5 rounded-[20px] bg-gradient-to-b from-paper/[0.08] to-paper/[0.03] p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-paper/10">
+              <div className="relative aspect-[16/10] overflow-hidden rounded-[14px] ring-1 ring-black/20">
                 {previews[0] ? (
                   <img src={previews[0]} alt="" className="size-full object-cover" />
                 ) : (
@@ -418,250 +658,466 @@ export default function NewProductPage() {
                     {karat}
                   </span>
                 ) : null}
+                {images.length > 1 ? (
+                  <span className="absolute right-2.5 top-2.5 rounded-md bg-black/50 px-1.5 py-0.5 text-[10px] font-medium text-paper backdrop-blur">
+                    +{images.length - 1}
+                  </span>
+                ) : null}
               </div>
               <div className="px-1.5 pb-1 pt-3">
-                <p className="truncate text-sm font-semibold text-paper">
-                  {vals.name?.trim() || "Untitled piece"}
+                <p className="truncate text-[15px] font-semibold text-paper">
+                  {vals.name?.trim() || <span className="text-paper/45">Untitled piece</span>}
                 </p>
-                <p className="mt-0.5 truncate text-xs text-paper/45">
-                  {catName || "Category"}
-                  {metalName ? ` · ${metalName}` : ""}
-                </p>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {[catName ?? "Category", metalName, stoneName].filter(Boolean).map((t, i) => (
+                    <span
+                      key={`${t}-${i}`}
+                      className={cn(
+                        "rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1",
+                        i === 0 && !catName ? "text-paper/40 ring-paper/10" : "bg-paper/[0.06] text-paper/75 ring-paper/10"
+                      )}
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
                 <div className="mt-3 grid grid-cols-2 gap-1.5">
                   {[
                     { l: "Net", v: net },
                     { l: "Fine", v: fine },
                   ].map((m) => (
-                    <div key={m.l} className="rounded-lg bg-paper/[0.05] px-2.5 py-1.5 ring-1 ring-paper/[0.08]">
-                      <div className="text-[8px] font-semibold uppercase tracking-[0.16em] text-paper/40">{m.l}</div>
-                      <div className="g-metric mt-0.5 text-sm text-gold-light">
-                        {m.v !== null && Number.isFinite(m.v) ? m.v.toFixed(3) : "—"}
-                        <span className="ml-0.5 text-[9px] text-paper/40">g</span>
+                    <div key={m.l} className="rounded-xl bg-black/20 px-3 py-2 ring-1 ring-paper/[0.08]">
+                      <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-paper/40">{m.l}</div>
+                      <div className="g-metric mt-0.5 text-[15px] text-gold-light">
+                        {fmtG(m.v)}
+                        <span className="ml-0.5 text-[10px] text-paper/40">g</span>
                       </div>
                     </div>
                   ))}
                 </div>
-                <div className="mt-2.5 flex items-end justify-between border-t border-paper/10 pt-2.5">
+                <div className="mt-3 flex items-end justify-between border-t border-paper/10 pt-3">
                   <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-paper/40">Price</span>
                   {price !== null ? (
                     <span className="flex items-baseline gap-1">
-                      <span className="text-[9px] text-paper/40">LKR</span>
-                      <span className="g-metric text-base text-paper">{price.toLocaleString("en-US")}</span>
+                      <span className="text-[10px] text-paper/40">LKR</span>
+                      <span className="g-metric text-lg text-paper">{price.toLocaleString("en-US")}</span>
                     </span>
                   ) : (
-                    <span className="text-xs font-medium text-gold-light">Live rate</span>
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gold-light">
+                      <span className="size-1.5 animate-pulse-soft rounded-full bg-gold" />
+                      Live rate
+                    </span>
                   )}
                 </div>
               </div>
             </div>
             <p className="mt-2 text-center text-[10px] text-paper/35">Live preview of the catalog card</p>
 
+            {/* Progress */}
+            <div className="mt-6">
+              <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.16em]">
+                <span className="text-paper/45">Progress</span>
+                <span className="g-metric text-gold-light">
+                  {doneCount}/{steps.length}
+                </span>
+              </div>
+              <div className="h-1 overflow-hidden rounded-full bg-paper/10">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-gold-dark via-gold to-gold-light transition-[width] duration-500 ease-brand"
+                  style={{ width: `${(doneCount / steps.length) * 100}%` }}
+                />
+              </div>
+            </div>
+
             {/* Steps */}
-            <nav aria-label="Form sections" className="mt-5 space-y-1">
+            <nav aria-label="Form sections" className="relative mt-4">
+              <span aria-hidden className="absolute bottom-5 left-[1.4rem] top-5 w-px bg-paper/10" />
               {steps.map((s) => (
                 <button
                   key={s.id}
                   type="button"
                   onClick={() => scrollTo(s.id)}
-                  className="group flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-paper/[0.06]"
+                  className="group relative flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-paper/[0.06]"
                 >
                   <span
                     className={cn(
-                      "flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold transition-colors",
+                      "relative flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold transition-all duration-320",
                       s.done
-                        ? "bg-gradient-to-b from-gold-light to-gold text-void"
-                        : "text-paper/50 ring-1 ring-paper/20 group-hover:ring-gold/40"
+                        ? "bg-gradient-to-b from-gold-light to-gold text-void shadow-[0_0_0_4px_rgba(205,168,83,0.12)]"
+                        : "bg-void text-paper/50 ring-1 ring-paper/20 group-hover:ring-gold/50"
                     )}
                   >
                     {s.done ? <CheckIcon size={11} /> : s.n}
                   </span>
-                  <span className="min-w-0">
+                  <span className="min-w-0 flex-1">
                     <span className={cn("block truncate text-xs font-medium", s.done ? "text-paper" : "text-paper/70")}>
                       {s.t}
                     </span>
                     <span className="block truncate text-[10px] text-paper/35">{s.d}</span>
                   </span>
+                  <ArrowRightIcon
+                    size={12}
+                    className="shrink-0 -translate-x-1 text-gold-light opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100"
+                  />
                 </button>
               ))}
             </nav>
 
             <div className="mt-5 flex items-center gap-2.5 rounded-xl bg-paper/[0.04] px-3 py-2.5 ring-1 ring-paper/[0.08]">
               <ScanBarcodeIcon size={15} className="shrink-0 text-gold-light" />
-              <p className="text-[10px] leading-snug text-paper/45">
-                {doneCount}/4 sections complete — required fields are marked *
+              <p className="text-[10px] leading-snug text-paper/50">
+                Required fields are marked <span className="text-gold-light">*</span> — everything else can wait.
               </p>
             </div>
           </div>
         </aside>
 
         {/* Form column */}
-        <div className="min-w-0 space-y-4">
+        <div className="min-w-0 space-y-5">
           {/* Mobile header */}
-          <div className="flex items-center gap-4 rounded-2xl bg-void p-4 text-paper shadow-4 lg:hidden">
-            <div className="min-w-0 flex-1">
-              <div className="g-kicker !text-gold-light">Catalog</div>
-              <h1 className="mt-0.5 font-display text-lg font-bold tracking-tight">New product</h1>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              {steps.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  aria-label={s.t}
-                  onClick={() => scrollTo(s.id)}
-                  className={cn(
-                    "flex size-6 items-center justify-center rounded-full text-[10px] font-semibold transition-colors",
-                    s.done ? "bg-gold text-void" : "text-paper/50 ring-1 ring-paper/25"
-                  )}
-                >
-                  {s.done ? <CheckIcon size={11} /> : s.n}
-                </button>
-              ))}
+          <div className="relative overflow-hidden rounded-[22px] bg-void p-4 text-paper shadow-4 lg:hidden">
+            <div className="pointer-events-none absolute -left-16 -top-20 size-48 rounded-full bg-gold/20 blur-[70px]" />
+            <div className="relative flex items-center gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="g-kicker !text-gold-light">Catalog</div>
+                <h1 className="g-display mt-1 text-xl">New product</h1>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {steps.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    aria-label={s.t}
+                    onClick={() => scrollTo(s.id)}
+                    className={cn(
+                      "flex size-7 items-center justify-center rounded-full text-[10px] font-semibold transition-colors",
+                      s.done ? "bg-gradient-to-b from-gold-light to-gold text-void" : "text-paper/50 ring-1 ring-paper/25"
+                    )}
+                  >
+                    {s.done ? <CheckIcon size={11} /> : s.n}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          <FormSection id="np-s1" n="1" title="Identity">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Name" required error={errors.name ? "Required" : undefined} className="col-span-2">
-                <input autoFocus className={fieldCls} placeholder="e.g. Kandyan bridal necklace" {...register("name")} />
+          <FormSection
+            id="np-s1"
+            n="1"
+            title="Identity"
+            description="What it is and where it sits in the catalog"
+            icon={<TagsIcon size={17} />}
+            done={steps[0]!.done}
+            required
+          >
+            <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
+              <Field
+                label="Name"
+                required
+                error={errors.name ? "Give the piece a name" : undefined}
+                className="sm:col-span-2"
+              >
+                <input
+                  autoFocus
+                  aria-invalid={errors.name ? true : undefined}
+                  className={cn(inputCls, "h-12 text-[15px] font-medium")}
+                  placeholder="e.g. Kandyan bridal necklace"
+                  {...register("name")}
+                />
               </Field>
-              <Field label="Category" required error={errors.categoryId ? "Required" : undefined}>
-                <Select {...register("categoryId")}>
-                  <option value="">Select…</option>
-                  {(cats.data?.rows ?? []).map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </Select>
+              <Field label="Category" required error={errors.categoryId ? "Pick a category" : undefined}>
+                <SelectField
+                  control={control}
+                  name="categoryId"
+                  options={toOptions(cats.data?.rows)}
+                  placeholder="Choose category"
+                  icon={<LayersIcon size={13} />}
+                  invalid={Boolean(errors.categoryId)}
+                  loading={cats.isLoading}
+                />
               </Field>
-              <Field label="Subcategory">
-                <Select {...register("subcategoryId")}>
-                  <option value="">None</option>
-                  {(subcats.data?.rows ?? []).map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </Select>
+              <Field label="Subcategory" optional>
+                <SelectField
+                  control={control}
+                  name="subcategoryId"
+                  options={toOptions(subcats.data?.rows, "None")}
+                  placeholder="None"
+                  icon={<LayersIcon size={13} />}
+                  loading={subcats.isLoading}
+                />
               </Field>
-              <Field label="Design">
-                <Select {...register("designId")}>
-                  <option value="">None</option>
-                  {(designs.data?.rows ?? []).map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </Select>
+              <Field label="Design" optional>
+                <SelectField
+                  control={control}
+                  name="designId"
+                  options={toOptions(designs.data?.rows, "None")}
+                  placeholder="None"
+                  icon={<SparklesIcon size={13} />}
+                  loading={designs.isLoading}
+                />
               </Field>
-              <Field label="Product type">
-                <Select {...register("productTypeId")}>
-                  <option value="">None</option>
-                  {(ptypes.data?.rows ?? []).map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </Select>
+              <Field label="Product type" optional>
+                <SelectField
+                  control={control}
+                  name="productTypeId"
+                  options={toOptions(ptypes.data?.rows, "None")}
+                  placeholder="None"
+                  icon={<PackageIcon size={13} />}
+                  loading={ptypes.isLoading}
+                />
               </Field>
             </div>
           </FormSection>
 
-          <FormSection id="np-s2" n="2" title="Material">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <Field label="Metal" required error={errors.metalTypeId ? "Required" : undefined}>
-                <Select {...register("metalTypeId")}>
-                  <option value="">Select…</option>
-                  {(metals.data?.rows ?? []).map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </Select>
+          <FormSection
+            id="np-s2"
+            n="2"
+            title="Material"
+            description="Metal, karat and any set stones"
+            icon={<GemIcon size={17} />}
+            done={steps[1]!.done}
+            required
+          >
+            <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
+              <Field label="Metal" required error={errors.metalTypeId ? "Pick a metal" : undefined}>
+                <SelectField
+                  control={control}
+                  name="metalTypeId"
+                  options={toOptions(metals.data?.rows)}
+                  placeholder="Choose metal"
+                  icon={<CoinsIcon size={13} />}
+                  invalid={Boolean(errors.metalTypeId)}
+                  loading={metals.isLoading}
+                />
               </Field>
-              <Field label="Purity" required error={errors.purityId ? "Required" : undefined}>
-                <Select {...register("purityId")}>
-                  <option value="">Select…</option>
-                  {(purs.data?.rows ?? []).map((p) => (
-                    <option key={p.id} value={p.id}>{p.karat}</option>
-                  ))}
-                </Select>
+              <Field label="Stone" optional>
+                <SelectField
+                  control={control}
+                  name="stoneTypeId"
+                  options={toOptions(stones.data?.rows, "None")}
+                  placeholder="None"
+                  icon={<GemIcon size={13} />}
+                  loading={stones.isLoading}
+                />
               </Field>
-              <Field label="Stone" className="col-span-2 sm:col-span-1">
-                <Select {...register("stoneTypeId")}>
-                  <option value="">None</option>
-                  {(stones.data?.rows ?? []).map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </Select>
+              <Field
+                label="Purity"
+                required
+                error={errors.purityId ? "Pick a karat" : undefined}
+                hint={permille ? `${permille}‰ fine — used for the fine-gold figure` : undefined}
+                className="sm:col-span-2"
+              >
+                {purs.isLoading ? (
+                  <div className="flex gap-2">
+                    {[0, 1, 2, 3].map((i) => (
+                      <span key={i} className="h-14 w-[5.25rem] animate-pulse rounded-xl bg-bone" />
+                    ))}
+                  </div>
+                ) : purityRows.length > 0 && purityRows.length <= 8 ? (
+                  <KaratPicker control={control} rows={purityRows} invalid={Boolean(errors.purityId)} />
+                ) : (
+                  <Controller
+                    control={control}
+                    name="purityId"
+                    render={({ field }) => (
+                      <Select
+                        buttonRef={field.ref}
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        options={purityRows.map((p) => ({
+                          value: p.id,
+                          label: p.karat ?? p.name ?? p.id,
+                          hint: p.permille ? `${p.permille}‰` : undefined,
+                        }))}
+                        placeholder="Choose karat"
+                        icon={<SparklesIcon size={13} />}
+                        invalid={Boolean(errors.purityId)}
+                        hintInTrigger
+                      />
+                    )}
+                  />
+                )}
               </Field>
             </div>
           </FormSection>
 
-          <FormSection id="np-s3" n="3" title="Weights & pricing">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <Field label="Gross" required error={errors.grossG ? "Must be > 0" : undefined}>
-                <UnitInput unit="g" {...register("grossG")} />
-              </Field>
-              <Field label="Stone">
-                <UnitInput unit="g" {...register("stoneG")} />
-              </Field>
-              <Field label="Wastage">
-                <UnitInput unit="g" {...register("wastageG")} />
-              </Field>
-              <Field label="Making">
-                <UnitInput unit="LKR" {...register("makingLkr")} />
-              </Field>
-              <Field label="Cost">
-                <UnitInput unit="LKR" {...register("costLkr")} />
-              </Field>
-              <Field label="Price">
-                <UnitInput unit="LKR" {...register("sellingPriceLkr")} />
-              </Field>
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-void p-3 text-paper">
-              {[
-                { l: "Net weight", v: net },
-                { l: "Fine gold", v: fine },
-              ].map((m) => (
-                <div key={m.l} className="rounded-lg bg-paper/[0.04] px-3 py-2 ring-1 ring-paper/[0.08]">
-                  <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-paper/40">{m.l}</div>
-                  <div className="g-metric mt-0.5 text-lg text-gold-light">
-                    {m.v !== null && Number.isFinite(m.v) ? m.v.toFixed(3) : "—"}
-                    <span className="ml-1 text-xs text-paper/40">g</span>
+          <FormSection
+            id="np-s3"
+            n="3"
+            title="Weights & pricing"
+            description="Grams on the scale, rupees on the tag"
+            icon={<ScaleIcon size={17} />}
+            done={steps[2]!.done}
+            required
+          >
+            <div className="space-y-6">
+              <div>
+                <div className="g-kicker mb-3 flex items-center gap-2">
+                  Weight
+                  <span className="h-px flex-1 bg-gradient-to-r from-gold/30 to-transparent" />
+                </div>
+                <div className="grid gap-x-4 gap-y-5 sm:grid-cols-3">
+                  <Field label="Gross" required error={errors.grossG ? "Must be more than 0" : undefined}>
+                    <UnitInput unit="g" aria-invalid={errors.grossG ? true : undefined} {...register("grossG")} />
+                  </Field>
+                  <Field label="Stone" optional>
+                    <UnitInput unit="g" {...register("stoneG")} />
+                  </Field>
+                  <Field label="Wastage" optional>
+                    <UnitInput unit="g" {...register("wastageG")} />
+                  </Field>
+                </div>
+
+                {/* Derived weights */}
+                <div className="relative mt-4 overflow-hidden rounded-2xl bg-void p-4 text-paper shadow-[0_18px_36px_-24px_rgba(6,42,34,0.9)]">
+                  <div className="pointer-events-none absolute -right-10 -top-16 size-40 rounded-full bg-gold/20 blur-[60px]" />
+                  <div className="relative grid grid-cols-2 gap-3">
+                    {[
+                      { l: "Net weight", v: net, s: "Gross − stone" },
+                      { l: "Fine gold", v: fine, s: permille ? `Net × ${permille}‰` : "Pick a purity" },
+                    ].map((m) => (
+                      <div key={m.l} className="rounded-xl bg-paper/[0.05] px-3.5 py-2.5 ring-1 ring-paper/[0.08]">
+                        <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-paper/45">{m.l}</div>
+                        <div className="g-metric mt-1 text-xl text-gold-light">
+                          {fmtG(m.v)}
+                          <span className="ml-1 text-xs text-paper/40">g</span>
+                        </div>
+                        <div className="mt-0.5 text-[10px] text-paper/35">{m.s}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="relative mt-3">
+                    <div className="flex h-1.5 overflow-hidden rounded-full bg-paper/10">
+                      <div
+                        className="h-full bg-gradient-to-r from-gold-dark to-gold-light transition-[width] duration-500 ease-brand"
+                        style={{ width: net !== null ? `${(1 - stoneShare) * 100}%` : "0%" }}
+                      />
+                      <div
+                        className="h-full bg-paper/35 transition-[width] duration-500 ease-brand"
+                        style={{ width: `${stoneShare * 100}%` }}
+                      />
+                    </div>
+                    <div className="mt-1.5 flex justify-between text-[10px] text-paper/40">
+                      <span className="flex items-center gap-1">
+                        <span className="size-1.5 rounded-full bg-gold" /> Metal
+                      </span>
+                      <span className="flex items-center gap-1">
+                        Stone <span className="size-1.5 rounded-full bg-paper/40" />
+                      </span>
+                    </div>
                   </div>
                 </div>
-              ))}
+              </div>
+
+              <div>
+                <div className="g-kicker mb-3 flex items-center gap-2">
+                  Pricing
+                  <span className="h-px flex-1 bg-gradient-to-r from-gold/30 to-transparent" />
+                  {margin !== null ? (
+                    <span
+                      className={cn(
+                        "g-metric rounded-full px-2 py-0.5 text-[10px] normal-case tracking-normal",
+                        margin >= 0 ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/15" : "bg-rose-50 text-rose-700 ring-1 ring-rose-600/15"
+                      )}
+                    >
+                      {margin.toFixed(1)}% margin
+                    </span>
+                  ) : null}
+                </div>
+                <div className="grid gap-x-4 gap-y-5 sm:grid-cols-3">
+                  <Field label="Making charge" optional>
+                    <UnitInput unit="LKR" {...register("makingLkr")} />
+                  </Field>
+                  <Field label="Cost" optional>
+                    <UnitInput unit="LKR" {...register("costLkr")} />
+                  </Field>
+                  <Field label="Selling price" optional hint={price === null ? "Blank = priced at the live rate" : undefined}>
+                    <UnitInput unit="LKR" {...register("sellingPriceLkr")} />
+                  </Field>
+                </div>
+              </div>
             </div>
           </FormSection>
 
-          <FormSection id="np-s4" n="4" title="Location & media">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Branch" required error={errors.branchId ? "Required" : undefined}>
-                <Select {...register("branchId")}>
-                  <option value="">Select…</option>
-                  {(branches.data?.rows ?? []).map((b) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </Select>
+          <FormSection
+            id="np-s4"
+            n="4"
+            title="Location & media"
+            description="Where it lives and how it looks"
+            icon={<StoreIcon size={17} />}
+            done={steps[3]!.done}
+            required
+          >
+            <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
+              <Field label="Branch" required error={errors.branchId ? "Pick a branch" : undefined}>
+                <SelectField
+                  control={control}
+                  name="branchId"
+                  options={toOptions(branches.data?.rows)}
+                  placeholder="Choose branch"
+                  icon={<StoreIcon size={13} />}
+                  invalid={Boolean(errors.branchId)}
+                  loading={branches.isLoading}
+                />
               </Field>
-              <Field label="Location">
-                <input className={fieldCls} placeholder="Tray, showcase…" {...register("location")} />
+              <Field label="Location" optional>
+                <input className={inputCls} placeholder="Tray, showcase…" {...register("location")} />
               </Field>
-              <Field label="Notes" className="col-span-2">
-                <input className={fieldCls} {...register("notes")} />
+              <Field label="Notes" optional className="sm:col-span-2">
+                <span className="relative block">
+                  <FileTextIcon size={14} className="pointer-events-none absolute left-3.5 top-3.5 text-ink-5" />
+                  <textarea
+                    rows={3}
+                    placeholder="Hallmark, provenance, customer order reference…"
+                    className={cn(inputCls, "h-auto min-h-[5.5rem] resize-y py-3 pl-10 leading-relaxed")}
+                    {...register("notes")}
+                  />
+                </span>
               </Field>
-              <Field label="Images" className="col-span-2">
+              <Field label="Images" optional className="sm:col-span-2">
                 <ImagePicker files={images} previews={previews} onChange={setImages} />
               </Field>
             </div>
           </FormSection>
 
           {/* Floating action bar */}
-          <div className="sticky bottom-4 z-10 flex items-center justify-between gap-3 rounded-2xl bg-paper/95 px-4 py-3 shadow-[0_20px_44px_-20px_rgba(28,25,23,0.4),inset_0_0_0_1px_rgba(28,25,23,0.08)] backdrop-blur sm:px-5">
-            <p className="min-w-0 truncate text-xs text-ink-4">
-              Net <span className="g-metric font-medium text-ink">{net !== null && Number.isFinite(net) ? net.toFixed(3) : "—"} g</span>
-              <span className="mx-1.5 text-ink/20">·</span>
-              Fine <span className="g-metric font-medium text-gold-deep">{fine !== null && Number.isFinite(fine) ? fine.toFixed(3) : "—"} g</span>
-            </p>
+          <div className="sticky bottom-4 z-20 flex items-center justify-between gap-3 rounded-[20px] bg-paper/90 px-3 py-3 shadow-[0_24px_48px_-20px_rgba(16,32,27,0.45),inset_0_0_0_1px_rgba(16,32,27,0.08)] backdrop-blur-xl sm:px-4">
+            <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
+            <div className="flex min-w-0 items-center gap-3">
+              <ProgressRing value={doneCount} total={steps.length} />
+              <div className="hidden min-w-0 gap-1.5 sm:flex">
+                <span className="rounded-lg bg-bone px-2.5 py-1 text-xs text-ink-4">
+                  Net <span className="g-metric font-medium text-ink">{fmtG(net)} g</span>
+                </span>
+                <span className="rounded-lg bg-gold-pale px-2.5 py-1 text-xs text-gold-deep">
+                  Fine <span className="g-metric font-medium">{fmtG(fine)} g</span>
+                </span>
+              </div>
+            </div>
             <div className="flex shrink-0 gap-2">
-              <Link href="/products" className="g-btn g-btn-secondary h-10 px-4 text-sm">
+              <Link
+                href="/products"
+                className="g-btn h-11 rounded-xl px-4 text-sm text-ink-3 hover:bg-bone hover:text-ink"
+              >
                 Cancel
               </Link>
-              <button type="submit" disabled={create.isPending} className="g-btn g-btn-primary h-10 px-5 text-sm">
-                {create.isPending ? "Saving…" : "Save product"}
-                {!create.isPending ? <ArrowRightIcon size={14} className="g-btn-arrow" /> : null}
+              <button
+                type="submit"
+                disabled={create.isPending}
+                className="g-btn g-btn-primary h-11 rounded-xl px-5 text-sm"
+              >
+                {create.isPending ? (
+                  <>
+                    <span className="size-3.5 animate-spin rounded-full border-2 border-gold-light/30 border-t-gold-light" />
+                    Saving…
+                  </>
+                ) : (
+                  <>
+                    Save product
+                    <ArrowRightIcon size={14} className="g-btn-arrow text-gold-light" />
+                  </>
+                )}
               </button>
             </div>
           </div>

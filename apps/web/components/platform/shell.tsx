@@ -68,7 +68,7 @@ const SECTIONS: Array<{ title: string; items: NavItem[] }> = [
 export function PlatformWordmark() {
   return (
     <span className="flex items-center gap-2.5">
-      <span className="flex size-8 items-center justify-center rounded-lg bg-gold/15 shadow-[inset_0_0_0_1px_rgba(201,162,39,0.35)]">
+      <span className="flex size-8 items-center justify-center rounded-lg bg-gold/15 shadow-[inset_0_0_0_1px_rgba(205,168,83,0.35)]">
         <GemIcon size={16} className="text-gold" />
       </span>
       <span className="flex flex-col leading-none">
@@ -115,7 +115,7 @@ function Sidebar({ me, onNavigate, onClose }: { me: PlatformMe; onNavigate?: () 
       </div>
 
       <div className="shrink-0 px-3 pb-2">
-        <div className="flex items-center gap-3 rounded-xl bg-paper/[0.04] p-2.5 shadow-[inset_0_0_0_1px_rgba(250,250,249,0.07)]">
+        <div className="flex items-center gap-3 rounded-xl bg-paper/[0.04] p-2.5 shadow-[inset_0_0_0_1px_rgba(246,245,240,0.07)]">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gold/15 text-gold">
             <ShieldIcon size={15} />
           </span>

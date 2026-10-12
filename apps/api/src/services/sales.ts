@@ -16,67 +16,12 @@ import { assertCountLock } from "./counts";
 import { getSetting } from "./settings";
 import { buildEntryStmts } from "./journal";
 import { businessDateFor } from "./busdate";
-import { consumeApproval, pendingApproval, recordInlineApproval, requestApproval } from "./approvals";
 import { customerBalance, moneyAccount, settlementStmt } from "./receipts";
 import { allocateNumber } from "./counters";
 
 export function discountPct(discountCents: number, subtotalCents: number): number {
   if (subtotalCents <= 0) throw new Error("subtotal must be positive");
   return (discountCents / subtotalCents) * 100;
-}
-
-const ROLE_DEFAULT_LIMITS: Record<string, number> = {
-  cashier: 5,
-  salesperson: 5,
-  manager: 15,
-  owner: 100,
-  accountant: 0,
-  inventory_officer: 0,
-  gold_officer: 0,
-  manufacturing_staff: 0,
-};
-
-async function callerRoles(db: D1Database, userId: string): Promise<string[]> {
-  const { results } = await db
-    .prepare("SELECT role_id FROM user_roles WHERE user_id = ?")
-    .bind(userId)
-    .all<{ role_id: string }>();
-  return (results ?? []).map((r) => r.role_id);
-}
-
-async function discountLimit(db: D1Database, roles: string[]): Promise<number> {
-  let limit = 0;
-  for (const role of roles) {
-    const s = await getSetting(db, `discount_limit_${role}`);
-    const v = typeof s?.value === "number" ? s.value : (ROLE_DEFAULT_LIMITS[role] ?? 0);
-    if (v > limit) limit = v;
-  }
-  return limit;
-}
-
-async function requireApprover(
-  db: D1Database,
-  approverId: string,
-  actorId: string,
-  action: string
-): Promise<void> {
-  if (approverId === actorId)
-    throw Object.assign(new Error("Approver cannot be yourself"), { code: "FORBIDDEN" });
-  const target = await db
-    .prepare("SELECT id FROM users WHERE id = ? AND is_active = 1")
-    .bind(approverId)
-    .first();
-  if (!target) throw Object.assign(new Error("Approver not found"), { code: "NOT_FOUND" });
-  const { results } = await db
-    .prepare(
-      `SELECT p.name AS name FROM user_roles ur JOIN role_permissions rp ON rp.role_id = ur.role_id JOIN permissions p ON p.id = rp.permission_id WHERE ur.user_id = ?`
-    )
-    .bind(approverId)
-    .all<{ name: string }>();
-  if (!(results ?? []).some((r) => r.name === "sales:approve"))
-    throw Object.assign(new Error(`Approval requires sales:approve (${action})`), {
-      code: "FORBIDDEN",
-    });
 }
 
 const PAY_ACCOUNT: Record<string, string> = {
@@ -100,7 +45,7 @@ export type ReceiveSaleOpts = {
    * The till must charge the shelf price. A line's `priceLkr` is then only
    * the price the cashier saw: if the rate or override moved since the scan
    * the sale is refused, so the cart can be refreshed. Without this a client
-   * could post any price and walk round the discount limits. Internal callers
+   * could post any price. Internal callers
    * (custom-order delivery) price pieces by agreement and leave it off.
    */
   enforceShelfPrice?: boolean;
@@ -192,6 +137,8 @@ export async function receiveSale(
     permille: number;
     costCents: number;
     priceCents: number;
+    /** Shelf price when the cashier charged something else; null = at shelf. */
+    listCents: number | null;
     discountCents: number;
     taxCents: number;
   };
@@ -246,19 +193,25 @@ export async function receiveSale(
       return livePrice.amount_cents;
     };
     let priceCents: number;
+    let listCents: number | null = null;
     if (it.priceLkr === undefined) {
       priceCents = await shelfPrice();
     } else {
       priceCents = lkrToCents(it.priceLkr);
       if (opts.enforceShelfPrice) {
         const shelf = await shelfPrice();
-        if (shelf !== priceCents)
+        // `listPriceLkr` is the shelf price the cashier saw. The till may then
+        // charge a different `priceLkr` (negotiated); a client that sends no
+        // list price must charge the shelf price, as before.
+        const seen = it.listPriceLkr === undefined ? priceCents : lkrToCents(it.listPriceLkr);
+        if (shelf !== seen)
           throw Object.assign(
             new Error(
-              `Price of ${p.barcode} is now ${centsToLkr(shelf).toLocaleString("en-US")} LKR (cart has ${centsToLkr(priceCents).toLocaleString("en-US")}) — refresh the cart`
+              `Price of ${p.barcode} is now ${centsToLkr(shelf).toLocaleString("en-US")} LKR (cart has ${centsToLkr(seen).toLocaleString("en-US")}) — refresh the cart`
             ),
             { code: "CONFLICT", productId: p.id, priceCents: shelf }
           );
+        if (priceCents !== shelf) listCents = shelf;
       }
     }
     const discountCents = lkrToCents(it.discountLkr);
@@ -271,6 +224,7 @@ export async function receiveSale(
       permille: p.permille,
       costCents: p.cost_cents ?? 0,
       priceCents,
+      listCents,
       discountCents,
       // Tax is on the after-discount price, per line, added on top.
       taxCents: salesTaxCents(priceCents - discountCents, tax.rateBp),
@@ -284,55 +238,8 @@ export async function receiveSale(
   // What the customer pays. Revenue is `net`; the tax is the authority's money.
   const total = net + taxTotal;
 
-  const roles = await callerRoles(db, actorId);
-  const limit = await discountLimit(db, roles);
-  // Discount approval: unified engine first (config threshold), then the
-  // legacy role limit. pct is rounded to 2dp so the approved terms bind
-  // exactly across request and retry. Zero-discount sales skip the engine.
-  const pct2 = Math.round(discountPct(discount, subtotal) * 100) / 100;
-  if (input.approvalId) {
-    await consumeApproval(
-      db,
-      { action: "SALES_DISCOUNT", id: input.approvalId, entity: "sale", entityId: input.approvalEntityId ?? "", metric: pct2 },
-      actorId
-    );
-  } else if (pct2 > 0) {
-    const req = await requestApproval(
-      db,
-      {
-        action: "SALES_DISCOUNT",
-        entity: "sale",
-        entityId: crypto.randomUUID(),
-        oldValue: { limitPct: limit },
-        newValue: { discountPct: pct2 },
-        metric: pct2,
-        reason: `discount ${pct2}% on LKR sale`,
-        branchId: input.branchId,
-      },
-      actorId
-    );
-    if (req.status === "PENDING") pendingApproval(req, "SALES_DISCOUNT");
-  }
-  if (!input.approvalId && pct2 > limit) {
-    if (!input.approvedBy)
-      throw Object.assign(new Error(`Discount exceeds your ${limit}% limit`), { code: "FORBIDDEN" });
-    await requireApprover(db, input.approvedBy, actorId, "discount");
-    await recordInlineApproval(
-      db,
-      {
-        action: "SALES_DISCOUNT",
-        entity: "sale",
-        entityId: crypto.randomUUID(),
-        oldValue: { limitPct: limit },
-        newValue: { discountPct: pct2 },
-        metric: pct2,
-        reason: `discount ${pct2}% over ${limit}% limit`,
-        branchId: input.branchId,
-        approverId: input.approvedBy,
-      },
-      actorId
-    );
-  }
+  // No discount limit or sign-off: the price and discount the cashier enters
+  // are what is charged. Every change is still in the invoice and audit trail.
 
   const payTotal = input.payments.reduce((s, p) => s + lkrToCents(p.amountLkr), 0);
   if (payTotal !== total)
@@ -414,10 +321,23 @@ export async function receiveSale(
     stmts.push(
       db
         .prepare(
-          "INSERT INTO sales_items (id, invoice_id, product_id, price_cents, discount_cents, tax_cents, cost_cents) VALUES (?, ?, ?, ?, ?, ?, ?)"
+          "INSERT INTO sales_items (id, invoice_id, product_id, price_cents, discount_cents, tax_cents, cost_cents, list_price_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         )
-        .bind(itemId, invoiceId, l.productId, l.priceCents, l.discountCents, l.taxCents, l.costCents)
+        .bind(itemId, invoiceId, l.productId, l.priceCents, l.discountCents, l.taxCents, l.costCents, l.listCents)
     );
+    if (l.listCents !== null)
+      stmts.push(
+        buildAuditStmt(db, {
+          userId: actorId,
+          action: "sale.price_override",
+          entity: "sale_invoice",
+          entityId: invoiceId,
+          prev: { productId: l.productId, listPriceCents: l.listCents },
+          next: { productId: l.productId, priceCents: l.priceCents },
+          reason: l.priceCents < l.listCents ? "sold below shelf price" : "sold above shelf price",
+          branchId: input.branchId,
+        })
+      );
     const moved = await buildMoveStmts(db, l.productId, "SOLD", {
       actorId,
       now,
@@ -618,54 +538,6 @@ export async function createReturn(
     ...(refundTax > 0 ? [{ account: TAX_PAYABLE, debitCents: refundTax, creditCents: 0 }] : []),
   ];
   const costTotal = targets.reduce((s, it) => s + it.cost_cents, 0);
-  // Returns go through the unified engine. A FULL return cancels the sale
-  // economically (there is no sale-void flow), so it records SALES_CANCEL;
-  // PARTIAL/EXCHANGE record SALES_RETURN with the refund as metric.
-  // NOTE: the legacy `return_approval_threshold` setting is superseded by
-  // `approval_threshold_SALES_RETURN` (same default, LKR 100,000 in cents).
-  const returnAction = input.type === "FULL" ? "SALES_CANCEL" : "SALES_RETURN";
-  const returnMetric = input.type === "FULL" ? 1 : refundTotal;
-  if (input.approvalId) {
-    await consumeApproval(
-      db,
-      { action: returnAction, id: input.approvalId, entity: "sale", entityId: input.invoiceId, metric: returnMetric },
-      actorId
-    );
-  } else {
-    const req = await requestApproval(
-      db,
-      {
-        action: returnAction,
-        entity: "sale",
-        entityId: input.invoiceId,
-        oldValue: { invoiceTotalCents: inv.total_cents },
-        newValue: { type: input.type, refundCents: refundTotal },
-        metric: returnMetric,
-        reason: input.reason,
-        branchId: inv.branch_id,
-      },
-      actorId
-    );
-    if (req.status === "PENDING") pendingApproval(req, returnAction);
-    if (input.approvedBy) {
-      await requireApprover(db, input.approvedBy, actorId, "return");
-      await recordInlineApproval(
-        db,
-        {
-          action: returnAction,
-          entity: "sale",
-          entityId: input.invoiceId,
-          oldValue: { invoiceTotalCents: inv.total_cents },
-          newValue: { type: input.type, refundCents: refundTotal },
-          metric: returnMetric,
-          reason: input.reason,
-          branchId: inv.branch_id,
-          approverId: input.approvedBy,
-        },
-        actorId
-      );
-    }
-  }
   const method = input.refundMethod ?? "original";
   const stmts: D1PreparedStatement[] = [];
   const number = await allocateNumber(db, "SRET", "SRET", 4, "sales_returns");

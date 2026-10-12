@@ -34,7 +34,6 @@ import {
 
 type Rate = { id: string; karat: string; rate_per_gram: number; effective_from: number };
 type Invoice = { id: string; number: string; customer_name: string | null; total_cents: number; status: string; created_at: number };
-type Approval = { id: string; action: string; entity: string; reason: string; createdAt: number };
 type AuditRow = { id: string; action: string; entity: string; entity_id: string; created_at: number };
 
 const opt = { retry: false, staleTime: 60_000 } as const;
@@ -43,7 +42,6 @@ const opt = { retry: false, staleTime: 60_000 } as const;
 
 function useDashboard(me: MeData | null, can: (p: string) => boolean) {
   const ready = !!me;
-  const approvalsScope = can("branches:manage") ? "" : me?.branchIds[0] ? `&branchId=${encodeURIComponent(me.branchIds[0])}` : null;
 
   const salesToday = useQuery({
     ...opt,
@@ -87,12 +85,6 @@ function useDashboard(me: MeData | null, can: (p: string) => boolean) {
     queryFn: () => api<{ rows: Invoice[]; total: number }>("/api/v1/sales/invoices?limit=6&page=1"),
     enabled: ready && can("sales:view"),
   });
-  const approvals = useQuery({
-    ...opt,
-    queryKey: ["dash", "approvals", approvalsScope],
-    queryFn: () => api<{ rows: Approval[]; total: number }>(`/api/v1/approvals?status=PENDING&limit=4${approvalsScope ?? ""}`),
-    enabled: ready && approvalsScope !== null,
-  });
   const audit = useQuery({
     ...opt,
     queryKey: ["dash", "audit"],
@@ -110,7 +102,7 @@ function useDashboard(me: MeData | null, can: (p: string) => boolean) {
     })),
   });
 
-  return { can, salesToday, salesMonth, purchasesToday, oldGoldToday, wip, rates, invoices, approvals, audit, months, trend };
+  return { can, salesToday, salesMonth, purchasesToday, oldGoldToday, wip, rates, invoices, audit, months, trend };
 }
 
 type D = ReturnType<typeof useDashboard>;
@@ -120,7 +112,6 @@ type D = ReturnType<typeof useDashboard>;
 function HomeHeader({ me, d }: { me: MeData | null; d: D }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
-  const pendingCount = d.approvals.data?.total ?? 0;
   const firstName = me?.user.name?.split(" ")[0] ?? "Team";
 
   // On iOS the scroll view's automatic content inset already clears the status bar.
@@ -152,24 +143,6 @@ function HomeHeader({ me, d }: { me: MeData | null; d: D }) {
         </View>
       </View>
 
-      <PressableScale
-        scaleTo={0.9}
-        accessibilityLabel={pendingCount > 0 ? `${pendingCount} pending approvals` : "Notifications"}
-        onPress={() => {
-          haptic.light();
-          router.push("/approvals");
-        }}
-        style={[styles.iconBtn, { backgroundColor: c.card }, elevation.low]}
-      >
-        <Icon name="bell" size={18} color={c.label} weight="medium" />
-        {pendingCount > 0 ? (
-          <View style={[styles.bellBadge, { backgroundColor: c.red, borderColor: c.card }]}>
-            <Text variant="caption2" weight="800" color="#FFFFFF" style={{ fontSize: 10, lineHeight: 12 }}>
-              {pendingCount > 9 ? "9+" : pendingCount}
-            </Text>
-          </View>
-        ) : null}
-      </PressableScale>
     </View>
   );
 }
@@ -456,43 +429,7 @@ function SectionTitle({ title, subtitle, action }: { title: string; subtitle?: s
   );
 }
 
-/* ------------------------------------------------------------------ urgent alert */
 
-function UrgentAlert({ d }: { d: D }) {
-  const { c } = useTheme();
-  const pending = d.approvals.data?.total ?? 0;
-  const first = d.approvals.data?.rows?.[0];
-  if (pending === 0) return null;
-
-  return (
-    <PressableScale
-      scaleTo={0.98}
-      onPress={() => {
-        haptic.selection();
-        router.push("/approvals");
-      }}
-      style={[styles.urgentCard, { backgroundColor: c.card }, styles.surfaceLift]}
-    >
-      <View style={[styles.urgentAccent, { backgroundColor: c.orange }]} />
-      <View style={[styles.urgentIcon, { backgroundColor: `${c.orange}1F` }]}>
-        <Icon name="shieldAlert" size={20} color={c.orange} weight="bold" />
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text variant="subhead" weight="700" numberOfLines={1}>
-          {pending} approval{pending > 1 ? "s" : ""} waiting
-        </Text>
-        <Text variant="footnote" tone="secondary" numberOfLines={1} style={{ marginTop: 1 }}>
-          {first ? `${humanize(first.action)} · ${humanize(first.entity)}` : "Decisions awaiting your review"}
-        </Text>
-      </View>
-      <View style={[styles.urgentActionBtn, { backgroundColor: c.orange }]}>
-        <Text variant="footnote" weight="700" color="#FFFFFF">
-          Review
-        </Text>
-      </View>
-    </PressableScale>
-  );
-}
 
 /* ------------------------------------------------------------------ quick operations */
 
@@ -848,7 +785,6 @@ export default function DashboardScreen() {
     d.wip,
     d.rates,
     d.invoices,
-    d.approvals,
     d.audit,
     ...d.trend
   );
@@ -859,7 +795,6 @@ export default function DashboardScreen() {
       <HomeHeader me={me} d={d} />
       <PlatformNotices />
       <HeroCard d={d} />
-      <UrgentAlert d={d} />
       <QuickOperations d={d} />
       <LiveBoardRates d={d} />
       <RecentSalesCard d={d} />

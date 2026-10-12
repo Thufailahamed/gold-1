@@ -4,11 +4,10 @@ import { PERMISSIONS, requestTransferSchema } from "@goldos/shared";
 import type { Env } from "../db/client";
 import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
-import { approveTransfer, cancelTransfer, dispatchTransfer, getTransferDetail, listTransfers, receiveLines, recallLines, reconcileTransfer, requestTransfer } from "../services/transfers";
-import { branchScope, eligibleApprovers, inScope } from "../services/branchAccess";
+import { cancelTransfer, dispatchTransfer, getTransferDetail, listTransfers, receiveLines, recallLines, reconcileTransfer, requestTransfer } from "../services/transfers";
+import { branchScope, inScope } from "../services/branchAccess";
 import { serviceError } from "./http";
 
-const approveSchema = z.object({ approvedBy: z.string().min(1) });
 const receiveSchema = z.object({ barcodes: z.array(z.string().min(1).max(32)).min(1).max(100) });
 const recallSchema = z.object({ productIds: z.array(z.string().min(1)).min(1).max(100) });
 const reasonSchema = z.object({ reason: z.string().min(1).max(500) });
@@ -66,23 +65,6 @@ export const stockTransferRoutes = new Hono<{ Bindings: Env; Variables: AppVaria
     try {
       await guardTransfer(c, c.req.param("id"), "either");
       return c.json({ success: true, data: await getTransferDetail(c.env.DB, c.req.param("id")) }, 200);
-    } catch (err) { return serviceError(c, err); }
-  })
-  .get("/:id/approvers", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
-    try {
-      await guardTransfer(c, c.req.param("id"), "either");
-      const t = await c.env.DB.prepare("SELECT from_branch_id, requested_by FROM transfers WHERE id = ?").bind(c.req.param("id")).first<{ from_branch_id: string; requested_by: string | null }>();
-      const data = await eligibleApprovers(c.env.DB, PERMISSIONS.PRODUCTS_CANCEL, { branchId: t?.from_branch_id, exclude: [t?.requested_by] });
-      return c.json({ success: true, data }, 200);
-    } catch (err) { return serviceError(c, err); }
-  })
-  .post("/:id/approve", requirePerm(PERMISSIONS.PRODUCTS_CANCEL), async (c) => {
-    const parsed = approveSchema.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ success: false, error: { code: "VALIDATION", message: "approvedBy required" } }, 400);
-    try {
-      await guardTransfer(c, c.req.param("id"), "sender");
-      await approveTransfer(c.env.DB, c.req.param("id"), parsed.data.approvedBy, c.get("userId"));
-      return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) { return serviceError(c, err); }
   })
   .post("/:id/dispatch", requirePerm(PERMISSIONS.PRODUCTS_EDIT), async (c) => {

@@ -9,8 +9,10 @@ import { api, type MeData } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useCountUp } from "@/lib/count-up";
 import { businessToday, monthBounds, type MonthlyReport } from "@/lib/monthly";
-import { BarList, Page, Pill, SectionLabel, Skeleton, StatusPill, controlClass } from "@/components/ui";
+import { BarList, GaugeRing, Page, Pill, SectionLabel, Skeleton, StatusPill, controlClass } from "@/components/ui";
 import { SpotlightCard } from "@/components/home/motion";
+import { AskBooks } from "@/components/ask-books";
+import { DailyBrief } from "@/components/daily-brief";
 import {
   AlertCircleIcon,
   ArrowRightIcon,
@@ -92,7 +94,7 @@ function Card({ children, className }: { children: ReactNode; className?: string
   return (
     <section
       className={cn(
-        "relative overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(28,25,23,0.07),0_18px_40px_-28px_rgba(28,25,23,0.25)]",
+        "relative overflow-hidden rounded-[18px] bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-28px_rgba(16,32,27,0.25)]",
         className
       )}
     >
@@ -122,7 +124,7 @@ function CardHead({
             "flex size-9 shrink-0 items-center justify-center rounded-xl",
             dark
               ? "bg-gradient-to-b from-gold-light to-gold-deep text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]"
-              : "bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.2)]"
+              : "bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,138,62,0.2)]"
           )}
         >
           <Icon size={16} />
@@ -163,7 +165,7 @@ function Empty({ icon: Icon, title, desc, dark }: { icon: IconCmp; title: string
       <span
         className={cn(
           "mb-3 flex size-10 items-center justify-center rounded-xl",
-          dark ? "bg-paper/[0.06] text-gold-light" : "bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.08)]"
+          dark ? "bg-paper/[0.06] text-gold-light" : "bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)]"
         )}
       >
         <Icon size={18} />
@@ -180,7 +182,7 @@ function SectionHead({ index, title, sub, aside }: { index: string; title: React
     <div className="flex flex-wrap items-end gap-3 pt-2 sm:gap-4">
       <span className="g-metric pb-0.5 text-[11px] font-semibold tracking-[0.22em] text-gold-dark">{index}</span>
       <div className="min-w-0">
-        <h2 className="font-display text-lg font-bold tracking-tight text-ink">{title}</h2>
+        <h2 className="font-display text-base font-bold tracking-tight text-ink">{title}</h2>
         {sub ? <p className="mt-0.5 text-xs text-ink-4">{sub}</p> : null}
       </div>
       <div className="hidden h-px flex-1 translate-y-[-6px] bg-ink/[0.08] sm:block" />
@@ -213,11 +215,11 @@ function KpiTile({
 }) {
   const shown = useCountUp(cents);
   const body = (
-    <SpotlightCard tone="light" className="flex h-full flex-col p-5">
+    <SpotlightCard tone="light" className="flex h-full flex-col p-4">
       <div className="flex items-center justify-between gap-3">
         <span className="flex min-w-0 items-center gap-2.5 text-sm font-medium text-ink-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.2)] transition-all duration-320 group-hover:from-void group-hover:to-ink-2 group-hover:text-gold-light">
-            <Icon size={16} />
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,138,62,0.2)] transition-all duration-320 group-hover:from-void group-hover:to-ink-2 group-hover:text-gold-light">
+            <Icon size={15} />
           </span>
           <span className="truncate">{label}</span>
         </span>
@@ -228,15 +230,15 @@ function KpiTile({
           />
         ) : null}
       </div>
-      <div className="mt-4">
+      <div className="mt-3">
         {loading ? (
-          <Skeleton className="h-9 w-32" />
+          <Skeleton className="h-7 w-28" />
         ) : (
           <div className="flex items-baseline gap-1.5">
             {cents !== undefined ? <span className="text-xs font-medium text-ink-4">LKR</span> : null}
             <span
               className={cn(
-                "g-metric truncate text-[26px] leading-none",
+                "g-metric truncate text-[21px] leading-none",
                 tone === "good" && "text-emerald-700",
                 tone === "bad" && "text-rose-700",
                 tone === "neutral" && "text-ink"
@@ -248,7 +250,7 @@ function KpiTile({
         )}
         {sub ? <p className="mt-2 truncate text-xs text-ink-4">{sub}</p> : null}
       </div>
-      <span className="absolute inset-x-5 bottom-0 h-0.5 origin-left scale-x-0 rounded-full bg-gradient-to-r from-gold-dark via-gold-light to-transparent transition-transform duration-500 ease-brand group-hover:scale-x-100" />
+      <span className="absolute inset-x-4 bottom-0 h-0.5 origin-left scale-x-0 rounded-full bg-gradient-to-r from-gold-dark via-gold-light to-transparent transition-transform duration-500 ease-brand group-hover:scale-x-100" />
     </SpotlightCard>
   );
   const cls = "group block h-full animate-fade-in rounded-[22px]";
@@ -264,8 +266,12 @@ function KpiTile({
   );
 }
 
-/** Compact hub cell linking to an accounts sub-page; laid out inside a shared Card. */
-function NavTile({
+/**
+ * Hub card linking to an accounts desk or book. Vertical so names and live
+ * stats never truncate; `featured` widens the first card of a group on the
+ * two-column layout so five cards never leave an orphan.
+ */
+function HubTile({
   href,
   index,
   icon: Icon,
@@ -273,6 +279,9 @@ function NavTile({
   description,
   stat,
   statTone = "muted",
+  featured,
+  variant = "desk",
+  delay = 0,
 }: {
   href: string;
   index: string;
@@ -281,33 +290,46 @@ function NavTile({
   description: string;
   stat?: ReactNode;
   statTone?: "ok" | "warn" | "info" | "muted";
+  featured?: boolean;
+  variant?: "desk" | "book";
+  delay?: number;
 }) {
   const dot = { ok: "bg-emerald-500", warn: "bg-amber-500", info: "bg-gold", muted: "bg-ink/25" }[statTone];
   return (
     <Link
       href={href}
-      className="group relative flex min-w-0 items-center gap-3.5 bg-paper px-5 py-4 transition-colors hover:bg-gold-pale/50"
+      style={{ animationDelay: `${delay}ms` }}
+      className={cn(
+        "group relative flex min-w-0 animate-fade-in flex-col overflow-hidden rounded-2xl p-3.5 transition-all duration-320 ease-brand hover:-translate-y-0.5",
+        variant === "desk"
+          ? "bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),inset_0_1px_0_rgba(255,255,255,0.9),0_18px_40px_-32px_rgba(16,32,27,0.3)] hover:shadow-[inset_0_0_0_1px_rgba(205,168,83,0.55),0_26px_50px_-30px_rgba(126,98,35,0.45)]"
+          : "bg-gradient-to-b from-paper to-gold-pale/70 shadow-[inset_0_0_0_1px_rgba(168,138,62,0.16),0_18px_40px_-32px_rgba(126,98,35,0.35)] hover:shadow-[inset_0_0_0_1px_rgba(205,168,83,0.6),0_26px_50px_-30px_rgba(126,98,35,0.5)]",
+        featured && "sm:col-span-2 lg:col-span-1"
+      )}
     >
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.2)] transition-all duration-320 group-hover:from-void group-hover:to-ink-2 group-hover:text-gold-light">
-        <Icon size={17} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="truncate text-sm font-semibold text-ink transition-colors group-hover:text-gold-dark">{title}</span>
-          <span className="g-metric text-[9px] tracking-[0.2em] text-ink-5">{index}</span>
+      <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/70 to-transparent opacity-0 transition-opacity duration-320 group-hover:opacity-100" />
+      <span className="pointer-events-none absolute -right-12 -top-12 size-32 rounded-full bg-gold/15 opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-100" />
+
+      <div className="relative flex items-center gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,138,62,0.22),inset_0_1px_0_rgba(255,255,255,0.8)] transition-all duration-320 group-hover:from-void group-hover:to-ink-2 group-hover:text-gold-light group-hover:shadow-[0_10px_22px_-10px_rgba(6,42,34,0.6)]">
+          <Icon size={16} />
         </span>
-        <span className="mt-0.5 block truncate text-xs text-ink-4">{description}</span>
-        {stat ? (
-          <span className="mt-1.5 flex items-center gap-1.5 text-[11px] font-medium text-ink-3">
-            <span className={cn("size-1.5 shrink-0 rounded-full", dot)} />
-            <span className="truncate">{stat}</span>
-          </span>
-        ) : null}
-      </span>
-      <ArrowRightIcon
-        size={14}
-        className="shrink-0 -translate-x-1 text-ink-5 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-gold-dark group-hover:opacity-100"
-      />
+        <h3 className="min-w-0 flex-1 font-sans text-sm font-semibold leading-tight tracking-normal text-ink transition-colors group-hover:text-gold-deep">
+          {title}
+        </h3>
+        <span className="g-metric shrink-0 self-start text-[9px] tracking-[0.2em] text-ink-5 transition-colors group-hover:text-gold-dark">{index}</span>
+      </div>
+      <p className="relative mt-2 line-clamp-2 text-[11.5px] leading-snug text-ink-4">{description}</p>
+
+      <div className="min-h-2.5 flex-1" />
+      <div className="relative flex items-center gap-2 border-t border-ink/[0.06] pt-2">
+        <span className={cn("size-1.5 shrink-0 rounded-full", dot, statTone === "warn" && "animate-pulse-soft")} />
+        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-ink-3">{stat}</span>
+        <ArrowRightIcon
+          size={13}
+          className="shrink-0 -translate-x-1 text-ink-5 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-gold-dark group-hover:opacity-100"
+        />
+      </div>
     </Link>
   );
 }
@@ -331,7 +353,7 @@ function StatementRow({
         "flex items-baseline justify-between gap-3 py-2.5",
         indent && "pl-4",
         strong
-          ? "mt-1.5 rounded-xl bg-bone px-3.5 py-3 text-[15px] font-semibold text-ink shadow-[inset_0_0_0_1px_rgba(28,25,23,0.07)]"
+          ? "mt-1.5 rounded-xl bg-bone px-3.5 py-3 text-[15px] font-semibold text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]"
           : "border-b border-ink/[0.05] text-sm text-ink-3"
       )}
     >
@@ -346,7 +368,7 @@ function StatementRow({
 /* ------------------------------------------------------------------- page */
 
 const heroSelectClass =
-  "h-10 rounded-full bg-paper/[0.07] px-4 pr-9 text-sm text-paper shadow-[inset_0_0_0_1px_rgba(250,250,249,0.18)] transition-shadow duration-200 hover:bg-paper/[0.1] focus:outline-none focus:shadow-[inset_0_0_0_1px_#E7C65A,0_0_0_3px_rgba(201,162,39,0.3)] [&>option]:bg-paper [&>option]:text-ink";
+  "h-9 rounded-full bg-paper/[0.07] px-4 pr-9 text-[13px] text-paper shadow-[inset_0_0_0_1px_rgba(246,245,240,0.18)] transition-shadow duration-200 hover:bg-paper/[0.1] focus:outline-none focus:shadow-[inset_0_0_0_1px_#E2C27A,0_0_0_3px_rgba(205,168,83,0.3)] [&>option]:bg-paper [&>option]:text-ink";
 
 export default function AccountsDashboardPage() {
   const today = businessToday();
@@ -494,20 +516,34 @@ export default function AccountsDashboardPage() {
   const monthQuery = `?month=${month}`;
   const monthReportHref = `/reports/monthly${monthQuery}${branchId ? `&branch=${encodeURIComponent(branchId)}` : ""}`;
 
-  const strip: { label: string; value: string; icon: IconCmp; href?: string; tone?: string; meter?: number }[] = [
-    { label: "Spent today", value: todays.isLoading ? "—" : `${lkr(todayPosted)} LKR`, icon: CreditCardIcon, href: "/expenses?range=today" },
+  const branchName = visibleBranches.find((b) => b.id === branchId)?.name ?? "";
+  const dayStatus = !branchId ? "Pick a branch" : closedToday ? "Today is closed" : "Today is open";
+
+  const strip: {
+    label: string;
+    value: string;
+    prefix?: string;
+    suffix?: string;
+    icon: IconCmp;
+    href?: string;
+    tone?: string;
+    meter?: number;
+  }[] = [
+    { label: "Spent today", value: todays.data ? lkr(todayPosted) : "—", prefix: "LKR", icon: CreditCardIcon, href: "/expenses?range=today" },
     {
       label: "Day closing",
-      value: !branchId ? "Pick a branch" : closedToday ? "Closed" : p ? `${checksPass}/${checksTotal} checks pass` : "—",
+      value: !branchId ? "—" : closedToday ? "Closed" : p ? `${checksPass}/${checksTotal}` : "—",
+      suffix: !branchId ? "pick a branch" : !closedToday && p ? "checks pass" : undefined,
       icon: ClipboardCheckIcon,
       href: "/day-closing",
       tone: closedToday ? "text-emerald-300" : undefined,
       meter: branchId && p ? (closedToday ? 100 : checksPct) : undefined,
     },
-    { label: "Spent this month", value: summary.data ? `${lkr(monthPosted)} LKR` : "—", icon: TrendingUpIcon, href: "/expenses?range=month" },
+    { label: "Spent this month", value: summary.data ? lkr(monthPosted) : "—", prefix: "LKR", icon: TrendingUpIcon, href: "/expenses?range=month" },
     {
-      label: "Net profit this month",
-      value: r ? `${lkrSigned(r.profit.netProfitCents)} LKR` : "—",
+      label: "Net profit · month",
+      value: r ? lkrSigned(r.profit.netProfitCents) : "—",
+      prefix: "LKR",
       icon: ScaleIcon,
       href: monthReportHref,
       tone: r && r.profit.netProfitCents < 0 ? "text-rose-300" : undefined,
@@ -517,27 +553,59 @@ export default function AccountsDashboardPage() {
   return (
     <Page>
       {/* ---------------------------------------------------------------- hero */}
-      <section className="relative overflow-hidden rounded-2xl bg-void text-paper shadow-4">
-        <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-50" />
-        <div className="home-drift pointer-events-none absolute -right-24 -top-32 size-72 rounded-full bg-gold/20 blur-[100px]" />
+      <section className="relative overflow-hidden rounded-[22px] bg-void text-paper shadow-5">
+        <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-40" />
+        <div className="home-drift pointer-events-none absolute -right-24 -top-32 size-80 rounded-full bg-gold/20 blur-[110px]" />
+        <div className="pointer-events-none absolute -bottom-40 left-1/4 size-72 rounded-full bg-gold-deep/25 blur-[110px]" />
         <div className="home-noise pointer-events-none absolute inset-0" />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
 
-        <div className="relative flex flex-col gap-4 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+        <div className="relative grid gap-4 px-5 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-8">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2.5">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/[0.08] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">
                 <span className="size-1.5 animate-pulse-soft rounded-full bg-gold" />
                 Accounts
               </span>
               <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-paper/40">{longDate(today)}</span>
             </div>
-            <h1 className="g-display mt-2 text-2xl leading-tight text-paper sm:text-[28px]">
+            <h1 className="g-display mt-2.5 text-[24px] leading-[1.08] text-paper text-balance sm:text-[30px]">
               Every rupee, <span className="home-gold-text">accounted for.</span>
             </h1>
+            <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-paper/55 text-pretty">
+              Expenses, cash, dues and the double-entry ledger {branchName ? <>for <span className="text-paper/85">{branchName}</span></> : "across every branch"} —
+              reconciled to the cent, closed every day.
+            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/day-closing"
+            className="group relative hidden shrink-0 flex-col items-center lg:flex"
+            aria-label={`Day closing: ${dayStatus}`}
+          >
+            <span className="pointer-events-none absolute inset-4 rounded-full bg-gold/10 blur-2xl transition-opacity duration-500 group-hover:bg-gold/20" />
+            <span className="relative block size-[96px] transition-transform duration-500 ease-brand group-hover:scale-[1.03]">
+              <GaugeRing
+                value={closedToday ? 1 : checksPass}
+                max={closedToday ? 1 : Math.max(checksTotal, 1)}
+                label={closedToday ? "Day" : "Checks"}
+                caption={!branchId ? "—" : closedToday ? "Closed" : p ? `${checksPass}/${checksTotal}` : "—"}
+              />
+            </span>
+            <span className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-medium text-paper/50 transition-colors group-hover:text-gold-light">
+              <span className={cn("size-1.5 rounded-full", closedToday ? "bg-emerald-400" : branchId ? "bg-gold" : "bg-paper/30")} />
+              {dayStatus}
+            </span>
+          </Link>
+        </div>
+
+        {/* the assistant: ask the books in plain words */}
+        <AskBooks branchId={branchId || undefined} />
+
+        {/* command bar */}
+        <div className="relative flex flex-wrap items-center gap-2 border-t border-paper/[0.08] bg-paper/[0.025] px-5 py-2.5 sm:px-6">
+          <label className="flex items-center gap-2.5">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-paper/40">Branch</span>
             <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={heroSelectClass} aria-label="Branch">
               {canShop ? <option value="">All branches</option> : null}
               {visibleBranches.map((b) => (
@@ -546,37 +614,42 @@ export default function AccountsDashboardPage() {
                 </option>
               ))}
             </select>
-            {canManage ? (
-              <Link href="/expenses?new=1" className="home-btn-gold h-10 px-4 text-sm">
-                <PlusIcon size={15} />
-                Record expense
-              </Link>
-            ) : null}
-            {canManage ? (
-              <Link href="/accounts/receivables" className="home-btn-ghost h-10 px-4 text-sm">
-                <UsersIcon size={15} />
-                Collect dues
-              </Link>
-            ) : null}
-            <Link href="/day-closing" className="home-btn-ghost h-10 px-4 text-sm">
-              <ClipboardCheckIcon size={15} />
-              Close the day
+          </label>
+          <div className="hidden flex-1 sm:block" />
+          <Link href="/day-closing" className="home-btn-ghost h-9 px-3.5 text-[13px]">
+            <ClipboardCheckIcon size={15} />
+            Close the day
+          </Link>
+          {canManage ? (
+            <Link href="/accounts/receivables" className="home-btn-ghost h-9 px-3.5 text-[13px]">
+              <UsersIcon size={15} />
+              Collect dues
             </Link>
-          </div>
+          ) : null}
+          {canManage ? (
+            <Link href="/expenses?new=1" className="home-btn-gold h-9 px-4 text-[13px]">
+              <PlusIcon size={15} />
+              Record expense
+            </Link>
+          ) : null}
         </div>
 
         <div className="relative grid grid-cols-2 border-t border-paper/[0.08] lg:grid-cols-4">
           {strip.map((s, i) => {
             const body = (
               <>
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-paper/[0.05] text-gold-light ring-1 ring-paper/[0.08] transition-colors group-hover:bg-gold group-hover:text-void">
-                  <s.icon size={14} />
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-paper/[0.05] text-gold-light ring-1 ring-paper/[0.08] transition-all duration-320 group-hover:bg-gradient-to-b group-hover:from-gold-light group-hover:to-gold-dark group-hover:text-void group-hover:ring-gold/40">
+                  <s.icon size={15} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-paper/40">{s.label}</span>
-                  <span className={cn("g-metric mt-0.5 block truncate text-[15px]", s.tone ?? "text-paper")}>{s.value}</span>
+                  <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-paper/40">{s.label}</span>
+                  <span className="mt-1 flex items-baseline gap-1.5 whitespace-nowrap">
+                    {s.prefix ? <span className="text-[10px] font-medium text-paper/40">{s.prefix}</span> : null}
+                    <span className={cn("g-metric text-base leading-none", s.tone ?? "text-paper")}>{s.value}</span>
+                    {s.suffix ? <span className="truncate text-[11px] font-medium text-paper/45">{s.suffix}</span> : null}
+                  </span>
                   {s.meter !== undefined ? (
-                    <span className="mt-1.5 block h-1 overflow-hidden rounded-full bg-paper/10">
+                    <span className="mt-2 block h-1 overflow-hidden rounded-full bg-paper/10">
                       <span
                         className={cn(
                           "block h-full rounded-full transition-[width] duration-700 ease-brand",
@@ -587,10 +660,16 @@ export default function AccountsDashboardPage() {
                     </span>
                   ) : null}
                 </span>
+                {s.href ? (
+                  <ArrowRightIcon
+                    size={13}
+                    className="shrink-0 -translate-x-1 text-paper/30 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-gold-light group-hover:opacity-100"
+                  />
+                ) : null}
               </>
             );
             const cls = cn(
-              "group flex min-w-0 items-center gap-3 px-4 py-3 transition-colors hover:bg-paper/[0.04] sm:px-6",
+              "group flex min-w-0 items-center gap-3 px-5 py-3 transition-colors hover:bg-paper/[0.04] sm:px-6",
               i % 2 === 1 && "border-l border-paper/[0.08]",
               i >= 2 && "border-t border-paper/[0.08] lg:border-t-0",
               i === 2 && "lg:border-l"
@@ -608,99 +687,117 @@ export default function AccountsDashboardPage() {
         </div>
       </section>
 
-      {/* ----------------------------------------------------------- jump to */}
-      <Card>
-        {/* 1px gaps over a tinted background draw the hairlines, so the grid
-            stays ruled correctly at any column count and any tile count. */}
-        <nav aria-label="Accounts pages" className="grid gap-px bg-ink/[0.06] sm:grid-cols-2 lg:grid-cols-4">
-          <NavTile
-            href="/expenses"
-            index="01"
-            icon={BanknoteIcon}
-            title="Expenses"
-            description="Record and review spending"
-            stat={pending.data?.total ? `${pending.data.total} awaiting approval` : "Nothing waiting"}
-            statTone={pending.data?.total ? "warn" : "ok"}
-          />
-          <NavTile
-            href="/accounts/cash"
-            index="02"
-            icon={CoinsIcon}
-            title="Cash & bank"
-            description="Balances, cash book, owner in/out"
-            stat={banks.data ? `Banks ${lkr(bankTotal)} LKR` : "Drawer & bank balances"}
-            statTone="info"
-          />
-          <NavTile
-            href="/accounts/receivables"
-            index="03"
-            icon={UsersIcon}
-            title="Customer dues"
-            description="Collect credit-sale payments"
-            stat={dues.data ? (dues.data.totalCents > 0 ? `${lkr(dues.data.totalCents)} LKR owed` : "Nobody owes the shop") : "Who owes the shop"}
-            statTone={dues.data?.totalCents ? "warn" : "ok"}
-          />
-          <NavTile
-            href="/day-closing"
-            index="04"
-            icon={ClipboardCheckIcon}
-            title="Day closing"
-            description="Count, explain, lock the day"
-            stat={branchId ? (closedToday ? "Today is closed" : "Today is open") : "Pick a branch"}
-            statTone={branchId ? (closedToday ? "ok" : "warn") : "muted"}
-          />
-          <NavTile
-            href="/accounts/payables"
-            index="05"
-            icon={FileTextIcon}
-            title="Supplier dues"
-            description="What the shop owes, aged by bill"
-            stat={r ? (r.payables.totalCents > 0 ? `${lkr(r.payables.totalCents)} LKR owed` : "Nothing owed") : "Open purchase bills"}
-            statTone={r?.payables.totalCents ? "warn" : "ok"}
-          />
-          <NavTile
-            href={monthReportHref}
-            index="06"
-            icon={TrendingUpIcon}
-            title="Monthly report"
-            description="Sales, profit, cash, stock"
-            stat={r ? `Net ${lkrSigned(r.profit.netProfitCents)} LKR` : "Open the full report"}
-            statTone="info"
-          />
-          <NavTile
-            href="/accounts/statements"
-            index="07"
-            icon={ScaleIcon}
-            title="Financial statements"
-            description="P&L, balance sheet, trial balance"
-            stat="Any period, live from the ledger"
-          />
-          <NavTile
-            href="/accounts/chart"
-            index="08"
-            icon={BookOpenIcon}
-            title="Chart of accounts"
-            description="Ledger balances & adjustments"
-            stat="Double-entry books"
-          />
-          <NavTile
-            href="/accounts/tax"
-            index="09"
-            icon={TagsIcon}
-            title="Sales tax"
-            description="VAT charged, refunded and paid"
-            stat="Tax return for any period"
-          />
-          <NavTile
-            href="/accounts/year-end"
-            index="10"
-            icon={HistoryIcon}
-            title="Financial year"
-            description="Close the year, lock the books"
-            stat="Retained earnings carried forward"
-          />
-        </nav>
-      </Card>
+      <DailyBrief />
+
+      {/* ------------------------------------------------------------- hub */}
+      <SectionHead index="A-01" title="Run the day" sub="The desks where money moves — open any one to act" />
+      <nav aria-label="Daily accounts desks" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <HubTile
+          featured
+          href="/expenses"
+          index="01"
+          icon={BanknoteIcon}
+          title="Expenses"
+          description="Record and review what the shop spends"
+          stat={pending.data?.total ? `${pending.data.total} awaiting approval` : "Nothing waiting"}
+          statTone={pending.data?.total ? "warn" : "ok"}
+        />
+        <HubTile
+          href="/accounts/cash"
+          index="02"
+          icon={CoinsIcon}
+          title="Cash & bank"
+          description="Balances, cash book, owner in and out"
+          stat={banks.data ? `Banks ${lkr(bankTotal)} LKR` : "Drawer & bank balances"}
+          statTone="info"
+          delay={40}
+        />
+        <HubTile
+          href="/accounts/receivables"
+          index="03"
+          icon={UsersIcon}
+          title="Customer dues"
+          description="Collect payments on credit sales"
+          stat={dues.data ? (dues.data.totalCents > 0 ? `${lkr(dues.data.totalCents)} LKR owed` : "Nobody owes") : "Who owes the shop"}
+          statTone={dues.data?.totalCents ? "warn" : "ok"}
+          delay={80}
+        />
+        <HubTile
+          href="/accounts/payables"
+          index="04"
+          icon={FileTextIcon}
+          title="Supplier dues"
+          description="What the shop owes, aged by bill"
+          stat={r ? (r.payables.totalCents > 0 ? `${lkr(r.payables.totalCents)} LKR owed` : "Nothing owed") : "Open purchase bills"}
+          statTone={r?.payables.totalCents ? "warn" : "ok"}
+          delay={120}
+        />
+        <HubTile
+          href="/day-closing"
+          index="05"
+          icon={ClipboardCheckIcon}
+          title="Day closing"
+          description="Count the drawer, explain it, lock the day"
+          stat={dayStatus}
+          statTone={branchId ? (closedToday ? "ok" : "warn") : "muted"}
+          delay={160}
+        />
+      </nav>
+
+      <SectionHead index="A-02" title="Books & reports" sub="The ledger, statements and filings — live from double entry" />
+      <nav aria-label="Accounting books and reports" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <HubTile
+          featured
+          variant="book"
+          href={monthReportHref}
+          index="06"
+          icon={TrendingUpIcon}
+          title="Monthly report"
+          description="Sales, profit, cash and stock for the month"
+          stat={r ? `Net ${lkrSigned(r.profit.netProfitCents)} LKR` : "Open the full report"}
+          statTone="info"
+        />
+        <HubTile
+          variant="book"
+          href="/accounts/statements"
+          index="07"
+          icon={ScaleIcon}
+          title="Financial statements"
+          description="P&L, balance sheet and trial balance"
+          stat="Any period, live"
+          delay={40}
+        />
+        <HubTile
+          variant="book"
+          href="/accounts/chart"
+          index="08"
+          icon={BookOpenIcon}
+          title="Chart of accounts"
+          description="Ledger balances and adjustments"
+          stat="Double entry"
+          delay={80}
+        />
+        <HubTile
+          variant="book"
+          href="/accounts/tax"
+          index="09"
+          icon={TagsIcon}
+          title="Sales tax"
+          description="VAT charged, refunded and paid"
+          stat="Any period"
+          delay={120}
+        />
+        <HubTile
+          variant="book"
+          href="/accounts/year-end"
+          index="10"
+          icon={HistoryIcon}
+          title="Financial year"
+          description="Close the year and lock the books"
+          stat="Year-end close"
+          delay={160}
+        />
+      </nav>
 
       {/* -------------------------------------------------------------- today */}
       <SectionHead index="T-01" title="Today" sub={longDate(today)} />
@@ -871,11 +968,6 @@ export default function AccountsDashboardPage() {
                     </>
                   )}
                 </div>
-                {p.closing.awaitingApprovalCents > 0 ? (
-                  <p className="text-xs text-ink-4">
-                    {lkr(p.closing.awaitingApprovalCents)} LKR of expenses are awaiting approval — cash reads high by that until approved.
-                  </p>
-                ) : null}
                 {(closings.data?.rows ?? []).length > 0 ? (
                   <div className="rounded-xl bg-bone/70 p-3 ring-1 ring-ink/[0.05]">
                     <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Recent closings</div>
@@ -1003,47 +1095,47 @@ export default function AccountsDashboardPage() {
                   <>
                     <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-4">
                       <span className="inline-flex items-center gap-1.5">
-                        <span className="size-2 rounded-sm bg-[#C9A227]" /> Posted
+                        <span className="size-2 rounded-sm bg-[#CDA853]" /> Posted
                       </span>
                       <span className="inline-flex items-center gap-1.5">
-                        <span className="size-2 rounded-sm bg-[#E7C65A]/45" /> Awaiting approval
+                        <span className="size-2 rounded-sm bg-[#E2C27A]/45" /> Awaiting approval
                       </span>
                       <span className="inline-flex items-center gap-1.5">
-                        <span className="w-3 border-t border-dashed border-[#8C6D1F]" /> Daily average
+                        <span className="w-3 border-t border-dashed border-[#7E6223]" /> Daily average
                       </span>
                     </div>
                     <div className="h-60" role="img" aria-label={`Daily expenses for the month, ${activeDays} days with spending`}>
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={chartData} margin={{ top: 6, right: 6, left: 0, bottom: 0 }} barCategoryGap="22%">
-                          <CartesianGrid stroke="rgba(28,25,23,0.06)" strokeDasharray="3 5" vertical={false} />
-                          <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#78716c", fontSize: 11 }} interval="preserveStartEnd" />
+                          <CartesianGrid stroke="rgba(16,32,27,0.06)" strokeDasharray="3 5" vertical={false} />
+                          <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#5d6e68", fontSize: 11 }} interval="preserveStartEnd" />
                           <YAxis
                             tickLine={false}
                             axisLine={false}
                             width={44}
-                            tick={{ fill: "#a8a29e", fontSize: 11 }}
+                            tick={{ fill: "#93a29c", fontSize: 11 }}
                             tickFormatter={(v: number) => compact(v)}
                           />
                           <Tooltip
-                            cursor={{ fill: "rgba(201,162,39,0.08)" }}
+                            cursor={{ fill: "rgba(205,168,83,0.08)" }}
                             contentStyle={{
                               borderRadius: 12,
                               border: "none",
-                              background: "#0c0a09",
+                              background: "#062a22",
                               color: "#fff",
                               fontSize: 12,
                               boxShadow: "0 20px 40px -16px rgba(0,0,0,0.5)",
                             }}
-                            labelStyle={{ color: "#E7C65A", fontWeight: 600, marginBottom: 4 }}
-                            itemStyle={{ color: "#fafaf9" }}
+                            labelStyle={{ color: "#E2C27A", fontWeight: 600, marginBottom: 4 }}
+                            itemStyle={{ color: "#f6f5f0" }}
                             labelFormatter={(_, pl) => (pl?.[0]?.payload?.date ? dayLabel(pl[0].payload.date) : "")}
                             formatter={(v) => `LKR ${Number(v ?? 0).toLocaleString("en-US")}`}
                           />
                           {avgPerDay > 0 ? (
-                            <ReferenceLine y={avgPerDay / 100} stroke="#8C6D1F" strokeDasharray="4 4" strokeOpacity={0.6} ifOverflow="extendDomain" />
+                            <ReferenceLine y={avgPerDay / 100} stroke="#7E6223" strokeDasharray="4 4" strokeOpacity={0.6} ifOverflow="extendDomain" />
                           ) : null}
-                          <Bar dataKey="posted" name="Posted" stackId="a" fill="#C9A227" radius={[0, 0, 0, 0]} />
-                          <Bar dataKey="pending" name="Awaiting approval" stackId="a" fill="#E7C65A" fillOpacity={0.45} radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="posted" name="Posted" stackId="a" fill="#CDA853" radius={[0, 0, 0, 0]} />
+                          <Bar dataKey="pending" name="Awaiting approval" stackId="a" fill="#E2C27A" fillOpacity={0.45} radius={[4, 4, 0, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -1054,7 +1146,7 @@ export default function AccountsDashboardPage() {
           </div>
         </Card>
 
-        <section className="relative overflow-hidden rounded-2xl bg-void text-paper shadow-4 lg:col-span-2">
+        <section className="relative overflow-hidden rounded-[18px] bg-void text-paper shadow-4 lg:col-span-2">
           <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-50" />
           <div className="pointer-events-none absolute -right-20 -top-20 size-64 rounded-full bg-gold/20 blur-[90px]" />
           <CardHead
@@ -1179,7 +1271,7 @@ export default function AccountsDashboardPage() {
 
       {/* ------------------------------------------------------ needs attention */}
       {(pending.data?.rows.length ?? 0) > 0 || (r?.warnings.length ?? 0) > 0 ? (
-        <section className="relative overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(180,83,9,0.28),0_18px_40px_-28px_rgba(180,83,9,0.35)]">
+        <section className="relative overflow-hidden rounded-[18px] bg-paper shadow-[inset_0_0_0_1px_rgba(180,83,9,0.28),0_18px_40px_-28px_rgba(180,83,9,0.35)]">
           <div className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full bg-amber-400/15 blur-3xl" />
           <div className="relative flex items-center gap-3 px-5 pb-4 pt-5 sm:px-6">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-600/10 text-amber-700 shadow-[inset_0_0_0_1px_rgba(180,83,9,0.25)]">

@@ -213,7 +213,7 @@ export async function createExpense(
   const stmts: D1PreparedStatement[] = [];
   const number = await nextNumber(db, stmts, "EXP", "EXP", "expenses");
   const id = crypto.randomUUID();
-  const status = gates.requiresApproval ? "PENDING_APPROVAL" : "POSTED";
+  const status = "POSTED";
   let entryId: string | null = null;
 
   if (status === "POSTED") {

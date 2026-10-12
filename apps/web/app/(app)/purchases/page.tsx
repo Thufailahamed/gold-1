@@ -5,15 +5,15 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { BarList, Page, StatusPill } from "@/components/ui";
+import { BarList, Page, Skeleton, StatusPill } from "@/components/ui";
 import {
   Card,
   CardHead,
   Empty,
   HeadLink,
   ListSkeleton,
-  ModuleCard,
   ModuleHero,
+  Shortcut,
   SectionHead,
   StatusBoard,
   ago,
@@ -116,6 +116,69 @@ function MixCard({
   );
 }
 
+/** Hero side panel: what is owed to suppliers and how much of this month's spend is settled. */
+function PayablesPanel({
+  owed,
+  openBills,
+  paid,
+  spent,
+  awaiting,
+  loading,
+}: {
+  owed: number | undefined;
+  openBills: number;
+  paid: number | undefined;
+  spent: number | undefined;
+  awaiting: number | undefined;
+  loading: boolean;
+}) {
+  const pct = spent && paid ? Math.min(100, Math.round((paid / spent) * 100)) : 0;
+  return (
+    <div className="relative overflow-hidden rounded-2xl bg-paper/[0.04] p-5 ring-1 ring-gold/20 backdrop-blur-sm sm:p-6">
+      <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-light/60 to-transparent" />
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">Owed to suppliers</p>
+      {loading ? (
+        <Skeleton className="mt-3 h-9 w-40 bg-paper/10" />
+      ) : (
+        <p className="g-metric mt-2 flex items-baseline gap-2 text-[34px] leading-none text-paper">
+          <span className="text-xs font-medium tracking-normal text-paper/45">LKR</span>
+          {owed === undefined ? "—" : lkr(owed)}
+        </p>
+      )}
+      <p className="mt-2 text-xs text-paper/50">
+        {openBills === 0 ? "Every supplier bill is settled" : `${openBills} bill${openBills === 1 ? "" : "s"} waiting for payment`}
+      </p>
+
+      <div className="mt-5">
+        <div className="flex items-baseline justify-between text-[11px] text-paper/50">
+          <span>Paid of this month&apos;s spend</span>
+          <span className="g-metric text-paper/85">{pct}%</span>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-paper/[0.08]">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-gold-deep via-gold to-gold-light transition-[width] duration-700 ease-brand"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <p className="g-metric mt-2 text-[11px] text-paper/40">
+          {lkr(paid ?? 0)} of {lkr(spent ?? 0)} LKR
+        </p>
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-paper/[0.08] ring-1 ring-paper/[0.08]">
+        <Link href="/purchases/orders?status=SENT" className="group bg-void px-3.5 py-3 transition-colors hover:bg-paper/[0.06]">
+          <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-paper/40">With supplier</span>
+          <span className="g-metric mt-1 block text-lg leading-none text-paper group-hover:text-gold-light">{awaiting ?? "—"}</span>
+        </Link>
+        <Link href="/purchases/invoices?status=UNPAID" className="group bg-void px-3.5 py-3 transition-colors hover:bg-paper/[0.06]">
+          <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-paper/40">Bills to pay</span>
+          <span className="g-metric mt-1 block text-lg leading-none text-paper group-hover:text-gold-light">{openBills}</span>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------- page */
 
 export default function PurchasingDashboardPage() {
@@ -201,106 +264,74 @@ export default function PurchasingDashboardPage() {
             </Link>
           </>
         }
+        aside={
+          <PayablesPanel
+            owed={a?.outstanding_cents}
+            openBills={openBills}
+            paid={m?.paid_cents}
+            spent={m?.value_cents}
+            awaiting={orderCounts[1]}
+            loading={allTime.isLoading}
+          />
+        }
         metrics={[
           { label: "Spend · month", value: m?.value_cents, format: lkr, unit: "LKR", icon: BanknoteIcon, href: "/purchases/reports" },
           { label: "Gold in · month", value: m?.gold_mg, format: grams, unit: "g", icon: GemIcon, href: "/purchases/reports" },
           { label: "Paid · month", value: m?.paid_cents, format: lkr, unit: "LKR", icon: CoinsIcon, href: "/purchases/invoices?status=PAID" },
-          { label: "Owed to suppliers", value: a?.outstanding_cents, format: lkr, unit: "LKR", icon: CreditCardIcon, href: "/purchases/invoices?status=UNPAID" },
+          { label: "Open orders", value: ordersLoading ? undefined : openCount, format: count, icon: FileTextIcon, href: "/purchases/orders" },
         ]}
       />
 
       {/* ------------------------------------------------------- workspaces */}
-      <SectionHead index="01" title="Workspaces" sub="Jump into any part of purchasing" />
       <div className={cn("grid gap-4 sm:grid-cols-2", canSuppliers || !me.data ? "xl:grid-cols-4" : "xl:grid-cols-3")}>
-        <ModuleCard
+        <Shortcut
           href="/purchases/orders"
-          index="01"
           icon={FileTextIcon}
           title="Orders"
-          description="Draft orders to suppliers, then receive them to post stock and the journal."
-          metric={ordersLoading ? "—" : openCount}
-          metricLabel="Open orders"
-          cta="Manage"
+          desc="Draft, send and receive into stock"
+          metric={openCount}
+          label="Open"
           loading={ordersLoading}
           alert={(orderCounts[1] ?? 0) > 0}
           delay={0}
         />
-        <ModuleCard
+        <Shortcut
           href="/purchases/invoices"
-          index="02"
           icon={CreditCardIcon}
           title="Invoices"
-          description="Supplier bills, direct purchases and the payments made against them."
-          metric={billsLoading ? "—" : openBills}
-          metricLabel="Bills to pay"
-          cta="Pay bills"
+          desc="Supplier bills and payments"
+          metric={openBills}
+          label="To pay"
           loading={billsLoading}
           alert={openBills > 0}
           delay={60}
         />
-        <ModuleCard
+        <Shortcut
           href="/purchases/reports"
-          index="03"
           icon={TrendingUpIcon}
           title="Reports"
-          description="Spend, gold intake and balances by supplier, purity or category."
+          desc="Spend by supplier, purity, category"
           metric={m ? lkr(m.value_cents) : "—"}
-          metricLabel="LKR spent this month"
-          cta="View reports"
+          label="LKR this month"
           loading={month.isLoading}
           delay={120}
         />
         {canSuppliers || !me.data ? (
-          <ModuleCard
+          <Shortcut
             href="/suppliers"
-            index="04"
             icon={TruckIcon}
             title="Suppliers"
-            description="The refiners, wholesalers and makers you buy from."
+            desc="Refiners, wholesalers and makers"
             metric={suppliers.data ? count(suppliers.data.total) : "—"}
-            metricLabel="Suppliers on file"
-            cta="Open list"
+            label="On file"
             loading={suppliers.isLoading && canSuppliers}
             delay={180}
           />
         ) : null}
       </div>
 
-      {/* ------------------------------------------------------- pipelines */}
-      <SectionHead index="02" title="Orders & payables" sub="Where orders stand, and what is still owed — tap a state to open it" />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <StatusBoard
-          icon={FileTextIcon}
-          title="Order pipeline"
-          sub={ordersLoading ? "Purchase orders by status" : `${openCount} open · ${orderCounts[2] ?? 0} received`}
-          action={<HeadLink href="/purchases/orders">All orders</HeadLink>}
-          states={ORDER_STATES}
-          counts={orderCounts}
-          loading={ordersLoading}
-          href={(s) => `/purchases/orders?status=${s}`}
-        />
-        <StatusBoard
-          icon={CreditCardIcon}
-          title="Supplier bills"
-          sub={a ? `${lkr(a.outstanding_cents)} LKR outstanding across ${openBills} bill${openBills === 1 ? "" : "s"}` : "Bills by payment status"}
-          action={<HeadLink href="/purchases/invoices">All bills</HeadLink>}
-          states={BILL_STATES}
-          counts={billCounts}
-          loading={billsLoading}
-          href={(s) => `/purchases/invoices?status=${s}`}
-        />
-      </div>
-
-      {/* ---------------------------------------------------- where it goes */}
-      <SectionHead index="03" title="Where the money goes" sub="This month's purchases" />
-      <div className="grid gap-4 lg:grid-cols-3">
-        <MixCard icon={TruckIcon} title="By supplier" sub="Top suppliers by spend" rows={bySupplier.data} loading={bySupplier.isLoading} fallback="Unknown" by="value" />
-        <MixCard icon={GemIcon} title="By purity" sub="Gold received" rows={byPurity.data} loading={byPurity.isLoading} fallback="Unspecified" by="gold" />
-        <MixCard icon={TagsIcon} title="By category" sub="What you are stocking" rows={byCategory.data} loading={byCategory.isLoading} fallback="Uncategorised" by="value" />
-      </div>
-
       {/* ---------------------------------------------------------- activity */}
-      <SectionHead index="04" title="Worklist" sub="Orders to receive and the latest bills" />
+      <SectionHead index="01" title="Needs attention" sub="Orders waiting to be received and the latest supplier bills" />
       <div className="grid gap-4 lg:grid-cols-5">
         <Card className="lg:col-span-2">
           <CardHead
@@ -388,6 +419,39 @@ export default function PurchasingDashboardPage() {
           </div>
         </Card>
       </div>
+      {/* ------------------------------------------------------- pipelines */}
+      <SectionHead index="02" title="Orders & payables" sub="Where orders stand, and what is still owed — tap a state to open it" />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <StatusBoard
+          icon={FileTextIcon}
+          title="Order pipeline"
+          sub={ordersLoading ? "Purchase orders by status" : `${openCount} open · ${orderCounts[2] ?? 0} received`}
+          action={<HeadLink href="/purchases/orders">All orders</HeadLink>}
+          states={ORDER_STATES}
+          counts={orderCounts}
+          loading={ordersLoading}
+          href={(s) => `/purchases/orders?status=${s}`}
+        />
+        <StatusBoard
+          icon={CreditCardIcon}
+          title="Supplier bills"
+          sub={a ? `${lkr(a.outstanding_cents)} LKR outstanding across ${openBills} bill${openBills === 1 ? "" : "s"}` : "Bills by payment status"}
+          action={<HeadLink href="/purchases/invoices">All bills</HeadLink>}
+          states={BILL_STATES}
+          counts={billCounts}
+          loading={billsLoading}
+          href={(s) => `/purchases/invoices?status=${s}`}
+        />
+      </div>
+
+      {/* ---------------------------------------------------- where it goes */}
+      <SectionHead index="03" title="Where the money goes" sub="This month's purchases" />
+      <div className="grid gap-4 lg:grid-cols-3">
+        <MixCard icon={TruckIcon} title="By supplier" sub="Top suppliers by spend" rows={bySupplier.data} loading={bySupplier.isLoading} fallback="Unknown" by="value" />
+        <MixCard icon={GemIcon} title="By purity" sub="Gold received" rows={byPurity.data} loading={byPurity.isLoading} fallback="Unspecified" by="gold" />
+        <MixCard icon={TagsIcon} title="By category" sub="What you are stocking" rows={byCategory.data} loading={byCategory.isLoading} fallback="Uncategorised" by="value" />
+      </div>
+
     </Page>
   );
 }

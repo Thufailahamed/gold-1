@@ -24,7 +24,6 @@ import {
   Row,
   Screen,
   Section,
-  SelectField,
   Sheet,
   StatTile,
   Text,
@@ -431,11 +430,8 @@ export default function CountDetailScreen() {
 
 function ApproveSheet({ countId, missing, expected, onClose, onDone }: { countId: string; missing: number; expected: number; onClose: () => void; onDone: () => void }) {
   const [reason, setReason] = useState("");
-  const [approvedBy, setApprovedBy] = useState("");
-  const approvers = useQuery({ queryKey: ["count-approvers", countId], queryFn: () => api<{ id: string; name: string }[]>(`/api/v1/counts/${countId}/approvers`) });
-  const list = approvers.data ?? [];
   const approve = useMutation({
-    mutationFn: () => api<{ posted: number }>(`/api/v1/counts/${countId}/approve`, { method: "POST", body: JSON.stringify({ reason: reason.trim(), approvedBy }) }),
+    mutationFn: () => api<{ posted: number }>(`/api/v1/counts/${countId}/approve`, { method: "POST", body: JSON.stringify({ reason: reason.trim() }) }),
     onSuccess: (res) => {
       toast.success(res.posted > 0 ? `Count approved: ${plural(res.posted, "piece")} written off as LOST` : "Count approved, nothing written off");
       onDone();
@@ -451,7 +447,7 @@ function ApproveSheet({ countId, missing, expected, onClose, onDone }: { countId
       destructive={missing > 0}
       onSubmit={() => approve.mutate()}
       submitting={approve.isPending}
-      canSubmit={!!reason.trim() && !!approvedBy}
+      canSubmit={!!reason.trim()}
     >
       <FormStack>
         {missing > 0 ? (
@@ -463,25 +459,6 @@ function ApproveSheet({ countId, missing, expected, onClose, onDone }: { countId
             Approving closes the count and releases the stock lock. No pieces will be written off.
           </Callout>
         )}
-        <SelectField
-          label="Second approver"
-          value={approvedBy}
-          options={list.map((u) => ({ value: u.id, label: u.name }))}
-          onChange={setApprovedBy}
-          disabled={approvers.isLoading || list.length === 0}
-          placeholder={approvers.isLoading ? "Loading…" : list.length === 0 ? "No eligible approvers" : "Select approver…"}
-          hint={approvers.isSuccess && list.length === 0 ? undefined : "Another user with gold:manage who is not you and did not open this count."}
-        />
-        {approvers.isSuccess && list.length === 0 ? (
-          <Callout tone="warning" title="No eligible approver" style={{ marginHorizontal: 0 }}>
-            A count must be approved by a second person. Ask an administrator to give another user the gold:manage permission (someone other than you and the person who opened this count).
-          </Callout>
-        ) : null}
-        {approvers.isError ? (
-          <Callout tone="danger" title="Could not load approvers" style={{ marginHorizontal: 0 }}>
-            {errorMessage(approvers.error, "Please try again.")}
-          </Callout>
-        ) : null}
         <Field label="Reason" multiline value={reason} onChangeText={setReason} maxLength={500} placeholder="e.g. Monthly showcase count, missing pieces investigated" hint={`${reason.length}/500`} />
       </FormStack>
     </Sheet>

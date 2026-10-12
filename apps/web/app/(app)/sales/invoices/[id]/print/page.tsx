@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { api, assetUrl } from "@/lib/api";
 import { amountInWords } from "@/lib/barcode";
 import { Page, Skeleton, Callout } from "@/components/ui";
-import { ArrowLeftIcon, PrinterIcon, FileDownIcon } from "@/components/icons";
+import { ArrowLeftIcon, PrinterIcon, FileDownIcon, SendIcon } from "@/components/icons";
 
 type Detail = {
   invoice: {
@@ -163,46 +163,106 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
   const shareText = `${shop.shopName} — Invoice ${invoice.number}\nTotal: LKR ${fmt(invoice.total_cents)}${balance > 0 ? `\nBalance due: LKR ${fmt(balance)}` : "\nPaid in full"}\nThank you!`;
 
   return (
-    <Page>
+    <Page className="space-y-6">
       <style>{receipt ? `@media print { @page { size: 80mm auto; margin: 3mm; } }` : `@media print { @page { size: A4; margin: 8mm; } }`}</style>
-      <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <button onClick={() => router.back()} className="g-btn g-btn-secondary h-10 px-4 text-sm">
-          <ArrowLeftIcon size={15} /> Back
-        </button>
-        <div className="flex flex-wrap gap-2">
-          <div className="inline-flex rounded-lg bg-ink/[0.05] p-0.5 text-sm">
-            {[
-              { k: false, label: "A4 invoice" },
-              { k: true, label: "Receipt 80mm" },
-            ].map((o) => (
-              <button
-                key={o.label}
-                onClick={() => setReceipt(o.k)}
-                className={cn("rounded-md px-3 py-1.5", receipt === o.k ? "bg-paper font-medium text-ink shadow-sm" : "text-ink-3")}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
-          {invoice.customer_phone ? (
-            <a
-              href={`https://wa.me/${waNumber(invoice.customer_phone)}?text=${encodeURIComponent(shareText)}`}
-              target="_blank"
-              rel="noreferrer"
-              className="g-btn g-btn-secondary h-10 px-4 text-sm"
+      {/* Studio bar — screen only */}
+      <section className="relative overflow-hidden rounded-[24px] bg-void text-paper shadow-5 ring-1 ring-gold/10 print:hidden">
+        <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-50" aria-hidden />
+        <div className="home-drift pointer-events-none absolute -right-20 -top-28 size-72 rounded-full bg-gold/20 blur-[100px]" aria-hidden />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" aria-hidden />
+        <div className="relative flex flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-3.5">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              aria-label="Back"
+              className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-paper/[0.06] text-paper/70 ring-1 ring-paper/10 transition-all hover:-translate-x-0.5 hover:bg-paper/[0.1] hover:text-gold-light"
             >
-              WhatsApp
-            </a>
-          ) : null}
-          <button onClick={() => window.print()} className="g-btn g-btn-secondary h-10 px-4 text-sm" title="Choose “Save as PDF” in the print dialog">
-            <FileDownIcon size={15} /> PDF
-          </button>
-          <button onClick={() => window.print()} className="g-btn g-btn-primary h-10 px-4 text-sm">
-            <PrinterIcon size={15} /> Print
-          </button>
-        </div>
-      </div>
+              <ArrowLeftIcon size={16} />
+            </button>
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-light to-gold text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_10px_22px_-10px_rgba(205,168,83,0.7)]">
+              <PrinterIcon size={18} />
+            </span>
+            <div className="min-w-0">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">Print preview</div>
+              <div className="mt-0.5 flex items-center gap-2">
+                <span className="g-metric truncate text-lg text-paper">{invoice.number}</span>
+                <span className="rounded-full bg-paper/[0.08] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-paper/70 ring-1 ring-paper/10">
+                  {status.label}
+                </span>
+              </div>
+            </div>
+          </div>
 
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              role="tablist"
+              aria-label="Format"
+              className="relative grid grid-cols-2 rounded-xl bg-paper/[0.06] p-1 ring-1 ring-paper/10"
+            >
+              <span
+                aria-hidden
+                className="absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/2)] rounded-lg bg-gradient-to-b from-gold-light to-gold shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_8px_18px_-10px_rgba(205,168,83,0.8)] transition-transform duration-320 ease-brand"
+                style={{ transform: `translateX(${receipt ? 100 : 0}%)` }}
+              />
+              {[
+                { k: false, label: "A4 invoice", sub: "210 × 297" },
+                { k: true, label: "Receipt", sub: "80 mm" },
+              ].map((o) => (
+                <button
+                  key={o.label}
+                  type="button"
+                  role="tab"
+                  aria-selected={receipt === o.k}
+                  onClick={() => setReceipt(o.k)}
+                  className={cn(
+                    "relative flex h-10 flex-col items-center justify-center rounded-lg px-4 leading-tight transition-colors duration-200",
+                    receipt === o.k ? "text-void" : "text-paper/60 hover:text-paper"
+                  )}
+                >
+                  <span className="text-[13px] font-semibold">{o.label}</span>
+                  <span className={cn("g-metric text-[9px]", receipt === o.k ? "text-void/60" : "text-paper/35")}>{o.sub}</span>
+                </button>
+              ))}
+            </div>
+            {invoice.customer_phone ? (
+              <a
+                href={`https://wa.me/${waNumber(invoice.customer_phone)}?text=${encodeURIComponent(shareText)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="home-btn-ghost h-12 px-4 text-sm"
+              >
+                <SendIcon size={15} /> WhatsApp
+              </a>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="home-btn-ghost h-12 px-4 text-sm"
+              title="Choose “Save as PDF” in the print dialog"
+            >
+              <FileDownIcon size={15} /> PDF
+            </button>
+            <button type="button" onClick={() => window.print()} className="home-btn-gold h-12 px-5 text-sm">
+              <PrinterIcon size={15} /> Print
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Stage — screen-only backdrop; print CSS shows only .print-area, pinned top-left. */}
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-[28px] bg-gradient-to-b from-mist/70 via-bone to-bone px-3 py-6 ring-1 ring-ink/[0.06] sm:px-8 sm:py-10",
+          "print:static print:overflow-visible print:rounded-none print:bg-none print:p-0 print:ring-0"
+        )}
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-60 [background-image:radial-gradient(rgba(16,32,27,0.07)_1px,transparent_1px)] [background-size:18px_18px] print:hidden"
+        />
+        <div aria-hidden className="pointer-events-none absolute -top-24 left-1/2 size-[30rem] -translate-x-1/2 rounded-full bg-gold/10 blur-[100px] print:hidden" />
+        <div className="relative print:static">
       {receipt ? (
         <ThermalReceipt
           id={id}
@@ -216,12 +276,21 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
           status={status.label}
         />
       ) : (
-        <article className="print-area invoice-sheet mx-auto w-full max-w-[210mm] animate-fade-in overflow-hidden rounded-2xl bg-paper text-ink shadow-elevated ring-1 ring-ink/10 print:max-w-none print:rounded-none print:shadow-none print:ring-0">
+        <article className="print-area invoice-sheet mx-auto w-full max-w-[210mm] animate-fade-in overflow-hidden rounded-[18px] bg-paper text-ink shadow-[0_1px_2px_rgba(16,32,27,0.06),0_40px_80px_-36px_rgba(16,32,27,0.45)] ring-1 ring-ink/[0.08] print:max-w-none print:rounded-none print:shadow-none print:ring-0">
           {/* Letterhead */}
           <div className="h-1.5 bg-gradient-to-r from-gold-deep via-gold to-gold-light" />
+          <div className="h-px bg-void/80" />
           <header className="flex flex-wrap items-start justify-between gap-6 px-10 pb-6 pt-8 print:px-2 print:pb-4 print:pt-4">
             <div className="min-w-0 max-w-[60%]">
-              <h1 className="font-display text-[28px] font-bold leading-tight tracking-tight text-ink">{shop.shopName}</h1>
+              <div className="flex items-center gap-3">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.35)]">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" className="size-5" aria-hidden>
+                    <path d="M6 3h12l4 6-10 13L2 9Z" />
+                    <path d="M2 9h20M12 22 8 9l4-6 4 6-4 13" />
+                  </svg>
+                </span>
+                <h1 className="font-display text-[28px] font-bold leading-tight tracking-tight text-ink">{shop.shopName}</h1>
+              </div>
               {shop.header ? <p className="mt-0.5 text-sm italic text-gold-deep">{shop.header}</p> : null}
               <div className="mt-2 space-y-0.5 text-[12.5px] leading-relaxed text-ink-3">
                 {shop.address ? <p className="whitespace-pre-line">{shop.address}</p> : null}
@@ -255,9 +324,9 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
           </header>
 
           {/* Parties */}
-          <section className="mx-10 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-ink/10 ring-1 ring-ink/10 print:mx-2">
+          <section className="mx-10 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-ink/10 ring-1 ring-ink/10 print:mx-2 print:rounded-xl">
             <div className="bg-bone px-5 py-4">
-              <p className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-ink-4">Bill to</p>
+              <p className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.2em] text-gold-deep"><span className="size-1.5 rounded-full bg-gold" />Bill to</p>
               <p className="mt-1.5 text-[15px] font-semibold text-ink">{invoice.customer_name ?? "Walk-in customer"}</p>
               <div className="mt-1 space-y-0.5 text-[12.5px] text-ink-3">
                 {invoice.customer_code ? <p className="font-mono">{invoice.customer_code}</p> : null}
@@ -267,7 +336,7 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
               </div>
             </div>
             <div className="bg-bone px-5 py-4">
-              <p className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-ink-4">Sale details</p>
+              <p className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.2em] text-gold-deep"><span className="size-1.5 rounded-full bg-gold" />Sale details</p>
               <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 text-[12.5px]">
                 <dt className="text-ink-4">Branch</dt>
                 <dd className="text-ink">{invoice.branch_name ?? "—"}{invoice.branch_code ? ` (${invoice.branch_code})` : ""}</dd>
@@ -289,21 +358,21 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
           <section className="px-10 pt-6 print:px-2 print:pt-4">
             <table className="w-full border-collapse text-[12.5px]">
               <thead>
-                <tr className="border-b-2 border-ink text-left text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-3">
-                  <th className="w-7 py-2 pr-2">#</th>
+                <tr className="border-b-2 border-gold-dark bg-bone text-left text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-3">
+                  <th className="w-7 py-2.5 pl-2 pr-2">#</th>
                   <th className="py-2 pr-2">Description</th>
                   <th className="py-2 pr-2 text-center">Purity</th>
                   <th className="py-2 pr-2 text-right">Gross g</th>
                   <th className="py-2 pr-2 text-right">Net g</th>
                   <th className="py-2 pr-2 text-right">Making</th>
                   <th className="py-2 pr-2 text-right">Amount</th>
-                  <th className="py-2 text-right">Disc.</th>
+                  <th className="py-2.5 pr-2 text-right">Disc.</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((it, i) => (
                   <tr key={i} className="border-b border-ink/10 align-top">
-                    <td className="py-2.5 pr-2 text-ink-4 num-tabular">{i + 1}</td>
+                    <td className="py-2.5 pl-2 pr-2 text-ink-4 num-tabular">{i + 1}</td>
                     <td className="py-2.5 pr-2">
                       <p className="font-medium text-ink">{it.name}</p>
                       <p className="font-mono text-[10.5px] text-ink-4">
@@ -311,17 +380,19 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
                         {it.stone_mg > 0 ? ` · stone ${grams(it.stone_mg)} g` : ""}
                       </p>
                     </td>
-                    <td className="py-2.5 pr-2 text-center font-medium">{it.karat}</td>
+                    <td className="py-2.5 pr-2 text-center">
+                      <span className="inline-block rounded-md bg-gold-pale px-1.5 py-0.5 text-[11px] font-semibold text-gold-deep ring-1 ring-gold-dark/20">{it.karat}</span>
+                    </td>
                     <td className="py-2.5 pr-2 text-right num-tabular text-ink-2">{grams(it.gross_mg)}</td>
                     <td className="py-2.5 pr-2 text-right num-tabular text-ink-2">{grams(it.net_mg)}</td>
                     <td className="py-2.5 pr-2 text-right num-tabular text-ink-2">{fmt(it.making_cents)}</td>
                     <td className="py-2.5 pr-2 text-right num-tabular font-medium">{fmt(it.price_cents)}</td>
-                    <td className="py-2.5 text-right num-tabular text-ink-2">{it.discount_cents ? fmt(it.discount_cents) : "—"}</td>
+                    <td className="py-2.5 pr-2 text-right num-tabular text-ink-2">{it.discount_cents ? fmt(it.discount_cents) : "—"}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr className="text-[11.5px] font-semibold text-ink-3">
+                <tr className="border-t border-ink/20 text-[11.5px] font-semibold text-ink-3">
                   <td />
                   <td className="py-2 pr-2">Totals</td>
                   <td />
@@ -329,7 +400,7 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
                   <td className="py-2 pr-2 text-right num-tabular">{grams(totals.net)}</td>
                   <td className="py-2 pr-2 text-right num-tabular">{fmt(totals.making)}</td>
                   <td className="py-2 pr-2 text-right num-tabular">{fmt(invoice.subtotal_cents)}</td>
-                  <td className="py-2 text-right num-tabular">{invoice.discount_cents ? fmt(invoice.discount_cents) : "—"}</td>
+                  <td className="py-2 pr-2 text-right num-tabular">{invoice.discount_cents ? fmt(invoice.discount_cents) : "—"}</td>
                 </tr>
               </tfoot>
             </table>
@@ -338,8 +409,8 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
           {/* Money */}
           <section className="grid grid-cols-[1fr_minmax(0,19rem)] gap-8 px-10 pt-4 print:px-2">
             <div className="space-y-4 text-[12.5px]">
-              <div>
-                <p className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-ink-4">Amount in words</p>
+              <div className="rounded-xl bg-gold-pale/70 px-3.5 py-2.5 ring-1 ring-gold-dark/15">
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-gold-deep">Amount in words</p>
                 <p className="mt-1 font-medium text-ink">{amountInWords(invoice.total_cents)}</p>
               </div>
               <div>
@@ -416,9 +487,10 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
                   </>
                 ) : null}
               </dl>
-              <div className="mt-3 flex items-baseline justify-between rounded-xl bg-ink px-4 py-3 text-paper print:bg-ink">
+              <div className="relative mt-3 flex items-baseline justify-between overflow-hidden rounded-xl bg-void px-4 py-3.5 text-paper shadow-[inset_0_0_0_1px_rgba(205,168,83,0.3)]">
+                <span className="absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-gold to-transparent" aria-hidden />
                 <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gold-light">Total LKR</span>
-                <span className="font-display text-2xl font-bold num-tabular">{fmt(invoice.total_cents)}</span>
+                <span className="font-display text-2xl font-bold text-gold-light num-tabular">{fmt(invoice.total_cents)}</span>
               </div>
               <dl className="mt-3 space-y-1.5 text-[13px] num-tabular">
                 <div className="flex justify-between text-ink-2">
@@ -458,6 +530,12 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
           </footer>
         </article>
       )}
+        </div>
+        <p className="relative mt-5 text-center text-[11px] text-ink-4 print:hidden">
+          {receipt ? "80 mm thermal slip" : "A4 · prints edge to edge with 8 mm margins"} · use <span className="font-medium text-ink-3">PDF</span> and pick
+          “Save as PDF” to share digitally
+        </p>
+      </div>
     </Page>
   );
 }
@@ -491,7 +569,7 @@ function ThermalReceipt({
     </p>
   );
   return (
-    <div className="print-area mx-auto w-full max-w-[80mm] animate-fade-in rounded-md bg-paper p-3 font-mono text-[11.5px] leading-snug text-ink shadow-elevated ring-1 ring-ink/10 print:max-w-none print:rounded-none print:p-0 print:shadow-none print:ring-0">
+    <div className="print-area mx-auto w-full max-w-[80mm] animate-fade-in rounded-[10px] bg-paper p-4 font-mono text-[11.5px] leading-snug text-ink shadow-[0_1px_2px_rgba(16,32,27,0.06),0_30px_60px_-28px_rgba(16,32,27,0.45)] ring-1 ring-ink/[0.08] print:max-w-none print:rounded-none print:p-0 print:shadow-none print:ring-0">
       <div className="text-center">
         <p className="font-sans text-lg font-bold">{shop.shopName}</p>
         {shop.header ? <p className="text-[10.5px]">{shop.header}</p> : null}

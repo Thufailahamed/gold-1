@@ -3,7 +3,7 @@ import { View } from "react-native";
 import { router, Stack, useLocalSearchParams, type Href } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { extractScanCode } from "@goldos/shared";
-import { api, PendingApprovalError } from "@/lib/api";
+import { api } from "@/lib/api";
 import { dateTime } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { GUTTER, useTheme } from "@/theme";
@@ -84,11 +84,7 @@ export default function InvoiceDetailScreen() {
   const [reason, setReason] = useState("");
   const [refundMethod, setRefundMethod] = useState("original");
   const [refundBank, setRefundBank] = useState("");
-  const [approvedBy, setApprovedBy] = useState("");
   const [retScan, setRetScan] = useState("");
-  // A return over the threshold waits in the Approval Center; the retry
-  // carries the approval id and must keep the same items and type.
-  const [retPending, setRetPending] = useState<{ approvalId: string; sig: string } | null>(null);
 
   const banks = useQuery({
     queryKey: ["pos-bank-accounts", "all"],
@@ -96,14 +92,6 @@ export default function InvoiceDetailScreen() {
     enabled: retOpen && refundMethod === "bank",
     retry: false,
   });
-  const approvers = useQuery({
-    queryKey: ["pos-approvers"],
-    queryFn: () => api<{ id: string; name: string }[]>("/api/v1/sales/approvers"),
-    enabled: retOpen,
-    retry: false,
-  });
-  const retSig = JSON.stringify([type, [...selected].sort()]);
-  const retApproval = retPending && retPending.sig === retSig ? retPending : null;
 
   const detail = useQuery({ queryKey: ["sale", id], queryFn: () => api<Detail>(`/api/v1/sales/invoices/${id}`), enabled: !!id });
   const refresh = useRefresh(detail);
@@ -119,8 +107,6 @@ export default function InvoiceDetailScreen() {
           reason,
           refundMethod,
           refundBankAccountId: refundMethod === "bank" && refundBank ? refundBank : undefined,
-          approvedBy: retApproval ? undefined : approvedBy || undefined,
-          approvalId: retApproval?.approvalId,
         }),
       }),
     onSuccess: (d) => {
@@ -128,16 +114,10 @@ export default function InvoiceDetailScreen() {
       setRetOpen(false);
       setSelected([]);
       setReason("");
-      setRetPending(null);
       void qc.invalidateQueries({ queryKey: ["sale", id] });
       void qc.invalidateQueries({ queryKey: ["sale-print", id] });
     },
     onError: (e) => {
-      if (e instanceof PendingApprovalError && e.approvalId) {
-        setRetPending({ approvalId: e.approvalId, sig: retSig });
-        toast.info("Return sent for approval", "Once it is approved in the Approval Center, record the return again.");
-        return;
-      }
       toast.error(e, "Return failed");
     },
   });
@@ -388,17 +368,12 @@ export default function InvoiceDetailScreen() {
         visible={retOpen}
         onClose={() => setRetOpen(false)}
         title="Record return"
-        submitLabel={retApproval ? "Record approved" : "Record"}
+        submitLabel="Record"
         onSubmit={() => ret.mutate()}
         submitting={ret.isPending}
         canSubmit={!!reason && (type === "FULL" || selected.length > 0)}
       >
         <FormStack>
-          {retApproval ? (
-            <Callout tone="warning" title="Waiting for approval" style={{ marginHorizontal: 0 }}>
-              Once this return is approved in the Approval Center, press Record again. Changing the items or type cancels the request.
-            </Callout>
-          ) : null}
           <SelectField
             label="Type"
             value={type}
@@ -471,15 +446,6 @@ export default function InvoiceDetailScreen() {
               The part bought on credit comes off what the customer owes; only money actually paid is refunded.
             </Text>
           ) : null}
-          <SelectField
-            label="Counter approver (large returns)"
-            value={approvedBy}
-            allowClear
-            clearLabel="None"
-            placeholder="None"
-            options={(approvers.data ?? []).map((u) => ({ value: u.id, label: u.name }))}
-            onChange={setApprovedBy}
-          />
           {type === "EXCHANGE" ? (
             <Text variant="footnote" tone="secondary">
               After recording, start the replacement sale from the Returns section — pick Store credit to carry the refund into it.

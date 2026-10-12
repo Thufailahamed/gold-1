@@ -105,10 +105,8 @@ describe.skipIf(!sqliteAvailable)("inventory lifecycle over real SQLite", () => 
     await expect(requestTransfer(db, { fromBranchId: "b1", toBranchId: "b2", productIds: [ids.a!.id] }, "u1")).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
-  it("moves a piece request → approve → dispatch → receive with the gold following it", async () => {
-    const { approveTransfer, dispatchTransfer, receiveLines, reconcileTransfer, getTransferDetail } = await import("./transfers");
-    await expect(approveTransfer(db, transferId, "u1", "u1")).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await approveTransfer(db, transferId, "u2", "u2");
+  it("moves a piece request → dispatch → receive with the gold following it", async () => {
+    const { dispatchTransfer, receiveLines, reconcileTransfer, getTransferDetail } = await import("./transfers");
     await dispatchTransfer(db, transferId, "u1");
     expect(status(ids.a!.id)).toEqual({ status: "TRANSFER_PENDING", branch_id: "b1" });
     const r = await receiveLines(db, transferId, [ids.a!.barcode.toLowerCase()], "u3");
@@ -116,7 +114,7 @@ describe.skipIf(!sqliteAvailable)("inventory lifecycle over real SQLite", () => 
     expect(status(ids.a!.id)).toEqual({ status: "IN_STOCK", branch_id: "b2" });
     expect(await reconcileTransfer(db, transferId)).toEqual({ passed: true, warnings: [] });
     const d = await getTransferDetail(db, transferId);
-    expect(d).toMatchObject({ status: "COMPLETE", fromBranchName: "Main", toBranchName: "Kandy", approvedByName: "Owner" });
+    expect(d).toMatchObject({ status: "COMPLETE", fromBranchName: "Main", toBranchName: "Kandy" });
     expect(d.lines[0]).toMatchObject({ name: "Ring a", status: "RECEIVED" });
   });
 

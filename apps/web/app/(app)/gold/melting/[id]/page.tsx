@@ -52,7 +52,6 @@ export default function MeltDetailPage({ params }: { params: Promise<{ id: strin
   const [waste, setWaste] = useState("");
   const [otype, setOtype] = useState("grain");
   const [reason, setReason] = useState("");
-  const [approver, setApprover] = useState("");
 
   const detail = useQuery({
     queryKey: ["melt", id],
@@ -269,7 +268,7 @@ export default function MeltDetailPage({ params }: { params: Promise<{ id: strin
           kicker="Gold"
           title="Approve reconciliation"
           onClose={() => setDialog(null)}
-          onSubmit={() => call("/approve", "POST", { reason, approvedBy: approver || undefined }, "Approved")}
+          onSubmit={() => call("/approve", "POST", { reason }, "Approved")}
           submitDisabled={!reason}
           submitLabel="Approve"
         >
@@ -278,9 +277,6 @@ export default function MeltDetailPage({ params }: { params: Promise<{ id: strin
           </Callout>
           <label className="block text-sm text-ink-2">Reason (required)
             <input value={reason} onChange={(e) => setReason(e.target.value)} className={controlClass} />
-          </label>
-          <label className="block text-sm text-ink-2">Approver ID (if over threshold)
-            <input value={approver} onChange={(e) => setApprover(e.target.value)} className={controlClass} />
           </label>
         </Modal>
       ) : null}

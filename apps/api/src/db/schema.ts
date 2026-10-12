@@ -361,6 +361,8 @@ export const salesItems = sqliteTable("sales_items", {
   discountCents: integer("discount_cents").notNull().default(0),
   taxCents: integer("tax_cents").notNull().default(0),
   costCents: integer("cost_cents").notNull(),
+  /** Shelf price shown at the till; null = sold at shelf. */
+  listPriceCents: integer("list_price_cents"),
 });
 
 export const salesPayments = sqliteTable("sales_payments", {

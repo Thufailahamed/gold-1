@@ -7,11 +7,9 @@ import { cn } from "@/lib/cn";
 import { api } from "@/lib/api";
 import { useCountUp } from "@/lib/count-up";
 import { SpotlightCard } from "@/components/home/motion";
+import { Select } from "@/components/select";
 import {
   Callout,
-  controlSmClass,
-  Field,
-  FilterChips,
   Skeleton,
   StatusPill,
 } from "@/components/ui";
@@ -77,19 +75,19 @@ export function InventoryHero({
       label: "Pieces on hand",
       value: dash ? "—" : (t?.pieces ?? 0).toLocaleString("en-US"),
       sub: dash ? undefined : `${insights?.byBranch.length ?? 0} branches`,
-      icon: <PackageIcon size={14} />,
+      icon: <PackageIcon size={16} />,
     },
     {
       label: "Net weight",
       value: dash ? "—" : `${grams(t?.net_mg ?? 0)} g`,
       sub: dash ? undefined : `${insights?.byKarat.length ?? 0} purities`,
-      icon: <ScaleIcon size={14} />,
+      icon: <ScaleIcon size={16} />,
     },
     {
       label: "Fine gold",
       value: dash ? "—" : `${grams(t?.fine_mg ?? 0)} g`,
       sub: dash || avgPurity === 0 ? undefined : `${avgPurity.toFixed(1)}% average purity`,
-      icon: <GemIcon size={14} />,
+      icon: <GemIcon size={16} />,
     },
     {
       label: "Stock value",
@@ -101,24 +99,28 @@ export function InventoryHero({
           Set board rates <ArrowRightIcon size={11} />
         </Link>
       ),
-      icon: <ArchiveIcon size={14} />,
+      icon: <ArchiveIcon size={16} />,
     },
   ];
 
   return (
-    <section className="relative overflow-hidden rounded-2xl bg-void text-paper shadow-4">
-      <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-50" aria-hidden />
+    <section className="relative overflow-hidden rounded-[28px] bg-void text-paper shadow-5 ring-1 ring-gold/10">
+      <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-60" aria-hidden />
       <div
-        className="home-drift pointer-events-none absolute -right-24 -top-32 size-72 rounded-full bg-gold/20 blur-[100px]"
+        className="home-drift pointer-events-none absolute -right-24 -top-32 size-[22rem] rounded-full bg-gold/20 blur-[120px]"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute -bottom-40 -left-24 size-80 rounded-full bg-emerald-400/10 blur-[110px]"
         aria-hidden
       />
       <div className="home-noise pointer-events-none absolute inset-0" aria-hidden />
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent"
         aria-hidden
       />
 
-      <div className="relative flex flex-col gap-4 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+      <div className="relative flex flex-col gap-5 px-5 py-6 sm:px-7 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8 lg:py-7">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span
@@ -134,9 +136,14 @@ export function InventoryHero({
               <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-paper/40">{today}</span>
             ) : null}
           </div>
-          <h1 className="g-display mt-2 text-2xl leading-tight text-paper sm:text-[28px]">
+          <h1 className="g-display mt-3 text-3xl leading-tight text-paper sm:text-[2.4rem]">
             Every gram, <span className="home-gold-text">accounted for.</span>
           </h1>
+          {!error ? (
+            <p className="mt-2 max-w-lg text-sm leading-relaxed text-paper/55">
+              Live weights, fine gold and value across every branch — scan a piece to move it.
+            </p>
+          ) : null}
           {error ? (
             <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-paper/60">
               {error}
@@ -152,30 +159,35 @@ export function InventoryHero({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Link href="/scan" className="home-btn-gold h-10 px-4 text-sm">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Link href="/scan" className="home-btn-gold h-11 px-5 text-sm">
             <ScanBarcodeIcon size={15} />
             Scan to move stock
           </Link>
-          <button type="button" onClick={onRecord} className="home-btn-ghost h-10 px-4 text-sm">
+          <button type="button" onClick={onRecord} className="home-btn-ghost group h-11 px-5 text-sm">
             Record movement
-            <ArrowRightIcon size={14} />
+            <ArrowRightIcon size={14} className="transition-transform duration-200 group-hover:translate-x-0.5" />
           </button>
         </div>
       </div>
 
-      <div className="relative grid grid-cols-2 border-t border-paper/[0.08] lg:grid-cols-4">
+      <div className="relative grid grid-cols-2 gap-px border-t border-paper/[0.08] bg-paper/[0.06] lg:grid-cols-4">
         {strip.map((s, i) => (
           <div
             key={s.label}
             className={cn(
-              "flex min-w-0 items-center gap-3 px-4 py-3 sm:px-6",
-              i % 2 === 1 && "border-l border-paper/[0.08]",
-              i >= 2 && "border-t border-paper/[0.08] lg:border-t-0",
-              i === 2 && "lg:border-l"
+              "group flex min-w-0 items-center gap-3.5 bg-void/95 px-4 py-4 transition-colors hover:bg-void/80 sm:px-6",
+              i === 2 && "bg-gradient-to-br from-void/95 to-[#0d3a2c]/95"
             )}
           >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-paper/[0.05] text-gold-light ring-1 ring-paper/[0.08]">
+            <span
+              className={cn(
+                "flex size-10 shrink-0 items-center justify-center rounded-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 transition-colors",
+                i === 2
+                  ? "bg-gradient-to-b from-gold-light to-gold text-void ring-gold/40"
+                  : "bg-gradient-to-b from-paper/[0.09] to-paper/[0.03] text-gold-light ring-paper/[0.09] group-hover:text-gold"
+              )}
+            >
               {s.icon}
             </span>
             <span className="min-w-0">
@@ -183,9 +195,11 @@ export function InventoryHero({
                 {s.label}
               </span>
               {loading ? (
-                <Skeleton className="mt-1 h-5 w-24 bg-paper/10" />
+                <Skeleton className="mt-1 h-6 w-24 bg-paper/10" />
               ) : (
-                <span className="g-metric mt-0.5 block truncate text-[15px] text-paper">{s.value}</span>
+                <span className={cn("g-metric mt-0.5 block truncate text-xl leading-tight", i === 2 ? "text-gold-light" : "text-paper")}>
+                  {s.value}
+                </span>
               )}
               {s.sub ? <span className="mt-0.5 block truncate text-[11px] text-paper/45">{s.sub}</span> : null}
             </span>
@@ -227,7 +241,7 @@ export function QueryError({
           "mb-3 flex size-10 items-center justify-center rounded-xl",
           dark
             ? "bg-paper/[0.06] text-gold-light"
-            : "bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.08)]"
+            : "bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)]"
         )}
       >
         <AlertCircleIcon size={18} />
@@ -270,7 +284,7 @@ function DarkEmpty({ title, desc }: { title: string; desc: string }) {
 function LightEmpty({ title, desc }: { title: string; desc: string }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-ink/[0.12] bg-bone/60 px-6 py-9 text-center">
-      <span className="mb-3 flex size-10 items-center justify-center rounded-xl bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.08)]">
+      <span className="mb-3 flex size-10 items-center justify-center rounded-xl bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)]">
         <GemIcon size={18} />
       </span>
       <p className="text-sm font-medium text-ink">{title}</p>
@@ -323,7 +337,9 @@ export function StockByKarat({
       />
     ) : null;
   return (
-    <section className="relative flex flex-col overflow-hidden rounded-2xl bg-void p-5 text-paper shadow-4 sm:p-6" aria-label="Stock by karat">
+    <section className="relative flex flex-col overflow-hidden rounded-[22px] bg-void p-5 text-paper shadow-5 ring-1 ring-gold/10 sm:p-6" aria-label="Stock by karat">
+      <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" aria-hidden />
+      <div className="home-noise pointer-events-none absolute inset-0" aria-hidden />
       <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-50" aria-hidden />
       <div
         className="home-drift pointer-events-none absolute -right-20 -top-20 size-64 rounded-full bg-gold/20 blur-[90px]"
@@ -331,8 +347,8 @@ export function StockByKarat({
       />
 
       <div className="relative flex items-center gap-3">
-        <span className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-b from-gold-light to-gold-deep text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
-          <GemIcon size={16} />
+        <span className="flex size-11 items-center justify-center rounded-xl bg-gradient-to-b from-gold-light to-gold-deep text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_10px_22px_-10px_rgba(205,168,83,0.6)]">
+          <GemIcon size={18} />
         </span>
         <div className="min-w-0">
           <h2 className="font-sans text-[15px] font-semibold tracking-normal text-paper">
@@ -354,7 +370,7 @@ export function StockByKarat({
         ) : (
           <>
             <div
-              className="flex h-2 gap-[3px] overflow-hidden rounded-full bg-paper/[0.06]"
+              className="flex h-2.5 gap-[3px] overflow-hidden rounded-full bg-paper/[0.06] p-px ring-1 ring-paper/[0.06]"
               role="img"
               aria-label={`Fine gold split across ${rows.length} ${
                 rows.length === 1 ? "purity" : "purities"
@@ -394,7 +410,7 @@ export function StockByKarat({
                 return (
                   <li
                     key={r.purity_id}
-                    className="rounded-xl bg-paper/[0.03] p-3 ring-1 ring-paper/[0.06] transition-colors hover:bg-paper/[0.06]"
+                    className="rounded-2xl bg-gradient-to-b from-paper/[0.06] to-paper/[0.02] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ring-1 ring-paper/[0.08] transition-all duration-200 hover:-translate-y-px hover:ring-gold/30"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
@@ -445,10 +461,10 @@ export function StockByBranch({
   const totalNet = all.reduce((s, r) => s + r.net_mg, 0);
   return (
     <section className="flex flex-col">
-      <SpotlightCard tone="light" className="flex flex-1 flex-col rounded-2xl p-5 sm:p-6">
+      <SpotlightCard tone="light" className="flex flex-1 flex-col rounded-[22px] p-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)] sm:p-6">
         <div className="flex items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.2)]">
-            <Building2Icon size={16} />
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_10px_20px_-12px_rgba(6,42,34,0.8)]">
+            <Building2Icon size={18} />
           </span>
           <div className="min-w-0">
             <h2 className="font-sans text-[15px] font-semibold tracking-normal text-ink">
@@ -481,10 +497,10 @@ export function StockByBranch({
                 const share = totalNet > 0 ? (r.net_mg / totalNet) * 100 : 0;
                 return (
                   <li key={r.branch_id}>
-                    <div className="group block rounded-xl bg-bone/70 p-3 ring-1 ring-ink/[0.06] transition-colors hover:bg-gold-pale/60 hover:ring-gold-dark/20">
+                    <div className="group block rounded-2xl bg-bone/60 p-3.5 ring-1 ring-ink/[0.06] transition-all duration-200 hover:-translate-y-px hover:bg-gold-pale/60 hover:shadow-[0_12px_24px_-16px_rgba(126,98,35,0.45)] hover:ring-gold-dark/25">
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-3">
-                          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.08)] transition-colors group-hover:bg-gold group-hover:text-void">
+                          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)] transition-colors group-hover:bg-gold group-hover:text-void">
                             <Building2Icon size={14} />
                           </span>
                           <div className="min-w-0">
@@ -502,9 +518,9 @@ export function StockByBranch({
                           </div>
                         </div>
                       </div>
-                      <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-ink/[0.07]">
+                      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink/[0.07]">
                         <div
-                          className="h-full rounded-full bg-gradient-to-r from-ink-2 via-ink-3 to-gold-dark motion-reduce:transition-none"
+                          className="h-full rounded-full bg-gradient-to-r from-void via-gold-dark to-gold-light motion-reduce:transition-none"
                           style={{
                             width: `${Math.max(share, 2)}%`,
                             transition: `width 900ms cubic-bezier(0.16, 1, 0.3, 1) ${i * 60}ms`,
@@ -618,10 +634,10 @@ export function AttentionCard({
 
   return (
     <section className="flex flex-col">
-      <SpotlightCard tone="light" className="flex flex-1 flex-col rounded-2xl p-5 sm:p-6">
+      <SpotlightCard tone="light" className="flex flex-1 flex-col rounded-[22px] p-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)] sm:p-6">
         <div className="flex items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.2)]">
-            <AlertCircleIcon size={16} />
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_10px_20px_-12px_rgba(6,42,34,0.8)]">
+            <AlertCircleIcon size={18} />
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="font-sans text-[15px] font-semibold tracking-normal text-ink">
@@ -652,13 +668,14 @@ export function AttentionCard({
           ) : loading ? (
             <RowsSkeleton />
           ) : rows.length === 0 ? (
-            <div className="flex flex-col items-center rounded-xl bg-gradient-to-b from-emerald-50 to-paper px-6 py-9 text-center ring-1 ring-emerald-600/10">
-              <span className="relative mb-3 flex size-11 items-center justify-center rounded-full bg-emerald-600 text-paper">
+            <div className="relative flex h-full flex-col items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-b from-emerald-50 via-emerald-50/40 to-paper px-6 py-10 text-center ring-1 ring-emerald-600/10">
+              <div className="pointer-events-none absolute -top-16 left-1/2 size-40 -translate-x-1/2 rounded-full bg-emerald-300/30 blur-3xl" aria-hidden />
+              <span className="relative mb-4 flex size-14 items-center justify-center rounded-full bg-gradient-to-b from-emerald-500 to-emerald-700 text-paper shadow-[0_12px_24px_-10px_rgba(5,150,105,0.7)]">
                 <span className="absolute inset-0 animate-ping rounded-full bg-emerald-500/30" />
-                <CheckCircleIcon size={20} />
+                <CheckCircleIcon size={24} />
               </span>
-              <p className="text-sm font-semibold text-ink">All clear</p>
-              <p className="mt-1 text-xs text-ink-4">
+              <p className="relative text-base font-semibold text-ink">All clear</p>
+              <p className="relative mt-1 max-w-[15rem] text-xs leading-relaxed text-ink-4">
                 Nothing is in transit, repair or waiting on a decision.
               </p>
             </div>
@@ -695,7 +712,7 @@ export function AttentionCard({
                   </>
                 );
                 const cls =
-                  "group flex w-full items-center gap-3 rounded-xl bg-paper p-3 text-left ring-1 ring-ink/[0.06] shadow-[0_1px_2px_rgba(28,25,23,0.05)] transition-all hover:-translate-y-px hover:shadow-2 hover:ring-gold-dark/25";
+                  "group flex w-full items-center gap-3 rounded-2xl bg-paper p-3.5 text-left ring-1 ring-ink/[0.07] shadow-[0_1px_2px_rgba(16,32,27,0.05)] transition-all duration-200 hover:-translate-y-px hover:bg-gold-pale/40 hover:shadow-[0_12px_24px_-16px_rgba(126,98,35,0.45)] hover:ring-gold-dark/25";
                 return (
                   <li key={r.key}>
                     {r.href ? (
@@ -819,51 +836,70 @@ export function MovementFilters({
 }) {
   return (
     <div className="flex w-full flex-col gap-3">
-      <FilterChips
-        options={MOVEMENT_TYPES}
-        value={type}
-        onChange={onType}
-        ariaLabel="Movement type"
-      />
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="relative w-full sm:w-auto">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <label className="group relative w-full sm:w-72">
           <SearchIcon
             size={14}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-5"
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-5 transition-colors group-focus-within:text-gold-dark"
           />
           <span className="sr-only">Search movements</span>
           <input
             value={search}
             onChange={(e) => onSearch(e.target.value)}
             placeholder="Search barcode or reason"
-            className={cn(controlSmClass, "w-full pl-9 sm:w-64")}
+            className="h-11 w-full rounded-xl bg-bone/60 pl-10 pr-9 text-sm text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)] transition-all duration-200 placeholder:text-ink-5 hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] focus:bg-paper focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]"
           />
+          {search ? (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => onSearch("")}
+              className="absolute right-2 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-lg text-ink-4 hover:bg-ink/5 hover:text-ink"
+            >
+              <XIcon size={13} />
+            </button>
+          ) : null}
         </label>
-        <label className="w-full sm:w-auto">
-          <span className="sr-only">Filter by branch</span>
-          <select
-            value={branch}
-            onChange={(e) => onBranch(e.target.value)}
-            className={cn(controlSmClass, "w-full sm:w-auto")}
-          >
-            <option value="">All branches</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <Select
+          className="w-full sm:w-56"
+          ariaLabel="Filter by branch"
+          value={branch}
+          onChange={onBranch}
+          icon={<Building2Icon size={13} />}
+          options={[{ value: "", label: "All branches" }, ...branches.map((b) => ({ value: b.id, label: b.name }))]}
+        />
         {type || branch || search ? (
           <button
             type="button"
             onClick={onClear}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-ink-4 transition-colors hover:bg-ink/[0.05] hover:text-ink"
+            className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl px-3.5 text-xs font-medium text-ink-3 transition-colors hover:bg-bone hover:text-ink"
           >
-            <XIcon size={13} />
-            Clear filters
+            <RefreshCwIcon size={12} />
+            Reset
           </button>
         ) : null}
+      </div>
+      <div role="tablist" aria-label="Movement type" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 scrollbar-thin">
+        {MOVEMENT_TYPES.map((o) => {
+          const active = o.key === type;
+          return (
+            <button
+              key={o.key || "all"}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => onType(o.key)}
+              className={cn(
+                "inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-full px-3.5 text-xs font-medium transition-all duration-200 ease-brand",
+                active
+                  ? "bg-void text-paper shadow-[inset_0_0_0_1px_rgba(205,168,83,0.35),0_8px_18px_-10px_rgba(6,42,34,0.8)]"
+                  : "bg-paper text-ink-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.1)] hover:-translate-y-px hover:text-ink hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.24)]"
+              )}
+            >
+              {o.label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -894,18 +930,20 @@ export function PieceDetail({
   const purity = p.net_mg > 0 ? (p.fine_gold_mg / p.net_mg) * 100 : 0;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 p-4 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-50 flex animate-fade-in items-end justify-center bg-void/60 p-4 backdrop-blur-md sm:items-center"
       onClick={onClose}
     >
       <div
-        className="g-floating w-full max-w-md animate-fade-in overflow-hidden"
+        className="g-floating w-full max-w-md animate-pop-in overflow-hidden rounded-[24px] shadow-5"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="piece-detail-title"
       >
-        <div className="relative bg-void px-6 pb-5 pt-6 text-paper">
-          <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-40" aria-hidden />
+        <div className="relative overflow-hidden bg-void px-6 pb-6 pt-6 text-paper">
+          <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-50" aria-hidden />
+          <div className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full bg-gold/20 blur-[80px]" aria-hidden />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" aria-hidden />
           <button
             type="button"
             onClick={onClose}
@@ -915,14 +953,17 @@ export function PieceDetail({
             <XIcon size={16} />
           </button>
           <div className="relative flex items-center gap-3">
-            <span className="g-metric flex h-11 min-w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-light to-gold px-2 text-sm font-bold text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+            <span className="g-metric flex h-12 min-w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-light to-gold px-2.5 text-base font-bold text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_10px_22px_-10px_rgba(205,168,83,0.7)]">
               {p.karat}
             </span>
             <div className="min-w-0 pr-8">
               <h2 id="piece-detail-title" className="truncate font-display text-lg font-bold tracking-tight text-paper">
                 {p.name}
               </h2>
-              <div className="mt-0.5 font-mono text-xs text-paper/50">{p.barcode}</div>
+              <div className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-paper/[0.06] px-1.5 py-0.5 font-mono text-xs text-paper/70 ring-1 ring-paper/10">
+                <ScanBarcodeIcon size={11} className="text-gold-light" />
+                {p.barcode}
+              </div>
             </div>
           </div>
         </div>
@@ -939,7 +980,7 @@ export function PieceDetail({
               ["Net weight", `${grams(p.net_mg)} g`],
               ["Fine gold", `${grams(p.fine_gold_mg)} g · ${purity.toFixed(1)}%`],
             ].map(([k, v]) => (
-              <div key={k} className="min-w-0 rounded-xl bg-bone/70 p-3 ring-1 ring-ink/[0.05]">
+              <div key={k} className="min-w-0 rounded-2xl bg-bone/70 p-3.5 ring-1 ring-ink/[0.05]">
                 <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-4">{k}</dt>
                 <dd className="g-metric mt-1 truncate text-ink">{v}</dd>
               </div>
@@ -947,12 +988,12 @@ export function PieceDetail({
           </dl>
 
           <div className="flex flex-wrap justify-end gap-2 pt-1">
-            <Link href={`/products/${p.id}`} className="g-btn g-btn-secondary h-10 px-4 text-sm">
+            <Link href={`/products/${p.id}`} className="g-btn g-btn-secondary h-11 rounded-xl px-4 text-sm">
               View product
             </Link>
             <button
               type="button"
-              className="g-btn g-btn-primary h-10 px-4 text-sm"
+              className="g-btn g-btn-primary h-11 rounded-xl px-5 text-sm"
               onClick={() => onMove(p.barcode)}
             >
               Record movement

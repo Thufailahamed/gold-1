@@ -256,7 +256,10 @@ export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
 
 const saleItemSchema = z.object({
   productId: z.string().min(1),
+  /** The price to charge. With `listPriceLkr` it may differ from the shelf price. */
   priceLkr: z.number().min(0).optional(),
+  /** The shelf price the cashier was shown; lets the till negotiate `priceLkr`. */
+  listPriceLkr: z.number().min(0).optional(),
   discountLkr: z.number().min(0).optional().default(0),
 });
 
@@ -592,7 +595,7 @@ export const fiscalCloseSchema = z.object({
 
 export const fiscalReopenSchema = z.object({
   reason: z.string().min(1).max(500),
-  approvedBy: z.string().min(1),
+  approvedBy: z.string().min(1).optional(),
 });
 
 export type TaxConfigInput = z.infer<typeof taxConfigSchema>;
@@ -621,7 +624,7 @@ export const closeDaySchema = z.object({
 
 export const reopenDaySchema = z.object({
   reason: z.string().min(1).max(500),
-  approvedBy: z.string().min(1),
+  approvedBy: z.string().min(1).optional(),
 });
 
 export type CloseDayInput = z.infer<typeof closeDaySchema>;
@@ -644,7 +647,7 @@ export const startCountSchema = z.object({
   scopeRef: z.string().min(1).optional(),
 });
 export const scanSchema = z.object({ barcode: z.string().min(1).max(32) });
-export const approveCountSchema = z.object({ reason: z.string().min(1).max(500), approvedBy: z.string().min(1) });
+export const approveCountSchema = z.object({ reason: z.string().min(1).max(500), approvedBy: z.string().min(1).optional() });
 export type StartCountInput = z.infer<typeof startCountSchema>;
 
 export const requestTransferSchema = z.object({

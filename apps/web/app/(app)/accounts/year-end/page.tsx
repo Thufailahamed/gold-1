@@ -41,8 +41,8 @@ export default function YearEndPage() {
   return (
     <Page>
       <Hero
+        compact
         kicker="Accounts"
-        back={{ href: "/accounts", label: "Accounts dashboard" }}
         title="Financial year"
         description="Close a finished year to lock its books and freeze its statements. Profit from closed-off years is carried as retained earnings on the balance sheet."
         stats={[
@@ -155,10 +155,9 @@ function CloseModal({ year, onClose, onDone }: { year: Year; onClose: () => void
 
 function ReopenModal({ year, onClose, onDone }: { year: Year; onClose: () => void; onDone: () => void }) {
   const [reason, setReason] = useState("");
-  const [approver, setApprover] = useState("");
   const reopen = useMutation({
     mutationFn: () =>
-      api(`/api/v1/accounts/fiscal-years/${year.end}/reopen`, { method: "POST", body: JSON.stringify({ reason: reason.trim(), approvedBy: approver.trim() }) }),
+      api(`/api/v1/accounts/fiscal-years/${year.end}/reopen`, { method: "POST", body: JSON.stringify({ reason: reason.trim() }) }),
     onSuccess: () => {
       toast.success(`${year.label} reopened`);
       onDone();
@@ -174,17 +173,12 @@ function ReopenModal({ year, onClose, onDone }: { year: Year; onClose: () => voi
       onSubmit={() => reopen.mutate()}
       submitLabel="Reopen year"
       pending={reopen.isPending}
-      submitDisabled={!reason.trim() || !approver.trim()}
+      submitDisabled={!reason.trim()}
     >
       <label className="block text-sm text-ink-2">
         Reason
         <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. supplier invoice received late" className={`${controlClass} w-full`} />
       </label>
-      <label className="block text-sm text-ink-2">
-        Approved by
-        <input value={approver} onChange={(e) => setApprover(e.target.value)} placeholder="A user id holding accounts:manage" className={`${controlClass} w-full`} />
-      </label>
-      <p className="text-xs text-ink-4">The approver must not be you, and must not be whoever closed the year.</p>
     </Modal>
   );
 }

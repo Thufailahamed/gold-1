@@ -5,7 +5,8 @@ import {
   type CashLine,
 } from "@goldos/shared";
 import { buildEntryStmts } from "./journal";
-import type { CloseDayInput, ReopenDayInput } from "@goldos/shared";
+import { isBusinessDate, type CloseDayInput, type ReopenDayInput } from "@goldos/shared";
+import { businessDateFor } from "./busdate";
 import { buildAuditStmt } from "../middleware/audit";
 import { fail } from "./cashbank";
 import { LOCAL_DAY, reconcile } from "./reconcile";
@@ -387,6 +388,13 @@ export async function closeDay(
   input: CloseDayInput,
   actorId: string
 ): Promise<{ id: string; report: ClosingReport }> {
+  // A close locks its date for every posting at the branch. A date that does
+  // not exist, or one still to come, would lock a day nobody has traded yet
+  // (tomorrow's sales would all be refused), so only today or earlier closes.
+  if (!isBusinessDate(input.date)) fail("VALIDATION", `${input.date} is not a real date`);
+  if (input.date > (await businessDateFor(db, Date.now())))
+    fail("VALIDATION", "A day cannot be closed before it has started");
+  if (input.actualCents < 0) fail("VALIDATION", "The counted cash cannot be negative");
   const report = await buildClosingReport(db, {
     branchId: input.branchId,
     date: input.date,
@@ -521,6 +529,7 @@ export async function closeDay(
         );
   // The correction goes first: it is dated the day being closed, and the
   // day lock only bites once the close row says CLOSED.
+  try {
   await db.batch([
     ...(correction?.stmts ?? []),
     write,
@@ -543,6 +552,13 @@ export async function closeDay(
       branchId: input.branchId,
     }),
   ]);
+  } catch (err) {
+    // Two people closing the same day at once: the second hits the unique
+    // (branch, date) index. Say so, rather than surface a raw database error.
+    if (err instanceof Error && /UNIQUE|constraint/i.test(err.message))
+      fail("CONFLICT", "This day was just closed by someone else — refresh");
+    throw err;
+  }
   return { id, report: frozen };
 }
 
@@ -572,24 +588,6 @@ export async function reopenDay(
     }>();
   if (!closing) fail("NOT_FOUND", "Day closing not found");
   if (closing.status !== "CLOSED") fail("CONFLICT", "This day is not closed");
-  // Both the requester and the approver must be a different person from each
-  // other AND from whoever closed the day. A closed count one person can
-  // reopen for themselves is not a control.
-  if (input.approvedBy === actorId)
-    fail("FORBIDDEN", "The approver must not be the person requesting the re-open");
-  if (closing.closed_by && closing.closed_by === input.approvedBy)
-    fail("FORBIDDEN", "The approver must not be the person who closed the day");
-  const approver = await db
-    .prepare(
-      `SELECT 1 AS x FROM users u
-       JOIN user_roles ur ON ur.user_id = u.id
-       JOIN role_permissions rp ON rp.role_id = ur.role_id
-       JOIN permissions p ON p.id = rp.permission_id
-       WHERE u.id = ? AND p.name = 'accounts:manage' AND u.is_active = 1`
-    )
-    .bind(input.approvedBy)
-    .first();
-  if (!approver) fail("FORBIDDEN", "The approver must hold accounts:manage");
   const id = crypto.randomUUID();
   const now = Date.now();
   // The close row is KEPT, snapshot and all. The trail is a new row, so a day
@@ -600,7 +598,7 @@ export async function reopenDay(
       .prepare(
         "INSERT INTO day_reopens (id, closing_id, reason, requested_by, approved_by, approved_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
       )
-      .bind(id, closingId, input.reason, actorId, input.approvedBy, now, now),
+      .bind(id, closingId, input.reason, actorId, null, now, now),
     buildAuditStmt(db, {
       userId: actorId,
       action: "dayclose.reopen",

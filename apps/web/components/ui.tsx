@@ -9,6 +9,7 @@ import {
   ArrowRightIcon,
   CheckCircleIcon,
   InboxIcon,
+  SearchIcon,
   XIcon,
 } from "./icons";
 
@@ -71,10 +72,8 @@ const HERO_STAT_COLS: Record<number, string> = {
 };
 
 /** Button classes for use inside the dark Hero. */
-export const heroBtnPrimary =
-  "g-btn h-10 bg-gold px-4 text-sm text-ink transition-colors hover:bg-gold-light";
-export const heroBtnGhost =
-  "g-btn h-10 px-4 text-sm text-paper shadow-[inset_0_0_0_1px_rgba(250,250,249,0.25)] transition-colors hover:bg-paper/10";
+export const heroBtnPrimary = "home-btn-gold h-10 px-4 text-sm disabled:cursor-not-allowed disabled:opacity-60";
+export const heroBtnGhost = "home-btn-ghost h-10 px-4 text-sm disabled:cursor-not-allowed disabled:opacity-60";
 
 /**
  * Dark page hero: kicker + display title + description on the left, actions on
@@ -92,7 +91,10 @@ export function Hero({
   note,
   children,
   className,
+  compact,
 }: {
+  /** Tighter padding and type, for dense module pages. */
+  compact?: Maybe<boolean>;
   kicker?: ReactNode;
   title: ReactNode;
   description?: ReactNode;
@@ -106,56 +108,73 @@ export function Hero({
   className?: Maybe<string>;
 }) {
   return (
-    <section
-      className={cn("relative overflow-hidden rounded-xl bg-void p-5 text-paper sm:px-6 sm:py-5", className)}
-    >
-      <div className="pointer-events-none absolute -right-16 -top-24 size-60 rounded-full bg-gold/15 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-24 left-1/3 size-56 rounded-full bg-gold/10 blur-3xl" />
-      <div className="relative flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div className="min-w-0 max-w-2xl">
-          {back && (
-            <Link
-              href={back.href}
-              className="mb-2 inline-flex items-center gap-1.5 text-xs font-medium text-paper/50 transition-colors hover:text-paper"
-            >
-              <ArrowLeftIcon size={13} />
-              {back.label}
-            </Link>
-          )}
-          {kicker && (
-            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">
-              <span className="size-1.5 rounded-full bg-gold animate-pulse-soft" />
-              {kicker}
-            </div>
-          )}
-          <h1 className="g-display mt-2 text-2xl text-paper text-balance sm:text-3xl">{title}</h1>
-          {description && (
-            <p className="mt-1.5 max-w-md text-sm text-paper/60 text-pretty">{description}</p>
-          )}
-          {meta && <div className="mt-2.5 flex flex-wrap items-center gap-2">{meta}</div>}
-        </div>
-        {actions && <div className="flex flex-wrap items-center gap-2 md:shrink-0">{actions}</div>}
-      </div>
-      {children}
-      {stats && stats.length > 0 && (
-        <div
-          className={cn(
-            "relative mt-5 grid grid-cols-2 gap-3 border-t border-paper/10 pt-4",
-            HERO_STAT_COLS[Math.min(stats.length, 4)]
-          )}
-        >
-          {stats.map((s, i) => (
-            <div key={i} className="min-w-0">
-              <div className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-paper/40">
-                {s.label}
+    <section className={cn("relative overflow-hidden rounded-2xl bg-void text-paper shadow-4", className)}>
+      <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-40" />
+      <div className="pointer-events-none absolute -right-20 -top-28 size-72 rounded-full bg-gold/[0.16] blur-[90px]" />
+      <div className="pointer-events-none absolute -bottom-32 left-1/3 size-64 rounded-full bg-gold-deep/20 blur-[100px]" />
+      <div className="home-noise pointer-events-none absolute inset-0" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
+
+      <div className={cn("relative", compact ? "px-5 py-4 sm:px-6" : "px-5 py-6 sm:px-7 sm:py-7")}>
+        <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+          <div className="min-w-0 max-w-2xl">
+            {back && (
+              <Link
+                href={back.href}
+                className="mb-3 inline-flex items-center gap-1.5 rounded-full px-2 py-1 -ml-2 text-xs font-medium text-paper/50 transition-colors hover:bg-paper/[0.06] hover:text-paper"
+              >
+                <ArrowLeftIcon size={13} />
+                {back.label}
+              </Link>
+            )}
+            {kicker && (
+              <div className="flex">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/[0.08] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">
+                  <span className="size-1.5 animate-pulse-soft rounded-full bg-gold" />
+                  {kicker}
+                </span>
               </div>
-              <div className="g-metric mt-1 truncate text-base text-paper">{s.value}</div>
+            )}
+            <h1
+              className={cn(
+                "g-display leading-[1.08] text-paper text-balance",
+                compact ? "mt-2 text-[22px] sm:text-[26px]" : "mt-3 text-[26px] sm:text-[34px]"
+              )}
+            >
+              {title}
+            </h1>
+            {description && (
+              <p className={cn("max-w-xl leading-relaxed text-paper/60 text-pretty", compact ? "mt-1 text-[13px]" : "mt-2 text-sm")}>{description}</p>
+            )}
+            {meta && <div className="mt-3 flex flex-wrap items-center gap-2">{meta}</div>}
+          </div>
+          {actions && <div className="flex flex-wrap items-center gap-2 md:shrink-0">{actions}</div>}
+        </div>
+        {children}
+      </div>
+
+      {stats && stats.length > 0 && (
+        <div className={cn("relative grid grid-cols-2 border-t border-paper/[0.08]", HERO_STAT_COLS[Math.min(stats.length, 4)])}>
+          {stats.map((s, i) => (
+            <div
+              key={i}
+              className={cn(
+                "min-w-0 px-5 sm:px-7",
+                compact ? "py-2.5 sm:px-6" : "py-4",
+                i % 2 === 1 && "border-l border-paper/[0.08]",
+                i >= 2 && "border-t border-paper/[0.08] sm:border-t-0",
+                i > 0 && "sm:border-l"
+              )}
+            >
+              <div className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-paper/40">{s.label}</div>
+              <div className={cn("g-metric truncate leading-none text-paper", compact ? "mt-1 text-base" : "mt-1.5 text-lg")}>{s.value}</div>
             </div>
           ))}
         </div>
       )}
       {note && (
-        <div className="relative mt-4 rounded-lg border border-dashed border-paper/15 px-4 py-2.5 text-center font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-paper/40">
+        <div className={cn("relative flex items-center gap-2 border-t border-paper/[0.08] bg-paper/[0.02] px-5 text-xs text-paper/50", compact ? "py-2 sm:px-6" : "py-3 sm:px-7")}>
+          <span className="size-1.5 shrink-0 rounded-full bg-gold/70" />
           {note}
         </div>
       )}
@@ -195,7 +214,7 @@ export function CardHeader({
     <div className={cn("flex flex-wrap items-start justify-between gap-3", className)}>
       <div className="flex min-w-0 items-start gap-3">
         {icon && (
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-bone text-ink-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,138,62,0.2)]">
             {icon}
           </span>
         )}
@@ -306,8 +325,8 @@ export function StatCard({
         {icon && (
           <span
             className={cn(
-              "flex size-9 shrink-0 items-center justify-center rounded-lg bg-bone text-ink-3 transition-colors",
-              href && "group-hover:bg-ink group-hover:text-gold"
+              "flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,138,62,0.2)] transition-colors",
+              href && "group-hover:from-void group-hover:to-ink-2 group-hover:text-gold-light"
             )}
           >
             {icon}
@@ -357,7 +376,7 @@ export type PillTone =
 const PILL_TONES: Record<PillTone, { cls: string; dot: string }> = {
   neutral: { cls: "bg-ink/[0.06] text-ink-3", dot: "bg-ink-4" },
   ghost: {
-    cls: "bg-paper/10 text-paper/80 shadow-[inset_0_0_0_1px_rgba(250,250,249,0.14)]",
+    cls: "bg-paper/10 text-paper/80 shadow-[inset_0_0_0_1px_rgba(246,245,240,0.14)]",
     dot: "bg-gold",
   },
   success: { cls: "bg-emerald-700/10 text-emerald-700", dot: "bg-emerald-600" },
@@ -518,11 +537,44 @@ export function Toolbar({
 
 /** Class string for native <input>/<select> controls placed in toolbars and forms. */
 export const controlClass =
-  "h-10 rounded-lg bg-paper px-3 text-sm text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.14)] transition-shadow duration-200 focus:outline-none focus:shadow-[inset_0_0_0_1px_#1c1917,0_0_0_3px_rgba(201,162,39,0.3)] disabled:cursor-not-allowed disabled:opacity-60";
+  "h-10 rounded-lg bg-paper px-3 text-sm text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.14)] transition-shadow duration-200 focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.3)] disabled:cursor-not-allowed disabled:opacity-60";
+
+/** Search box with a leading icon, for list toolbars. */
+export function SearchField({
+  value,
+  onChange,
+  placeholder = "Search…",
+  className,
+  id,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: Maybe<string>;
+  className?: Maybe<string>;
+  id?: Maybe<string>;
+  ariaLabel?: Maybe<string>;
+}) {
+  return (
+    <label className={cn("relative block w-full sm:max-w-xs", className)}>
+      <span className="sr-only">{ariaLabel ?? placeholder}</span>
+      <SearchIcon size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-5" />
+      <input
+        id={id}
+        type="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete="off"
+        className={cn(controlClass, "w-full bg-bone/60 pl-9 focus:bg-paper")}
+      />
+    </label>
+  );
+}
 
 /** Smaller variant for dense toolbars. */
 export const controlSmClass =
-  "h-9 rounded-lg bg-paper px-3 text-sm text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.14)] transition-shadow duration-200 focus:outline-none focus:shadow-[inset_0_0_0_1px_#1c1917,0_0_0_3px_rgba(201,162,39,0.3)] disabled:cursor-not-allowed disabled:opacity-60";
+  "h-9 rounded-lg bg-paper px-3 text-sm text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.14)] transition-shadow duration-200 focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.3)] disabled:cursor-not-allowed disabled:opacity-60";
 
 /* ---------------------------------------------------------------- Buttons */
 
@@ -717,7 +769,7 @@ export function EmptyBlock({
         className
       )}
     >
-      <span className="mb-4 flex size-12 items-center justify-center rounded-xl bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.08)]">
+      <span className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,138,62,0.22),0_10px_24px_-14px_rgba(126,98,35,0.5)]">
         {icon ?? <InboxIcon size={22} />}
       </span>
       <h3 className="font-sans text-base font-semibold tracking-normal text-ink">{title}</h3>
@@ -742,7 +794,7 @@ export function Callout({
 }) {
   const cfg = {
     info: {
-      cls: "bg-gold/[0.07] shadow-[inset_0_0_0_1px_rgba(168,134,27,0.22)]",
+      cls: "bg-gold/[0.07] shadow-[inset_0_0_0_1px_rgba(168,138,62,0.22)]",
       icon: <AlertCircleIcon size={16} className="text-gold-dark" />,
     },
     success: {
@@ -998,9 +1050,9 @@ export function GaugeRing({
       <svg viewBox="0 0 200 200" className="size-full">
         <defs>
           <linearGradient id="gr-arc" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#FFF4C7" />
-            <stop offset="0.45" stopColor="#E7C65A" />
-            <stop offset="1" stopColor="#A8861B" />
+            <stop offset="0" stopColor="#FBF0D5" />
+            <stop offset="0.45" stopColor="#E2C27A" />
+            <stop offset="1" stopColor="#A88A3E" />
           </linearGradient>
         </defs>
         <circle
@@ -1008,7 +1060,7 @@ export function GaugeRing({
           cy="100"
           r="94"
           fill="none"
-          stroke="rgba(231,198,90,0.3)"
+          stroke="rgba(226,194,122,0.3)"
           strokeDasharray="1.5 6"
         />
         <circle cx="100" cy="100" r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="9" />
@@ -1069,7 +1121,7 @@ export function MetricCard({
   const body = (
     <div className="relative flex h-full flex-col p-5">
       <div className="flex items-center gap-2.5 text-sm font-medium text-ink-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.2)] transition-all duration-320 group-hover:from-void group-hover:to-ink-2 group-hover:text-gold-light">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,138,62,0.2)] transition-all duration-320 group-hover:from-void group-hover:to-ink-2 group-hover:text-gold-light">
           {icon}
         </span>
         <span className="truncate">{label}</span>

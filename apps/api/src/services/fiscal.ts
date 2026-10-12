@@ -124,7 +124,7 @@ export async function closeFiscalYear(
 export async function reopenFiscalYear(
   db: D1Database,
   yearEnd: string,
-  input: { reason: string; approvedBy: string },
+  input: { reason: string; approvedBy?: string | undefined },
   actorId: string
 ): Promise<void> {
   const row = await db
@@ -138,30 +138,19 @@ export async function reopenFiscalYear(
     .first<{ year_end: string }>();
   if (later) fail("CONFLICT", `Reopen the later year ending ${later.year_end} first`);
   if (!input.reason.trim()) fail("VALIDATION", "A reason is required");
-  if (input.approvedBy === actorId) fail("FORBIDDEN", "The approver cannot be the person reopening");
-  if (input.approvedBy === row.closed_by) fail("FORBIDDEN", "The approver cannot be the person who closed the year");
-  const { results } = await db
-    .prepare(
-      `SELECT p.name AS name FROM users u JOIN user_roles ur ON ur.user_id = u.id JOIN role_permissions rp ON rp.role_id = ur.role_id
-       JOIN permissions p ON p.id = rp.permission_id WHERE u.id = ? AND u.is_active = 1`
-    )
-    .bind(input.approvedBy)
-    .all<{ name: string }>();
-  if (!(results ?? []).some((r) => r.name === "accounts:manage"))
-    fail("FORBIDDEN", "The approver needs accounts:manage");
   await db.batch([
     db
       .prepare(
         "UPDATE fiscal_closes SET status = 'REOPENED', reopened_at = ?, reopened_by = ?, reopen_approved_by = ?, reopen_reason = ? WHERE id = ?"
       )
-      .bind(Date.now(), actorId, input.approvedBy, input.reason, row.id),
+      .bind(Date.now(), actorId, null, input.reason, row.id),
     buildAuditStmt(db, {
       userId: actorId,
       action: "fiscal.reopen",
       entity: "fiscal_close",
       entityId: row.id,
       prev: { status: "CLOSED" },
-      next: { status: "REOPENED", approvedBy: input.approvedBy },
+      next: { status: "REOPENED" },
       reason: input.reason,
     }),
   ]);

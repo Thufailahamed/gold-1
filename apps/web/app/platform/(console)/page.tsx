@@ -153,26 +153,26 @@ export default function PlatformDashboard() {
                 <ComposedChart data={trend} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="p-mrr-fill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0" stopColor="#C9A227" stopOpacity={0.35} />
-                      <stop offset="1" stopColor="#C9A227" stopOpacity={0} />
+                      <stop offset="0" stopColor="#CDA853" stopOpacity={0.35} />
+                      <stop offset="1" stopColor="#CDA853" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke="rgba(28,25,23,0.06)" strokeDasharray="3 5" vertical={false} />
-                  <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#78716c", fontSize: 11 }} />
+                  <CartesianGrid stroke="rgba(16,32,27,0.06)" strokeDasharray="3 5" vertical={false} />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#5d6e68", fontSize: 11 }} />
                   <YAxis
                     tickLine={false}
                     axisLine={false}
                     width={56}
-                    tick={{ fill: "#78716c", fontSize: 11 }}
+                    tick={{ fill: "#5d6e68", fontSize: 11 }}
                     tickFormatter={(v: number) => new Intl.NumberFormat("en-US", { notation: "compact" }).format(v)}
                   />
                   <Tooltip
-                    cursor={{ stroke: "rgba(168,134,27,0.35)", strokeDasharray: "3 3" }}
-                    contentStyle={{ borderRadius: 12, border: "none", boxShadow: "0 12px 32px -16px rgba(28,25,23,0.3)", fontSize: 12 }}
+                    cursor={{ stroke: "rgba(168,138,62,0.35)", strokeDasharray: "3 3" }}
+                    contentStyle={{ borderRadius: 12, border: "none", boxShadow: "0 12px 32px -16px rgba(16,32,27,0.3)", fontSize: 12 }}
                     formatter={(v, name) => [money(Math.round(Number(v ?? 0) * 100)), name === "mrr" ? "MRR" : "Collected"]}
                   />
-                  <Bar dataKey="collected" fill="#1c1917" fillOpacity={0.12} radius={[4, 4, 0, 0]} barSize={18} />
-                  <Area type="monotone" dataKey="mrr" stroke="#A8861B" strokeWidth={2.5} fill="url(#p-mrr-fill)" />
+                  <Bar dataKey="collected" fill="#10201b" fillOpacity={0.12} radius={[4, 4, 0, 0]} barSize={18} />
+                  <Area type="monotone" dataKey="mrr" stroke="#A88A3E" strokeWidth={2.5} fill="url(#p-mrr-fill)" />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>

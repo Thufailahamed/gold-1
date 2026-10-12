@@ -11,7 +11,8 @@ export default function OldGoldBarcodePage({ params }: { params: Promise<{ code:
   const decoded = decodeURIComponent(code);
   const lookup = useQuery({
     queryKey: ["og-barcode", code],
-    queryFn: () => api<{ item: { id: string } }>(`/api/v1/oldgold/items/barcode/${encodeURIComponent(code)}`),
+    // `code` arrives still URL-encoded; encoding it again turned a scanned "%" or space into "%25…" and missed.
+    queryFn: () => api<{ item: { id: string } }>(`/api/v1/oldgold/items/barcode/${encodeURIComponent(decoded)}`),
     retry: false,
   });
 

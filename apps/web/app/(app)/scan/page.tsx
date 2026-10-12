@@ -189,7 +189,7 @@ function ScanInput({ onScan }: { onScan: (code: string) => void }) {
           onChange={(e) => setV(e.target.value)}
           placeholder="Scan or type barcode, SKU or invoice no…"
           autoComplete="off"
-          className="h-12 w-full rounded-lg bg-paper pl-11 pr-4 font-mono text-base text-ink shadow-[inset_0_0_0_1.5px_rgba(201,162,39,0.6)] transition-shadow placeholder:font-sans placeholder:text-ink-5 focus:outline-none focus:shadow-[inset_0_0_0_1.5px_var(--gold,#C9A227),0_0_0_4px_rgba(201,162,39,0.25)]"
+          className="h-12 w-full rounded-lg bg-paper pl-11 pr-4 font-mono text-base text-ink shadow-[inset_0_0_0_1.5px_rgba(205,168,83,0.6)] transition-shadow placeholder:font-sans placeholder:text-ink-5 focus:outline-none focus:shadow-[inset_0_0_0_1.5px_var(--gold,#CDA853),0_0_0_4px_rgba(205,168,83,0.25)]"
         />
       </div>
       <CameraScanButton onDetected={onScan} className="h-12" />

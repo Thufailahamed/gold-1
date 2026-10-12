@@ -2,7 +2,7 @@ import { useState } from "react";
 import { View } from "react-native";
 import { router, Stack, useLocalSearchParams, type Href } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, apiText, errorMessage } from "@/lib/api";
+import { api, apiText } from "@/lib/api";
 import { extractScanCode } from "@/lib/barcode";
 import { gramsShort } from "@/lib/format";
 import { printHtml } from "@/lib/print";
@@ -27,7 +27,6 @@ import {
   Screen,
   Section,
   Segmented,
-  SelectField,
   Sheet,
   Text,
   toast,
@@ -277,24 +276,13 @@ function MeltSheet({ inputFineMg, pending, onClose, onSubmit }: { inputFineMg: n
   );
 }
 
-function ApproveSheet({ lossMg, recoveryMg, pending, onClose, onSubmit }: { lossMg: number; recoveryMg: number; pending: boolean; onClose: () => void; onSubmit: (b: { reason: string; approvedBy?: string }) => void }) {
+function ApproveSheet({ lossMg, recoveryMg, pending, onClose, onSubmit }: { lossMg: number; recoveryMg: number; pending: boolean; onClose: () => void; onSubmit: (b: { reason: string }) => void }) {
   const [reason, setReason] = useState("");
-  const [approver, setApprover] = useState("");
-  // Needs users:view; without it the approver is optional anyway.
-  const users = useQuery({ queryKey: ["users-options"], queryFn: () => api<{ rows: { id: string; name: string; email: string; is_active: number }[] }>("/api/v1/users?limit=100"), retry: false });
-  const opts = (users.data?.rows ?? []).filter((u) => u.is_active).map((u) => ({ value: u.id, label: u.name, subtitle: u.email }));
   return (
-    <Sheet visible onClose={onClose} title="Approve reconciliation" submitLabel="Approve" onSubmit={() => onSubmit({ reason: reason.trim(), approvedBy: approver || undefined })} submitting={pending} canSubmit={!!reason.trim()}>
+    <Sheet visible onClose={onClose} title="Approve reconciliation" submitLabel="Approve" onSubmit={() => onSubmit({ reason: reason.trim() })} submitting={pending} canSubmit={!!reason.trim()}>
       <FormStack>
         <Callout tone="info" style={{ marginHorizontal: 0 }}>{`Loss ${lossMg} mg · Recovery ${recoveryMg} mg`}</Callout>
         <Field label="Reason (required)" value={reason} onChangeText={setReason} maxLength={500} />
-        {users.isError ? (
-          <Text variant="footnote" tone="secondary">
-            {`Second approver list unavailable (${errorMessage(users.error)}). Needed only when the loss is over the threshold.`}
-          </Text>
-        ) : (
-          <SelectField label="Second approver (if over threshold)" value={approver} options={opts} onChange={setApprover} allowClear clearLabel="None" placeholder={users.isLoading ? "Loading…" : "None"} />
-        )}
       </FormStack>
     </Sheet>
   );

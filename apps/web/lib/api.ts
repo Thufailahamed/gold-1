@@ -31,10 +31,6 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   }
   const body = await readBody<T>(res);
   if (!body.success) {
-    // HTTP 202 PENDING carries the approval id + bound terms for retry.
-    // A plain Error would discard them and make the retry flow uncompletable.
-    if (body.error.code === "PENDING")
-      throw new PendingApprovalError(body.error.message, body.error);
     throw Object.assign(new Error(body.error.message), { code: body.error.code });
   }
   return body.data;
@@ -45,20 +41,6 @@ export function errorCode(err: unknown): string | undefined {
   return (err as { code?: string } | null)?.code;
 }
 
-export class PendingApprovalError extends Error {
-  readonly approvalId?: string;
-  readonly entity?: string;
-  readonly entityId?: string;
-  readonly metric?: number;
-  constructor(message: string, err: { approvalId?: string; entity?: string; entityId?: string; metric?: number }) {
-    super(message);
-    this.name = "PendingApprovalError";
-    this.approvalId = err.approvalId;
-    this.entity = err.entity;
-    this.entityId = err.entityId;
-    this.metric = err.metric;
-  }
-}
 
 export type MeData = {
   user: { id: string; email: string; name: string };
@@ -88,6 +70,21 @@ export function assetUrl(path: string): string {
 }
 
 /** Authenticated text download (server CSV). Throws with the API message on error. */
+/** Any binary download (PDF and the like) — the bytes are kept as they came. */
+export async function downloadFile(path: string, filename: string): Promise<void> {
+  const res = await fetch(`${BASE}${path}`, { credentials: "include" });
+  if (!res.ok) {
+    const body = await readBody<never>(res);
+    throw new Error(body.success ? `Download failed: ${res.status}` : body.error.message);
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function downloadCsv(path: string, filename: string): Promise<void> {
   const res = await fetch(`${BASE}${path}`, { credentials: "include" });
   if (!res.ok) {

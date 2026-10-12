@@ -176,7 +176,7 @@ export default function InventoryScreen() {
         title="Workflows"
         links={[
           { href: "/inventory/counts", label: "Stock counts", subtitle: "Scan the shelf against a frozen snapshot", icon: "clipboardCheck" },
-          { href: "/inventory/transfers", label: "Branch transfers", subtitle: "Request, approve, dispatch and receive", icon: "truck" },
+          { href: "/inventory/transfers", label: "Branch transfers", subtitle: "Request, dispatch and receive", icon: "truck" },
           { href: "/inventory/discrepancies", label: "Discrepancies", subtitle: "Missing pieces, overdue transfers, gold consistency", icon: "alert" },
         ]}
       />

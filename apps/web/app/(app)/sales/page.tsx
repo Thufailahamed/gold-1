@@ -12,9 +12,10 @@ import {
   Empty,
   HeadLink,
   ListSkeleton,
-  ModuleCard,
   ModuleHero,
   SectionHead,
+  Shortcut,
+  StatusBoard,
   ago,
   count,
   grams,
@@ -113,6 +114,73 @@ function MixCard({
   );
 }
 
+/** Hero side panel: today's takings at the counter, against the month so far. */
+function CounterPanel({
+  today,
+  month,
+  avgTicket,
+  owed,
+  owedPartial,
+  loading,
+}: {
+  today: Summary | undefined;
+  month: Summary | undefined;
+  avgTicket: number | undefined;
+  owed: number | undefined;
+  owedPartial: boolean;
+  loading: boolean;
+}) {
+  const share = today && month && month.value_cents > 0 ? Math.min(100, (today.value_cents / month.value_cents) * 100) : 0;
+  return (
+    <div className="relative overflow-hidden rounded-2xl bg-paper/[0.04] p-5 ring-1 ring-gold/20 backdrop-blur-sm sm:p-6">
+      <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-light/60 to-transparent" />
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">Today at the counter</p>
+      {loading ? (
+        <Skeleton className="mt-3 h-9 w-40 bg-paper/10" />
+      ) : (
+        <p className="g-metric mt-2 flex items-baseline gap-2 text-[34px] leading-none text-paper">
+          <span className="text-xs font-medium tracking-normal text-paper/45">LKR</span>
+          {today ? lkr(today.value_cents) : "—"}
+        </p>
+      )}
+      <p className="mt-2 text-xs text-paper/50">
+        {!today || today.invoices === 0
+          ? "No sales rung up yet today"
+          : `${today.invoices} sale${today.invoices === 1 ? "" : "s"} · average ${avgTicket === undefined ? "—" : lkr(avgTicket)} LKR`}
+      </p>
+
+      <div className="mt-5">
+        <div className="flex items-baseline justify-between text-[11px] text-paper/50">
+          <span>Share of the month so far</span>
+          <span className="g-metric text-paper/85">{share.toFixed(share > 0 && share < 10 ? 1 : 0)}%</span>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-paper/[0.08]">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-gold-deep via-gold to-gold-light transition-[width] duration-700 ease-brand"
+            style={{ width: `${share}%` }}
+          />
+        </div>
+        <p className="g-metric mt-2 text-[11px] text-paper/40">{lkr(month?.value_cents ?? 0)} LKR this month</p>
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-paper/[0.08] ring-1 ring-paper/[0.08]">
+        <Link href="/sales/invoices?status=UNPAID" className="group bg-void px-3.5 py-3 transition-colors hover:bg-paper/[0.06]">
+          <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-paper/40">On credit</span>
+          <span className="g-metric mt-1 block truncate text-lg leading-none text-paper group-hover:text-gold-light">
+            {owed === undefined ? "—" : `${lkr(owed)}${owedPartial ? "+" : ""}`}
+          </span>
+        </Link>
+        <Link href="/sales/reports" className="group bg-void px-3.5 py-3 transition-colors hover:bg-paper/[0.06]">
+          <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-paper/40">Discounts today</span>
+          <span className="g-metric mt-1 block truncate text-lg leading-none text-paper group-hover:text-gold-light">
+            {today ? lkr(today.discount_cents) : "—"}
+          </span>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------- page */
 
 export default function SalesDashboardPage() {
@@ -193,154 +261,73 @@ export default function SalesDashboardPage() {
             </Link>
           </>
         }
+        aside={
+          <CounterPanel
+            today={t}
+            month={m}
+            avgTicket={avgTicket}
+            owed={statesLoading ? undefined : owed}
+            owedPartial={owedPartial}
+            loading={today.isLoading}
+          />
+        }
         metrics={[
-          { label: "Sales today", value: t?.value_cents, format: lkr, unit: "LKR", icon: BanknoteIcon, href: "/sales/reports" },
-          { label: "Invoices today", value: t?.invoices, format: count, unit: "sales", icon: CreditCardIcon, href: "/sales/invoices" },
           { label: "Sales · month", value: m?.value_cents, format: lkr, unit: "LKR", icon: TrendingUpIcon, href: "/sales/reports" },
+          { label: "Invoices · month", value: m?.invoices, format: count, unit: "sales", icon: CreditCardIcon, href: "/sales/invoices" },
           { label: "Gold out · month", value: m?.gold_mg, format: grams, unit: "g", icon: GemIcon, href: "/sales/reports" },
+          { label: "Discounts · month", value: m?.discount_cents, format: lkr, unit: "LKR", icon: BanknoteIcon, href: "/sales/reports" },
         ]}
       />
 
       {/* ------------------------------------------------------- workspaces */}
-      <SectionHead index="01" title="Workspaces" sub="Jump into any part of the sales desk" />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {canSell || !me.data ? (
-          <ModuleCard
+          <Shortcut
             href="/pos"
-            index="01"
             icon={ScanBarcodeIcon}
             title="Point of sale"
-            description="Scan pieces, apply discounts, split payments and print the invoice."
+            desc="Scan, discount, split payment, print"
             metric={t ? t.invoices : "—"}
-            metricLabel="Sales rung up today"
-            cta="Start a sale"
+            label="Sales today"
             loading={today.isLoading}
             delay={0}
           />
         ) : null}
-        <ModuleCard
+        <Shortcut
           href="/sales/invoices"
-          index="02"
           icon={CreditCardIcon}
           title="Invoices"
-          description="Every completed sale, with payments, lines and the linked pieces."
+          desc="Every sale with its payments and pieces"
           metric={recent.data ? count(recent.data.total) : "—"}
-          metricLabel="Invoices on file"
-          cta="Browse"
+          label="On file"
           loading={recent.isLoading}
           alert={creditCount > 0}
           delay={60}
         />
-        <ModuleCard
+        <Shortcut
           href="/sales/returns"
-          index="03"
           icon={RotateCcwIcon}
           title="Returns"
-          description="Refunds and exchanges, with the gold movement reversed."
+          desc="Refunds and exchanges, gold reversed"
           metric={returns.data ? count(returns.data.total) : "—"}
-          metricLabel="Returns recorded"
-          cta="Open register"
+          label="Recorded"
           loading={returns.isLoading}
           delay={120}
         />
-        <ModuleCard
+        <Shortcut
           href="/sales/reports"
-          index="04"
           icon={TrendingUpIcon}
           title="Reports"
-          description="Sales by category, purity, branch, salesperson, payment or product."
+          desc="By category, purity, staff or payment"
           metric={m ? lkr(m.value_cents) : "—"}
-          metricLabel="LKR sold this month"
-          cta="View reports"
+          label="LKR this month"
           loading={month.isLoading}
           delay={180}
         />
       </div>
 
-      {/* ------------------------------------------------------ collections */}
-      <SectionHead index="02" title="Collections" sub="How invoices stand on payment — tap a state to see them" />
-      <Card>
-        <div className="grid gap-4 px-5 pt-5 sm:grid-cols-3 sm:px-6">
-          <div>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Owed on credit</span>
-            <p className="g-metric mt-1 text-2xl leading-none text-ink">
-              {statesLoading ? "—" : lkr(owed)}
-              <span className="ml-1.5 text-xs font-medium text-ink-4">LKR{owedPartial ? "+" : ""}</span>
-            </p>
-            <p className="mt-1 text-[11px] text-ink-4">
-              {creditCount > 0 ? `Across ${creditCount} open invoice${creditCount === 1 ? "" : "s"}` : "No open balances"}
-            </p>
-          </div>
-          <div>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Average sale today</span>
-            <p className="g-metric mt-1 text-2xl leading-none text-ink">
-              {avgTicket === undefined ? "—" : lkr(avgTicket)}
-              {avgTicket !== undefined ? <span className="ml-1.5 text-xs font-medium text-ink-4">LKR</span> : null}
-            </p>
-            <p className="mt-1 text-[11px] text-ink-4">{t ? `${t.invoices} sale${t.invoices === 1 ? "" : "s"} so far` : "Per invoice"}</p>
-          </div>
-          <div>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Discounts · month</span>
-            <p className="g-metric mt-1 text-2xl leading-none text-ink">
-              {m ? lkr(m.discount_cents) : "—"}
-              {m ? <span className="ml-1.5 text-xs font-medium text-ink-4">LKR</span> : null}
-            </p>
-            <p className="mt-1 text-[11px] text-ink-4">
-              {m && m.value_cents > 0 ? `${((m.discount_cents / (m.value_cents + m.discount_cents)) * 100).toFixed(1)}% of list price` : "Given at the counter"}
-            </p>
-          </div>
-        </div>
-        <div className="px-5 pt-5 sm:px-6">
-          <div className="flex h-2.5 overflow-hidden rounded-full bg-ink/[0.06]" aria-hidden>
-            {allInvoices > 0
-              ? STATES.map((s, i) => {
-                  const c = counts[i] ?? 0;
-                  return c > 0 ? (
-                    <span
-                      key={s.status}
-                      className={cn("h-full border-r-2 border-paper last:border-r-0 transition-[width] duration-700 ease-brand", s.bar)}
-                      style={{ width: `${(c / allInvoices) * 100}%` }}
-                    />
-                  ) : null;
-                })
-              : null}
-          </div>
-        </div>
-        <ol className="mt-5 grid grid-cols-2 gap-px border-t border-ink/[0.06] bg-ink/[0.06] lg:grid-cols-4">
-          {STATES.map((s, i) => (
-            <li key={s.status} className="bg-paper">
-              <Link
-                href={`/sales/invoices?status=${s.status}`}
-                className="group flex h-full items-center gap-4 px-5 py-4 transition-colors hover:bg-gold-pale/50"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className={cn("size-2 rounded-full", s.bar)} />
-                    <span className="text-[13px] font-semibold text-ink transition-colors group-hover:text-gold-dark">{s.label}</span>
-                  </span>
-                  <span className="mt-1 block text-[11px] text-ink-4">{s.hint}</span>
-                </span>
-                {stateQueries[i]?.isLoading ? (
-                  <Skeleton className="h-7 w-10" />
-                ) : (
-                  <span className="g-metric text-2xl leading-none text-ink">{counts[i] ?? "—"}</span>
-                )}
-              </Link>
-            </li>
-          ))}
-        </ol>
-      </Card>
-
-      {/* ---------------------------------------------------- what's selling */}
-      <SectionHead index="03" title="What's selling" sub="This month, by value" />
-      <div className="grid gap-4 lg:grid-cols-3">
-        <MixCard icon={TagsIcon} title="By category" sub="Top categories" rows={byCategory.data} loading={byCategory.isLoading} fallback="Uncategorised" />
-        <MixCard icon={CoinsIcon} title="By payment" sub="How customers pay" rows={byPayment.data} loading={byPayment.isLoading} fallback="Unrecorded" />
-        <MixCard icon={UsersIcon} title="By salesperson" sub="Who is selling" rows={bySalesperson.data} loading={bySalesperson.isLoading} fallback="Unassigned" />
-      </div>
-
       {/* ---------------------------------------------------------- activity */}
-      <SectionHead index="04" title="Recent activity" sub="The latest sales and returns at the counter" />
+      <SectionHead index="01" title="Recent activity" sub="The latest sales and returns at the counter" />
       <div className="grid gap-4 lg:grid-cols-5">
         <Card className="lg:col-span-3">
           <CardHead icon={CreditCardIcon} title="Latest invoices" sub="Most recent sales, all branches you can see" action={<HeadLink href="/sales/invoices">All invoices</HeadLink>} />
@@ -422,6 +409,34 @@ export default function SalesDashboardPage() {
           </div>
         </Card>
       </div>
+      {/* ------------------------------------------------------ collections */}
+      <SectionHead index="02" title="Collections" sub="How invoices stand on payment. Tap a state to see them." />
+      <StatusBoard
+        icon={CoinsIcon}
+        title="Invoice settlement"
+        sub={
+          statesLoading
+            ? "Invoices by payment status"
+            : creditCount > 0
+              ? `${lkr(owed)}${owedPartial ? "+" : ""} LKR owed across ${creditCount} open invoice${creditCount === 1 ? "" : "s"}`
+              : `${allInvoices} invoice${allInvoices === 1 ? "" : "s"} · no open balances`
+        }
+        action={<HeadLink href="/sales/invoices">All invoices</HeadLink>}
+        states={[...STATES]}
+        counts={counts}
+        loading={statesLoading}
+        href={(s) => `/sales/invoices?status=${s}`}
+        cols="grid-cols-2 lg:grid-cols-4"
+      />
+
+      {/* ---------------------------------------------------- what's selling */}
+      <SectionHead index="03" title="What's selling" sub="This month, by value" />
+      <div className="grid gap-4 lg:grid-cols-3">
+        <MixCard icon={TagsIcon} title="By category" sub="Top categories" rows={byCategory.data} loading={byCategory.isLoading} fallback="Uncategorised" />
+        <MixCard icon={CoinsIcon} title="By payment" sub="How customers pay" rows={byPayment.data} loading={byPayment.isLoading} fallback="Unrecorded" />
+        <MixCard icon={UsersIcon} title="By salesperson" sub="Who is selling" rows={bySalesperson.data} loading={bySalesperson.isLoading} fallback="Unassigned" />
+      </div>
+
     </Page>
   );
 }

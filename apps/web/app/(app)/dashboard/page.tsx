@@ -40,7 +40,6 @@ type Invoice = {
   status: string;
   created_at: number;
 };
-type Approval = { id: string; action: string; entity: string; reason: string; createdAt: number };
 type AuditRow = { id: string; action: string; entity: string; entity_id: string; created_at: number };
 
 const lkr = (cents: number) => Math.round(cents / 100).toLocaleString("en-US");
@@ -69,11 +68,6 @@ function useDashboard(perms: string[], me: MeData | undefined) {
   const can = (p: string) => hasPermission(perms, p);
   const ready = !!me;
   const opt = { retry: false, staleTime: 60_000 } as const;
-  const approvalsScope = can("branches:manage")
-    ? ""
-    : me?.branchIds[0]
-      ? `&branchId=${encodeURIComponent(me.branchIds[0])}`
-      : null;
 
   const salesToday = useQuery({
     ...opt,
@@ -117,12 +111,6 @@ function useDashboard(perms: string[], me: MeData | undefined) {
     queryFn: () => api<{ rows: Invoice[]; total: number }>("/api/v1/sales/invoices?limit=6&page=1"),
     enabled: ready && can("sales:view"),
   });
-  const approvals = useQuery({
-    ...opt,
-    queryKey: ["dash", "approvals", approvalsScope],
-    queryFn: () => api<{ rows: Approval[]; total: number }>(`/api/v1/approvals?status=PENDING&limit=4${approvalsScope ?? ""}`),
-    enabled: ready && approvalsScope !== null,
-  });
   const audit = useQuery({
     ...opt,
     queryKey: ["dash", "audit"],
@@ -140,7 +128,7 @@ function useDashboard(perms: string[], me: MeData | undefined) {
     })),
   });
 
-  return { can, salesToday, salesMonth, purchasesToday, oldGoldToday, wip, rates, invoices, approvals, audit, months, trend };
+  return { can, salesToday, salesMonth, purchasesToday, oldGoldToday, wip, rates, invoices, audit, months, trend };
 }
 
 /* ------------------------------------------------------------------ building blocks */
@@ -149,7 +137,7 @@ function Card({ children, className }: { children: ReactNode; className?: string
   return (
     <section
       className={cn(
-        "relative overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(28,25,23,0.07),0_18px_40px_-28px_rgba(28,25,23,0.25)]",
+        "relative overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-28px_rgba(16,32,27,0.25)]",
         className
       )}
     >
@@ -172,7 +160,7 @@ function CardHead({
   return (
     <div className="flex items-center justify-between gap-3 px-5 pb-4 pt-5 sm:px-6">
       <div className="flex min-w-0 items-center gap-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.2)]">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,138,62,0.2)]">
           <Icon size={16} />
         </span>
         <div className="min-w-0">
@@ -208,7 +196,7 @@ function Empty({ icon: Icon, title, desc, dark }: { icon: IconCmp; title: string
       <span
         className={cn(
           "mb-3 flex size-10 items-center justify-center rounded-xl",
-          dark ? "bg-paper/[0.06] text-gold-light" : "bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.08)]"
+          dark ? "bg-paper/[0.06] text-gold-light" : "bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)]"
         )}
       >
         <Icon size={18} />
@@ -244,19 +232,19 @@ function TodayGauge({ pct }: { pct: number | undefined }) {
     <svg viewBox="0 0 200 200" className="size-full" aria-hidden>
       <defs>
         <linearGradient id="dg-gold" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#FFF4C7" />
-          <stop offset="0.45" stopColor="#E7C65A" />
-          <stop offset="1" stopColor="#A8861B" />
+          <stop offset="0" stopColor="#FBF0D5" />
+          <stop offset="0.45" stopColor="#E2C27A" />
+          <stop offset="1" stopColor="#A88A3E" />
         </linearGradient>
         <radialGradient id="dg-glow">
-          <stop offset="0" stopColor="#E7C65A" stopOpacity="0.28" />
-          <stop offset="1" stopColor="#E7C65A" stopOpacity="0" />
+          <stop offset="0" stopColor="#E2C27A" stopOpacity="0.28" />
+          <stop offset="1" stopColor="#E2C27A" stopOpacity="0" />
         </radialGradient>
       </defs>
       <circle cx="100" cy="100" r="96" fill="url(#dg-glow)" />
       <g className="home-spin" style={{ transformOrigin: "100px 100px" }}>
-        <circle cx="100" cy="100" r="94" fill="none" stroke="rgba(231,198,90,0.3)" strokeDasharray="1.5 6" />
-        <circle cx="100" cy="6" r="2.5" fill="#E7C65A" />
+        <circle cx="100" cy="100" r="94" fill="none" stroke="rgba(226,194,122,0.3)" strokeDasharray="1.5 6" />
+        <circle cx="100" cy="6" r="2.5" fill="#E2C27A" />
       </g>
       <g className="home-spin-rev" style={{ transformOrigin: "100px 100px" }}>
         {ticks.map((d) => {
@@ -271,7 +259,7 @@ function TodayGauge({ pct }: { pct: number | undefined }) {
               y1={100 + r1 * Math.sin(a)}
               x2={100 + r2 * Math.cos(a)}
               y2={100 + r2 * Math.sin(a)}
-              stroke={long ? "#E7C65A" : "rgba(255,255,255,0.2)"}
+              stroke={long ? "#E2C27A" : "rgba(255,255,255,0.2)"}
               strokeWidth={long ? 1.4 : 0.8}
             />
           );
@@ -310,7 +298,6 @@ function Hero({ me, d }: { me: MeData | undefined; d: ReturnType<typeof useDashb
     { label: "Month to date", value: month ? `LKR ${lkr(month.value_cents)}` : "—", icon: TrendingUpIcon, href: "/sales/reports" },
     { label: "Invoices this month", value: month ? month.invoices.toLocaleString("en-US") : "—", icon: InboxIcon, href: "/sales/invoices" },
     { label: "Gold in workshop", value: wipMg !== undefined ? `${grams(wipMg)} g` : "—", icon: FlaskConicalIcon, href: "/manufacturing/orders" },
-    { label: "Pending approvals", value: d.approvals.data ? String(d.approvals.data.total) : "—", icon: ShieldIcon, href: "/approvals" },
   ];
 
   return (
@@ -460,7 +447,7 @@ function Kpi({
       <SpotlightCard tone="light" className="flex flex-col p-5">
         <div className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-2.5 text-sm font-medium text-ink-3">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.2)] transition-all duration-320 group-hover:from-void group-hover:to-ink-2 group-hover:text-gold-light">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-b from-gold-soft to-gold-pale text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,138,62,0.2)] transition-all duration-320 group-hover:from-void group-hover:to-ink-2 group-hover:text-gold-light">
               <Icon size={16} />
             </span>
             {label}
@@ -547,35 +534,35 @@ function RevenuePanel({ d }: { d: ReturnType<typeof useDashboard> }) {
                 <AreaChart data={data} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="rev-fill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0" stopColor="#C9A227" stopOpacity={0.35} />
-                      <stop offset="1" stopColor="#C9A227" stopOpacity={0} />
+                      <stop offset="0" stopColor="#CDA853" stopOpacity={0.35} />
+                      <stop offset="1" stopColor="#CDA853" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="rev-stroke" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0" stopColor="#E7C65A" />
-                      <stop offset="1" stopColor="#A8861B" />
+                      <stop offset="0" stopColor="#E2C27A" />
+                      <stop offset="1" stopColor="#A88A3E" />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke="rgba(28,25,23,0.06)" strokeDasharray="3 5" vertical={false} />
-                  <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#78716c", fontSize: 11 }} />
+                  <CartesianGrid stroke="rgba(16,32,27,0.06)" strokeDasharray="3 5" vertical={false} />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#5d6e68", fontSize: 11 }} />
                   <YAxis
                     tickLine={false}
                     axisLine={false}
                     width={48}
-                    tick={{ fill: "#a8a29e", fontSize: 11 }}
+                    tick={{ fill: "#93a29c", fontSize: 11 }}
                     tickFormatter={(v: number) => Intl.NumberFormat("en-US", { notation: "compact" }).format(v)}
                   />
                   <Tooltip
-                    cursor={{ stroke: "rgba(168,134,27,0.35)", strokeDasharray: "3 3" }}
+                    cursor={{ stroke: "rgba(168,138,62,0.35)", strokeDasharray: "3 3" }}
                     contentStyle={{
                       borderRadius: 12,
                       border: "none",
-                      background: "#0c0a09",
+                      background: "#062a22",
                       color: "#fff",
                       fontSize: 12,
                       boxShadow: "0 20px 40px -16px rgba(0,0,0,0.5)",
                     }}
-                    labelStyle={{ color: "#E7C65A", fontWeight: 600, marginBottom: 4 }}
-                    itemStyle={{ color: "#fafaf9" }}
+                    labelStyle={{ color: "#E2C27A", fontWeight: 600, marginBottom: 4 }}
+                    itemStyle={{ color: "#f6f5f0" }}
                     formatter={(v) => `LKR ${Number(v ?? 0).toLocaleString("en-US")}`}
                   />
                   <Area
@@ -586,9 +573,9 @@ function RevenuePanel({ d }: { d: ReturnType<typeof useDashboard> }) {
                     strokeWidth={2.5}
                     fill="url(#rev-fill)"
                     connectNulls
-                    activeDot={{ r: 5, fill: "#E7C65A", stroke: "#fff", strokeWidth: 2 }}
+                    activeDot={{ r: 5, fill: "#E2C27A", stroke: "#fff", strokeWidth: 2 }}
                   />
-                  <Line type="monotone" dataKey="net" name="Net profit" stroke="#1c1917" strokeWidth={1.5} strokeDasharray="4 4" dot={false} connectNulls />
+                  <Line type="monotone" dataKey="net" name="Net profit" stroke="#10201b" strokeWidth={1.5} strokeDasharray="4 4" dot={false} connectNulls />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -731,61 +718,6 @@ function RecentSales({ d }: { d: ReturnType<typeof useDashboard> }) {
   );
 }
 
-function Attention({ d }: { d: ReturnType<typeof useDashboard> }) {
-  const rows = d.approvals.data?.rows ?? [];
-  const total = d.approvals.data?.total ?? 0;
-  return (
-    <Card>
-      <CardHead
-        icon={ShieldIcon}
-        title="Needs attention"
-        sub="Approvals waiting on a decision"
-        action={
-          total > 0 ? (
-            <span className="g-metric rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-700">{total}</span>
-          ) : undefined
-        }
-      />
-      <div className="px-5 pb-5 sm:px-6">
-        {d.approvals.isLoading ? (
-          <RowsSkeleton rows={3} />
-        ) : d.approvals.isError || !d.approvals.data ? (
-          <Empty icon={ShieldIcon} title="Approvals unavailable" desc="Your role can't view the approval queue." />
-        ) : rows.length === 0 ? (
-          <div className="flex flex-col items-center rounded-xl bg-gradient-to-b from-emerald-50 to-paper px-6 py-9 text-center ring-1 ring-emerald-600/10">
-            <span className="relative mb-3 flex size-11 items-center justify-center rounded-full bg-emerald-600 text-paper">
-              <span className="absolute inset-0 animate-ping rounded-full bg-emerald-500/30" />
-              <CheckCircleIcon size={20} />
-            </span>
-            <p className="text-sm font-semibold text-ink">All clear</p>
-            <p className="mt-1 text-xs text-ink-4">No approvals are waiting on you.</p>
-          </div>
-        ) : (
-          <ul className="space-y-2">
-            {rows.map((a) => (
-              <li key={a.id}>
-                <Link
-                  href="/approvals"
-                  className="group flex items-start gap-3 rounded-xl bg-amber-50/60 p-3 ring-1 ring-amber-600/10 transition-colors hover:bg-amber-50"
-                >
-                  <span className="mt-1.5 size-2 shrink-0 animate-pulse-soft rounded-full bg-amber-500" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-ink">{humanize(a.action)}</span>
-                    <span className="block truncate text-xs text-ink-4">
-                      {humanize(a.entity)} · {ago(a.createdAt)}
-                    </span>
-                  </span>
-                  <ArrowRightIcon size={13} className="mt-1 shrink-0 text-ink-5 group-hover:text-amber-700" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </Card>
-  );
-}
-
 const ACTIONS: { label: string; desc: string; href: string; icon: IconCmp; perm: string }[] = [
   { label: "New sale", desc: "Open the POS", href: "/pos", icon: CreditCardIcon, perm: "sales:create" },
   { label: "Scan", desc: "Look up a piece", href: "/scan", icon: ScanBarcodeIcon, perm: "products:view" },
@@ -800,9 +732,9 @@ const ACTIONS: { label: string; desc: string; href: string; icon: IconCmp; perm:
 function QuickActions({ d }: { d: ReturnType<typeof useDashboard> }) {
   const items = ACTIONS.filter((a) => d.can(a.perm));
   return (
-    <Card className="lg:col-span-2">
+    <Card className="lg:col-span-3">
       <CardHead icon={GemIcon} title="Quick actions" sub="Jump straight into the day's work" />
-      <div className="grid grid-cols-2 gap-2.5 px-5 pb-5 sm:grid-cols-4 sm:px-6">
+      <div className="grid grid-cols-2 gap-2.5 px-5 pb-5 sm:grid-cols-4 lg:grid-cols-8 sm:px-6">
         {items.map((a, i) => (
           <Link
             key={a.href}
@@ -811,7 +743,7 @@ function QuickActions({ d }: { d: ReturnType<typeof useDashboard> }) {
             style={{ animationDelay: `${i * 40}ms` }}
           >
             <span className="pointer-events-none absolute -right-8 -top-8 size-20 rounded-full bg-gold/0 blur-2xl transition-colors duration-320 group-hover:bg-gold/30" />
-            <span className="relative flex size-9 items-center justify-center rounded-lg bg-paper text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,134,27,0.18)] transition-colors group-hover:bg-gold group-hover:text-void">
+            <span className="relative flex size-9 items-center justify-center rounded-lg bg-paper text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,138,62,0.18)] transition-colors group-hover:bg-gold group-hover:text-void">
               <a.icon size={16} />
             </span>
             <span className="relative mt-4 block text-sm font-semibold text-ink transition-colors group-hover:text-paper">{a.label}</span>
@@ -931,12 +863,11 @@ export default function DashboardPage() {
 
       <div className="grid gap-5 lg:grid-cols-3">
         <RecentSales d={d} />
-        <Attention d={d} />
+        <Activity d={d} />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
         <QuickActions d={d} />
-        <Activity d={d} />
       </div>
     </Page>
   );

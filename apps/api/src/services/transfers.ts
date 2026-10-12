@@ -67,24 +67,9 @@ export async function requestTransfer(db: D1Database, input: { fromBranchId: str
   return { id, number };
 }
 
-export async function approveTransfer(db: D1Database, id: string, approverId: string, actorId: string): Promise<void> {
-  const doc = await loadTransfer(db, id);
-  if (doc.status !== "REQUESTED") throw Object.assign(new Error("Transfer not awaiting approval"), { code: "CONFLICT" });
-  if (approverId === doc.requestedBy) throw Object.assign(new Error("Approver cannot be the requester"), { code: "FORBIDDEN" });
-  const member = await db.prepare("SELECT 1 AS x FROM branch_members WHERE user_id = ? AND branch_id = ?").bind(approverId, doc.fromBranchId).first();
-  if (!member) throw Object.assign(new Error("Approver must belong to the sending branch"), { code: "FORBIDDEN" });
-  const perms = await db.prepare(`SELECT p.name AS name FROM user_roles ur JOIN role_permissions rp ON rp.role_id = ur.role_id JOIN permissions p ON p.id = rp.permission_id WHERE ur.user_id = ?`).bind(approverId).all<{ name: string }>();
-  if (!(perms.results ?? []).some((r) => r.name === "products:cancel"))
-    throw Object.assign(new Error("Approval requires products:cancel"), { code: "FORBIDDEN" });
-  await db.batch([
-    db.prepare("UPDATE transfers SET status = 'APPROVED', approved_by = ? WHERE id = ? AND status = 'REQUESTED'").bind(approverId, id),
-    buildAuditStmt(db, { userId: actorId, action: "transfer.approve", entity: "transfer", entityId: id, next: { approvedBy: approverId } }),
-  ]);
-}
-
 export async function dispatchTransfer(db: D1Database, id: string, actorId: string): Promise<void> {
   const doc = await loadTransfer(db, id);
-  if (doc.status !== "APPROVED") throw Object.assign(new Error("Transfer not approved"), { code: "CONFLICT" });
+  if (doc.status !== "REQUESTED" && doc.status !== "APPROVED") throw Object.assign(new Error("Transfer already dispatched"), { code: "CONFLICT" });
   const now = Date.now();
   const stmts: D1PreparedStatement[] = [];
   const goldEntries: GoldEntry[] = [];
@@ -106,7 +91,7 @@ export async function dispatchTransfer(db: D1Database, id: string, actorId: stri
   const goldStmts = await postGoldStmts(db, goldEntries, { actorId, auditAction: "transfer.dispatch", auditEntity: "transfer", auditEntityId: id, branchId: doc.toBranchId });
   stmts.push(...goldStmts);
   stmts.push(
-    db.prepare("UPDATE transfers SET status = 'DISPATCHED' WHERE id = ? AND status = 'APPROVED'").bind(id),
+    db.prepare("UPDATE transfers SET status = 'DISPATCHED' WHERE id = ? AND status IN ('REQUESTED','APPROVED')").bind(id),
     buildAuditStmt(db, { userId: actorId, action: "transfer.dispatch", entity: "transfer", entityId: id, next: { lines: doc.lines.length } })
   );
   await db.batch(stmts);

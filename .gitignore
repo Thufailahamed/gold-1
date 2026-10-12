@@ -9,3 +9,4 @@ seed.sql
 *.log
 *.tsbuildinfo
 .turbo/
+.claude/

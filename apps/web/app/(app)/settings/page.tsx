@@ -215,7 +215,7 @@ export default function SettingsPage() {
             {key && preview.data ? (
               <p className="mt-3 text-sm text-ink-4">
                 Current:{" "}
-                <span className="rounded-md bg-bone px-2 py-1 font-mono text-xs text-ink shadow-[inset_0_0_0_1px_rgba(28,25,23,0.08)]">
+                <span className="rounded-md bg-bone px-2 py-1 font-mono text-xs text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)]">
                   {JSON.stringify(preview.data.value)}
                 </span>
               </p>

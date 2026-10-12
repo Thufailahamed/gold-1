@@ -201,7 +201,7 @@ export default function NewTransferPage() {
               placeholder={fromBranchId ? "Scan barcode…" : "Choose the sending branch first"}
               autoComplete="off"
               disabled={!canCreate}
-              className="h-13 w-full rounded-xl bg-paper/10 py-3.5 pl-11 pr-4 font-mono text-lg text-paper placeholder:text-paper/35 shadow-[inset_0_0_0_1px_rgba(201,162,39,0.45)] transition-shadow focus:outline-none focus:shadow-[inset_0_0_0_2px_#C9A227,0_0_0_4px_rgba(201,162,39,0.2)] disabled:opacity-50"
+              className="h-13 w-full rounded-xl bg-paper/10 py-3.5 pl-11 pr-4 font-mono text-lg text-paper placeholder:text-paper/35 shadow-[inset_0_0_0_1px_rgba(205,168,83,0.45)] transition-shadow focus:outline-none focus:shadow-[inset_0_0_0_2px_#CDA853,0_0_0_4px_rgba(205,168,83,0.2)] disabled:opacity-50"
             />
           </div>
           <CameraScanButton onDetected={(c) => submitScan(c)} tone="dark" className="h-auto rounded-xl" />

@@ -166,7 +166,7 @@ export function LineSheet({
           value={value}
           onChangeText={setValue}
           placeholder="0"
-          hint={`Up to ${fmt(line.priceCents)} LKR. Discounts above your limit need approval.`}
+          hint={`Up to ${fmt(line.priceCents)} LKR.`}
         />
         <Button
           title="Remove from cart"
@@ -265,7 +265,6 @@ export function PaymentSheet(p: {
   bankRows: BankAccount[];
   canComplete: boolean;
   completing: boolean;
-  approved: boolean;
   onComplete: () => void;
 }) {
   const { c } = useTheme();
@@ -395,7 +394,7 @@ export function PaymentSheet(p: {
         </View>
 
         <Button
-          title={p.completing ? "Posting…" : p.approved ? "Complete approved sale" : "Complete sale"}
+          title={p.completing ? "Posting…" : "Complete sale"}
           icon="checkCircle"
           size="lg"
           block

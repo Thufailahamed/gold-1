@@ -7,6 +7,8 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { centsToLkr, mgToG } from "@goldos/shared";
 import { api, formApi } from "@/lib/api";
+import { cn } from "@/lib/cn";
+import { Select } from "@/components/select";
 import { LineageChain, type LineageNode, type LineageEdge } from "@/components/lineage-chain";
 import {
   Page,
@@ -71,6 +73,57 @@ type Movement = {
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
+const lkr = (cents: number | null) => (cents === null ? "—" : `${centsToLkr(cents).toLocaleString("en-US")} LKR`);
+
+function SpecGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <div className="mb-3 flex items-center gap-3">
+        <span className="size-1.5 rounded-full bg-gold" />
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-dark">{title}</h3>
+        <span className="h-px flex-1 bg-gradient-to-r from-ink/[0.1] to-transparent" />
+      </div>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">{children}</div>
+    </section>
+  );
+}
+
+function SpecCard({
+  label,
+  value,
+  hint,
+  accent,
+  tone,
+}: {
+  label: string;
+  value: string;
+  hint?: string | undefined;
+  accent?: boolean;
+  tone?: "good" | "bad" | undefined;
+}) {
+  return (
+    <div
+      className={cn(
+        "g-surface relative overflow-hidden p-4 transition-transform duration-200 hover:-translate-y-0.5",
+        accent && "bg-gradient-to-br from-gold-pale/70 to-paper"
+      )}
+    >
+      {accent ? <span className="absolute inset-x-0 top-0 h-[2px] bg-gold" /> : null}
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">{label}</p>
+      <p
+        className={cn(
+          "num-tabular mt-2 break-words text-lg font-semibold tracking-tight text-ink",
+          tone === "good" && "text-emerald-700",
+          tone === "bad" && "text-rose-600"
+        )}
+      >
+        {value}
+      </p>
+      {hint ? <p className="mt-0.5 text-xs text-ink-4">{hint}</p> : null}
+    </div>
+  );
+}
+
 export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -87,6 +140,11 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     queryFn: () =>
       api<{ rows: Movement[]; total: number }>(`/api/v1/inventory/movements?productId=${id}&limit=50`),
     enabled: tab === "moves",
+  });
+  const branches = useQuery({
+    queryKey: ["branches-names"],
+    queryFn: () => api<{ rows: { id: string; name: string }[] }>("/api/v1/branches?limit=100"),
+    staleTime: 5 * 60_000,
   });
   const labelUrl = `${API}/api/v1/products/${id}/label`;
 
@@ -180,6 +238,10 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     );
   const { product, livePrice, noRate } = detail.data;
   const holdExpired = product.reserved_until !== null && product.reserved_until < Date.now();
+  const branchName = branches.data?.rows.find((b) => b.id === product.branch_id)?.name;
+  const price = product.selling_price_cents ?? livePrice?.amount_cents ?? null;
+  const margin = price !== null && product.cost_cents !== null ? price - product.cost_cents : null;
+  const marginPct = margin !== null && price ? (margin / price) * 100 : null;
 
   return (
     <Page>
@@ -290,38 +352,42 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
       />
 
       {tab === "specs" ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          {[
-            ["Category", product.category_name],
-            ["Karat", `${product.karat} (${product.permille})`],
-            ["Gross", `${mgToG(product.gross_mg)}g`],
-            ["Stone", `${mgToG(product.stone_mg)}g`],
-            ["Net", `${mgToG(product.net_mg)}g`],
-            ["Fine gold", `${mgToG(product.fine_gold_mg)}g`],
-            ["Wastage", `${mgToG(product.wastage_mg)}g`],
-            ["Making", `${centsToLkr(product.making_cents).toLocaleString("en-US")} LKR`],
-            [
-              "Cost",
-              product.cost_cents !== null
-                ? `${centsToLkr(product.cost_cents).toLocaleString("en-US")} LKR`
-                : "—",
-            ],
-            [
-              "Selling",
-              product.selling_price_cents !== null
-                ? `${centsToLkr(product.selling_price_cents).toLocaleString("en-US")} LKR`
-                : "—",
-            ],
-            ["Location", product.location ?? "—"],
-            ["Status", product.status],
-            ["Branch", product.branch_id],
-            ["Notes", product.notes ?? "—"],
-          ].map(([k, v]) => (
-            <div key={k} className="g-surface p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-4">{k}</p>
-              <p className="mt-1.5 break-words text-sm font-medium text-ink">{v}</p>
+        <div className="space-y-6">
+          <SpecGroup title="Identity">
+            <SpecCard label="Category" value={product.category_name} />
+            <SpecCard label="Karat" value={`${product.karat} · ${product.permille}‰`} />
+            <SpecCard label="Branch" value={branchName ?? "—"} />
+            <SpecCard label="Location" value={product.location ?? "—"} />
+          </SpecGroup>
+          <SpecGroup title="Weight">
+            <SpecCard label="Gross" value={`${mgToG(product.gross_mg)} g`} />
+            <SpecCard label="Stone" value={`${mgToG(product.stone_mg)} g`} />
+            <SpecCard label="Net" value={`${mgToG(product.net_mg)} g`} />
+            <SpecCard label="Fine gold" value={`${mgToG(product.fine_gold_mg)} g`} accent />
+            <SpecCard label="Wastage" value={`${mgToG(product.wastage_mg)} g`} />
+          </SpecGroup>
+          <SpecGroup title="Pricing">
+            <SpecCard label="Making" value={lkr(product.making_cents)} />
+            <SpecCard label="Book cost" value={lkr(product.cost_cents)} />
+            <SpecCard
+              label="Selling price"
+              value={product.selling_price_cents !== null ? lkr(product.selling_price_cents) : "Live board rate"}
+              hint={product.selling_price_cents !== null ? "Manual override" : undefined}
+              accent
+            />
+            <SpecCard
+              label="Margin"
+              value={margin !== null ? lkr(margin) : "—"}
+              hint={marginPct !== null ? `${marginPct.toFixed(1)}% of price` : "Needs a cost and a price"}
+              tone={margin === null ? undefined : margin < 0 ? "bad" : "good"}
+            />
+          </SpecGroup>
+          {product.notes ? (
+            <div className="g-surface p-5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-dark">Notes</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ink-2">{product.notes}</p>
             </div>
-          ))}
+          ) : null}
         </div>
       ) : (
         <TableCard title="Movement history" description="Every status change for this piece">
@@ -382,7 +448,11 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
           }
         >
           {product.image_keys.length === 0 ? (
-            <p className="text-sm text-ink-4">No images yet. JPEG, PNG or WebP, up to 5 MB each.</p>
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-ink/15 bg-bone/50 px-4 py-8 text-center">
+              <GemIcon size={22} className="text-gold" />
+              <p className="mt-2 text-sm font-medium text-ink-2">No photos yet</p>
+              <p className="mt-0.5 text-xs text-ink-4">JPEG, PNG or WebP, up to 5 MB each.</p>
+            </div>
           ) : (
             <div className="flex flex-wrap gap-3">
               {product.image_keys.map((k) => {
@@ -393,7 +463,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                     <img
                       src={`${API}/api/v1/products/${id}/images/${img}`}
                       alt={product.barcode}
-                      className="h-32 w-32 rounded-lg object-cover shadow-[inset_0_0_0_1px_rgba(28,25,23,0.1)]"
+                      className="h-36 w-36 rounded-xl object-cover shadow-[0_10px_24px_-14px_rgba(16,32,27,0.45),inset_0_0_0_1px_rgba(16,32,27,0.1)] transition-transform duration-200 group-hover:scale-[1.02]"
                     />
                     {product.status !== "VOID" ? (
                       <button
@@ -416,18 +486,18 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
       ) : null}
 
       <Panel title="Barcode label" description="Print-ready label for this piece" icon={<PrinterIcon size={16} />}>
-        <div className="print-area">
+        <div className="print-area inline-block rounded-xl bg-bone/60 p-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={labelUrl} alt={`Label for ${product.barcode}`} className="max-w-sm" />
+          <img src={labelUrl} alt={`Label for ${product.barcode}`} className="max-w-sm rounded-md bg-white shadow-sm" />
         </div>
         <div className="mt-4 flex gap-2 print:hidden">
           <button
             onClick={() => router.push(`/products/${id}/print`)}
-            className="g-btn g-btn-secondary h-9 px-3.5 text-sm"
+            className="g-btn g-btn-secondary h-10 rounded-xl px-4 text-sm"
           >
             Print view
           </button>
-          <button onClick={() => window.print()} className="g-btn g-btn-primary h-9 px-3.5 text-sm">
+          <button onClick={() => window.print()} className="g-btn g-btn-primary h-10 rounded-xl px-4 text-sm">
             <PrinterIcon size={14} />
             Print label
           </button>
@@ -461,6 +531,11 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     </Page>
   );
 }
+
+const withNone = (rows?: { id: string; name: string }[]) => [
+  { value: "", label: "None" },
+  ...(rows ?? []).map((r) => ({ value: r.id, label: r.name })),
+];
 
 function EditDialog({
   product,
@@ -526,11 +601,12 @@ function EditDialog({
     }
   }
 
-  const cls = controlClass;
+  const cls = `${controlClass} w-full !h-11 !rounded-xl !px-3.5`;
   return (
     <Modal
       title={<>Edit piece <span className="text-ink-4">({product.barcode})</span></>}
       kicker="Edit Product"
+      wide
       onClose={onClose}
       onSubmit={save}
       pending={pending}
@@ -538,67 +614,47 @@ function EditDialog({
     >
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2">
-          <label className="mb-1.5 block text-xs font-medium text-ink-3">Product Name</label>
+          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Product Name</label>
           <input value={name} onChange={(e) => setName(e.target.value)} required className={cls} />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-ink-3">Making charge (LKR)</label>
+          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Making charge (LKR)</label>
           <input type="number" step="any" value={makingLkr} onChange={(e) => setMakingLkr(e.target.value)} className={cls} />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-ink-3">Wastage (g)</label>
+          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Wastage (g)</label>
           <input type="number" step="any" value={wastageG} onChange={(e) => setWastageG(e.target.value)} className={cls} />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-ink-3">Cost (LKR)</label>
+          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Cost (LKR)</label>
           <input type="number" step="any" value={costLkr} onChange={(e) => setCostLkr(e.target.value)} className={cls} />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-ink-3">Selling price (LKR, optional)</label>
+          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Selling price (LKR, optional)</label>
           <input type="number" step="any" value={sellingPriceLkr} onChange={(e) => setSellingPriceLkr(e.target.value)} placeholder="Live board rate" className={cls} />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-ink-3">Subcategory</label>
-          <select value={subcategoryId} onChange={(e) => setSubcategoryId(e.target.value)} className={cls}>
-            <option value="">None</option>
-            {(subcats.data?.rows ?? []).map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
+          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Subcategory</label>
+          <Select value={subcategoryId} onChange={setSubcategoryId} options={withNone(subcats.data?.rows)} />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-ink-3">Design</label>
-          <select value={designId} onChange={(e) => setDesignId(e.target.value)} className={cls}>
-            <option value="">None</option>
-            {(designs.data?.rows ?? []).map((d) => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </select>
+          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Design</label>
+          <Select value={designId} onChange={setDesignId} options={withNone(designs.data?.rows)} />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-ink-3">Product Type</label>
-          <select value={productTypeId} onChange={(e) => setProductTypeId(e.target.value)} className={cls}>
-            <option value="">None</option>
-            {(ptypes.data?.rows ?? []).map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
+          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Product Type</label>
+          <Select value={productTypeId} onChange={setProductTypeId} options={withNone(ptypes.data?.rows)} />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-ink-3">Stone Type</label>
-          <select value={stoneTypeId} onChange={(e) => setStoneTypeId(e.target.value)} className={cls}>
-            <option value="">None</option>
-            {(stones.data?.rows ?? []).map((st) => (
-              <option key={st.id} value={st.id}>{st.name}</option>
-            ))}
-          </select>
+          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Stone Type</label>
+          <Select value={stoneTypeId} onChange={setStoneTypeId} options={withNone(stones.data?.rows)} />
         </div>
         <div className="col-span-2">
-          <label className="mb-1.5 block text-xs font-medium text-ink-3">Location / Showcase / Tray</label>
+          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Location / Showcase / Tray</label>
           <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Showcase A, Tray 3" className={cls} />
         </div>
         <div className="col-span-2">
-          <label className="mb-1.5 block text-xs font-medium text-ink-3">Notes</label>
+          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Notes</label>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Internal notes or comments" className={cls} />
         </div>
       </div>
@@ -641,7 +697,7 @@ function ReserveDialog({ id, onClose }: { id: string; onClose: (saved: boolean) 
     }
   }
 
-  const cls = controlClass;
+  const cls = `${controlClass} w-full !h-11 !rounded-xl !px-3.5`;
   return (
     <Modal
       title="Reserve for a customer"
@@ -653,14 +709,14 @@ function ReserveDialog({ id, onClose }: { id: string; onClose: (saved: boolean) 
       submitLabel="Reserve"
     >
       <div>
-        <label className="mb-1.5 block text-xs font-medium text-ink-3">Customer</label>
+        <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Customer</label>
         {customer ? (
-          <div className="flex items-center justify-between rounded-lg bg-bone px-3 py-2 text-sm">
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-gold-pale/60 px-3.5 py-3 text-sm shadow-[inset_0_0_0_1px_rgba(205,168,83,0.35)]">
             <span className="font-medium text-ink">
               {customer.name}
               {customer.phone ? <span className="text-ink-4"> · {customer.phone}</span> : null}
             </span>
-            <button type="button" onClick={() => setCustomer(null)} className="text-xs font-medium underline">
+            <button type="button" onClick={() => setCustomer(null)} className="rounded-lg px-2 py-1 text-xs font-semibold text-gold-dark transition-colors hover:bg-gold/15">
               Change
             </button>
           </div>
@@ -674,22 +730,22 @@ function ReserveDialog({ id, onClose }: { id: string; onClose: (saved: boolean) 
               className={cls}
             />
             {(hits.data?.rows ?? []).length > 0 ? (
-              <ul className="mt-1.5 divide-y divide-mist rounded-lg shadow-[inset_0_0_0_1px_rgba(28,25,23,0.1)]">
+              <ul className="g-floating mt-2 max-h-56 space-y-0.5 overflow-y-auto p-1.5 scrollbar-thin">
                 {hits.data!.rows.map((c) => (
                   <li key={c.id}>
                     <button
                       type="button"
                       onClick={() => setCustomer(c)}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-bone"
+                      className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-ink-2 transition-colors hover:bg-void/[0.06] hover:text-ink"
                     >
-                      {c.name}
-                      {c.phone ? <span className="text-ink-4"> · {c.phone}</span> : null}
+                      <span className="font-medium">{c.name}</span>
+                      {c.phone ? <span className="num-tabular text-xs text-ink-4">{c.phone}</span> : null}
                     </button>
                   </li>
                 ))}
               </ul>
             ) : search.trim() && !hits.isLoading ? (
-              <p className="mt-1.5 text-xs text-ink-4">
+              <p className="mt-2 rounded-lg bg-bone px-3 py-2 text-xs text-ink-4">
                 No match. <Link href="/customers" className="underline">Add the customer</Link> first.
               </p>
             ) : null}
@@ -697,7 +753,7 @@ function ReserveDialog({ id, onClose }: { id: string; onClose: (saved: boolean) 
         )}
       </div>
       <div>
-        <label className="mb-1.5 block text-xs font-medium text-ink-3">Note (required)</label>
+        <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Note (required)</label>
         <input
           value={note}
           onChange={(e) => setNote(e.target.value)}
@@ -707,7 +763,7 @@ function ReserveDialog({ id, onClose }: { id: string; onClose: (saved: boolean) 
         />
       </div>
       <div>
-        <label className="mb-1.5 block text-xs font-medium text-ink-3">Hold until (optional)</label>
+        <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Hold until (optional)</label>
         <input type="date" value={untilDate} onChange={(e) => setUntilDate(e.target.value)} className={cls} />
       </div>
     </Modal>

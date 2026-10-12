@@ -101,7 +101,7 @@ export default function TeamPage() {
                           aria-label={`Actions for ${a.name}`}
                           value=""
                           onChange={(e) => e.target.value && setAction({ kind: e.target.value as Action["kind"], admin: a })}
-                          className="h-8 rounded-lg bg-paper px-2 text-xs shadow-[inset_0_0_0_1px_rgba(28,25,23,0.14)]"
+                          className="h-8 rounded-lg bg-paper px-2 text-xs shadow-[inset_0_0_0_1px_rgba(16,32,27,0.14)]"
                         >
                           <option value="">Manage…</option>
                           <option value="role">Change role</option>

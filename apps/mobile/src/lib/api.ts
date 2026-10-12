@@ -6,7 +6,7 @@ import type { ApiResponse } from "@goldos/shared";
 
 /**
  * API client for the GoldOS worker. Mirrors apps/web/lib/api.ts: same
- * envelope, same idempotent-retry rule, same PENDING approval error.
+ * envelope, same idempotent-retry rule.
  *
  * Auth differs from the browser: the API issues an HttpOnly `session`
  * cookie. A native app has no shared cookie jar it can rely on across
@@ -133,21 +133,6 @@ export class ApiError extends Error {
   }
 }
 
-export class PendingApprovalError extends Error {
-  readonly code = "PENDING";
-  readonly approvalId?: string;
-  readonly entity?: string;
-  readonly entityId?: string;
-  readonly metric?: number;
-  constructor(message: string, err: { approvalId?: string; entity?: string; entityId?: string; metric?: number }) {
-    super(message);
-    this.name = "PendingApprovalError";
-    this.approvalId = err.approvalId;
-    this.entity = err.entity;
-    this.entityId = err.entityId;
-    this.metric = err.metric;
-  }
-}
 
 /** The API error code (CONFLICT, VALIDATION, …) carried by an `api` failure. */
 export function errorCode(err: unknown): string | undefined {
@@ -191,7 +176,6 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const body = await readBody<T>(res);
   captureSession(res, body);
   if (!body.success) {
-    if (body.error.code === "PENDING") throw new PendingApprovalError(body.error.message, body.error);
     handleUnauthorized(path, body.error.code);
     throw new ApiError(body.error.message, body.error.code);
   }

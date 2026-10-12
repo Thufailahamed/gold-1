@@ -177,7 +177,7 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
             <Pill tone="ghost" className="!text-paper">{scopeText}</Pill>
             {!open && count.closed_by_name ? (
               <Pill tone="ghost" className="!text-paper">
-                {count.status === "COMPLETE" ? "Approved" : "Cancelled"} by {count.closed_by_name}
+                {count.status === "COMPLETE" ? "Posted" : "Cancelled"} by {count.closed_by_name}
               </Pill>
             ) : null}
           </>
@@ -187,7 +187,7 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
             <>
               {canApprove ? (
                 <button type="button" onClick={() => setDialog("approve")} className={heroBtnPrimary}>
-                  <CheckCircleIcon size={14} /> Approve & post
+                  <CheckCircleIcon size={14} /> Post count
                 </button>
               ) : null}
               {canEdit ? (
@@ -218,7 +218,7 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
       </StatGrid>
 
       {count.status === "COMPLETE" ? (
-        <Callout tone="success" title="Count approved">
+        <Callout tone="success" title="Count posted">
           Closed by {count.closed_by_name ?? "unknown"}.{" "}
           {summary.posted > 0
             ? `${plural(summary.posted, "missing piece")} ${summary.posted === 1 ? "was" : "were"} written off as LOST and posted to the gold ledger.`
@@ -254,7 +254,7 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
           icon={<AlertCircleIcon size={17} />}
           description={
             open
-              ? "Expected on the shelf but not scanned yet. Approving writes these off as LOST."
+              ? "Expected on the shelf but not scanned yet. Posting writes these off as LOST."
               : "Pieces that were not found when the count closed."
           }
         >
@@ -606,7 +606,7 @@ function ScanStation({
               autoCapitalize="characters"
               spellCheck={false}
               enterKeyHint="send"
-              className="h-12 w-full rounded-lg bg-paper pl-11 pr-4 font-mono text-base text-ink shadow-[inset_0_0_0_1.5px_rgba(201,162,39,0.6)] transition-shadow placeholder:font-sans placeholder:text-ink-5 focus:outline-none focus:shadow-[inset_0_0_0_1.5px_var(--gold,#C9A227),0_0_0_4px_rgba(201,162,39,0.25)]"
+              className="h-12 w-full rounded-lg bg-paper pl-11 pr-4 font-mono text-base text-ink shadow-[inset_0_0_0_1.5px_rgba(205,168,83,0.6)] transition-shadow placeholder:font-sans placeholder:text-ink-5 focus:outline-none focus:shadow-[inset_0_0_0_1.5px_var(--gold,#CDA853),0_0_0_4px_rgba(205,168,83,0.25)]"
             />
           </div>
           <CameraScanButton onDetected={(c) => void submit(c)} className="h-12" tone="dark" />
@@ -675,25 +675,19 @@ function ApproveDialog({
   onDone: () => void;
 }) {
   const [reason, setReason] = useState("");
-  const [approvedBy, setApprovedBy] = useState("");
   const [pending, setPending] = useState(false);
-  const approvers = useQuery({
-    queryKey: ["count-approvers", countId],
-    queryFn: () => api<{ id: string; name: string }[]>(`/api/v1/counts/${countId}/approvers`),
-  });
-  const list = approvers.data ?? [];
 
   async function save() {
     setPending(true);
     try {
       const res = await api<{ posted: number }>(`/api/v1/counts/${countId}/approve`, {
         method: "POST",
-        body: JSON.stringify({ reason: reason.trim(), approvedBy }),
+        body: JSON.stringify({ reason: reason.trim() }),
       });
-      toast.success(res.posted > 0 ? `Count approved: ${plural(res.posted, "piece")} written off as LOST` : "Count approved, nothing written off");
+      toast.success(res.posted > 0 ? `Count posted: ${plural(res.posted, "piece")} written off as LOST` : "Count posted, nothing written off");
       onDone();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Approval failed");
+      toast.error(e instanceof Error ? e.message : "Could not post count");
     } finally {
       setPending(false);
     }
@@ -702,13 +696,13 @@ function ApproveDialog({
   return (
     <Modal
       kicker="Stock count"
-      title="Approve & post"
+      title="Post count"
       danger={missing > 0}
       onClose={onClose}
       onSubmit={save}
       pending={pending}
-      submitDisabled={!reason.trim() || !approvedBy}
-      submitLabel={missing > 0 ? `Write off ${plural(missing, "piece")}` : "Approve & close"}
+      submitDisabled={!reason.trim()}
+      submitLabel={missing > 0 ? `Write off ${plural(missing, "piece")}` : "Post & close"}
     >
       {missing > 0 ? (
         <Callout tone="danger" title={`${plural(missing, "piece")} will be written off as LOST`}>
@@ -717,44 +711,9 @@ function ApproveDialog({
         </Callout>
       ) : (
         <Callout tone="success" title="Nothing is missing">
-          Approving closes the count and releases the stock lock. No pieces will be written off.
+          Posting closes the count and releases the stock lock. No pieces will be written off.
         </Callout>
       )}
-      <Field
-        label="Second approver"
-        htmlFor="approve-by"
-        hint={
-          approvers.isSuccess && list.length === 0
-            ? undefined
-            : "Another user with gold:manage who is not you and did not open this count."
-        }
-      >
-        <select
-          id="approve-by"
-          value={approvedBy}
-          onChange={(e) => setApprovedBy(e.target.value)}
-          className={`w-full ${controlClass}`}
-          disabled={approvers.isLoading || list.length === 0}
-        >
-          <option value="">{approvers.isLoading ? "Loading…" : list.length === 0 ? "No eligible approvers" : "Select approver…"}</option>
-          {list.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.name}
-            </option>
-          ))}
-        </select>
-      </Field>
-      {approvers.isSuccess && list.length === 0 ? (
-        <Callout tone="warning" title="No eligible approver">
-          A count must be approved by a second person. Ask an administrator to give another user the gold:manage
-          permission (someone other than you and the person who opened this count).
-        </Callout>
-      ) : null}
-      {approvers.isError ? (
-        <Callout tone="danger" title="Could not load approvers">
-          {approvers.error instanceof Error ? approvers.error.message : "Please try again."}
-        </Callout>
-      ) : null}
       <Field label="Reason" htmlFor="approve-reason" hint={`${reason.length}/500`}>
         <textarea
           id="approve-reason"

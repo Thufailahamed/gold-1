@@ -65,26 +65,42 @@ export default function OldGoldDetailPage({ params }: { params: Promise<{ id: st
     queryFn: () => api<Detail>(`/api/v1/oldgold/items/${id}`),
   });
 
+  const [busy, setBusy] = useState(false);
+
+  // Every old-gold list and report reads these keys; a step here moves the item
+  // between them.
+  function refresh() {
+    for (const key of ["og-item", "og-items", "og-lineage", "og-summary", "og-breakdown", "og-pending", "og-dash", "og-queue", "og-retest"])
+      qc.invalidateQueries({ queryKey: [key] });
+  }
+
   async function act(path: string, body: unknown, ok: string) {
+    if (busy) return;
+    setBusy(true);
     try {
       await api(`/api/v1/oldgold/items/${id}${path}`, { method: "POST", body: JSON.stringify(body) });
       toast.success(ok);
-      qc.invalidateQueries({ queryKey: ["og-item", id] });
-      qc.invalidateQueries({ queryKey: ["og-items"] });
+      refresh();
       setDialog(null);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Action failed");
+    } finally {
+      setBusy(false);
     }
   }
 
   async function voidIt(reason: string) {
+    if (busy) return;
+    setBusy(true);
     try {
       await api(`/api/v1/oldgold/items/${id}/void`, { method: "PATCH", body: JSON.stringify({ reason }) });
       toast.success("Voided");
-      qc.invalidateQueries({ queryKey: ["og-item", id] });
+      refresh();
       setDialog(null);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Void failed");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -129,10 +145,17 @@ export default function OldGoldDetailPage({ params }: { params: Promise<{ id: st
           { label: "Net weight", value: `${g(item.net_mg)} g` },
           { label: "Fine gold", value: `${g(item.fine_mg)} g` },
           { label: "Value", value: item.purchase_value_cents !== null ? `${fmt(item.purchase_value_cents)} LKR` : "—" },
-          { label: "Paid", value: `${fmt(item.paid_cents)} LKR` },
+          purchase
+            ? { label: "Owed to customer", value: `${fmt(purchase.value_cents - purchase.paid_cents)} LKR` }
+            : { label: "Paid", value: `${fmt(item.paid_cents)} LKR` },
         ]}
         actions={
           <>
+            {item.status === "RECEIVED" || item.status === "TESTED" ? (
+              <Link href="/old-gold/testing" className={item.status === "RECEIVED" ? heroBtnPrimary : heroBtnGhost}>
+                {item.status === "RECEIVED" ? "Test purity" : "Retest"}
+              </Link>
+            ) : null}
             {item.status === "TESTED" || item.status === "VALUED" ? (
               <button onClick={() => setDialog("value")} className={heroBtnPrimary}>Value</button>
             ) : null}
@@ -140,7 +163,7 @@ export default function OldGoldDetailPage({ params }: { params: Promise<{ id: st
               <button onClick={() => setDialog("purchase")} className={heroBtnPrimary}>Purchase</button>
             ) : null}
             {item.status === "PURCHASED" ? (
-              <button onClick={() => act("/release", {}, "Released")} className={heroBtnPrimary}>Release</button>
+              <button onClick={() => act("/release", {}, "Released")} disabled={busy} className={heroBtnPrimary}>Release to stock</button>
             ) : null}
             {item.status === "AVAILABLE" ? (
               <button onClick={() => setDialog("convert")} className={heroBtnGhost}>Convert to product</button>
@@ -218,10 +241,10 @@ export default function OldGoldDetailPage({ params }: { params: Promise<{ id: st
         <OldGoldLineage id={id} />
       </Panel>
 
-      {dialog === "value" ? <ValueDialog onSubmit={(b) => act("/value", b, "Valued")} onClose={() => setDialog(null)} /> : null}
-      {dialog === "purchase" ? <PurchaseDialog maxLkr={item.purchase_value_cents !== null ? item.purchase_value_cents / 100 : 0} onSubmit={(b) => act("/purchase", b, "Purchased")} onClose={() => setDialog(null)} /> : null}
-      {dialog === "convert" ? <ConvertDialog onSubmit={(b) => act("/convert", b, "Converted")} onClose={() => setDialog(null)} /> : null}
-      {dialog === "void" ? <VoidDialog onSubmit={(r) => voidIt(r)} onClose={() => setDialog(null)} /> : null}
+      {dialog === "value" ? <ValueDialog pending={busy} onSubmit={(b) => act("/value", b, "Valued")} onClose={() => setDialog(null)} /> : null}
+      {dialog === "purchase" ? <PurchaseDialog pending={busy} maxLkr={item.purchase_value_cents !== null ? item.purchase_value_cents / 100 : 0} onSubmit={(b) => act("/purchase", b, "Purchased")} onClose={() => setDialog(null)} /> : null}
+      {dialog === "convert" ? <ConvertDialog pending={busy} onSubmit={(b) => act("/convert", b, "Converted")} onClose={() => setDialog(null)} /> : null}
+      {dialog === "void" ? <VoidDialog pending={busy} onSubmit={(r) => voidIt(r)} onClose={() => setDialog(null)} /> : null}
     </Page>
   );
 }
@@ -239,48 +262,55 @@ function OldGoldLineage({ id }: { id: string }) {
   return <LineageChain nodes={lineage.data.nodes} edges={lineage.data.edges} />;
 }
 
-function ValueDialog({ onSubmit, onClose }: { onSubmit: (b: object) => void; onClose: () => void }) {
+function ValueDialog({ pending, onSubmit, onClose }: { pending: boolean; onSubmit: (b: object) => void; onClose: () => void }) {
   const [buyPct, setBuyPct] = useState("");
   const [stone, setStone] = useState("");
   const [proc, setProc] = useState("");
   const [neg, setNeg] = useState("");
   const [reason, setReason] = useState("");
+  // A custom buy % or a negotiated total is an override; the server refuses it without a reason.
+  const override = buyPct !== "" || neg !== "";
   return (
-    <Modal kicker="Old gold" title="Valuation" onClose={onClose} onSubmit={() => onSubmit({
+    <Modal kicker="Old gold" title="Valuation" onClose={onClose} pending={pending} submitDisabled={override && reason.trim() === ""} onSubmit={() => onSubmit({
       ...(buyPct !== "" ? { buyPct: Number(buyPct) } : {}),
       stoneDeductionLkr: stone === "" ? 0 : Number(stone),
       processingDeductionLkr: proc === "" ? 0 : Number(proc),
       ...(neg !== "" ? { negotiatedLkr: Number(neg) } : {}),
-      ...(reason !== "" ? { reason } : {}),
+      ...(reason.trim() !== "" ? { reason: reason.trim() } : {}),
     })} submitLabel="Value">
       <div className="grid grid-cols-2 gap-3">
-        <label className="block text-sm text-ink-2">Buy % (blank = default)<input value={buyPct} onChange={(e) => setBuyPct(e.target.value)} type="number" step="any" className={`num-tabular ${controlClass}`} /></label>
-        <label className="block text-sm text-ink-2">Stone deduction LKR<input value={stone} onChange={(e) => setStone(e.target.value)} type="number" step="any" className={`num-tabular ${controlClass}`} /></label>
-        <label className="block text-sm text-ink-2">Processing deduction LKR<input value={proc} onChange={(e) => setProc(e.target.value)} type="number" step="any" className={`num-tabular ${controlClass}`} /></label>
-        <label className="block text-sm text-ink-2">Negotiated total LKR<input value={neg} onChange={(e) => setNeg(e.target.value)} type="number" step="any" className={`num-tabular ${controlClass}`} /></label>
+        <label className="block text-sm text-ink-2">Buy % (blank = default)<input value={buyPct} onChange={(e) => setBuyPct(e.target.value)} type="number" min="0" max="100" step="any" className={`num-tabular ${controlClass}`} /></label>
+        <label className="block text-sm text-ink-2">Stone deduction LKR<input value={stone} onChange={(e) => setStone(e.target.value)} type="number" min="0" step="any" className={`num-tabular ${controlClass}`} /></label>
+        <label className="block text-sm text-ink-2">Processing deduction LKR<input value={proc} onChange={(e) => setProc(e.target.value)} type="number" min="0" step="any" className={`num-tabular ${controlClass}`} /></label>
+        <label className="block text-sm text-ink-2">Negotiated total LKR<input value={neg} onChange={(e) => setNeg(e.target.value)} type="number" min="0" step="any" className={`num-tabular ${controlClass}`} /></label>
       </div>
-      <label className="block text-sm text-ink-2">Reason (required for overrides)
+      <label className="block text-sm text-ink-2">Reason {override ? "(required for this override)" : "(only for overrides)"}
         <input value={reason} onChange={(e) => setReason(e.target.value)} className={controlClass} />
       </label>
+      <p className="text-xs text-ink-4">Value = net weight × tested purity at the board rate × buy %, less deductions. A negotiated total replaces the formula.</p>
     </Modal>
   );
 }
 
-function PurchaseDialog({ maxLkr, onSubmit, onClose }: { maxLkr: number; onSubmit: (b: object) => void; onClose: () => void }) {
-  const [paid, setPaid] = useState("");
+function PurchaseDialog({ pending, maxLkr, onSubmit, onClose }: { pending: boolean; maxLkr: number; onSubmit: (b: object) => void; onClose: () => void }) {
+  const [paid, setPaid] = useState(String(maxLkr));
   const [method, setMethod] = useState("cash");
+  const paidN = paid === "" ? NaN : Number(paid);
+  const valid = Number.isFinite(paidN) && paidN >= 0 && paidN <= maxLkr;
+  const owed = valid ? Math.round((maxLkr - paidN) * 100) / 100 : null;
   return (
     <Modal
       kicker="Old gold"
       title={`Purchase — value ${maxLkr.toLocaleString("en-US")} LKR`}
       onClose={onClose}
-      onSubmit={() => onSubmit({ paidLkr: Number(paid), method })}
-      submitDisabled={!paid}
+      onSubmit={() => onSubmit({ paidLkr: paidN, method })}
+      pending={pending}
+      submitDisabled={!valid}
       submitLabel="Purchase"
     >
       <div className="grid grid-cols-2 gap-3">
         <label className="block text-sm text-ink-2">Paid now LKR
-          <input value={paid} onChange={(e) => setPaid(e.target.value)} type="number" step="any" className={`num-tabular ${controlClass}`} />
+          <input value={paid} onChange={(e) => setPaid(e.target.value)} type="number" min="0" max={maxLkr} step="any" className={`num-tabular ${controlClass}`} />
         </label>
         <label className="block text-sm text-ink-2">Method
           <select value={method} onChange={(e) => setMethod(e.target.value)} className={controlClass}>
@@ -289,28 +319,59 @@ function PurchaseDialog({ maxLkr, onSubmit, onClose }: { maxLkr: number; onSubmi
           </select>
         </label>
       </div>
-      <p className="text-xs text-ink-4">Remainder becomes a customer payable.</p>
+      <p className="text-xs text-ink-4">
+        {!valid
+          ? `Enter an amount from 0 to ${maxLkr.toLocaleString("en-US")} LKR.`
+          : owed
+            ? `${owed.toLocaleString("en-US")} LKR stays owed to the customer (account 1200).`
+            : "Paid in full."}
+      </p>
     </Modal>
   );
 }
 
-function ConvertDialog({ onSubmit, onClose }: { onSubmit: (b: object) => void; onClose: () => void }) {
+type Option = { id: string; name: string };
+
+function ConvertDialog({ pending, onSubmit, onClose }: { pending: boolean; onSubmit: (b: object) => void; onClose: () => void }) {
   const [categoryId, setCategoryId] = useState("");
-  const [metalTypeId, setMetalTypeId] = useState("");
+  const [metalTypeId, setMetalTypeId] = useState("metal-gold");
   const [name, setName] = useState("");
+  const [location, setLocation] = useState("");
+  const cats = useQuery({ queryKey: ["categories-all"], queryFn: () => api<{ rows: Option[] }>("/api/v1/masters/categories?limit=100") });
+  const metals = useQuery({ queryKey: ["metals-all"], queryFn: () => api<{ rows: Option[] }>("/api/v1/masters/metal-types?limit=100") });
   return (
-    <Modal kicker="Old gold" title="Convert to sellable product" onClose={onClose} onSubmit={() => onSubmit({ categoryId, metalTypeId, name })} submitLabel="Convert">
-      <label className="block text-sm text-ink-2">Category ID<input value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={controlClass} /></label>
-      <label className="block text-sm text-ink-2">Metal type ID<input value={metalTypeId} onChange={(e) => setMetalTypeId(e.target.value)} className={controlClass} /></label>
-      <label className="block text-sm text-ink-2">Name<input value={name} onChange={(e) => setName(e.target.value)} className={controlClass} /></label>
+    <Modal
+      kicker="Old gold"
+      title="Convert to sellable product"
+      onClose={onClose}
+      pending={pending}
+      submitDisabled={!categoryId || !metalTypeId || name.trim() === ""}
+      onSubmit={() => onSubmit({ categoryId, metalTypeId, name: name.trim(), ...(location.trim() ? { location: location.trim() } : {}) })}
+      submitLabel="Convert"
+    >
+      <label className="block text-sm text-ink-2">Category
+        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={controlClass}>
+          <option value="">Select…</option>
+          {(cats.data?.rows ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </label>
+      <label className="block text-sm text-ink-2">Metal
+        <select value={metalTypeId} onChange={(e) => setMetalTypeId(e.target.value)} className={controlClass}>
+          <option value="">Select…</option>
+          {(metals.data?.rows ?? []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+      </label>
+      <label className="block text-sm text-ink-2">Product name<input value={name} onChange={(e) => setName(e.target.value)} className={controlClass} /></label>
+      <label className="block text-sm text-ink-2">Location (optional)<input value={location} onChange={(e) => setLocation(e.target.value)} className={controlClass} /></label>
+      <p className="text-xs text-ink-4">The product takes the item&apos;s net weight and tested purity, at the purchase value as cost.</p>
     </Modal>
   );
 }
 
-function VoidDialog({ onSubmit, onClose }: { onSubmit: (r: string) => void; onClose: () => void }) {
+function VoidDialog({ pending, onSubmit, onClose }: { pending: boolean; onSubmit: (r: string) => void; onClose: () => void }) {
   const [reason, setReason] = useState("");
   return (
-    <Modal kicker="Old gold" title="Void item" danger onClose={onClose} onSubmit={() => onSubmit(reason)} submitLabel="Void">
+    <Modal kicker="Old gold" title="Void item" danger pending={pending} submitDisabled={reason.trim() === ""} onClose={onClose} onSubmit={() => onSubmit(reason.trim())} submitLabel="Void">
       <label className="block text-sm text-ink-2">Reason
         <input value={reason} onChange={(e) => setReason(e.target.value)} className={controlClass} />
       </label>

@@ -1,15 +1,31 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
+import { hasPermission } from "@goldos/shared";
 import { cn } from "@/lib/cn";
 import { api, type MeData } from "@/lib/api";
 import { logout } from "@/lib/auth";
 import { Modal, Pill, controlClass } from "@/components/ui";
-import { CheckCircleIcon, ChevronDownIcon, LogOutIcon, ShieldIcon } from "./icons";
+import {
+  CheckCircleIcon,
+  ChevronDownIcon,
+  HistoryIcon,
+  LifeBuoyIcon,
+  LogOutIcon,
+  SettingsIcon,
+  ShieldIcon,
+} from "./icons";
+
+const MENU_LINKS = [
+  { href: "/settings", label: "Settings", icon: SettingsIcon, perm: "settings:view" },
+  { href: "/audit", label: "Audit log", icon: HistoryIcon, perm: "audit:view" },
+  { href: "/support", label: "Help & support", icon: LifeBuoyIcon, perm: null },
+];
 
 const pwSchema = z.object({
   currentPassword: z.string().min(1),
@@ -95,6 +111,18 @@ export function UserMenu({ me }: { me: MeData }) {
             </span>
           </div>
           <div className="p-1.5">
+            {MENU_LINKS.filter((l) => !l.perm || hasPermission(me.permissions, l.perm)).map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                onClick={() => setOpen(false)}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-ink-2 transition-colors hover:bg-ink/5"
+              >
+                <l.icon size={15} className="text-ink-4" />
+                {l.label}
+              </Link>
+            ))}
+            <div className="my-1.5 h-px bg-ink/[0.07]" aria-hidden />
             <button
               onClick={() => {
                 setPwOpen(true);

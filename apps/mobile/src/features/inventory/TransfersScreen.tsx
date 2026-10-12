@@ -27,7 +27,7 @@ type TransferListRow = {
 };
 
 export const TRANSFER_STATUS_LABEL: Record<TransferStatus, string> = {
-  REQUESTED: "Awaiting approval",
+  REQUESTED: "Awaiting dispatch",
   APPROVED: "Approved",
   DISPATCHED: "In transit",
   PARTIAL: "Partially received",
@@ -37,7 +37,7 @@ export const TRANSFER_STATUS_LABEL: Record<TransferStatus, string> = {
 
 const STATUS_FILTERS: { key: string; label: string; match: (s: TransferStatus) => boolean }[] = [
   { key: "all", label: "All", match: () => true },
-  { key: "requested", label: "Awaiting approval", match: (s) => s === "REQUESTED" },
+  { key: "requested", label: "Awaiting dispatch", match: (s) => s === "REQUESTED" },
   { key: "approved", label: "Approved", match: (s) => s === "APPROVED" },
   { key: "transit", label: "In transit", match: (s) => s === "DISPATCHED" || s === "PARTIAL" },
   { key: "complete", label: "Complete", match: (s) => s === "COMPLETE" },
@@ -78,7 +78,7 @@ export default function TransfersScreen() {
           <View style={{ gap: 12, paddingTop: 8 }}>
             <Grid>
               <StatTile label="Transfers" value={list.data ? count(all.length) : "-"} icon="swap" />
-              <StatTile label="Awaiting approval" value={list.data ? count(awaiting) : "-"} icon="hourglass" tone={awaiting ? "warning" : "default"} />
+              <StatTile label="Awaiting dispatch" value={list.data ? count(awaiting) : "-"} icon="hourglass" tone={awaiting ? "warning" : "default"} />
               <StatTile label="Pieces in transit" value={list.data ? count(inTransit) : "-"} icon="truck" />
               <StatTile label="Incoming to receive" value={list.data ? count(incomingOpen) : "-"} icon="inboxIn" tone={incomingOpen ? "gold" : "default"} />
             </Grid>

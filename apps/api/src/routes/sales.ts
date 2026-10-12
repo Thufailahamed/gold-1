@@ -101,10 +101,6 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .get("/invoice-profile", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
     return c.json({ success: true, data: await invoiceProfile(c.env.DB) }, 200);
   })
-  // Counter sign-off list for over-limit discounts and returns.
-  .get("/approvers", requirePerm(PERMISSIONS.SALES_CREATE), async (c) => {
-    return c.json({ success: true, data: await listApprovers(c.env.DB, c.get("userId")) }, 200);
-  })
   // Scan an invoice barcode or a sold piece's tag to find its sale.
   .get("/lookup/:code", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
     try {

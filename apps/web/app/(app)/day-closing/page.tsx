@@ -36,6 +36,7 @@ import {
 } from "@/components/icons";
 import { api, downloadCsv, type MeData } from "@/lib/api";
 import { InvestigatePanel, SummaryPanel, UnclosedPanel, VariancePanel, fmt } from "./panels";
+import { AutoCloseModal, surveyParams, type AutoCloseResult, type DaySurvey } from "./auto-close";
 
 type CashLine = { label: string; refEntity: string; cents: number };
 type CashGroup = { totalCents: number; unclassifiedCents: number; lines: CashLine[] };
@@ -107,7 +108,7 @@ export default function DayClosingPage() {
   const [page, setPage] = useState(1);
   const [reopenFor, setReopenFor] = useState<Closing | null>(null);
   const [reopenReason, setReopenReason] = useState("");
-  const [approver, setApprover] = useState("");
+  const [survey, setSurvey] = useState<{ result: AutoCloseResult; query: string } | null>(null);
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
   const canManage = hasPermission(me.data?.permissions ?? [], "accounts:manage");
@@ -175,17 +176,56 @@ export default function DayClosingPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not close"),
   });
 
+  // Survey the whole day and, when nothing blocks it and the user may close,
+  // close it with the counted cash. Readers get the survey without the close.
+  const autoClose = useMutation({
+    mutationFn: async () => {
+      const query = surveyParams({ branchId, date, actualCents, cardCents, reason: needsReason ? reason : "" });
+      const result = canManage
+        ? await api<AutoCloseResult>("/api/v1/day-closings/auto-close", {
+            method: "POST",
+            body: JSON.stringify({
+              branchId,
+              date,
+              actualCents: actualCents ?? undefined,
+              differenceReason: needsReason && reason.trim() ? reason : undefined,
+              denominations: useSheet
+                ? Object.fromEntries(Object.entries(counts).filter(([, n]) => n !== "" && Number(n) > 0).map(([f, n]) => [f, Number(n)]))
+                : undefined,
+              cardTerminalCents: cardCents ?? undefined,
+              postDifference: differenceCents ? postDifference : undefined,
+            }),
+          })
+        : { closed: false, closingId: null, survey: await api<DaySurvey>(`/api/v1/day-closings/survey?${query}`) };
+      return { result, query };
+    },
+    onSuccess: (data) => {
+      setSurvey(data);
+      if (data.result.closed) {
+        toast.success(`Auto-closed ${date}`);
+        setActual("");
+        setCounts({});
+        setCard("");
+        setReason("");
+        qc.invalidateQueries({ queryKey: ["day-closings"] });
+        qc.invalidateQueries({ queryKey: ["day-closing-preview"] });
+        qc.invalidateQueries({ queryKey: ["day-unclosed"] });
+        qc.invalidateQueries({ queryKey: ["day-summary"] });
+      }
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Survey failed"),
+  });
+
   const reopen = useMutation({
     mutationFn: () =>
       api(`/api/v1/day-closings/${reopenFor?.id}/reopen`, {
         method: "POST",
-        body: JSON.stringify({ reason: reopenReason, approvedBy: approver }),
+        body: JSON.stringify({ reason: reopenReason }),
       }),
     onSuccess: () => {
       toast.success("Re-opened");
       setReopenFor(null);
       setReopenReason("");
-      setApprover("");
       qc.invalidateQueries({ queryKey: ["day-closings"] });
       qc.invalidateQueries({ queryKey: ["day-unclosed"] });
     },
@@ -213,6 +253,9 @@ export default function DayClosingPage() {
               ))}
             </select>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={controlClass} />
+            <button type="button" className={heroBtnGhost} disabled={autoClose.isPending || !me.data} onClick={() => autoClose.mutate()}>
+              <ClipboardCheckIcon size={14} /> {autoClose.isPending ? "Surveying…" : canManage ? "Auto close" : "Run survey"}
+            </button>
             <Link href={reportHref} className={heroBtnGhost}>
               <PrinterIcon size={14} /> Print report
             </Link>
@@ -233,7 +276,6 @@ export default function DayClosingPage() {
           { label: "Expected closing", value: r ? `${fmt(expectedCents)} LKR` : "—" },
           { label: "Checks", value: r ? `${r.checks.total - r.checks.failing.length}/${r.checks.total} pass` : "—" },
           { label: "Days not closed", value: unclosed.data ? String(unclosedCount) : "—" },
-          { label: "Awaiting approval", value: r ? `${fmt(r.closing.awaitingApprovalCents)} LKR` : "—" },
         ]}
         note="Money is in LKR. Gold is in fine milligrams. The two never mix."
       />
@@ -290,12 +332,6 @@ export default function DayClosingPage() {
           {unclassified > 0 ? (
             <Callout tone="warning" title={`${fmt(unclassified)} LKR unrecognised`}>
               Some cash movement does not belong to a category this screen knows, so the breakdown would be wrong. The close is blocked until it is named.
-            </Callout>
-          ) : null}
-
-          {r && r.closing.awaitingApprovalCents > 0 ? (
-            <Callout tone="info" title={`${fmt(r.closing.awaitingApprovalCents)} LKR has left the bank but is not yet approved`}>
-              The books read this much higher than the drawer. If your count is short by about that much, this is why — not a shortage.
             </Callout>
           ) : null}
 
@@ -411,11 +447,27 @@ export default function DayClosingPage() {
                   </label>
                 ) : null}
                 {canManage ? (
-                  <button type="button" onClick={() => close.mutate()} disabled={!canClose || close.isPending} className="g-btn g-btn-primary h-10 w-full text-sm">
-                    {close.isPending ? "Closing…" : `Close ${date}`}
-                  </button>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => autoClose.mutate()}
+                      disabled={autoClose.isPending || close.isPending}
+                      title="Survey every check, document, pending item and earlier day; close only if nothing blocks it"
+                      className="g-btn g-btn-secondary h-10 w-full text-sm"
+                    >
+                      <ClipboardCheckIcon size={15} /> {autoClose.isPending ? "Surveying the day…" : "Auto close"}
+                    </button>
+                    <button type="button" onClick={() => close.mutate()} disabled={!canClose || close.isPending || autoClose.isPending} className="g-btn g-btn-primary h-10 w-full text-sm">
+                      {close.isPending ? "Closing…" : `Close ${date}`}
+                    </button>
+                  </div>
                 ) : (
-                  <p className="text-xs text-ink-4">You can read this screen; closing the day needs accounts:manage.</p>
+                  <>
+                    <button type="button" onClick={() => autoClose.mutate()} disabled={autoClose.isPending} className="g-btn g-btn-secondary h-10 w-full text-sm">
+                      <ClipboardCheckIcon size={15} /> {autoClose.isPending ? "Surveying the day…" : "Run day-close survey"}
+                    </button>
+                    <p className="text-xs text-ink-4">You can read this screen; closing the day needs accounts:manage.</p>
+                  </>
                 )}
               </div>
             </Panel>
@@ -554,13 +606,15 @@ export default function DayClosingPage() {
         </div>
       )}
 
+      {survey ? <AutoCloseModal result={survey.result} query={survey.query} onClose={() => setSurvey(null)} /> : null}
+
       {reopenFor ? (
         <Modal
           kicker="Accounts"
           title={`Re-open ${reopenFor.close_date}`}
           danger
           submitLabel="Re-open day"
-          submitDisabled={!reopenReason || !approver}
+          submitDisabled={!reopenReason}
           pending={reopen.isPending}
           onClose={() => setReopenFor(null)}
           onSubmit={() => reopen.mutate()}
@@ -570,11 +624,6 @@ export default function DayClosingPage() {
             Why
             <input value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} className={`${controlClass} w-full`} />
           </label>
-          <label className="block text-sm text-ink-2">
-            Approved by
-            <input value={approver} onChange={(e) => setApprover(e.target.value)} placeholder="A user id holding accounts:manage" className={`${controlClass} w-full`} />
-          </label>
-          <p className="text-xs text-ink-4">The approver must not be you, and must not be whoever closed the day.</p>
         </Modal>
       ) : null}
     </Page>

@@ -10,6 +10,15 @@ WEB_ORIGIN = "http://localhost:3000"
 # unmanaged single-shop install (no gate, no limits).
 # TENANT_ID = ""
 
+# Accounts assistant. Every model call goes to Workers AI through AI Gateway
+# (dashboard: AI > AI Gateway; "default" is created on first use). The
+# fallback model answers only when the primary errors or returns nothing.
+AI_GATEWAY_ID = "default"
+ASSISTANT_MODEL = "@cf/zai-org/glm-5.3-flash"
+ASSISTANT_FALLBACK_MODEL = "@cf/zai-org/glm-4.7-flash"
+ASSISTANT_REASONING_EFFORT = "high"
+ASSISTANT_VISION_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct"
+
 # Secrets (never in this file):
 #   wrangler secret put PLATFORM_BOOTSTRAP_TOKEN   # one-time: creates the first super admin
 
@@ -26,6 +35,9 @@ binding = "PLATFORM_DB"
 database_name = "goldos-platform"
 database_id = "4aa27d78-db29-42c8-b76f-295f30d48dc4"
 migrations_dir = "drizzle-platform"
+
+[ai]
+binding = "AI"
 
 [[r2_buckets]]
 binding = "R2"

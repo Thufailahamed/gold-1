@@ -3,7 +3,7 @@ import { ActivityIndicator, Platform, Pressable, TextInput, View } from "react-n
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { salesTaxCents } from "@goldos/shared";
-import { api, errorCode, PendingApprovalError } from "@/lib/api";
+import { api, errorCode } from "@/lib/api";
 import { extractScanCode, looksLikeCode } from "@/lib/barcode";
 import { haptic } from "@/lib/haptics";
 import { getSavedBranchId, useBranch } from "@/lib/session";
@@ -25,7 +25,6 @@ import {
   Row,
   Screen,
   Section,
-  SelectField,
   Text,
   toast,
 } from "@/ui";
@@ -49,7 +48,6 @@ import {
   type PayRow,
 } from "./pos-parts";
 
-type Pending = { approvalId: string; entityId: string; sig: string };
 type Draft = { cart: CartLine[]; customer: Customer | null; exchange: Exchange | null; notes: string };
 
 // An unfinished sale survives leaving the screen (web: sessionStorage draft).
@@ -76,11 +74,9 @@ export default function PosScreen() {
   const [customer, setCustomer] = useState<Customer | null>(draft?.customer ?? null);
   const [exchange, setExchange] = useState<Exchange | null>(draft?.exchange ?? null);
   const [notes, setNotes] = useState(draft?.notes ?? "");
-  const [approver, setApprover] = useState("");
   const [pays, setPays] = useState<PayRow[]>([{ method: "cash", amountLkr: "" }]);
   const [tendered, setTendered] = useState("");
   const [done, setDone] = useState<Done | null>(null);
-  const [pending, setPending] = useState<Pending | null>(null);
   const [stale, setStale] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
@@ -129,11 +125,6 @@ export default function PosScreen() {
     queryFn: () => api<BankAccount[]>(`/api/v1/sales/bank-accounts?branchId=${encodeURIComponent(branchId)}`),
     staleTime: 5 * 60_000,
     retry: false,
-  });
-  const approvers = useQuery({
-    queryKey: ["pos-approvers"],
-    queryFn: () => api<{ id: string; name: string }[]>("/api/v1/sales/approvers"),
-    staleTime: 5 * 60_000,
   });
   const taxConfig = useQuery({
     queryKey: ["pos-tax-config"],
@@ -245,9 +236,6 @@ export default function PosScreen() {
   const storeCredit = credit.data && credit.data.branchBalanceCents < 0 ? -credit.data.branchBalanceCents : 0;
   const overLimit = !!(creditDue > 0 && credit.data && credit.data.creditLimitCents > 0 && credit.data.balanceCents + creditDue > credit.data.creditLimitCents);
 
-  // An approval binds the exact terms it was asked for; any cart edit voids it.
-  const sig = JSON.stringify(cart.map((l) => [l.productId, l.priceCents, l.discountCents]));
-  const approval = pending && pending.sig === sig ? pending : null;
   const canComplete =
     cart.length > 0 &&
     paidSum === total &&
@@ -267,8 +255,6 @@ export default function PosScreen() {
     setPays([{ method: "cash", amountLkr: "" }]);
     setTendered("");
     setNotes("");
-    setApprover("");
-    setPending(null);
     setStale(false);
   }
 
@@ -288,9 +274,6 @@ export default function PosScreen() {
           })),
           tenderedLkr: cashDue > 0 && tendered ? Number(tendered) : undefined,
           notes: notes.trim() || undefined,
-          approvedBy: approval ? undefined : approver || undefined,
-          approvalId: approval?.approvalId,
-          approvalEntityId: approval?.entityId,
           exchangeReturnId: exchange?.returnId,
         }),
       }),
@@ -309,12 +292,6 @@ export default function PosScreen() {
       toast.success(`Sale ${d.number} complete`);
     },
     onError: (e) => {
-      if (e instanceof PendingApprovalError && e.approvalId) {
-        setPending({ approvalId: e.approvalId, entityId: e.entityId ?? "", sig });
-        setPayOpen(false);
-        toast.info("Discount sent for approval", "Once a manager approves it in the Approval Center, complete the sale again.");
-        return;
-      }
       if (errorCode(e) === "CONFLICT" && e instanceof Error && e.message.includes("refresh the cart")) {
         setStale(true);
         setPayOpen(false);
@@ -384,7 +361,7 @@ export default function PosScreen() {
               </Text>
             </View>
             <Button
-              title={approval ? "Charge (approved)" : "Charge"}
+              title="Charge"
               icon="creditCard"
               size="lg"
               disabled={cart.length === 0 || total <= 0 || stale || heldMismatch.length > 0 || !branchId}
@@ -494,14 +471,6 @@ export default function PosScreen() {
           {`${heldMismatch.map((l) => `${l.barcode} is held for ${l.reservedFor!.name}`).join(" · ")}. Select that customer, or remove the piece — release the hold on the product page to sell it to someone else.`}
         </Callout>
       ) : null}
-      {approval ? (
-        <Callout tone="warning" title="Discount waiting for approval" style={{ marginTop: 12 }}>
-          <View style={{ gap: 8 }}>
-            <Text variant="footnote">{`A ${pct.toFixed(2)}% discount needs sign-off. Once it is approved, charge again — changing the cart cancels this request.`}</Text>
-            <Button title="Approval Center" variant="gray" size="sm" onPress={() => router.push("/approvals")} style={{ alignSelf: "flex-start" }} />
-          </View>
-        </Callout>
-      ) : null}
 
       {/* Cart */}
       <Section title={`Cart · ${cart.length} item${cart.length === 1 ? "" : "s"}`} footer={cart.length > 0 ? "Tap a piece to discount or remove it." : undefined}>
@@ -586,21 +555,9 @@ export default function PosScreen() {
       </View>
 
       {/* Discount */}
-      <Section title="Discount" footer="Discounts above the approval threshold go to the Approval Center instead.">
+      <Section title="Discount">
         <KeyValue label="Total discount" value={`${fmt(discount)} LKR · ${pct.toFixed(1)}%`} />
       </Section>
-      <View style={{ marginHorizontal: GUTTER, marginTop: 12 }}>
-        <SelectField
-          label="Counter approver (over your limit)"
-          value={approver}
-          allowClear
-          clearLabel="None"
-          placeholder="None"
-          disabled={Boolean(approval)}
-          options={(approvers.data ?? []).map((u) => ({ value: u.id, label: u.name }))}
-          onChange={setApprover}
-        />
-      </View>
 
       {/* Totals */}
       <Section title="Summary">
@@ -666,7 +623,6 @@ export default function PosScreen() {
         bankRows={bankRows}
         canComplete={canComplete && !complete.isPending}
         completing={complete.isPending}
-        approved={!!approval}
         onComplete={() => complete.mutate()}
       />
       <DoneSheet done={done} onClose={() => setDone(null)} />

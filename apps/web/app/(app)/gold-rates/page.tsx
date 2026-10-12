@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,6 +12,7 @@ import {
   Page,
   Hero,
   heroBtnPrimary,
+  heroBtnGhost,
   StatGrid,
   StatCard,
   TableCard,
@@ -87,11 +89,17 @@ export default function GoldRatesPage() {
         title="Gold Rates"
         description="Current buying rates per gram, published by purity."
         actions={
+          <>
+          <Link href="/live-rates" className={heroBtnGhost}>
+            <TrendingUpIcon size={15} />
+            Live market
+          </Link>
           <button onClick={() => setDialog(true)} className={heroBtnPrimary}>
             <CoinsIcon size={15} />
             Publish rate
             <ArrowRightIcon size={14} className="g-btn-arrow" />
           </button>
+          </>
         }
         stats={(() => {
           const rates = current.data ?? [];

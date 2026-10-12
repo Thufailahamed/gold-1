@@ -6,7 +6,9 @@ import { csrf } from "./middleware/csrf";
 import { idempotency, purgeIdempotencyKeys } from "./middleware/idempotency";
 import { accounts } from "./routes/accounts";
 import { audit } from "./routes/audit";
-import { approvals } from "./routes/approvals";
+import { assistant } from "./routes/assistant";
+import { bindAssistantDispatch } from "./assistant/actions";
+import { maybeRunBrief } from "./ai/brief";
 import { auth } from "./routes/auth";
 import { branches } from "./routes/branches";
 import { bankAccounts, cash, settlements } from "./routes/cashbank";
@@ -16,6 +18,8 @@ import { gold } from "./routes/gold";
 import { expenseCategories, expenses } from "./routes/expenses";
 import { health } from "./routes/health";
 import { manufacturing } from "./routes/manufacturing";
+import { market } from "./routes/market";
+import { recordMarketSnapshot } from "./services/market";
 import { melting } from "./routes/melting";
 import { monthly } from "./routes/monthly";
 import { counts } from "./routes/counts";
@@ -63,6 +67,7 @@ app.route("/api/v1/settings", settings);
 app.route("/api/v1/audit", audit);
 app.route("/api/v1/masters", catalog);
 app.route("/api/v1/gold-rates", rates);
+app.route("/api/v1/market", market);
 app.route("/api/v1/suppliers", suppliers);
 app.route("/api/v1/customers", customers);
 app.route("/api/v1/products", products);
@@ -88,13 +93,20 @@ app.route("/api/v1/discrepancies", discrepancies);
 app.route("/api/v1/branch-overview", overview);
 app.route("/api/v1/repairs", repairRoutes);
 app.route("/api/v1/custom-orders", customOrderRoutes);
-app.route("/api/v1/approvals", approvals);
+app.route("/api/v1/assistant", assistant);
+// A confirmed assistant action is replayed through this same app, so it
+// passes every gate a direct request would.
+bindAssistantDispatch(async (req, env) => app.fetch(req, env));
 
 export default {
   fetch: app.fetch,
   scheduled: (event: ScheduledController, env: Env, ctx: ExecutionContext) => {
     ctx.waitUntil(platformScheduled(event, env));
     ctx.waitUntil(purgeIdempotencyKeys(env.DB));
+    // Hourly tick: writes the day's brief once the shop-local hour is reached.
+    ctx.waitUntil(maybeRunBrief(env).catch((e) => console.error("daily brief failed", e)));
+    // Market reference prices: the free feed keeps no history, so we do.
+    ctx.waitUntil(recordMarketSnapshot(env.DB).catch((e) => console.error("market snapshot failed", e)));
   },
 };
 

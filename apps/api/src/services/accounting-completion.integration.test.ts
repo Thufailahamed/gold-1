@@ -233,8 +233,7 @@ describe.skipIf(!sqliteAvailable)("accounting completion over real SQLite", () =
     const years = await listFiscalYears(db);
     expect(years.years.find((y) => y.end === priorEnd)?.close?.status).toBe("CLOSED");
 
-    await expect(reopenFiscalYear(db, priorEnd, { reason: "Late invoice", approvedBy: "u1" }, "u1")).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await reopenFiscalYear(db, priorEnd, { reason: "Late invoice", approvedBy: "u2" }, "u1");
+    await reopenFiscalYear(db, priorEnd, { reason: "Late invoice" }, "u1");
     await expect(post(inPrior)).resolves.toBeTruthy();
   });
 });

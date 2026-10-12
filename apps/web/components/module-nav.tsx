@@ -38,6 +38,7 @@ export const SALES_PAGES: ModulePage[] = [
   { href: "/pos", label: "POS", icon: ScanBarcodeIcon, perm: "sales:create" },
   { href: "/sales/invoices", label: "Invoices", icon: CreditCardIcon, perm: "sales:view" },
   { href: "/sales/returns", label: "Returns", icon: RotateCcwIcon, perm: "sales:view" },
+  { href: "/repairs", label: "Repairs", icon: HammerIcon, perm: "sales:view" },
   { href: "/sales/reports", label: "Reports", icon: TrendingUpIcon, perm: "sales:view" },
 ];
 
@@ -58,6 +59,7 @@ export const GOLD_PAGES: ModulePage[] = [
 export const MANUFACTURING_PAGES: ModulePage[] = [
   { href: "/manufacturing", label: "Overview", icon: GaugeIcon, perm: "mfg:view" },
   { href: "/manufacturing/orders", label: "Orders", icon: HammerIcon, perm: "mfg:view" },
+  { href: "/custom-orders", label: "Custom Orders", icon: GemIcon, perm: "mfg:view" },
   { href: "/manufacturing/reports", label: "Reports", icon: TrendingUpIcon, perm: "mfg:view" },
 ];
 
@@ -80,9 +82,9 @@ export function ModuleNav({ label, pages }: { label: string; pages: ModulePage[]
     <div className="-mx-1 mb-6 overflow-x-auto scrollbar-thin print:hidden">
       <nav
         aria-label={label}
-        className="mx-1 flex min-w-max items-center gap-1 rounded-2xl bg-paper p-1.5 shadow-[inset_0_0_0_1px_rgba(28,25,23,0.07),0_12px_28px_-24px_rgba(28,25,23,0.35)]"
+        className="mx-1 flex w-[calc(100%-0.5rem)] min-w-max items-center justify-center gap-1.5 rounded-2xl bg-paper p-1.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_12px_28px_-24px_rgba(16,32,27,0.35)]"
       >
-        <span className="hidden items-center gap-2 pl-3 pr-4 sm:flex">
+        <span className="hidden items-center gap-2 pl-3 pr-5 sm:flex">
           <span className="size-1.5 rounded-full bg-gold" />
           <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-dark">{label}</span>
         </span>
@@ -95,8 +97,10 @@ export function ModuleNav({ label, pages }: { label: string; pages: ModulePage[]
               href={p.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "group inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-xl px-4 text-[13px] font-medium transition-all duration-200 ease-brand",
-                active ? "bg-ink text-paper shadow-pop" : "text-ink-4 hover:bg-ink/[0.04] hover:text-ink"
+                "group inline-flex h-11 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-[13px] font-medium transition-all duration-200 ease-brand",
+                active
+                  ? "bg-void text-paper shadow-[inset_0_0_0_1px_rgba(205,168,83,0.28),0_10px_24px_-14px_rgba(6,42,34,0.7)] [&_svg]:text-gold-light"
+                  : "text-ink-4 hover:bg-ink/[0.04] hover:text-ink"
               )}
             >
               <span className={cn("transition-colors", active ? "text-gold" : "text-ink-5 group-hover:text-gold-dark")}>

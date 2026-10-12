@@ -130,7 +130,6 @@ function ReportView() {
         <Row label="Difference" cents={c ? c.difference_cents : null} strong />
         {c?.difference_reason ? <p className="mt-1 text-xs text-ink-3">Explanation: {c.difference_reason}</p> : null}
         {c?.correction_cents ? <p className="text-xs text-ink-3">Posted to Cash Short &amp; Over: {fmt(c.correction_cents)}</p> : null}
-        {report.closing.awaitingApprovalCents ? <p className="text-xs text-ink-3">Expenses awaiting approval: {fmt(report.closing.awaitingApprovalCents)}</p> : null}
 
         {counts && Object.keys(counts).length ? (
           <>

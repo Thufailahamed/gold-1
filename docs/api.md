@@ -48,6 +48,8 @@ Keys are per session. 5xx outcomes and multipart uploads are never stored.
 | POST | /gold-rates | masters:create | immutable; UNIQUE(purity, effective_from) |
 | GET | /gold-rates/current | masters:view | latest rate per purity |
 | GET | /gold-rates | masters:view | history, filterable by karat; paginated |
+| GET | /market/live | masters:view | spot metals + crypto (gold-api.com) and FX (open.er-api.com) in LKR, per karat vs board rate; 30s cache; last snapshot when the feed is down (`stale`); 503 UNAVAILABLE if neither |
+| GET | /market/history?symbol=XAU&range=1d\|7d\|30d\|1y | masters:view | stored snapshots (hourly cron + on page view, ≥10 min apart, kept ~13 months) |
 | POST | /suppliers | masters:create | branch-scoped, NIC unique |
 | GET | /suppliers | masters:view | branch-scoped unless branches:manage; paginated |
 | PATCH | /suppliers/:id | masters:edit | field updates; optional reason |

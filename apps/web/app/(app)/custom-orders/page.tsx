@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { hasPermission, PERMISSIONS } from "@goldos/shared";
-import { api, PendingApprovalError, type MeData } from "@/lib/api";
+import { api, type MeData } from "@/lib/api";
 import { lkr, readBranchCookie, toCents } from "@/lib/accounts";
 import {
   Page,
@@ -359,10 +359,6 @@ function NewOrderDialog({ me, branches, onClose }: { me: MeData | undefined; bra
       router.push(`/custom-orders/${d.id}`);
     },
     onError: (e) => {
-      if (e instanceof PendingApprovalError) {
-        toast.message("Sent for approval", { description: e.message });
-        return;
-      }
       toast.error(errMsg(e, "Create failed"));
     },
   });

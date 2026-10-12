@@ -25,7 +25,6 @@ import {
   Row,
   Screen,
   Section,
-  SelectField,
   Sheet,
   StatusPill,
   Text,
@@ -47,31 +46,27 @@ type TransferDetail = {
   reason: string | null;
   requestedBy: string | null;
   requestedByName: string | null;
-  approvedBy: string | null;
-  approvedByName: string | null;
   createdAt: number | null;
   totalNetMg: number;
   lines: TransferLine[];
 };
-type Approver = { id: string; name: string };
 type Reconcile = { passed: boolean; warnings: string[] };
 type ReceiveResult = { received: string[]; skipped: string[] };
 type ScanLog = { key: number; code: string; outcome: "received" | "skipped" | "error"; message: string };
 
 const LINE_LABEL: Record<LineStatus, string> = { PENDING: "Pending", IN_TRANSIT: "In transit", RECEIVED: "Received", RECALLED: "Recalled" };
-const STEPS = ["Requested", "Approved", "Dispatched", "Received"];
+const STEPS = ["Requested", "Dispatched", "Received"];
 const DISPATCHED_STATES: TransferStatus[] = ["DISPATCHED", "PARTIAL", "COMPLETE"];
 function stepOf(status: TransferStatus): number {
   switch (status) {
     case "REQUESTED":
-      return 1;
     case "APPROVED":
-      return 2;
+      return 1;
     case "DISPATCHED":
     case "PARTIAL":
-      return 3;
+      return 2;
     case "COMPLETE":
-      return 4;
+      return 3;
     default:
       return -1;
   }
@@ -82,7 +77,7 @@ export default function TransferDetailScreen() {
   const { c } = useTheme();
   const qc = useQueryClient();
   const { me, can } = useSession();
-  const [dialog, setDialog] = useState<null | "approve" | "dispatch" | "cancel" | "recall">(null);
+  const [dialog, setDialog] = useState<null | "dispatch" | "cancel" | "recall">(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [scanning, setScanning] = useState(false);
   const [typed, setTyped] = useState("");
@@ -97,7 +92,6 @@ export default function TransferDetailScreen() {
   function refresh() {
     void qc.invalidateQueries({ queryKey: ["transfer", id] });
     void qc.invalidateQueries({ queryKey: ["transfer-reconcile", id] });
-    void qc.invalidateQueries({ queryKey: ["transfer-approvers", id] });
     void qc.invalidateQueries({ queryKey: ["transfers"] });
     void qc.invalidateQueries({ queryKey: ["products"] });
   }
@@ -157,12 +151,10 @@ export default function TransferDetailScreen() {
   const isSender = manage || myBranches.includes(t.fromBranchId);
   const isReceiver = manage || myBranches.includes(t.toBranchId);
   const canEdit = can("products:edit");
-  const canApprove = can("products:cancel");
   const inTransitLines = t.lines.filter((l) => l.status === "IN_TRANSIT");
   const receivedCount = t.lines.filter((l) => l.status === "RECEIVED").length;
   const inTransit = t.status === "DISPATCHED" || t.status === "PARTIAL";
-  const showApprove = t.status === "REQUESTED" && isSender && canApprove;
-  const showDispatch = t.status === "APPROVED" && isSender && canEdit;
+  const showDispatch = (t.status === "REQUESTED" || t.status === "APPROVED") && isSender && canEdit;
   const showCancel = (t.status === "REQUESTED" || t.status === "APPROVED") && isSender && canEdit;
   const showReceive = inTransit && isReceiver && canEdit;
   const showRecall = inTransit && isSender && canEdit;
@@ -198,14 +190,12 @@ export default function TransferDetailScreen() {
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
           <Pill tone="dark">{TRANSFER_STATUS_LABEL[t.status] ?? t.status}</Pill>
           <Pill tone="dark">{`Requested by ${t.requestedByName ?? "-"}`}</Pill>
-          {t.approvedByName ? <Pill tone="dark">{`Approved by ${t.approvedByName}`}</Pill> : null}
           <Pill tone="dark">{t.createdAt ? dateTime(t.createdAt) : "-"}</Pill>
         </View>
       </Hero>
 
-      {showApprove || showDispatch || showCancel ? (
+      {showDispatch || showCancel ? (
         <View style={{ flexDirection: "row", gap: 10, marginHorizontal: GUTTER, marginTop: 14 }}>
-          {showApprove ? <Button title="Approve" icon="check" style={{ flex: 1 }} onPress={() => setDialog("approve")} /> : null}
           {showDispatch ? <Button title="Dispatch" icon="truck" style={{ flex: 1 }} onPress={() => setDialog("dispatch")} /> : null}
           {showCancel ? <Button title="Cancel" icon="ban" variant="destructiveTinted" style={{ flex: 1 }} onPress={() => setDialog("cancel")} /> : null}
         </View>
@@ -238,15 +228,10 @@ export default function TransferDetailScreen() {
 
       {t.status === "REQUESTED" && !isSender ? (
         <Callout tone="info" title="Waiting on the sending branch" style={{ marginTop: 14 }}>
-          {`${t.fromBranchName} must approve and dispatch this transfer.`}
+          {`${t.fromBranchName} must dispatch this transfer.`}
         </Callout>
       ) : null}
-      {t.status === "APPROVED" && !isSender ? (
-        <Callout tone="info" title="Approved — awaiting dispatch" style={{ marginTop: 14 }}>
-          {`${t.fromBranchName} will dispatch the pieces. You can receive them once they are in transit.`}
-        </Callout>
-      ) : null}
-
+      
       {showReceive ? (
         <Card style={{ marginTop: 18 }}>
           <CardHeader title="Receive pieces" subtitle="Each scan is received immediately; repeats are skipped." icon="inboxIn" />
@@ -383,7 +368,6 @@ export default function TransferDetailScreen() {
         }
       />
 
-      {dialog === "approve" ? <ApproveSheet transferId={id} fromBranchName={t.fromBranchName} onClose={() => setDialog(null)} onDone={() => { setDialog(null); refresh(); }} /> : null}
       {dialog === "dispatch" ? (
         <DispatchSheet transferId={id} pieces={t.lines.filter((l) => l.status === "PENDING").length} netMg={t.totalNetMg} toBranchName={t.toBranchName} onClose={() => setDialog(null)} onDone={() => { setDialog(null); refresh(); }} />
       ) : null}
@@ -405,38 +389,6 @@ export default function TransferDetailScreen() {
   );
 }
 
-function ApproveSheet({ transferId, fromBranchName, onClose, onDone }: { transferId: string; fromBranchName: string; onClose: () => void; onDone: () => void }) {
-  const [approvedBy, setApprovedBy] = useState("");
-  const approvers = useQuery({ queryKey: ["transfer-approvers", transferId], queryFn: () => api<Approver[]>(`/api/v1/transfers/${transferId}/approvers`) });
-  const approve = useMutation({
-    mutationFn: () => api(`/api/v1/transfers/${transferId}/approve`, { method: "POST", body: JSON.stringify({ approvedBy }) }),
-    onSuccess: () => {
-      toast.success("Transfer approved");
-      onDone();
-    },
-    onError: (e) => toast.error(e, "Approve failed"),
-  });
-  const list = approvers.data ?? [];
-  return (
-    <Sheet visible onClose={onClose} title="Approve transfer" submitLabel="Approve" onSubmit={list.length > 0 ? () => approve.mutate() : undefined} submitting={approve.isPending} canSubmit={!!approvedBy}>
-      <FormStack>
-        {approvers.isLoading ? (
-          <Loading />
-        ) : approvers.isError ? (
-          <Callout tone="danger" title="Could not load approvers" style={{ marginHorizontal: 0 }}>
-            {errorMessage(approvers.error, "Retry in a moment.")}
-          </Callout>
-        ) : list.length === 0 ? (
-          <Callout tone="warning" title="No eligible approver" style={{ marginHorizontal: 0 }}>
-            {`Someone else at ${fromBranchName} with the products:cancel permission must approve this transfer. The requester cannot approve their own request.`}
-          </Callout>
-        ) : (
-          <SelectField label="Approver" value={approvedBy} options={list.map((a) => ({ value: a.id, label: a.name }))} onChange={setApprovedBy} hint={`A ${fromBranchName} member other than the requester.`} placeholder="Select approver…" />
-        )}
-      </FormStack>
-    </Sheet>
-  );
-}
 
 function DispatchSheet({ transferId, pieces, netMg, toBranchName, onClose, onDone }: { transferId: string; pieces: number; netMg: number; toBranchName: string; onClose: () => void; onDone: () => void }) {
   const dispatch = useMutation({
