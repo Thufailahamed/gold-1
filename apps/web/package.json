@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build",
+    "build:cf": "opennextjs-cloudflare build",
+    "deploy": "opennextjs-cloudflare build && wrangler deploy",
     "test": "echo 'no web tests yet' && exit 0",
     "lint": "tsc --noEmit"
   },
@@ -15,7 +17,7 @@
     "@tanstack/react-query": "^5.59.0",
     "barcode-detector": "2",
     "clsx": "^2.1.0",
-    "next": "^16.3.0",
+    "next": "^16.4.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.53.0",
@@ -26,12 +28,14 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.20.10",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.0",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "wrangler": "^4.149.0"
   }
 }

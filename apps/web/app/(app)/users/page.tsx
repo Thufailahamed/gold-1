@@ -9,22 +9,15 @@ import { toast } from "sonner";
 import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import {
-  Page,
-  Hero,
-  heroBtnPrimary,
-  TableCard,
-  TableSkeleton,
-  Pager,
-  StatusPill,
-  EmptyBlock,
-  Pill,
-  DetailList,
-  Modal,
-  Skeleton,
-  controlClass,
-} from "@/components/ui";
-import { ArrowRightIcon, PlusIcon, SearchIcon, XIcon } from "@/components/icons";
+import { Page, StatusPill, Pill, DetailList, Modal, Skeleton, controlClass } from "@/components/ui";
+import { Card, CardHead, Empty, FilterPills, GoldHero, HeroBadge, RowsSkeleton, ago, count, heroGold, inputCls, th, thead, tr } from "@/components/console-kit";
+import { Building2Icon, ChevronRightIcon, EditIcon, HistoryIcon, PlusIcon, SearchIcon, ShieldIcon, UsersIcon, XIcon } from "@/components/icons";
+
+/** A stable colour per person, so the same account reads the same everywhere. */
+const AVATAR = ["#B8923F", "#059669", "#0284C7", "#7C3AED", "#E11D48", "#D97706", "#0D9488", "#4F46E5"];
+const avatarTone = (key: string) => AVATAR[[...key].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR.length]!;
+const initialsOf = (name: string, email: string) =>
+  (name.trim() ? name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("") : email.slice(0, 2)).toUpperCase();
 
 type User = { id: string; email: string; name: string; is_active: number };
 type Role = { id: string; name: string };
@@ -43,6 +36,7 @@ export default function UsersPage() {
   const [page, setPage] = useState(1);
   const [dialog, setDialog] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [show, setShow] = useState<"all" | "active" | "inactive">("all");
   const [editId, setEditId] = useState<string | null>(null);
   const qc = useQueryClient();
   const me = useQuery({
@@ -99,126 +93,212 @@ export default function UsersPage() {
     }
   }
 
-  const rows = list.data?.rows ?? [];
+  const allRows = list.data?.rows ?? [];
+  const total = list.data?.total ?? 0;
+  const activeN = allRows.filter((r) => r.is_active).length;
+  const rows = show === "all" ? allRows : allRows.filter((r) => (show === "active" ? !!r.is_active : !r.is_active));
+  const pages = Math.max(1, Math.ceil(total / 20));
+  const myId = me.data?.user.id;
 
   return (
-    <Page>
-      <Hero
-        kicker="Organisation"
+    <Page className="space-y-4">
+      <GoldHero
+        icon={UsersIcon}
         title="Users"
-        description="Accounts, roles and branch access."
+        accent="& access"
+        badge={<HeroBadge tone="muted">Organisation</HeroBadge>}
+        sub="Staff accounts, roles and branch access · changes apply on the account's next request"
+        back={{ href: "/setup", label: "Setup" }}
         actions={
           canCreate ? (
-            <button onClick={() => setDialog(true)} className={heroBtnPrimary}>
-              <PlusIcon size={15} />
+            <button onClick={() => setDialog(true)} className={heroGold}>
+              <PlusIcon size={13} />
               New user
-              <ArrowRightIcon size={14} className="g-btn-arrow" />
             </button>
           ) : undefined
         }
         stats={[
-          { label: "Accounts", value: list.isLoading ? "—" : (list.data?.total ?? 0) },
-          { label: "Roles", value: roles.data?.length ?? "—" },
-          { label: "Branches", value: branches.data?.total ?? "—" },
-          {
-            label: "Active (page)",
-            value: list.isLoading ? "—" : rows.filter((r) => r.is_active).length,
-          },
+          { label: "Accounts", value: list.isLoading ? undefined : total, loading: list.isLoading, accent: true, sub: search ? `matching “${search}”` : "all staff" },
+          { label: "Active", value: list.isLoading ? undefined : activeN, loading: list.isLoading, tone: "good", sub: "on this page" },
+          { label: "Inactive", value: list.isLoading ? undefined : allRows.length - activeN, loading: list.isLoading, tone: allRows.length - activeN ? "warn" : undefined, sub: "on this page" },
+          { label: "Roles", value: roles.data?.length, loading: roles.isLoading },
+          { label: "Branches", value: branches.data?.total, loading: branches.isLoading, href: "/branches" },
         ]}
-        note="Role and branch changes take effect on the account's next request"
       />
 
-      <TableCard
-        toolbar={
-          <div className="relative w-full max-w-sm">
-            <SearchIcon
-              size={15}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-4"
-            />
-            <input
-              placeholder="Search…"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className={cn(controlClass, "pl-9")}
+      <div className="grid gap-4 xl:grid-cols-12">
+        <Card className="xl:col-span-9">
+          <div className="flex flex-wrap items-center gap-2 border-b border-ink/[0.06] px-4 py-2.5">
+            <div className="relative w-full max-w-xs">
+              <SearchIcon size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-5" />
+              <input
+                placeholder="Search name or email…"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className={cn(inputCls, "w-full pl-8")}
+              />
+            </div>
+            <FilterPills
+              value={show}
+              onChange={setShow}
+              items={[
+                { key: "all", label: "All", count: allRows.length },
+                { key: "active", label: "Active", count: activeN, dot: "bg-emerald-500" },
+                { key: "inactive", label: "Inactive", count: allRows.length - activeN, dot: "bg-ink/30" },
+              ]}
             />
           </div>
-        }
-        footer={
-          <Pager
-            page={page}
-            onChange={setPage}
-            pageSize={20}
-            count={rows.length}
-            total={list.data?.total ?? 0}
-            unit="accounts"
-          />
-        }
-      >
-        {list.isLoading ? (
-          <TableSkeleton rows={5} cols={4} />
-        ) : rows.length === 0 ? (
-          <EmptyBlock title="No users found" description="Try a different search." />
-        ) : (
-          <table className="g-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Status</th>
-                <th className="!text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <button
-                      onClick={() => setDetailId(r.id)}
-                      className="group flex items-center gap-3 text-left"
-                    >
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-ink font-mono text-[10px] font-bold text-gold transition-colors group-hover:bg-gold group-hover:text-ink">
-                        {(r.name || r.email).slice(0, 2).toUpperCase()}
-                      </span>
-                      <span className="font-medium text-ink group-hover:underline">{r.name}</span>
-                    </button>
-                  </td>
-                  <td className="text-ink-3">{r.email}</td>
-                  <td>
-                    <StatusPill
-                      status={r.is_active ? "active" : "inactive"}
-                      label={r.is_active ? "Active" : "Inactive"}
-                    />
-                  </td>
-                  <td className="text-right">
-                    {canEdit ? (
-                      <div className="flex items-center justify-end gap-3">
-                        <button
-                          onClick={() => setEditId(r.id)}
-                          className="text-xs font-medium text-ink-3 transition-colors hover:text-ink hover:underline"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => toggleActive(r)}
-                          className={cn(
-                            "text-xs font-medium transition-colors hover:underline",
-                            r.is_active ? "text-rose-700" : "text-emerald-700"
-                          )}
-                        >
-                          {r.is_active ? "Deactivate" : "Activate"}
-                        </button>
-                      </div>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </TableCard>
+          {list.isLoading ? (
+            <RowsSkeleton rows={6} />
+          ) : rows.length === 0 ? (
+            <Empty icon={UsersIcon} title="No users found" desc={search ? `Nothing matches “${search}”.` : "Try a different filter."} />
+          ) : (
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full text-[12.5px]">
+                <thead className={thead}>
+                  <tr>
+                    <th className={cn(th, "pl-4")}>Person</th>
+                    <th className={th}>Email</th>
+                    <th className={th}>Status</th>
+                    <th className={cn(th, "pr-4 text-right")}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => {
+                    const tone = avatarTone(r.email);
+                    return (
+                      <tr key={r.id} className={cn(tr, !r.is_active && "opacity-60")}>
+                        <td className="py-1.5 pl-4 pr-2">
+                          <button onClick={() => setDetailId(r.id)} className="group flex items-center gap-2.5 text-left">
+                            <span
+                              className="flex size-8 shrink-0 items-center justify-center rounded-lg font-display text-[11px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
+                              style={{ background: `linear-gradient(145deg, ${tone}, ${tone}cc)` }}
+                            >
+                              {initialsOf(r.name, r.email)}
+                            </span>
+                            <span className="leading-tight">
+                              <span className="flex items-center gap-1.5 font-semibold text-ink group-hover:underline">
+                                {r.name}
+                                {r.id === myId ? <span className="rounded-full bg-gold/15 px-1.5 text-[9.5px] font-semibold text-gold-deep no-underline">You</span> : null}
+                              </span>
+                              <span className="text-[10.5px] text-ink-5">View profile & activity</span>
+                            </span>
+                          </button>
+                        </td>
+                        <td className="px-2 text-ink-3">{r.email}</td>
+                        <td className="px-2">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-full px-2 py-px text-[10.5px] font-semibold ring-1 ring-inset",
+                              r.is_active ? "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25" : "bg-ink/[0.04] text-ink-5 ring-ink/10"
+                            )}
+                          >
+                            <span className={cn("size-1.5 rounded-full", r.is_active ? "bg-emerald-500" : "bg-ink/30")} />
+                            {r.is_active ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="py-1.5 pl-2 pr-4 text-right">
+                          {canEdit ? (
+                            <span className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => setEditId(r.id)}
+                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/10 transition-colors hover:bg-bone hover:text-ink"
+                              >
+                                <EditIcon size={11} />
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => toggleActive(r)}
+                                className={cn(
+                                  "rounded-md px-2 py-1 text-[11px] font-semibold transition-colors",
+                                  r.is_active ? "text-rose-700 hover:bg-rose-500/10" : "text-emerald-700 hover:bg-emerald-500/10"
+                                )}
+                              >
+                                {r.is_active ? "Deactivate" : "Activate"}
+                              </button>
+                            </span>
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-2 border-t border-ink/[0.06] bg-bone/40 px-4 py-2 text-[11px] text-ink-4">
+            <span>
+              <span className="g-metric text-ink-2">{count(allRows.length)}</span> of <span className="g-metric text-ink-2">{count(total)}</span> accounts
+            </span>
+            <span className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage(page - 1)}
+                aria-label="Previous page"
+                className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/10 hover:bg-paper disabled:opacity-40"
+              >
+                <ChevronRightIcon size={13} className="rotate-180" />
+              </button>
+              <span className="g-metric px-1.5 text-ink-2">
+                {page} / {pages}
+              </span>
+              <button
+                type="button"
+                disabled={page >= pages}
+                onClick={() => setPage(page + 1)}
+                aria-label="Next page"
+                className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/10 hover:bg-paper disabled:opacity-40"
+              >
+                <ChevronRightIcon size={13} />
+              </button>
+            </span>
+          </div>
+        </Card>
+
+        <div className="space-y-4 xl:col-span-3">
+          <Card>
+            <CardHead icon={ShieldIcon} title="Roles" sub="Each account holds one role" />
+            {roles.isLoading ? (
+              <RowsSkeleton rows={3} />
+            ) : (
+              <ul className="flex flex-wrap gap-1.5 p-3">
+                {(roles.data ?? []).map((r) => (
+                  <li
+                    key={r.id}
+                    className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                    style={{ color: avatarTone(r.name), background: `${avatarTone(r.name)}14`, boxShadow: `inset 0 0 0 1px ${avatarTone(r.name)}33` }}
+                  >
+                    <span className="size-1.5 rounded-full" style={{ background: avatarTone(r.name) }} />
+                    {r.name}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="border-t border-ink/[0.06] px-4 py-2 text-[10.5px] text-ink-5">
+              {canApprove ? "You can change roles." : "Changing a role needs users:approve."}
+            </p>
+          </Card>
+          <Card>
+            <CardHead icon={Building2Icon} title="Branches" sub="Accounts are granted branch by branch" />
+            {branches.isLoading ? (
+              <RowsSkeleton rows={3} />
+            ) : (
+              <ul className="divide-y divide-ink/[0.05]">
+                {(branches.data?.rows ?? []).map((b) => (
+                  <li key={b.id} className="flex items-center gap-2.5 px-4 py-2">
+                    <span className="g-metric rounded bg-void px-1.5 py-px text-[10px] font-semibold text-gold-light">{b.code}</span>
+                    <span className="truncate text-[12px] text-ink-2">{b.name}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
+      </div>
 
       {dialog ? (
         <Modal title="New user" kicker="Organisation" onClose={() => setDialog(false)} footer={false}>
@@ -463,21 +543,24 @@ function DetailDrawer({ id, onClose }: { id: string; onClose: () => void }) {
           <Skeleton className="h-32" />
         )}
         <div>
-          <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-4">
+          <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-4">
+            <HistoryIcon size={12} />
             Activity
+            <span className="g-metric ml-auto normal-case tracking-normal text-ink-5">{activity.data?.total ?? 0} events</span>
           </div>
           {(activity.data?.rows ?? []).length === 0 ? (
             <p className="text-sm text-ink-4">No activity recorded.</p>
           ) : (
             <ul className="space-y-2 text-sm">
               {(activity.data?.rows ?? []).map((a) => (
-                <li key={a.id} className="g-surface p-3">
+                <li key={a.id} className="relative rounded-xl bg-bone/60 py-2 pl-4 pr-3 ring-1 ring-inset ring-ink/[0.06]">
+                  <span className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-gold" aria-hidden />
                   <div className="flex items-center justify-between gap-2">
                     <Pill tone="neutral" className="font-mono normal-case tracking-normal">
                       {a.action}
                     </Pill>
-                    <span className="text-[11px] text-ink-5">
-                      {new Date(a.created_at).toLocaleString()}
+                    <span className="text-[11px] text-ink-5" title={new Date(a.created_at).toLocaleString()}>
+                      {ago(a.created_at)}
                     </span>
                   </div>
                   <div className="mt-1.5 text-xs text-ink-4">{a.entity}</div>

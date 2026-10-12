@@ -10,6 +10,7 @@
 # Migrations are tracked in the remote `schema_migrations` table, so re-runs
 # only apply pending files from apps/api/drizzle/*.sql in sorted order.
 set -euo pipefail
+export PATH="$HOME/Library/pnpm/bin:/usr/local/bin:$PATH"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API_DIR="$ROOT/apps/api"

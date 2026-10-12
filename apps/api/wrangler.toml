@@ -4,7 +4,7 @@ compatibility_date = "2024-09-01"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-WEB_ORIGIN = "http://localhost:3000"
+WEB_ORIGIN = "https://goldos-web.thufailahamed627.workers.dev,http://localhost:3000"
 # The platform account this data plane serves. Set it to the tenant id shown
 # in the admin portal once the shop's account exists; leave unset for an
 # unmanaged single-shop install (no gate, no limits).

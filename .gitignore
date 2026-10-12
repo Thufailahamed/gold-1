@@ -10,3 +10,4 @@ seed.sql
 *.tsbuildinfo
 .turbo/
 .claude/
+.open-next/

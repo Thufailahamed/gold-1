@@ -1,10 +1,12 @@
 "use client";
 
 import { MasterCrud } from "@/components/master-crud";
+import { GemIcon } from "@/components/icons";
 
 export default function DesignsPage() {
   return (
     <MasterCrud
+        icon={GemIcon}
       title="Designs"
       subtitle="Jewellery pattern, style and design masters"
       endpoint="/api/v1/masters/designs"

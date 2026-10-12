@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { MasterCrud } from "@/components/master-crud";
+import { TagsIcon } from "@/components/icons";
 
 export default function SubcategoriesPage() {
   const cats = useQuery({
@@ -17,6 +18,7 @@ export default function SubcategoriesPage() {
 
   return (
     <MasterCrud
+        icon={TagsIcon}
       title="Subcategories"
       subtitle="Detailed sub-classifications under main categories"
       endpoint="/api/v1/masters/subcategories"

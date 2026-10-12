@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { MasterCrud, type CrudColumn, type CrudField } from "@/components/master-crud";
-import { LedgerDrawer } from "../suppliers/page";
+import { BookOpenIcon, UserCheckIcon } from "@/components/icons";
+import { LedgerDrawer } from "@/components/party-ledger";
 
 const PARTY_COLUMNS: CrudColumn[] = [
   { key: "code", label: "Code" },
@@ -37,6 +38,7 @@ export default function CustomersPage() {
   return (
     <>
       <MasterCrud
+        icon={UserCheckIcon}
         title="Customers"
         subtitle="Retail and wholesale customers"
         endpoint="/api/v1/customers"
@@ -48,17 +50,18 @@ export default function CustomersPage() {
         emptyHint="No customers yet. Create the first one."
         note="Customers attach to sales, credit limits and ledgers"
         renderActions={(row, { onDeactivate }) => (
-          <span className="flex justify-end gap-3">
+          <span className="flex justify-end gap-1">
             <button
               onClick={() => setLedgerId(String(row.id))}
-              className="text-xs font-medium hover:underline"
+              className="inline-flex items-center gap-1 rounded-md bg-void px-2 py-1 text-[11px] font-semibold text-gold-light transition-colors hover:bg-void/85"
             >
+              <BookOpenIcon size={11} />
               Ledger
             </button>
             {row.is_active ? (
               <button
                 onClick={() => onDeactivate(String(row.id))}
-                className="text-xs font-medium text-rose-700 hover:underline"
+                className="rounded-md px-2 py-1 text-[11px] font-semibold text-rose-700 transition-colors hover:bg-rose-500/10"
               >
                 Deactivate
               </button>

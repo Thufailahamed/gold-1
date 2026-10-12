@@ -7,10 +7,10 @@ Cloudflare account with Workers, D1 (`goldos`), R2 (`goldos-assets`).
 
 Live (2026-09-27):
 - API: https://goldos-api.thufailahamed627.workers.dev
+- Web: https://goldos-web.thufailahamed627.workers.dev
 - D1: `goldos` (27c637f8-6a15-4012-bd7e-8b7b601df400), region APAC
 - R2: `goldos-assets`
-- Web `apps/web/.env.local` points `NEXT_PUBLIC_API_URL` at the Workers URL
-  (git-ignored; set the same env var when deploying to Pages).
+- Web `apps/web/.env.local` points `NEXT_PUBLIC_API_URL` at the Workers URL.
 
 ## Cloud sync (use this)
 
@@ -46,5 +46,5 @@ pnpm --filter goldos-api exec wrangler dev --local --port 8787
 NEXT_PUBLIC_API_URL=http://localhost:8787 pnpm --filter goldos-web exec next dev --port 3000
 ```
 
-Deploy API with `wrangler deploy`; deploy web to Cloudflare Pages with
-`NEXT_PUBLIC_API_URL` pointed at the Workers URL.
+Deploy API with `wrangler deploy` (or `./scripts/cloudflare-sync.sh --backend-only`);
+deploy web with `pnpm --filter goldos-web run deploy`.

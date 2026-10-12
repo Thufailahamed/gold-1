@@ -1,10 +1,12 @@
 "use client";
 
 import { MasterCrud } from "@/components/master-crud";
+import { GemIcon } from "@/components/icons";
 
 export default function StoneTypesPage() {
   return (
     <MasterCrud
+        icon={GemIcon}
       title="Stone Types"
       subtitle="Gemstone, diamond, and stone classification masters"
       endpoint="/api/v1/masters/stone-types"

@@ -1,10 +1,12 @@
 "use client";
 
 import { MasterCrud } from "@/components/master-crud";
+import { PackageIcon } from "@/components/icons";
 
 export default function ProductTypesPage() {
   return (
     <MasterCrud
+        icon={PackageIcon}
       title="Product Types"
       subtitle="Production and inventory piece classifications"
       endpoint="/api/v1/masters/product-types"

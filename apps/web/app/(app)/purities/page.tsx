@@ -1,10 +1,12 @@
 "use client";
 
 import { MasterCrud } from "@/components/master-crud";
+import { ScaleIcon } from "@/components/icons";
 
 export default function PuritiesPage() {
   return (
     <MasterCrud
+        icon={ScaleIcon}
       title="Purities"
       subtitle="Karat definitions with default charges"
       endpoint="/api/v1/masters/purities"

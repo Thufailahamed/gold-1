@@ -1,10 +1,12 @@
 "use client";
 
 import { MasterCrud } from "@/components/master-crud";
+import { TagsIcon } from "@/components/icons";
 
 export default function CategoriesPage() {
   return (
     <MasterCrud
+        icon={TagsIcon}
       title="Categories"
       subtitle="Product categories for the catalog"
       endpoint="/api/v1/masters/categories"
