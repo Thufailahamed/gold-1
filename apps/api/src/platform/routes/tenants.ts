@@ -237,7 +237,18 @@ export const platformTenants = new Hono<PlatformEnv>()
   })
   .get("/:id/export.json", requirePlatformPerm(P.TENANTS_VIEW), async (c) => {
     try {
-      return ok(c, await exportTenant(c.get("pdb"), c.req.param("id")));
+      const full = await exportTenant(c.get("pdb"), c.req.param("id"));
+      // Export respects the same section perms as the rest of the console:
+      // billing / tickets / audit are stripped without their view perms.
+      const perms: string[] = c.get("platformPermissions") ?? [];
+      const { invoices, payments, tickets, audit, ...rest } = full as typeof full & { invoices: unknown[]; payments: unknown[]; tickets: unknown[]; audit: unknown[] };
+      return ok(c, {
+        ...rest,
+        invoices: perms.includes(P.BILLING_VIEW) ? invoices : [],
+        payments: perms.includes(P.BILLING_VIEW) ? payments : [],
+        tickets: perms.includes(P.SUPPORT_VIEW) ? tickets : [],
+        audit: perms.includes(P.AUDIT_VIEW) ? audit : [],
+      });
     } catch (e) {
       return serviceError(c, e);
     }

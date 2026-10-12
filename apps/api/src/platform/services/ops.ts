@@ -289,10 +289,10 @@ export async function listActiveImpersonations(db: D1Database) {
   return results ?? [];
 }
 
-/** Revokes a single grant. Idempotent: revoking a consumed/expired grant is ok. */
+/** Revokes a single grant. Idempotent: revoking an already-gone grant is ok (kill-switch retries/races). */
 export async function revokeImpersonation(db: D1Database, grantId: string, reason: string, actor: Actor): Promise<void> {
   const g = await db.prepare("SELECT id, tenant_id, target_email FROM impersonation_grants WHERE id = ?").bind(grantId).first<{ id: string; tenant_id: string; target_email: string }>();
-  if (!g) fail("NOT_FOUND", "Impersonation grant not found");
+  if (!g) return;
   await db.batch([
     db.prepare("DELETE FROM impersonation_grants WHERE id = ?").bind(grantId),
     buildPlatformAudit(db, { adminId: actor.id, action: "tenant.impersonate_revoke", entity: "impersonation_grant", entityId: grantId, tenantId: g.tenant_id, prev: { targetEmail: g.target_email }, reason, ip: actor.ip }),
@@ -305,8 +305,8 @@ export async function revokeAllImpersonations(db: D1Database, tenantId: string, 
   const now = Date.now();
   const existing = await db.prepare("SELECT COUNT(*) AS n FROM impersonation_grants WHERE tenant_id = ? AND consumed_at IS NULL AND expires_at > ?").bind(tenantId, now).first<{ n: number }>();
   const revoked = existing?.n ?? 0;
-  await db.prepare("DELETE FROM impersonation_grants WHERE tenant_id = ? AND consumed_at IS NULL AND expires_at > ?").bind(tenantId, now).run();
   await db.batch([
+    db.prepare("DELETE FROM impersonation_grants WHERE tenant_id = ? AND consumed_at IS NULL AND expires_at > ?").bind(tenantId, now),
     buildPlatformAudit(db, { adminId: actor.id, action: "tenant.impersonate_revoke_all", entity: "tenant", entityId: tenantId, tenantId, next: { revoked }, reason, ip: actor.ip }),
   ]);
   return { revoked };

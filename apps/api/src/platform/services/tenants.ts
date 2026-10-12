@@ -543,23 +543,32 @@ export async function bulkTenants(
  * Hard delete of an archived account and every control-plane row that
  * references it. Only ARCHIVED accounts can be purged — this is the
  * irreversible half of deletion (GDPR erase). Callers should export first.
+ * Note: platform_audit_logs rows for the tenant are kept (append-only
+ * compliance trail); their tenant_id is nulled so no account data remains
+ * joined to them.
  */
 export async function purgeTenant(db: D1Database, id: string, reason: string, actor: Actor): Promise<{ purged: string }> {
   const t = await loadTenant(db, id);
   if (t.status !== "ARCHIVED") fail("CONFLICT", "Only archived accounts can be purged — archive first");
   const sub = await db.prepare("SELECT id FROM subscriptions WHERE tenant_id = ?").bind(id).first<{ id: string }>();
   const subId = sub?.id;
+  const invs = await db.prepare("SELECT id FROM invoices WHERE tenant_id = ? LIMIT 1").bind(id).all<{ id: string }>();
+  const hasInvoices = (invs.results ?? []).length > 0;
   const stmts: D1PreparedStatement[] = [];
   if (subId) {
-    const invs = await db.prepare("SELECT id FROM invoices WHERE tenant_id = ?").bind(id).all<{ id: string }>();
-    for (const inv of invs.results ?? []) {
+    stmts.push(
+      db.prepare("DELETE FROM subscription_events WHERE subscription_id = ?").bind(subId),
+      db.prepare("DELETE FROM subscriptions WHERE id = ?").bind(subId)
+    );
+  }
+  if (hasInvoices) {
+    const allInvs = await db.prepare("SELECT id FROM invoices WHERE tenant_id = ?").bind(id).all<{ id: string }>();
+    for (const inv of allInvs.results ?? []) {
       stmts.push(db.prepare("DELETE FROM invoice_lines WHERE invoice_id = ?").bind(inv.id));
     }
     stmts.push(
       db.prepare("DELETE FROM payments WHERE tenant_id = ?").bind(id),
-      db.prepare("DELETE FROM invoices WHERE tenant_id = ?").bind(id),
-      db.prepare("DELETE FROM subscription_events WHERE subscription_id = ?").bind(subId),
-      db.prepare("DELETE FROM subscriptions WHERE id = ?").bind(subId)
+      db.prepare("DELETE FROM invoices WHERE tenant_id = ?").bind(id)
     );
   }
   stmts.push(
@@ -569,6 +578,7 @@ export async function purgeTenant(db: D1Database, id: string, reason: string, ac
     db.prepare("DELETE FROM impersonation_grants WHERE tenant_id = ?").bind(id),
     db.prepare("DELETE FROM support_messages WHERE ticket_id IN (SELECT id FROM support_tickets WHERE tenant_id = ?)").bind(id),
     db.prepare("DELETE FROM support_tickets WHERE tenant_id = ?").bind(id),
+    db.prepare("UPDATE platform_audit_logs SET tenant_id = NULL WHERE tenant_id = ?").bind(id),
     db.prepare("DELETE FROM tenants WHERE id = ?").bind(id),
     buildPlatformAudit(db, { adminId: actor.id, action: "tenant.purge", entity: "tenant", entityId: id, tenantId: null, prev: { slug: t.slug, name: t.name, status: t.status }, reason, ip: actor.ip })
   );

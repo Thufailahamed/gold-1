@@ -227,7 +227,9 @@ export async function listPayments(db: D1Database, opts: { tenantId?: string; pa
 /**
  * Reverses a recorded payment (duplicate entry, refund, gateway reversal).
  * The payment row is removed and the invoice balance is restored; a PAID
- * invoice reopens to OPEN. Fully audited with a mandatory reason.
+ * invoice reopens to OPEN. Only OPEN/PAID invoices can have payments
+ * reversed. Fully audited with a mandatory reason; the audit row preserves
+ * the reversed payment's details (payments are record-only, no gateway).
  */
 export async function voidPayment(db: D1Database, paymentId: string, reason: string, actor: Actor): Promise<{ invoiceId: string; status: string }> {
   const pay = await db
@@ -237,12 +239,16 @@ export async function voidPayment(db: D1Database, paymentId: string, reason: str
   if (!pay) fail("NOT_FOUND", "Payment not found");
   const inv = await db.prepare("SELECT id, status, amount_paid_cents FROM invoices WHERE id = ?").bind(pay.invoice_id).first<{ id: string; status: string; amount_paid_cents: number }>();
   if (!inv) fail("NOT_FOUND", "Invoice not found");
+  if (inv.status !== "OPEN" && inv.status !== "PAID") fail("CONFLICT", `Invoice is ${inv.status.toLowerCase()} — payments on it cannot be reversed`);
   const now = Date.now();
   const nextPaid = Math.max(0, inv.amount_paid_cents - pay.amount_cents);
-  const nextStatus = inv.status === "PAID" ? "OPEN" : inv.status;
+  const reopening = inv.status === "PAID";
+  const nextStatus = reopening ? "OPEN" : inv.status;
   await db.batch([
     db.prepare("DELETE FROM payments WHERE id = ?").bind(paymentId),
-    db.prepare("UPDATE invoices SET amount_paid_cents = ?, status = ?, paid_at = NULL WHERE id = ?").bind(nextPaid, nextStatus, inv.id),
+    reopening
+      ? db.prepare("UPDATE invoices SET amount_paid_cents = ?, status = ?, paid_at = NULL WHERE id = ?").bind(nextPaid, nextStatus, inv.id)
+      : db.prepare("UPDATE invoices SET amount_paid_cents = ? WHERE id = ?").bind(nextPaid, inv.id),
     buildPlatformAudit(db, { adminId: actor.id, action: "invoice.refund", entity: "payment", entityId: paymentId, tenantId: pay.tenant_id, prev: { invoiceId: inv.id, amountCents: pay.amount_cents, method: pay.method, reference: pay.reference, invoiceStatus: inv.status }, next: { invoiceStatus: nextStatus, amountPaidCents: nextPaid }, reason, ip: actor.ip }),
   ]);
   return { invoiceId: inv.id, status: nextStatus };
