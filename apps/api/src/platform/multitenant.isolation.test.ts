@@ -4,6 +4,7 @@ import { app } from "../app";
 import type { Env } from "../db/client";
 import { resetGateCache } from "./bridge";
 import { resetResolveCache } from "./resolve";
+import { createImpersonation } from "./services/ops";
 
 function seedShop(raw: SqliteDb, userId: string, sessionId: string) {
   const now = Date.now();
@@ -73,6 +74,18 @@ describe.skipIf(!sqliteAvailable)("multitenant isolation over real SQLite", () =
     const res = await app.request("/api/v1/auth/me", { headers: { cookie: "session=sid-c; goldos_tenant=shop-c" } }, env);
     expect(res.status).toBe(403);
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe("TENANT_SUSPENDED");
+  });
+
+  it("refuses a staff link minted for another workspace", async () => {
+    pdb.raw.prepare("INSERT INTO platform_admins (id, email, name, password_hash, role, created_at, updated_at) VALUES ('staff-1', 's@goldos.lk', 'Staff', 'x', 'support', 0, 0)").run();
+    const grant = await createImpersonation(pdb.db, env, "t-shop-a", { targetEmail: "u-b@shop.lk", reason: "support case" }, { id: "staff-1", ip: null });
+    const token = new URL(grant.url).searchParams.get("token");
+    const res = await app.request("/api/v1/platform/impersonate", {
+      method: "POST",
+      headers: { cookie: "goldos_tenant=shop-b", "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    }, env);
+    expect(res.status).toBe(401);
   });
 
   it("passes unmanaged deploys straight through", async () => {

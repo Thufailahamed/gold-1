@@ -4,7 +4,7 @@ import { migratedDb, sqliteAvailable, type SqliteDb } from "../services/sqlite-t
 import type { Env } from "../db/client";
 import { SHOP_MIGRATIONS } from "../db/shop-migrations";
 import { provisionShop, restCfClient, retryProvision, type CfClient, type CfQuery, type ProvisionInput } from "./provision";
-import { createTenant } from "./services/tenants";
+import { createTenant, suspendTenant } from "./services/tenants";
 
 const require = createRequire(import.meta.url);
 const DatabaseSync = require("node:sqlite").DatabaseSync as new (path: string) => SqliteDb;
@@ -140,16 +140,59 @@ describe.skipIf(!sqliteAvailable)("in-worker provisioning", () => {
       country: "LK", currency: "LKR", timezone: "Asia/Colombo", region: "apac",
       planId: "plan-starter", interval: "MONTH", tags: [],
     }, admin);
+    // Failed provisions leave no mapping row: retry provisions straight through.
+    const out = await retryProvision(env, pdb, id, { ownerEmail: "owner@kandygold.lk", tempPassword: "temporary-99" }, world.client);
+    const owner = world.dbs.get(out.d1Id)!.prepare("SELECT email FROM users WHERE email = ?").get("owner@kandygold.lk") as { email: string };
+    expect(owner.email).toBe("owner@kandygold.lk");
+  });
+
+  it("retry on a suspended shop destroys then recreates, in that order", async () => {
+    const world = fakeWorld();
+    const admin = { id: "admin-1", ip: null };
+    const { id } = await createTenant(pdb, {
+      name: "Kandy Gold House", slug: "kandy-gold", ownerName: "Amara", ownerEmail: "o@x.lk",
+      country: "LK", currency: "LKR", timezone: "Asia/Colombo", region: "apac",
+      planId: "plan-starter", interval: "MONTH", tags: [],
+    }, admin);
     await pdb.prepare("INSERT INTO tenant_databases (tenant_id, d1_id, d1_name, created_at) VALUES (?, ?, ?, ?)").bind(id, "d1-old", "goldos-kandy-gold-dead", 0).run();
     world.dbs.set("d1-old", new DatabaseSync(":memory:"));
+    await suspendTenant(pdb, id, "repairing database", admin);
     const out = await retryProvision(env, pdb, id, { ownerEmail: "owner@kandygold.lk", tempPassword: "temporary-99" }, world.client);
     expect(out.d1Id).not.toBe("d1-old");
     const delIdx = world.calls.findIndex((c) => c === "delete:d1-old");
     const createIdx = world.calls.findIndex((c) => c.startsWith("create:goldos-kandy-gold-"));
     expect(delIdx).toBeGreaterThanOrEqual(0);
     expect(createIdx).toBeGreaterThan(delIdx);
-    const owner = world.dbs.get(out.d1Id)!.prepare("SELECT email FROM users WHERE email = ?").get("owner@kandygold.lk") as { email: string };
-    expect(owner.email).toBe("owner@kandygold.lk");
+  });
+
+  it("retry refuses to wipe a live shop database", async () => {
+    const world = fakeWorld();
+    const admin = { id: "admin-1", ip: null };
+    const { id } = await createTenant(pdb, {
+      name: "Kandy Gold House", slug: "kandy-gold", ownerName: "Amara", ownerEmail: "o@x.lk",
+      country: "LK", currency: "LKR", timezone: "Asia/Colombo", region: "apac",
+      planId: "plan-starter", interval: "MONTH", tags: [],
+    }, admin);
+    await pdb.prepare("INSERT INTO tenant_databases (tenant_id, d1_id, d1_name, created_at) VALUES (?, ?, ?, ?)").bind(id, "d1-live", "goldos-kandy-gold-live", 0).run();
+    world.dbs.set("d1-live", new DatabaseSync(":memory:"));
+    await expect(retryProvision(env, pdb, id, { ownerEmail: "owner@kandygold.lk", tempPassword: "temporary-99" }, world.client)).rejects.toThrow(/already has a database/i);
+    expect(world.calls).toEqual([]);
+    expect(world.dbs.has("d1-live")).toBe(true);
+  });
+
+  it("a failed control-plane write deletes the created database", async () => {
+    const world = fakeWorld();
+    const admin = { id: "admin-1", ip: null };
+    const { id } = await createTenant(pdb, {
+      name: "Kandy Gold House", slug: "kandy-gold", ownerName: "Amara", ownerEmail: "o@x.lk",
+      country: "LK", currency: "LKR", timezone: "Asia/Colombo", region: "apac",
+      planId: "plan-starter", interval: "MONTH", tags: [],
+    }, admin);
+    // A stale mapping row makes the final bookkeeping fail…
+    await pdb.prepare("INSERT INTO tenant_databases (tenant_id, d1_id, d1_name, created_at) VALUES (?, ?, ?, ?)").bind(id, "d1-stale", "goldos-stale", 0).run();
+    await expect(provisionShop(env, pdb, { ...input, tenantId: id }, world.client)).rejects.toThrow();
+    // …and the just-created database must not be left orphaned.
+    expect(world.dbs.size).toBe(0);
   });
 
   it("builds a REST client from env secrets", () => {

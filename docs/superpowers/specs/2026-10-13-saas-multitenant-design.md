@@ -134,8 +134,9 @@ Tenant resolution (builder detail):
   `!PLATFORM_DB` (local single-shop dev) and legacy-pin fallback when
   `TENANT_ID` is set (old deploys + existing tests keep passing).
 - Sessions stay in shop D1 (no migration). `lookup` reads `tenant_members`
-  only (20/min/IP, slugs only, same-latency empty for unknown). Login auths
-  against exactly one D1 — timing-safe as today.
+  only (20/min/IP) and returns `[{slug, name}]` for that email — names are the
+  caller's own shops, so no oracle. Unknown emails get `[]` from the same
+  single indexed query. Login auths against exactly one D1 — timing-safe as today.
 - Perf (accepted for v1, my call): each query is one HTTPS roundtrip. No
   per-page optimisation in v1; Phase B coalesces hot paths. Correctness first.
 

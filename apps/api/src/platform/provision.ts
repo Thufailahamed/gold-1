@@ -187,17 +187,18 @@ export async function provisionShop(
       { sql: "INSERT INTO branches (id, name, code, is_active, created_at, created_by) VALUES (?, 'Main Branch', 'MAIN', 1, ?, ?)", params: [branchId, now, ownerId] },
       { sql: "INSERT INTO branch_members (user_id, branch_id) VALUES (?, ?)", params: [ownerId, branchId] },
     ]);
+    await pdb.batch([
+      pdb.prepare("INSERT INTO tenant_databases (tenant_id, d1_id, d1_name, created_at) VALUES (?, ?, ?, ?)").bind(input.tenantId, created.id, created.name, Date.now()),
+      pdb.prepare("INSERT INTO tenant_members (tenant_id, email, created_at) VALUES (?, ?, ?) ON CONFLICT (tenant_id, email) DO NOTHING").bind(input.tenantId, input.ownerEmail.toLowerCase(), Date.now()),
+      pdb.prepare("UPDATE tenants SET data_plane = ?, updated_at = ? WHERE id = ?").bind(created.id, Date.now(), input.tenantId),
+    ]);
   } catch (e) {
     // Half-migrated databases are unsafe to resume (migrations are not
-    // idempotent): remove it so a retry starts clean.
+    // idempotent), and a database without bookkeeping rows is orphaned
+    // either way: remove it so a retry starts clean.
     await cf.deleteDatabase(created.id).catch(() => undefined);
     throw e;
   }
-  await pdb.batch([
-    pdb.prepare("INSERT INTO tenant_databases (tenant_id, d1_id, d1_name, created_at) VALUES (?, ?, ?, ?)").bind(input.tenantId, created.id, created.name, Date.now()),
-    pdb.prepare("INSERT INTO tenant_members (tenant_id, email, created_at) VALUES (?, ?, ?) ON CONFLICT (tenant_id, email) DO NOTHING").bind(input.tenantId, input.ownerEmail.toLowerCase(), Date.now()),
-    pdb.prepare("UPDATE tenants SET data_plane = ?, updated_at = ? WHERE id = ?").bind(created.id, Date.now(), input.tenantId),
-  ]);
   return { d1Id: created.id, d1Name: created.name };
 }
 
@@ -213,6 +214,13 @@ export async function retryProvision(
   client?: CfClient
 ): Promise<ProvisionResult> {
   const tenant = await loadTenant(pdb, tenantId);
+  const existing = await pdb.prepare("SELECT d1_id FROM tenant_databases WHERE tenant_id = ?").bind(tenantId).first<{ d1_id: string }>();
+  // A live shop must never be wiped through this endpoint: failed provisions
+  // leave no mapping row, so a present row on an ACTIVE account means a shop
+  // that serves traffic. Suspend first (reversible) if its database is gone.
+  if (existing && tenant.status === "ACTIVE") {
+    throw Object.assign(new Error("This shop already has a database. Suspend the account first if its database is actually gone, then retry."), { code: "CONFLICT", status: 409 });
+  }
   const cf =
     client ??
     ((!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_D1_API_TOKEN)
@@ -220,7 +228,7 @@ export async function retryProvision(
           throw Object.assign(new Error("Provisioning is not configured"), { code: "PROVISIONING", status: 503 });
         })()
       : restCfClient(env.CLOUDFLARE_ACCOUNT_ID, env.CLOUDFLARE_D1_API_TOKEN));
-  const old = await pdb.prepare("SELECT d1_id FROM tenant_databases WHERE tenant_id = ?").bind(tenantId).first<{ d1_id: string }>();
+  const old = existing;
   if (old) {
     await cf.deleteDatabase(old.d1_id).catch(() => undefined);
     await pdb.prepare("DELETE FROM tenant_databases WHERE tenant_id = ?").bind(tenantId).run();
