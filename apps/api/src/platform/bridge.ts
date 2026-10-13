@@ -43,7 +43,7 @@ async function gateState(env: Env, tenantId: string | undefined): Promise<GateSt
   return value;
 }
 
-const GATE_EXEMPT = ["/api/v1/health", "/api/v1/platform/context", "/api/v1/auth/logout"];
+const GATE_EXEMPT = ["/api/v1/health", "/api/v1/platform/context", "/api/v1/auth/logout", "/api/v1/public"];
 
 /**
  * Stops a suspended or archived shop from using the product, and every shop

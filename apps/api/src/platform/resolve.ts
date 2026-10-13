@@ -6,6 +6,11 @@ import type { AppVariables } from "../middleware/auth";
 /** Cookie (and header/query fallback) naming the shop on a single-domain deploy. */
 export const TENANT_COOKIE = "goldos_tenant";
 
+/** Readable picker cookie. Matches the session cookie's cross-site posture. */
+export function tenantCookie(slug: string): string {
+  return `${TENANT_COOKIE}=${slug}; Path=/; Max-Age=2592000; Secure; SameSite=None`;
+}
+
 export type ResolvedTenant = {
   id: string;
   slug: string;

@@ -5,6 +5,8 @@ import {
   PERMISSIONS,
   resetConfirmSchema,
   resetRequestSchema,
+  shopLoginSchema,
+  shopLookupSchema,
 } from "@goldos/shared";
 import type { Env } from "../db/client";
 import { extractSessionId, requireAuth, type AppVariables } from "../middleware/auth";
@@ -15,7 +17,8 @@ import { verifyPassword } from "../services/hash";
 import { changePassword, confirmReset, requestReset } from "../services/password";
 import { clearFailures, lockedFor, loginKeys, recordFailure } from "../services/throttle";
 import { serviceError } from "./http";
-import { getShopDb } from "../platform/resolve";
+import { getShopDb, resolveShopDb, tenantCookie, TenantResolveError } from "../platform/resolve";
+import { checkPublicThrottle } from "../platform/publicThrottle";
 
 // Well-formed but matches no password: lets a failed lookup cost the same
 // scrypt run as a real check.
@@ -40,16 +43,33 @@ export function sessionCookie(id: string, maxAge: number): string {
 export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .post("/login", async (c) => {
     const body = await c.req.json().catch(() => null);
-    const parsed = loginSchema.safeParse(body);
+    const rawSlug = (body as { slug?: unknown } | null)?.slug;
+    const slug = typeof rawSlug === "string" && rawSlug.trim() !== "" ? rawSlug : undefined;
+    const parsed = (slug ? shopLoginSchema : loginSchema).safeParse(body);
     if (!parsed.success) {
       return c.json(
         { success: false, error: { code: "VALIDATION", message: "Invalid email or password" } },
         400
       );
     }
+    // Shop-picker login resolves the workspace first; the password is then
+    // checked against exactly that shop's database. Without a slug the
+    // request keeps the legacy single-shop behavior.
+    let db = getShopDb(c);
+    if (slug) {
+      if (!c.env.PLATFORM_DB)
+        return c.json({ success: false, error: { code: "UNAVAILABLE", message: "Shop login is not available on this deployment" } }, 503);
+      try {
+        ({ db } = await resolveShopDb(c.env, slug));
+      } catch (e) {
+        if (e instanceof TenantResolveError)
+          return c.json({ success: false, error: { code: e.code, message: e.message } }, e.status as 401);
+        throw e;
+      }
+    }
     const ip = c.req.header("cf-connecting-ip") ?? undefined;
     const keys = loginKeys(parsed.data.email, ip);
-    const wait = await lockedFor(getShopDb(c), keys);
+    const wait = await lockedFor(db, keys);
     if (wait > 0) {
       c.header("Retry-After", String(Math.ceil(wait / 1000)));
       return c.json(
@@ -60,7 +80,7 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         429
       );
     }
-    const user = await getShopDb(c).prepare(
+    const user = await db.prepare(
       "SELECT id, email, name, password_hash, is_active FROM users WHERE email = ?"
     )
       .bind(parsed.data.email)
@@ -69,15 +89,15 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     // time does not reveal which emails have accounts.
     const ok = await verifyPassword(parsed.data.password, user?.password_hash ?? DUMMY_HASH);
     if (!user || !user.is_active || !ok) {
-      await recordFailure(getShopDb(c), keys);
+      await recordFailure(db, keys);
       return c.json(
         { success: false, error: { code: "UNAUTHORIZED", message: "Invalid credentials" } },
         401
       );
     }
-    await clearFailures(getShopDb(c), parsed.data.email);
-    const session = await createSession(getShopDb(c), user.id);
-    await writeAudit(getShopDb(c), {
+    await clearFailures(db, parsed.data.email);
+    const session = await createSession(db, user.id);
+    await writeAudit(db, {
       userId: user.id,
       action: "auth.login",
       entity: "session",
@@ -85,6 +105,7 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       ip,
     });
     c.header("Set-Cookie", sessionCookie(session.id, SESSION_ABSOLUTE_MS / 1000));
+    if (slug) c.header("Set-Cookie", tenantCookie(slug), { append: true });
     c.header("X-Session-Id", session.id);
     return c.json(
       {
@@ -97,6 +118,37 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       },
       200
     );
+  })
+  .post("/lookup", async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = shopLookupSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        { success: false, error: { code: "VALIDATION", message: "A valid email is required" } },
+        400
+      );
+    }
+    const pdb = c.env.PLATFORM_DB;
+    // Single-shop deploys have no picker: the only shop is the current one.
+    if (!pdb) return c.json({ success: true, data: { shops: [] } }, 200);
+    const ip = c.req.header("cf-connecting-ip") ?? "unknown";
+    if (!(await checkPublicThrottle(pdb, `lookup:${ip}`, 20, 60_000))) {
+      c.header("Retry-After", "60");
+      return c.json(
+        { success: false, error: { code: "RATE_LIMITED", message: "Too many lookups. Try again in a little while." } },
+        429
+      );
+    }
+    // Index-only: one query whether the email is known or not, slugs only.
+    const { results } = await pdb.prepare(
+      `SELECT t.slug AS slug, t.name AS name FROM tenant_members m
+       JOIN tenants t ON t.id = m.tenant_id
+       WHERE m.email = ? AND t.status IN ('ACTIVE', 'SUSPENDED')
+       ORDER BY t.created_at`
+    )
+      .bind(parsed.data.email.toLowerCase())
+      .all<{ slug: string; name: string }>();
+    return c.json({ success: true, data: { shops: results ?? [] } }, 200);
   })
   .post("/logout", requireAuth, async (c) => {
     const sessionId = extractSessionId(c);
