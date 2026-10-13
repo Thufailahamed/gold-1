@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import {
   applyDiscountSchema,
   bulkTenantActionSchema,
@@ -16,6 +17,8 @@ import {
 import { serviceError } from "../../routes/http";
 import { requirePlatformAuth, requirePlatformPerm } from "../auth";
 import type { PlatformEnv } from "../core";
+import { randomToken } from "../core";
+import { provisionShop, retryProvision } from "../provision";
 import { actor, csv, ok, page, parseBody } from "../http";
 import { listInvoices } from "../services/billing";
 import { createImpersonation, listActiveImpersonations, listImpersonations, listPlatformAudit, resolveDataPlane, revokeAllImpersonations, revokeImpersonation, snapshotUsage } from "../services/ops";
@@ -103,7 +106,37 @@ export const platformTenants = new Hono<PlatformEnv>()
     const p = await parseBody(c, createTenantSchema);
     if (!p.ok) return p.res;
     try {
-      return ok(c, await createTenant(c.get("pdb"), p.data, actor(c)), 201);
+      const created = await createTenant(c.get("pdb"), p.data, actor(c));
+      // Staff-created shops provision down the same path as self-signup. The
+      // temp password is shown once — it is never stored.
+      const tempPassword = randomToken(12).slice(0, 16);
+      try {
+        const tenant = await loadTenant(c.get("pdb"), created.id);
+        const out = await provisionShop(c.env, c.get("pdb"), {
+          tenantId: created.id,
+          slug: tenant.slug,
+          shopName: tenant.name,
+          ownerName: tenant.owner_name,
+          ownerEmail: tenant.owner_email,
+          password: tempPassword,
+          country: tenant.country,
+          currency: tenant.currency,
+          timezone: tenant.timezone,
+        });
+        return ok(c, { ...created, provisioning: { status: "ready", ...out }, tempPassword }, 201);
+      } catch (e) {
+        return ok(c, { ...created, provisioning: { status: "failed", error: e instanceof Error ? e.message : String(e) }, tempPassword: null }, 201);
+      }
+    } catch (e) {
+      return serviceError(c, e);
+    }
+  })
+  .post("/:id/retry-provision", requirePlatformPerm(P.TENANTS_MANAGE), async (c) => {
+    const p = await parseBody(c, z.object({ ownerEmail: z.string().email(), tempPassword: z.string().min(10).max(200) }));
+    if (!p.ok) return p.res;
+    try {
+      const out = await retryProvision(c.env, c.get("pdb"), c.req.param("id"), p.data);
+      return ok(c, { provisioning: { status: "ready", ...out } }, 200);
     } catch (e) {
       return serviceError(c, e);
     }

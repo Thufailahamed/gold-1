@@ -13,9 +13,29 @@ import {
   listUsers,
 } from "../services/users";
 import { pagination, serviceError } from "./http";
-import { getShopDb } from "../platform/resolve";
+import { getShopDb, getTenantId } from "../platform/resolve";
 
 const reasonSchema = z.object({ reason: z.string().min(1).max(500) });
+
+/**
+ * Best-effort login-index upkeep: the shop-picker `lookup` reads
+ * `tenant_members`, so staff user changes reflect there. Never blocks the
+ * shop write; skipped where there is no control plane (unmanaged deploys).
+ */
+async function syncMember(c: { env: Env; get: (key: any) => unknown }, email: string, add: boolean): Promise<void> {
+  const pdb = c.env.PLATFORM_DB;
+  const tenantId = getTenantId(c);
+  if (!pdb || !tenantId) return;
+  try {
+    if (add) {
+      await pdb.prepare("INSERT INTO tenant_members (tenant_id, email, created_at) VALUES (?, ?, ?) ON CONFLICT (tenant_id, email) DO NOTHING").bind(tenantId, email.toLowerCase(), Date.now()).run();
+    } else {
+      await pdb.prepare("DELETE FROM tenant_members WHERE tenant_id = ? AND email = ?").bind(tenantId, email.toLowerCase()).run();
+    }
+  } catch {
+    // Index lag only affects picker convenience; login with slug always works.
+  }
+}
 
 export const users = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
@@ -29,6 +49,7 @@ export const users = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     try {
       const user = await createUser(getShopDb(c), parsed.data, c.get("userId"));
+      await syncMember(c, parsed.data.email, true);
       return c.json({ success: true, data: user }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -71,6 +92,8 @@ export const users = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     try {
       await deactivateUser(getShopDb(c), c.req.param("id"), c.get("userId"), parsed.data.reason);
+      const detail = await getUserDetail(getShopDb(c), c.req.param("id")).catch(() => null);
+      if (detail) await syncMember(c, detail.email, false);
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -86,6 +109,8 @@ export const users = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     try {
       await activateUser(getShopDb(c), c.req.param("id"), c.get("userId"), parsed.data.reason);
+      const detail = await getUserDetail(getShopDb(c), c.req.param("id")).catch(() => null);
+      if (detail) await syncMember(c, detail.email, true);
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);

@@ -116,7 +116,7 @@ export function createPublicRoutes(deps: { provision: Provisioner }) {
         const now = Date.now();
         await pdb.prepare("INSERT INTO job_runs (id, job, trigger, status, started_at, triggered_by) VALUES (?, 'provision', 'manual', 'RUNNING', ?, ?)").bind(jobId, now, null).run();
         try {
-          await deps.provision(pdb, {
+          await deps.provision(c.env, pdb, {
             tenantId,
             slug: input.slug,
             shopName: input.shopName,

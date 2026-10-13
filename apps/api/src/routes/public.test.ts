@@ -9,7 +9,7 @@ import { resetResolveCache } from "../platform/resolve";
 import { resetGateCache } from "../platform/bridge";
 
 function testApp(env: Env) {
-  const fakeProvision: Provisioner = async (pdb, input) => {
+  const fakeProvision: Provisioner = async (_env, pdb, input) => {
     const shop = migratedDb();
     const hash = await hashPassword(input.password);
     // Migrations already seed roles/permissions/chart/settings: only the

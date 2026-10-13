@@ -45,7 +45,7 @@ import { platform, platformScheduled } from "./platform";
 import { enforcePlanLimit, platformBridge, tenantGate } from "./platform/bridge";
 import { resolveTenant } from "./platform/resolve";
 import { createPublicRoutes } from "./routes/public";
-import { unconfiguredProvisioner } from "./platform/provision";
+import { provisionShop } from "./platform/provision";
 
 const app = new Hono<{ Bindings: Env }>();
 app.onError(errorHandler);
@@ -56,9 +56,8 @@ app.use("/platform/*", csrf);
 // Control plane: the SaaS operator's admin portal API.
 app.route("/platform/v1", platform);
 // Public self-serve: mounted before the tenant scope so signup, plans and
-// provisioning status never need a workspace. (Replaced with the Task 4
-// provisioner when it lands; the interface is already fixed.)
-app.route("/api/v1/public", createPublicRoutes({ provision: unconfiguredProvisioner }));
+// provisioning status never need a workspace.
+app.route("/api/v1/public", createPublicRoutes({ provision: provisionShop }));
 // Data plane: every shop request is scoped to its workspace first, then gated.
 app.use("/api/v1/*", resolveTenant);
 app.use("/api/v1/*", tenantGate);
