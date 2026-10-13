@@ -1,7 +1,8 @@
 # Sellable Multi-Tenant SaaS for GoldOS — Design
 
 Date: 2026-10-13
-Status: DRAFT — awaiting owner approval (nothing built until approved)
+Status: APPROVED + REVISED (owner approved; architecture switched 2026-10-13
+from 8-shop bindings fleet to automatic D1-per-shop — unlimited shops)
 
 ## 1. Intent / why
 
@@ -54,13 +55,22 @@ Anti-goals (failure even if it works):
 - Stack: Cloudflare Workers + Hono API (`apps/api`), D1 (SQLite) x2 planes,
   R2 for slips, Next.js web (`apps/web`), Drizzle, shared zod schemas
   (`packages/shared/src/platform.ts`). No new infra vendor.
-- Shop schema has NO `tenant_id` column (69 tables). Do NOT add tenant_id to
-  every table in v1 — isolation is database-per-shop, not row-per-shop.
-- Cloudflare Workers cannot dynamically bind D1 at runtime. Single worker can
-  only reach D1s listed in `wrangler.toml`. So v1 supports a bounded fleet
-  (e.g. 10–20 bindings `DB_T1..DB_TN`) + a provisioning script that creates
-  the D1 via API, runs the 43 migrations, seeds, and assigns the binding.
-  Design must not promise unbounded auto-D1 without a deploy.
+- Shop schema has NO `tenant_id` column (69 tables). Isolation stays
+  database-per-shop, not row-per-shop — verified 2026-10-13 that shared
+  tables would mean scoping 1,033 raw-SQL sites with leak risk. Rejected.
+- One Worker serves ALL shops (no per-shop deploy). Each shop gets its own
+  D1, created automatically at signup via the Cloudflare D1 REST API and
+  reached at request time over HTTPS (not wrangler bindings — bindings need a
+  redeploy per shop and cap the fleet). Verified 2026-10-13: no per-database
+  fee, 1M databases on $5/mo Workers Paid, D1 designed for per-tenant DBs.
+  Secrets (never in repo): `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_API_TOKEN`
+  (`wrangler secret put`). Pricing partition: Free plan caps at 10 databases —
+  selling needs Workers Paid.
+- Shop migrations (`drizzle/*.sql`, 43 files) are bundled into the Worker at
+  build time (`scripts/bundle-migrations.mjs` → committed
+  `apps/api/src/db/shop-migrations.ts`; re-run when `drizzle/*` changes) so
+  in-worker provisioning can apply them over REST. Chart of accounts + default
+  settings come from migrations 0008/0015/0018/0031/0032 — verified.
 - Existing control-plane tables (`tenants`, `subscriptions`, `invoices`,
   `payments`, `impersonation_grants`, `support_*`, `platform_*`) are append-only
   where noted. Reuse `subscription_events`, `platform_audit_logs`.
@@ -76,100 +86,116 @@ Anti-goals (failure even if it works):
 `TENANT_ID` env → `tenantGate` + `currentPlan` → `env.DB` (one shop).
 `tenants.data_plane` is only used for usage snapshots.
 
-### 4.2 v1 SaaS (single domain, DB-per-shop, per-request tenant)
+### 4.2 v1 SaaS (single domain, auto D1-per-shop, per-request tenant)
 
 ```
-browser (app.goldos.lk)
+browser (app.<domain>)
  ├─ GET /signup, /login (shop picker), /billing (pay), /support
  └─ /platform/* (staff console, unchanged)
         │
-API worker (one deploy, PLATFORM_DB bound, DB_T1..DB_TN + legacy DB bound)
- ├─ POST /api/v1/public/signup        (rate-limited, captcha-ready)
+API worker (one deploy: PLATFORM_DB + legacy DB bound; shop DBs via D1 REST)
+ ├─ POST /api/v1/public/signup        (rate-limited → tenant TRIALING + auto D1)
  ├─ GET  /api/v1/public/plans         (public plans + prices)
- ├─ POST /api/v1/auth/lookup          {email} → [{slug,name}] (no password leak)
- ├─ POST /api/v1/auth/login           {email,password,slug} → session @ correct D1
+ ├─ POST /api/v1/auth/lookup          {email} → [{slug,name}] (central index)
+ ├─ POST /api/v1/auth/login           {email,password,slug} → session @ shop D1
  ├─ *Authenticated* — middleware chain per request:
- │    resolveTenant (cookie goldos_tenant + session) → pick D1 binding
+ │    resolveTenant (cookie goldos_tenant + session) → tenant row → D1 REST handle
  │    → tenantGate (PLATFORM_DB status, 30s cache per tenant)
- │    → requireAuth (against picked D1) → requirePerm / branchScope (unchanged)
+ │    → requireAuth (against that shop's D1) → requirePerm / branchScope (unchanged)
  ├─ POST /api/v1/billing/slip         (auth, R2 upload, creates payment PENDING)
  └─ /platform/v1/*                    (staff, unchanged + approve/reject slip)
 ```
 
 Tenant resolution (builder detail):
-- New cookies: `goldos_tenant=<slug>; Path=/; 30d; Lax`. Login sets it.
+- New cookies: `goldos_tenant=<slug>; Path=/; 30d`. Login sets it.
   Every authenticated call reads it first; fallback `X-Shop-Slug` header.
   Session cookie stays `session; Path=/; HttpOnly; Secure` with
   `SameSite=None` in production (cross-site app+api, see §8 O1) and `Lax`
   on localhost. `goldos_tenant` picker cookie is readable by JS (no HttpOnly).
   If the session id is not found in the resolved tenant's D1 → 401, never
   try other D1s (prevents cross-shop session replay). Logout clears both cookies.
-- New PLATFORM_DB table `tenant_bindings (tenant_id UNIQUE, binding TEXT,
-  d1_id TEXT, created_at)` — maps tenant → `DB_Tn` binding name. `tenants.data_plane`
-  continues to store the same binding name (back-compat with `resolveDataPlane`).
-- New helper `resolveShopDb(env, slugOrId): {db, tenant}` — looks up tenant row
-  (ACTIVE/SUSPENDED, not ARCHIVED for login), returns bound D1 or 503
-  `PROVISIONING` if `status=ACTIVE` but no binding yet (signup race).
+- New PLATFORM_DB tables (migration `0002_saas.sql`):
+  `tenant_databases (tenant_id TEXT PRIMARY KEY REFERENCES tenants(id),
+  d1_id TEXT NOT NULL UNIQUE, d1_name TEXT NOT NULL, created_at INTEGER NOT NULL)`;
+  `tenant_members (tenant_id TEXT NOT NULL REFERENCES tenants(id),
+  email TEXT NOT NULL, created_at INTEGER NOT NULL,
+  PRIMARY KEY (tenant_id, email))` — central login index so `lookup` never
+  fans out to N databases. `tenants.data_plane` keeps the D1 id as a readable
+  mirror (cron/docs), not a binding name.
+- New `apps/api/src/db/rest-d1.ts`: `RestD1` class implementing the D1 surface
+  the codebase uses (`prepare().bind().first/all/run`, `batch()`) over
+  `POST /accounts/{acct}/d1/database/{id}/query`. Handles cached per isolate
+  (tenant → handle). Tests inject in-memory handles — no network in tests.
+- New helper `resolveShopDb(env, slugOrId): {db, tenant}` — tenant row lookup
+  (ACTIVE/SUSPENDED, not ARCHIVED for login), then handle for its `d1_id`,
+  or 503 `PROVISIONING` while provisioning runs.
 - `tenantGate` and `enforcePlanLimit` change signature from `env.TENANT_ID` to
   `c.get('tenantId')` set by `resolveTenant`. Keep unmanaged passthrough when
-  `!PLATFORM_DB` (local single-shop dev).
-- Sessions stay in shop D1 (no migration). Lookup flow tries bindings in order:
-  `lookup` queries each reachable shop D1 `SELECT id FROM users WHERE email=?`
-  (bounded fleet, cached 60s by email hash) and returns matching slugs only.
-  Login then auths against exactly one D1 — timing-safe as today.
+  `!PLATFORM_DB` (local single-shop dev) and legacy-pin fallback when
+  `TENANT_ID` is set (old deploys + existing tests keep passing).
+- Sessions stay in shop D1 (no migration). `lookup` reads `tenant_members`
+  only (20/min/IP, slugs only, same-latency empty for unknown). Login auths
+  against exactly one D1 — timing-safe as today.
+- Perf (accepted for v1, my call): each query is one HTTPS roundtrip. No
+  per-page optimisation in v1; Phase B coalesces hot paths. Correctness first.
 
-### 4.3 Provisioning (the sellable path)
+### 4.3 Provisioning (the sellable path — fully automatic, in-worker)
 
 Public signup input (zod, shared): `{shopName, slug^[a-z0-9-]{3,30}$,
 ownerName, ownerEmail, password>=10 chars, phone?, country=LK, currency=LKR,
 timezone, planId, interval}`.
 
-Flow:
-1. Validate `signup_enabled`, plan public/active, slug + email uniqueness
-   (slug in PLATFORM_DB; email checked across bound D1s to warn duplicates
-   but allowed — same owner may own 2 shops).
+Flow (all inside the API worker, seconds):
+1. Validate `signup_enabled`, plan public/active, slug not blocklisted/taken.
+   Same email may own N shops (different passwords per shop — picker explains).
 2. `createTenant` (existing) with `trialDays=14` → TRIALING, tenant ACTIVE.
-3. Provision job — OUT-OF-BAND (builder-check decision, my call): Workers
-   cannot shell out to `wrangler`, so `scripts/provision-tenant.mjs` runs on
-   the owner's machine/CI with `CLOUDFLARE_API_TOKEN`. It `wrangler d1
-   create`, applies `drizzle/*.sql` in order (chart of accounts + default
-   settings rows come from migrations 0008/0015/0018/0031/0032 — verified),
-   then runs `buildSeedSql` from `src/seed.ts` (roles/permissions/owner/HQ
-   branch only — no extra seed needed). Then writes `tenant_bindings` +
-   mirrors `tenants.data_plane`. Until the binding exists the API returns
-   503 `PROVISIONING` for that slug; signup response includes
-   `provisioning: pending` and the Tenants detail page has a Retry button
-   (`job_runs type=provision` records each attempt).
-4. Return `{slug, loginUrl: /login?shop=<slug>}`. Auto-login as owner (set
-   `goldos_tenant` + `session` cookie).
+   Record `job_runs` row `job='provision' status='RUNNING'`.
+3. Create D1 `goldos-<slug>-<shortid>` via REST (`POST /accounts/{acct}/d1/database`
+   with the token secret). On name clash, retry with new shortid.
+4. Apply bundled `shop-migrations.ts` (43 files, in order) to the new D1 via
+   REST batch/query. Then seed via existing `buildSeedSql` (roles/permissions/
+   owner + HQ branch; chart/settings come from migrations) with scrypt hash
+   from `services/hash.ts`.
+5. Write `tenant_databases` + `tenant_members(owner)` + mirror D1 id into
+   `tenants.data_plane`; mark `job_runs` OK.
+6. Return `{slug, loginUrl: /login?shop=<slug>}` + auto-login as owner (set
+   `goldos_tenant` + `session` cookies).
 
-Fleet ceiling (my call): Cloudflare allows ~10 D1 bindings per Worker.
-Keep legacy `DB` for unmanaged dev, reserve `PLATFORM_DB`, add
-`DB_T1..DB_T8` (8 sellable shops on one deploy). Provision script picks
-first free binding; when full the signup returns 503 `FLEET_FULL` + staff
-alert. Scaling beyond 8 is Phase B (second worker shard or D1 HTTP API).
+Failure (my call): any step failing marks the job FAILED + `tenant_notes`
+entry; the slug stays reserved for 24h (prevents land-grab confusion) and
+staff Retry re-runs from scratch — destroy the half-made D1 via API and start
+over (D1 creation is seconds; migrations are not idempotent so resume is
+unsafe). Until `tenant_databases` exists the API returns 503 `PROVISIONING`.
 
-Source of truth (my call): `tenant_bindings(tenant_id UNIQUE, binding,
-d1_id, created_at)` is authoritative; `tenants.data_plane` is a mirror kept
-for back-compat `resolveDataPlane`. Write order: bindings row first, then
-`data_plane`. Migration `0002_saas.sql` backfills bindings from existing
-`data_plane` values.
+No fleet cap (my call): bindings are gone; the only ceiling is Cloudflare's
+1M databases per account. No `FLEET_FULL`, no redeploy per shop.
 
-Rate limits (my call, no new infra): reuse D1-backed throttling (same
-pattern as `login_attempts`) + in-memory cache like `gateCache`. Signup
-5/hr/IP, lookup 20/min/IP. No KV/DO in v1.
+Rate limits (my call, no new infra): D1-backed throttling (same pattern as
+`login_attempts`) + in-memory cache like `gateCache`. Signup 5/hr/IP, lookup
+20/min/IP. No KV/DO in v1.
 
 DB plumbing scope (my call): new `getShopDb(c)` helper replaces every
-`getDb(c.env)` / direct `c.env.DB` read in authenticated routes, `tenantGate`,
-`currentPlan`, `enforcePlanLimit`, `platformBridge`, support, impersonation,
-audit. Legacy `env.DB` is used ONLY when `!PLATFORM_DB` (unmanaged local
-dev) — never as fallback in managed mode. Crons iterate all bindings via
-`tenant_bindings`. `TENANT_ID` env is deprecated (kept as read-only hint for
-old deploys, ignored when bindings exist).
+`getDb(c.env)` / direct `c.env.DB` read in AUTHENTICATED shop routes,
+`tenantGate`, `currentPlan`, `enforcePlanLimit`, `platformBridge`, support,
+impersonation, audit. Query code itself is UNTOUCHED — it just receives a
+REST-backed handle instead of a bound one. Legacy `env.DB` is used ONLY when
+`!PLATFORM_DB` (unmanaged local dev) or legacy `TENANT_ID` pin (old deploys).
+Crons iterate `tenant_databases` via REST (rewrite `collectAllUsage`;
+`resolveDataPlane` binding logic retired).
 
-Admin create: same service, extra field `skipEmailCheck`, staff picker for
+Admin create: same in-worker path, extra staff picker for
 plan/interval/trialDays, checkbox "send invite" (v1: show temp password once;
 no email sender yet).
+
+`tenant_members` upkeep (my call): signup + staff user-create/activate write
+index rows; deactivate/delete remove them. Best-effort convenience for the
+picker — login with explicit slug never needs the index. Documented
+eventual-consistency: a user added 60s ago may need direct `?shop=` link
+(cache TTL); acceptable v1.
+
+Existing single shop adoption (doc-only): create its tenant row via admin
+console, insert `tenant_databases` pointing at the current D1 id, add owner
+to `tenant_members`. Zero data migration.
 
 Seed scope (builder, verified against repo): reuse existing `buildSeedSql`
 from `apps/api/src/seed.ts` — roles/permissions/owner/HQ branch. Chart of
@@ -216,7 +242,7 @@ only own tenant's receipts; retained until tenant purge (manual D1 delete).
   button; if `TENANT_SUSPENDED/ARCHIVED` show blocked screen with support
   email (instead of silent fail). Branch switcher unchanged.
 - New `(app)/billing` + `(app)/support` (support exists? keep, wire receipts).
-- Platform console: Tenants detail gets Provisioning card (binding, D1 id,
+- Platform console: Tenants detail gets Provisioning card (D1 id/name,
   retry provision, impersonate), Billing gets Receipts queue. No new staff roles.
 
 ### 4.6 Security / isolation checklist (builder must implement + test)
@@ -229,22 +255,23 @@ only own tenant's receipts; retained until tenant purge (manual D1 delete).
   checks `p.billing:view`; shop can only list own tenant's receipts.
 - Impersonation already single-use + 1h cap; extend check from `TENANT_ID ==
   grant.tenant` to `resolved tenant == grant.tenant`.
-- `purgeTenant` stays control-plane only; document that shop D1 delete is
-  manual (`wrangler d1 delete`) in v1.
+- `purgeTenant` stays control-plane only; shop D1 delete is one API call
+  (console button does it — no wrangler needed).
 
 ## 5. Phased build (sizes)
 
-- Phase A (sellable MVP, this plan): signup + provision script + login picker +
-  per-request tenant resolve + receipts billing + marketing pricing + trial
-  banners. Bounded fleet (10 bindings pre-declared).
-- Phase B (later): Cloudflare API auto-create D1 + deploy-free scaling,
-  payments.lk webhook, email (invite, dunning, receipts), custom domains,
-  storage metering, self-serve plan change with proration.
+- Phase A (sellable MVP, this plan): auto signup + in-worker provision +
+  login picker + per-request tenant resolve + receipts billing + marketing
+  pricing + trial banners. Unlimited shops, one deploy.
+- Phase B (later): hot-path query coalescing (REST latency), payments.lk
+  webhook, email (invite, dunning, receipts), custom domains, storage
+  metering, self-serve plan change with proration.
 
 ## 6. Test plan (builder)
 
-- `platform.provision.test.ts`: signup → tenant TRIALING 14d → binding written
-  → owner can login → second signup slug clash 409.
+- `platform.provision.test.ts`: signup → tenant TRIALING 14d → D1 created +
+  migrations applied + owner seeded → owner can login → second signup slug
+  clash 409 (all with mocked Cloudflare API).
 - `multitenant.isolation.test.ts`: shop A session cannot read shop B (resolve
   with forged `goldos_tenant` → 401/404); suspended tenant → 403
   TENANT_SUSPENDED; archived → 403.
@@ -257,11 +284,11 @@ only own tenant's receipts; retained until tenant purge (manual D1 delete).
 
 ## 7. Open calls made by this design (no user question needed)
 
-- Fleet bound at 10 (`DB_T1..DB_T10`) in `wrangler.toml`; provision script
-  picks first free. Documented scaling path, not hidden limit.
-- Passwords per-shop (not central) to avoid migrating 69 tables. Same email
-  may own N shops with different passwords — picker explains this.
+- No bindings, no fleet cap: the only ceiling is Cloudflare's 1M databases.
+- Passwords per-shop (isolation by construction). Same email may own N shops
+  with different passwords — picker explains this.
 - Receipts table in PLATFORM_DB (not shop DB) so billing survives shop archive.
+- Provision retry = destroy + recreate (migrations aren't idempotent).
 - No email sending in v1 — credentials/invoices shown in UI + staff copy-paste.
 
 ---
@@ -277,5 +304,6 @@ plan + todos). Minor builder-settled details are marked above.
   (session) / `SameSite=None; Secure` (tenant picker, readable by JS).
   Localhost stays `Lax` via existing dev fallback. CSRF middleware already
   validates Origin/Referer against `WEB_ORIGIN` — no change needed.
-- O2 Fleet: ANSWERED 2026-10-13 — 8 shops per deploy is enough to start.
-  Phase B (shard / D1 HTTP API) only when fleet fills.
+- O2 Fleet: SUPERSEDED 2026-10-13 — no fleet. Owner confirmed unlimited-shop
+  goal; automatic D1-per-shop replaces bindings. Workers Paid ($5/mo) required
+  past 10 databases; usage fits included limits until large.
