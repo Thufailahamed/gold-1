@@ -15,6 +15,7 @@ import { businessDateFor, tzOffsetMinutes } from "../services/busdate";
 import { assertBranchAccess, branchScope, inScope } from "../services/branchAccess";
 import { addFiles, assertCanAddFiles, convertItem, customerOldgold, findByBarcode, getItem, intakeItem, listItems, oldgoldBreakdown, oldgoldSummary, pendingList, purchaseItem, recordTest, releaseItem, valuateItem, voidItem } from "../services/oldgold";
 import { pagination, serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 /**
  * Report windows must agree with journal_entries.entry_date, which is
@@ -37,14 +38,14 @@ type Ctx = Context<{ Bindings: Env; Variables: AppVariables }>;
 
 /** Item routes act only on items in a branch the caller works in. */
 async function assertItemAccess(c: Ctx, itemId: string): Promise<void> {
-  const row = await c.env.DB.prepare("SELECT branch_id FROM old_gold_items WHERE id = ?").bind(itemId).first<{ branch_id: string }>();
+  const row = await getShopDb(c).prepare("SELECT branch_id FROM old_gold_items WHERE id = ?").bind(itemId).first<{ branch_id: string }>();
   if (!row) throw Object.assign(new Error("Item not found"), { code: "NOT_FOUND" });
-  await assertBranchAccess(c.env.DB, c.get("userId"), c.get("permissions"), row.branch_id, "this item's branch");
+  await assertBranchAccess(getShopDb(c), c.get("userId"), c.get("permissions"), row.branch_id, "this item's branch");
 }
 
 /** Scope for list/report reads; a requested branch outside it is refused. */
 async function readScope(c: Ctx, branchId: string | undefined): Promise<string[] | null> {
-  const scope = await branchScope(c.env.DB, c.get("userId"), c.get("permissions"));
+  const scope = await branchScope(getShopDb(c), c.get("userId"), c.get("permissions"));
   if (branchId && !inScope(scope, branchId))
     throw Object.assign(new Error("You are not a member of this branch"), { code: "FORBIDDEN" });
   return scope;
@@ -71,8 +72,8 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      await assertBranchAccess(c.env.DB, c.get("userId"), c.get("permissions"), parsed.data.branchId);
-      const data = await intakeItem(c.env.DB, parsed.data, c.get("userId"));
+      await assertBranchAccess(getShopDb(c), c.get("userId"), c.get("permissions"), parsed.data.branchId);
+      const data = await intakeItem(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -87,7 +88,7 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     try {
       const branchId = c.req.query("branchId") || undefined;
       const scope = await readScope(c, branchId);
-      const data = await listItems(c.env.DB, scope, {
+      const data = await listItems(getShopDb(c), scope, {
         ...pagination(c),
         status: c.req.query("status") || undefined,
         purityId: c.req.query("purityId") || undefined,
@@ -103,7 +104,7 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/items/barcode/:code", requirePerm(PERMISSIONS.OLDGOLD_VIEW), async (c) => {
     try {
-      const data = await findByBarcode(c.env.DB, c.req.param("code"));
+      const data = await findByBarcode(getShopDb(c), c.req.param("code"));
       await assertItemAccess(c, data.item.id);
       return c.json({ success: true, data }, 200);
     } catch (err) {
@@ -113,7 +114,7 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .get("/items/:id", requirePerm(PERMISSIONS.OLDGOLD_VIEW), async (c) => {
     try {
       await assertItemAccess(c, c.req.param("id"));
-      const data = await getItem(c.env.DB, c.req.param("id"));
+      const data = await getItem(getShopDb(c), c.req.param("id"));
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -129,7 +130,7 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     try {
       await assertItemAccess(c, c.req.param("id"));
-      const data = await recordTest(c.env.DB, c.req.param("id"), parsed.data, c.get("userId"));
+      const data = await recordTest(getShopDb(c), c.req.param("id"), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -145,7 +146,7 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     try {
       await assertItemAccess(c, c.req.param("id"));
-      const data = await valuateItem(c.env.DB, c.req.param("id"), parsed.data, c.get("userId"));
+      const data = await valuateItem(getShopDb(c), c.req.param("id"), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -162,7 +163,7 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     try {
       await assertItemAccess(c, c.req.param("id"));
       const data = await purchaseItem(
-        c.env.DB,
+        getShopDb(c),
         c.req.param("id"),
         { paidLkr: parsed.data.paidLkr, method: parsed.data.method },
         c.get("userId")
@@ -175,7 +176,7 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .post("/items/:id/release", requirePerm(PERMISSIONS.OLDGOLD_EDIT), async (c) => {
     try {
       await assertItemAccess(c, c.req.param("id"));
-      await releaseItem(c.env.DB, c.req.param("id"), c.get("userId"));
+      await releaseItem(getShopDb(c), c.req.param("id"), c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -195,7 +196,7 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         );
       try {
         await assertItemAccess(c, c.req.param("id"));
-        const data = await convertItem(c.env.DB, c.req.param("id"), parsed.data, c.get("userId"));
+        const data = await convertItem(getShopDb(c), c.req.param("id"), parsed.data, c.get("userId"));
         return c.json({ success: true, data }, 201);
       } catch (err) {
         return serviceError(c, err);
@@ -230,7 +231,7 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     }
     try {
       await assertItemAccess(c, id);
-      await assertCanAddFiles(c.env.DB, id, kind, files.length);
+      await assertCanAddFiles(getShopDb(c), id, kind, files.length);
       const keys: string[] = [];
       for (const f of files) {
         const rawExt = f.name.includes(".") ? (f.name.split(".").pop() ?? "") : "";
@@ -240,7 +241,7 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         keys.push(key);
       }
       try {
-        const data = await addFiles(c.env.DB, id, kind, keys, c.get("userId"));
+        const data = await addFiles(getShopDb(c), id, kind, keys, c.get("userId"));
         return c.json({ success: true, data }, 201);
       } catch (err) {
         // Not recorded on the item, so nothing would ever reference them.
@@ -281,7 +282,7 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     try {
       await assertItemAccess(c, c.req.param("id"));
-      await voidItem(c.env.DB, c.req.param("id"), parsed.data.reason, c.get("userId"));
+      await voidItem(getShopDb(c), c.req.param("id"), parsed.data.reason, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -291,8 +292,8 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     try {
       const branchId = c.req.query("branchId") || undefined;
       const scope = await readScope(c, branchId);
-      const { from, to } = await dayBounds(c.env.DB, c.req.query("period") ?? "all");
-      const data = await oldgoldSummary(c.env.DB, { from, to, branchId, scope });
+      const { from, to } = await dayBounds(getShopDb(c), c.req.query("period") ?? "all");
+      const data = await oldgoldSummary(getShopDb(c), { from, to, branchId, scope });
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -310,8 +311,8 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     try {
       const branchId = c.req.query("branchId") || undefined;
       const scope = await readScope(c, branchId);
-      const { from, to } = await dayBounds(c.env.DB, c.req.query("period") ?? "all");
-      const data = await oldgoldBreakdown(c.env.DB, { from, to, branchId, scope, groupBy: parsed.data.groupBy });
+      const { from, to } = await dayBounds(getShopDb(c), c.req.query("period") ?? "all");
+      const data = await oldgoldBreakdown(getShopDb(c), { from, to, branchId, scope, groupBy: parsed.data.groupBy });
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -321,7 +322,7 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     try {
       const branchId = c.req.query("branchId") || undefined;
       const scope = await readScope(c, branchId);
-      const data = await pendingList(c.env.DB, branchId, scope);
+      const data = await pendingList(getShopDb(c), branchId, scope);
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -330,7 +331,7 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .get("/customers/:id/history", requirePerm(PERMISSIONS.OLDGOLD_VIEW), async (c) => {
     try {
       const scope = await readScope(c, undefined);
-      const data = await customerOldgold(c.env.DB, c.req.param("id"), scope);
+      const data = await customerOldgold(getShopDb(c), c.req.param("id"), scope);
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);

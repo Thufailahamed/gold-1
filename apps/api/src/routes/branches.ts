@@ -6,6 +6,7 @@ import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
 import { createBranch, listBranches, updateBranch } from "../services/branches";
 import { pagination, serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 const updateBranchSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -25,7 +26,7 @@ export const branches = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      const branch = await createBranch(c.env.DB, parsed.data, c.get("userId"));
+      const branch = await createBranch(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data: branch }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -34,7 +35,7 @@ export const branches = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .get("/", requirePerm(PERMISSIONS.BRANCHES_VIEW), async (c) => {
     const perms = c.get("permissions") as string[];
     const canManageAll = perms.includes(PERMISSIONS.BRANCHES_MANAGE);
-    const data = await listBranches(c.env.DB, c.get("userId"), canManageAll, pagination(c));
+    const data = await listBranches(getShopDb(c), c.get("userId"), canManageAll, pagination(c));
     return c.json({ success: true, data }, 200);
   })
   .patch("/:id", requirePerm(PERMISSIONS.BRANCHES_EDIT), async (c) => {
@@ -47,7 +48,7 @@ export const branches = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     try {
       await updateBranch(
-        c.env.DB,
+        getShopDb(c),
         c.req.param("id"),
         { name: parsed.data.name, address: parsed.data.address, isActive: parsed.data.isActive },
         c.get("userId"),

@@ -1,10 +1,15 @@
 import { createMiddleware } from "hono/factory";
 import type { Env } from "../db/client";
+import { getShopDb } from "../platform/resolve";
 import { SESSION_ABSOLUTE_MS, SESSION_IDLE_MS, SESSION_TOUCH_MS } from "../services/session";
 
 export type AppVariables = {
   userId: string;
   permissions: string[];
+  /** Per-request SaaS scope, set by resolveTenant. Absent on unmanaged deploys. */
+  tenantId?: string;
+  tenantSlug?: string;
+  shopDb?: D1Database;
 };
 
 type AppEnv = { Bindings: Env; Variables: AppVariables };
@@ -40,7 +45,10 @@ export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
       401
     );
   }
-  const row = await c.env.DB.prepare(
+  // A session is only valid in the workspace it was minted in: the resolved
+  // shop database, never any other account's. No fallback across tenants.
+  const shopDb = getShopDb(c);
+  const row = await shopDb.prepare(
     "SELECT s.id, s.user_id, s.expires_at, s.created_at, u.is_active FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?"
   )
     .bind(sessionId)
@@ -62,9 +70,9 @@ export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   // busy POS does not turn every read into a write.
   const slid = Math.min(now + SESSION_IDLE_MS, row.created_at + SESSION_ABSOLUTE_MS);
   if (slid - row.expires_at >= SESSION_TOUCH_MS) {
-    await c.env.DB.prepare("UPDATE sessions SET expires_at = ? WHERE id = ?").bind(slid, sessionId).run();
+    await shopDb.prepare("UPDATE sessions SET expires_at = ? WHERE id = ?").bind(slid, sessionId).run();
   }
-  const { results } = await c.env.DB.prepare(
+  const { results } = await shopDb.prepare(
     `SELECT p.name AS name FROM user_roles ur
      JOIN role_permissions rp ON rp.role_id = ur.role_id
      JOIN permissions p ON p.id = rp.permission_id

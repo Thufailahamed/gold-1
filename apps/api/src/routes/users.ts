@@ -13,6 +13,7 @@ import {
   listUsers,
 } from "../services/users";
 import { pagination, serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 const reasonSchema = z.object({ reason: z.string().min(1).max(500) });
 
@@ -27,19 +28,19 @@ export const users = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      const user = await createUser(c.env.DB, parsed.data, c.get("userId"));
+      const user = await createUser(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data: user }, 201);
     } catch (err) {
       return serviceError(c, err);
     }
   })
   .get("/", requirePerm(PERMISSIONS.USERS_VIEW), async (c) => {
-    const data = await listUsers(c.env.DB, pagination(c));
+    const data = await listUsers(getShopDb(c), pagination(c));
     return c.json({ success: true, data }, 200);
   })
   .get("/:id", requirePerm(PERMISSIONS.USERS_VIEW), async (c) => {
     try {
-      const data = await getUserDetail(c.env.DB, c.req.param("id"));
+      const data = await getUserDetail(getShopDb(c), c.req.param("id"));
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -54,7 +55,7 @@ export const users = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      await editUser(c.env.DB, c.req.param("id"), parsed.data, c.get("userId"));
+      await editUser(getShopDb(c), c.req.param("id"), parsed.data, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -69,7 +70,7 @@ export const users = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      await deactivateUser(c.env.DB, c.req.param("id"), c.get("userId"), parsed.data.reason);
+      await deactivateUser(getShopDb(c), c.req.param("id"), c.get("userId"), parsed.data.reason);
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -84,7 +85,7 @@ export const users = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      await activateUser(c.env.DB, c.req.param("id"), c.get("userId"), parsed.data.reason);
+      await activateUser(getShopDb(c), c.req.param("id"), c.get("userId"), parsed.data.reason);
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);

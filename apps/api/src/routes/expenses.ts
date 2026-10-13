@@ -28,6 +28,7 @@ import { businessDateFor } from "../services/busdate";
 import { scanBill, ScanUnavailableError, SCAN_MAX_BYTES, SCAN_TYPES } from "../ai/billscan";
 import { bumpUsage, checkQuota } from "../assistant/agent";
 import { pagination, serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 type Ctx = Context<{ Bindings: Env; Variables: AppVariables }>;
 
@@ -38,14 +39,14 @@ function invalid(c: Ctx, message: string): Response {
 export const expenseCategories = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
   .get("/", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
-    const rows = await listExpenseCategories(c.env.DB);
+    const rows = await listExpenseCategories(getShopDb(c));
     return c.json({ success: true, data: rows }, 200);
   })
   .post("/", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
     const parsed = createExpenseCategorySchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return invalid(c, "Invalid expense category");
     try {
-      const data = await createExpenseCategory(c.env.DB, parsed.data, c.get("userId"));
+      const data = await createExpenseCategory(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -56,7 +57,7 @@ export const expenseCategories = new Hono<{ Bindings: Env; Variables: AppVariabl
     if (!parsed.success) return invalid(c, "Invalid category status");
     try {
       await setExpenseCategoryActive(
-        c.env.DB,
+        getShopDb(c),
         c.req.param("id"),
         parsed.data.isActive,
         parsed.data.reason,
@@ -72,7 +73,7 @@ export const expenses = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
   .get("/", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     const q = (k: string) => c.req.query(k) ?? undefined;
-    const data = await listExpenses(c.env.DB, {
+    const data = await listExpenses(getShopDb(c), {
       ...pagination(c),
       from: q("from"),
       to: q("to"),
@@ -90,11 +91,11 @@ export const expenses = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     if (!(SCAN_TYPES as readonly string[]).includes(file.type)) return invalid(c, "The bill photo must be a jpeg, png or webp image");
     if (file.size > SCAN_MAX_BYTES) return invalid(c, "The bill photo must be under 4MB");
     try {
-      const today = await businessDateFor(c.env.DB, Date.now());
-      await checkQuota(c.env, c.get("userId"), today);
-      const categories = (await listExpenseCategories(c.env.DB)).filter((x) => x.is_active).map((x) => ({ id: x.id, name: x.name }));
-      const data = await scanBill(c.env, { bytes: new Uint8Array(await file.arrayBuffer()), type: file.type }, categories, today);
-      await bumpUsage(c.env.DB, c.get("userId"), today);
+      const today = await businessDateFor(getShopDb(c), Date.now());
+      await checkQuota({ ...c.env, DB: getShopDb(c) }, c.get("userId"), today);
+      const categories = (await listExpenseCategories(getShopDb(c))).filter((x) => x.is_active).map((x) => ({ id: x.id, name: x.name }));
+      const data = await scanBill({ ...c.env, DB: getShopDb(c) }, { bytes: new Uint8Array(await file.arrayBuffer()), type: file.type }, categories, today);
+      await bumpUsage(getShopDb(c), c.get("userId"), today);
       return c.json({ success: true, data }, 200);
     } catch (err) {
       const code = (err as { code?: string } | null)?.code;
@@ -110,7 +111,7 @@ export const expenses = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     const parsed = createExpenseSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return invalid(c, "Invalid expense");
     try {
-      const data = await createExpense(c.env.DB, parsed.data, c.get("userId"));
+      const data = await createExpense(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -120,9 +121,9 @@ export const expenses = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   // path chained after /:id is read as an expense id.
   .get("/reports/summary", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     try {
-      const to = c.req.query("to") ?? (await businessDateFor(c.env.DB, Date.now()));
+      const to = c.req.query("to") ?? (await businessDateFor(getShopDb(c), Date.now()));
       const from = c.req.query("from") ?? "1970-01-01";
-      const data = await expenseSummary(c.env.DB, {
+      const data = await expenseSummary(getShopDb(c), {
         from,
         to,
         branchId: c.req.query("branchId") ?? undefined,
@@ -134,10 +135,10 @@ export const expenses = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/reports/daily", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     const date = /^\d{4}-\d{2}-\d{2}$/;
-    const to = c.req.query("to") ?? (await businessDateFor(c.env.DB, Date.now()));
+    const to = c.req.query("to") ?? (await businessDateFor(getShopDb(c), Date.now()));
     const from = c.req.query("from") ?? to.slice(0, 8) + "01";
     if (!date.test(from) || !date.test(to)) return invalid(c, "from and to must be YYYY-MM-DD");
-    const data = await expenseDaily(c.env.DB, {
+    const data = await expenseDaily(getShopDb(c), {
       from,
       to,
       branchId: c.req.query("branchId") ?? undefined,
@@ -146,7 +147,7 @@ export const expenses = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/:id", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     try {
-      return c.json({ success: true, data: await getExpense(c.env.DB, c.req.param("id")) }, 200);
+      return c.json({ success: true, data: await getExpense(getShopDb(c), c.req.param("id")) }, 200);
     } catch (err) {
       return serviceError(c, err);
     }
@@ -156,7 +157,7 @@ export const expenses = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     if (!parsed.success) return invalid(c, "Invalid approval");
     try {
       const data = await approveExpense(
-        c.env.DB,
+        getShopDb(c),
         c.req.param("id"),
         parsed.data,
         c.get("userId")
@@ -170,7 +171,7 @@ export const expenses = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     const parsed = rejectExpenseSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return invalid(c, "A rejection needs a reason");
     try {
-      await rejectExpense(c.env.DB, c.req.param("id"), parsed.data.reason, c.get("userId"));
+      await rejectExpense(getShopDb(c), c.req.param("id"), parsed.data.reason, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -181,7 +182,7 @@ export const expenses = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     const file = form["file"];
     if (!(file instanceof File)) return invalid(c, "Attach a receipt file under 'file'");
     try {
-      const data = await attachReceipt(c.env.DB, c.env.R2, c.req.param("id"), file, c.get("userId"));
+      const data = await attachReceipt(getShopDb(c), c.env.R2, c.req.param("id"), file, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -189,7 +190,7 @@ export const expenses = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/:id/receipt", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     try {
-      const { body, contentType } = await getReceipt(c.env.DB, c.env.R2, c.req.param("id"));
+      const { body, contentType } = await getReceipt(getShopDb(c), c.env.R2, c.req.param("id"));
       c.header("Content-Type", contentType);
       return c.body(body, 200);
     } catch (err) {

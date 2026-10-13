@@ -7,8 +7,11 @@ export type Env = {
   WEB_ORIGIN?: string;
   /** Control-plane database (accounts, plans, billing). Absent = unmanaged single-shop deploy. */
   PLATFORM_DB?: D1Database;
-  /** The platform tenant id this data plane serves. */
+  /** Legacy single-shop pin: the platform tenant id this worker serves. Falls back to `DB` for old deploys. */
   TENANT_ID?: string;
+  /** D1 REST credentials for auto-created tenant databases (wrangler secrets, never in repo). */
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_D1_API_TOKEN?: string;
   /** One-time secret that authorises creating the first platform super admin. */
   PLATFORM_BOOTSTRAP_TOKEN?: string;
   /** Workers AI binding. Every assistant call is routed through AI Gateway. */

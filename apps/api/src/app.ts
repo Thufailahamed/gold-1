@@ -43,6 +43,7 @@ import { settings } from "./routes/settings";
 import { users } from "./routes/users";
 import { platform, platformScheduled } from "./platform";
 import { enforcePlanLimit, platformBridge, tenantGate } from "./platform/bridge";
+import { resolveTenant } from "./platform/resolve";
 
 const app = new Hono<{ Bindings: Env }>();
 app.onError(errorHandler);
@@ -52,7 +53,8 @@ app.use("/platform/*", cors);
 app.use("/platform/*", csrf);
 // Control plane: the SaaS operator's admin portal API.
 app.route("/platform/v1", platform);
-// Data plane: every shop request passes the account gate first.
+// Data plane: every shop request is scoped to its workspace first, then gated.
+app.use("/api/v1/*", resolveTenant);
 app.use("/api/v1/*", tenantGate);
 app.use("/api/v1/*", idempotency);
 app.route("/api/v1/platform", platformBridge);

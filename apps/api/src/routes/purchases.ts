@@ -27,6 +27,7 @@ import {
   voidInvoice,
 } from "../services/purchases";
 import { pagination, serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 const receiveSchema = z.object({
   chargesLkr: z.number().min(0).optional(),
@@ -61,7 +62,7 @@ export const purchases = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      const data = await createOrder(c.env.DB, parsed.data, c.get("userId"));
+      const data = await createOrder(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -70,7 +71,7 @@ export const purchases = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .get("/orders", requirePerm(PERMISSIONS.PURCHASES_VIEW), async (c) => {
     const perms = c.get("permissions") as string[];
     const data = await listOrders(
-      c.env.DB,
+      getShopDb(c),
       c.get("userId"),
       perms.includes(PERMISSIONS.BRANCHES_MANAGE),
       {
@@ -84,7 +85,7 @@ export const purchases = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/orders/:id", requirePerm(PERMISSIONS.PURCHASES_VIEW), async (c) => {
     try {
-      const data = await getOrder(c.env.DB, c.req.param("id"));
+      const data = await getOrder(getShopDb(c), c.req.param("id"));
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -99,7 +100,7 @@ export const purchases = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      await cancelOrder(c.env.DB, c.req.param("id"), parsed.data.reason, c.get("userId"), {
+      await cancelOrder(getShopDb(c), c.req.param("id"), parsed.data.reason, c.get("userId"), {
         approvalId: parsed.data.approvalId,
       });
       return c.json({ success: true, data: { ok: true } }, 200);
@@ -116,7 +117,7 @@ export const purchases = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      const data = await receiveOrder(c.env.DB, c.req.param("id"), parsed.data, c.get("userId"));
+      const data = await receiveOrder(getShopDb(c), c.req.param("id"), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -131,7 +132,7 @@ export const purchases = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      const data = await createInvoiceDirect(c.env.DB, parsed.data, c.get("userId"));
+      const data = await createInvoiceDirect(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -144,7 +145,7 @@ export const purchases = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return v === undefined ? undefined : Number(v);
     };
     const data = await listInvoices(
-      c.env.DB,
+      getShopDb(c),
       c.get("userId"),
       perms.includes(PERMISSIONS.BRANCHES_MANAGE),
       {
@@ -159,8 +160,8 @@ export const purchases = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     return c.json({ success: true, data }, 200);
   })
   .get("/reports/summary", requirePerm(PERMISSIONS.PURCHASES_VIEW), async (c) => {
-    const { from, to } = await dayBounds(c.env.DB, c.req.query("period") ?? "all");
-    const data = await purchaseSummary(c.env.DB, {
+    const { from, to } = await dayBounds(getShopDb(c), c.req.query("period") ?? "all");
+    const data = await purchaseSummary(getShopDb(c), {
       from,
       to,
       supplierId: c.req.query("supplierId"),
@@ -177,8 +178,8 @@ export const purchases = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         { success: false, error: { code: "VALIDATION", message: "Invalid groupBy" } },
         400
       );
-    const { from, to } = await dayBounds(c.env.DB, c.req.query("period") ?? "all");
-    const data = await purchaseBreakdown(c.env.DB, {
+    const { from, to } = await dayBounds(getShopDb(c), c.req.query("period") ?? "all");
+    const data = await purchaseBreakdown(getShopDb(c), {
       from,
       to,
       branchId: c.req.query("branchId"),
@@ -188,7 +189,7 @@ export const purchases = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/invoices/:id", requirePerm(PERMISSIONS.PURCHASES_VIEW), async (c) => {
     try {
-      const data = await getInvoice(c.env.DB, c.req.param("id"));
+      const data = await getInvoice(getShopDb(c), c.req.param("id"));
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -204,7 +205,7 @@ export const purchases = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     try {
       const data = await payInvoice(
-        c.env.DB,
+        getShopDb(c),
         c.req.param("id"),
         lkrToCents(parsed.data.amountLkr),
         parsed.data.bankAccountId,
@@ -224,7 +225,7 @@ export const purchases = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      await voidInvoice(c.env.DB, c.req.param("id"), parsed.data.reason, c.get("userId"), {
+      await voidInvoice(getShopDb(c), c.req.param("id"), parsed.data.reason, c.get("userId"), {
         approvalId: parsed.data.approvalId,
       });
       return c.json({ success: true, data: { ok: true } }, 200);

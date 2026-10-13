@@ -7,6 +7,7 @@ import { requirePerm } from "../middleware/requirePerm";
 import { goldLineage, goldStock, listLedger, recordAdjustment } from "../services/gold";
 import { gToMg } from "@goldos/shared";
 import { pagination, serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 export const gold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
@@ -15,7 +16,7 @@ export const gold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       const v = c.req.query(k);
       return v === undefined ? undefined : Number(v);
     };
-    const data = await listLedger(c.env.DB, {
+    const data = await listLedger(getShopDb(c), {
       ...pagination(c),
       type: c.req.query("type"),
       branchId: c.req.query("branchId"),
@@ -36,7 +37,7 @@ export const gold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         { success: false, error: { code: "VALIDATION", message: "refEntity and refId required" } },
         400
       );
-    const data = await goldLineage(c.env.DB, refEntity, refId);
+    const data = await goldLineage(getShopDb(c), refEntity, refId);
     return c.json({ success: true, data }, 200);
   })
   .get("/stock", requirePerm(PERMISSIONS.GOLD_VIEW), async (c) => {
@@ -48,7 +49,7 @@ export const gold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         { success: false, error: { code: "VALIDATION", message: "Invalid groupBy" } },
         400
       );
-    const data = await goldStock(c.env.DB, parsed.data.groupBy);
+    const data = await goldStock(getShopDb(c), parsed.data.groupBy);
     return c.json({ success: true, data }, 200);
   })
   .post("/ledger/adjustments", requirePerm(PERMISSIONS.GOLD_MANAGE), async (c) => {
@@ -61,7 +62,7 @@ export const gold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     try {
       const data = await recordAdjustment(
-        c.env.DB,
+        getShopDb(c),
         {
           type: parsed.data.type,
           branchId: parsed.data.branchId,

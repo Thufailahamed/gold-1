@@ -4,6 +4,7 @@ import type { Env } from "../db/client";
 import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
 import { pagination } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 export const audit = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
@@ -30,10 +31,10 @@ export const audit = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     }
     const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
 
-    const count = await c.env.DB.prepare(`SELECT COUNT(*) AS total FROM audit_logs ${where}`)
+    const count = await getShopDb(c).prepare(`SELECT COUNT(*) AS total FROM audit_logs ${where}`)
       .bind(...vals)
       .first<{ total: number }>();
-    const { results } = await c.env.DB.prepare(
+    const { results } = await getShopDb(c).prepare(
       `SELECT id, user_id, action, entity, entity_id, prev_json, new_json, reason, ip, branch_id, created_at FROM audit_logs ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`
     )
       .bind(...vals, limit, offset)

@@ -6,6 +6,7 @@ import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
 import { getSetting, putSetting } from "../services/settings";
 import { serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 const putSettingSchema = z.object({
   value: z.unknown(),
@@ -15,7 +16,7 @@ const putSettingSchema = z.object({
 export const settings = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
   .get("/:key", requirePerm(PERMISSIONS.SETTINGS_VIEW), async (c) => {
-    const data = await getSetting(c.env.DB, c.req.param("key"));
+    const data = await getSetting(getShopDb(c), c.req.param("key"));
     if (!data)
       return c.json(
         { success: false, error: { code: "NOT_FOUND", message: "Setting not found" } },
@@ -40,7 +41,7 @@ export const settings = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      await putSetting(c.env.DB, c.req.param("key"), parsed.data.value, parsed.data.type, c.get("userId"));
+      await putSetting(getShopDb(c), c.req.param("key"), parsed.data.value, parsed.data.type, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);

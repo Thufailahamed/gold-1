@@ -22,6 +22,7 @@ import {
   voidBatch,
 } from "../services/melting";
 import { pagination, serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 const voidSchema = z.object({ reason: z.string().min(1).max(500) });
 
@@ -36,14 +37,14 @@ export const melting = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      const data = await createBatch(c.env.DB, parsed.data.branchId, parsed.data.notes, c.get("userId"));
+      const data = await createBatch(getShopDb(c), parsed.data.branchId, parsed.data.notes, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
     }
   })
   .get("/batches", requirePerm(PERMISSIONS.GOLD_VIEW), async (c) => {
-    const data = await listBatches(c.env.DB, {
+    const data = await listBatches(getShopDb(c), {
       ...pagination(c),
       status: c.req.query("status"),
       branchId: c.req.query("branchId"),
@@ -52,7 +53,7 @@ export const melting = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/batches/:id", requirePerm(PERMISSIONS.GOLD_VIEW), async (c) => {
     try {
-      const data = await getBatch(c.env.DB, c.req.param("id"));
+      const data = await getBatch(getShopDb(c), c.req.param("id"));
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -60,7 +61,7 @@ export const melting = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/batches/:id/label", requirePerm(PERMISSIONS.GOLD_VIEW), async (c) => {
     try {
-      const { batch } = await getBatch(c.env.DB, c.req.param("id"));
+      const { batch } = await getBatch(getShopDb(c), c.req.param("id"));
       const bars = bwipjs.toSVG({
         bcid: "code128",
         text: batch.number,
@@ -91,7 +92,7 @@ export const melting = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      const data = await addItems(c.env.DB, c.req.param("id"), parsed.data.oldGoldIds, c.get("userId"));
+      const data = await addItems(getShopDb(c), c.req.param("id"), parsed.data.oldGoldIds, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -99,7 +100,7 @@ export const melting = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .post("/batches/:id/lock", requirePerm(PERMISSIONS.GOLD_MANAGE), async (c) => {
     try {
-      await lockBatch(c.env.DB, c.req.param("id"), c.get("userId"));
+      await lockBatch(getShopDb(c), c.req.param("id"), c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -115,7 +116,7 @@ export const melting = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     try {
       const data = await recordMelt(
-        c.env.DB,
+        getShopDb(c),
         c.req.param("id"),
         {
           outputWeightG: parsed.data.outputWeightG,
@@ -140,7 +141,7 @@ export const melting = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     try {
       const data = await approveBatch(
-        c.env.DB,
+        getShopDb(c),
         c.req.param("id"),
         { reason: parsed.data.reason, approvedBy: parsed.data.approvedBy, approvalId: parsed.data.approvalId },
         c.get("userId")
@@ -159,7 +160,7 @@ export const melting = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      await voidBatch(c.env.DB, c.req.param("id"), parsed.data.reason, c.get("userId"));
+      await voidBatch(getShopDb(c), c.req.param("id"), parsed.data.reason, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);

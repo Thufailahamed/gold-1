@@ -28,6 +28,7 @@ import {
 import { getTaxConfig } from "../services/taxes";
 import { buildCodeSvg, buildQrSvg } from "../services/label";
 import { pagination, serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 /**
  * Report windows must agree with journal_entries.entry_date, which is
@@ -50,7 +51,7 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   // The POS needs the rate to show the customer the right total before the
   // sale posts. Read-only, and cashiers do not hold accounts:view.
   .get("/tax-config", requirePerm(PERMISSIONS.SALES_CREATE), async (c) => {
-    return c.json({ success: true, data: await getTaxConfig(c.env.DB) }, 200);
+    return c.json({ success: true, data: await getTaxConfig(getShopDb(c)) }, 200);
   })
   .post("/invoices", requirePerm(PERMISSIONS.SALES_CREATE), async (c) => {
     const body = await c.req.json().catch(() => null);
@@ -61,7 +62,7 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      const data = await receiveSale(c.env.DB, parsed.data, c.get("userId"), {
+      const data = await receiveSale(getShopDb(c), parsed.data, c.get("userId"), {
         enforceShelfPrice: true,
         enforceCreditLimit: true,
       });
@@ -75,7 +76,7 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     const branchId = c.req.query("branchId");
     if (!branchId)
       return c.json({ success: false, error: { code: "VALIDATION", message: "branchId required" } }, 400);
-    const data = await posCatalog(c.env.DB, {
+    const data = await posCatalog(getShopDb(c), {
       q: c.req.query("q") ?? "",
       branchId,
       customerId: c.req.query("customerId"),
@@ -85,12 +86,12 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   // Which bank a "bank" payment went into, so it posts to that account.
   .get("/bank-accounts", requirePerm(PERMISSIONS.SALES_CREATE), async (c) => {
-    return c.json({ success: true, data: await saleBankAccounts(c.env.DB, c.req.query("branchId")) }, 200);
+    return c.json({ success: true, data: await saleBankAccounts(getShopDb(c), c.req.query("branchId")) }, 200);
   })
   // Balance, limit and open bills before a sale goes on credit.
   .get("/customers/:id/credit", requirePerm(PERMISSIONS.SALES_CREATE), async (c) => {
     try {
-      const data = await customerCredit(c.env.DB, c.req.param("id"), c.req.query("branchId") ?? "");
+      const data = await customerCredit(getShopDb(c), c.req.param("id"), c.req.query("branchId") ?? "");
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -99,18 +100,18 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   // Letterhead and terms for the printed invoice. Cashiers print bills but
   // do not hold settings:view, so this is read under sales:view.
   .get("/invoice-profile", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
-    return c.json({ success: true, data: await invoiceProfile(c.env.DB) }, 200);
+    return c.json({ success: true, data: await invoiceProfile(getShopDb(c)) }, 200);
   })
   // Scan an invoice barcode or a sold piece's tag to find its sale.
   .get("/lookup/:code", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
     try {
-      return c.json({ success: true, data: await lookupSale(c.env.DB, c.req.param("code")) }, 200);
+      return c.json({ success: true, data: await lookupSale(getShopDb(c), c.req.param("code")) }, 200);
     } catch (err) {
       return serviceError(c, err);
     }
   })
   .get("/invoices/:id/barcode", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
-    const inv = await c.env.DB.prepare("SELECT number FROM sales_invoices WHERE id = ?")
+    const inv = await getShopDb(c).prepare("SELECT number FROM sales_invoices WHERE id = ?")
       .bind(c.req.param("id"))
       .first<{ number: string }>();
     if (!inv)
@@ -120,7 +121,7 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     return c.body(buildCodeSvg(inv.number), 200);
   })
   .get("/invoices/:id/qr", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
-    const inv = await c.env.DB.prepare("SELECT number FROM sales_invoices WHERE id = ?")
+    const inv = await getShopDb(c).prepare("SELECT number FROM sales_invoices WHERE id = ?")
       .bind(c.req.param("id"))
       .first<{ number: string }>();
     if (!inv)
@@ -136,7 +137,7 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return v === undefined ? undefined : Number(v);
     };
     const data = await listSales(
-      c.env.DB,
+      getShopDb(c),
       c.get("userId"),
       perms.includes(PERMISSIONS.BRANCHES_MANAGE),
       {
@@ -151,8 +152,8 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     return c.json({ success: true, data }, 200);
   })
   .get("/reports/summary", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
-    const { from, to } = await dayBounds(c.env.DB, c.req.query("period") ?? "all");
-    const data = await salesSummary(c.env.DB, {
+    const { from, to } = await dayBounds(getShopDb(c), c.req.query("period") ?? "all");
+    const data = await salesSummary(getShopDb(c), {
       from,
       to,
       branchId: c.req.query("branchId"),
@@ -168,8 +169,8 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         { success: false, error: { code: "VALIDATION", message: "Invalid groupBy" } },
         400
       );
-    const { from, to } = await dayBounds(c.env.DB, c.req.query("period") ?? "all");
-    const data = await salesBreakdown(c.env.DB, {
+    const { from, to } = await dayBounds(getShopDb(c), c.req.query("period") ?? "all");
+    const data = await salesBreakdown(getShopDb(c), {
       from,
       to,
       branchId: c.req.query("branchId"),
@@ -179,7 +180,7 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/invoices/:id", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
     try {
-      const data = await getSale(c.env.DB, c.req.param("id"));
+      const data = await getSale(getShopDb(c), c.req.param("id"));
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -194,7 +195,7 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      const data = await createReturn(c.env.DB, parsed.data, c.get("userId"));
+      const data = await createReturn(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -209,7 +210,7 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      await linkExchange(c.env.DB, c.req.param("id"), parsed.data.saleId, c.get("userId"));
+      await linkExchange(getShopDb(c), c.req.param("id"), parsed.data.saleId, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -217,7 +218,7 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/returns", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
     try {
-      const data = await listReturns(c.env.DB, {
+      const data = await listReturns(getShopDb(c), {
         ...pagination(c),
         invoiceId: c.req.query("invoiceId"),
         branchId: c.req.query("branchId"),

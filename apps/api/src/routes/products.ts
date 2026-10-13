@@ -24,6 +24,7 @@ import {
 import { releaseReservation, reserveProduct } from "../services/inventory";
 import { branchScope, inScope } from "../services/branchAccess";
 import { pagination, serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 const voidSchema = z.object({ reason: z.string().min(1).max(500) });
 const reserveSchema = z.object({
@@ -37,11 +38,11 @@ type Ctx = { env: Env; get: (k: "userId" | "permissions") => unknown };
 
 /** Branch staff act only on pieces at their own branches (as /inventory/movements). */
 async function outOfScope(c: Ctx, productId: string): Promise<boolean> {
-  const prod = await c.env.DB.prepare("SELECT branch_id FROM products WHERE id = ?")
+  const prod = await getShopDb(c).prepare("SELECT branch_id FROM products WHERE id = ?")
     .bind(productId)
     .first<{ branch_id: string }>();
   if (!prod) return false;
-  const scope = await branchScope(c.env.DB, c.get("userId") as string, c.get("permissions") as string[]);
+  const scope = await branchScope(getShopDb(c), c.get("userId") as string, c.get("permissions") as string[]);
   return !inScope(scope, prod.branch_id);
 }
 
@@ -61,7 +62,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      const row = await createProduct(c.env.DB, parsed.data, c.get("userId"));
+      const row = await createProduct(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data: row }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -74,7 +75,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       const v = c.req.query(k);
       return v === undefined ? undefined : Number(v);
     };
-    const data = await listProducts(c.env.DB, c.get("userId"), canManageAll, {
+    const data = await listProducts(getShopDb(c), c.get("userId"), canManageAll, {
       ...pagination(c),
       status: c.req.query("status"),
       categoryId: c.req.query("categoryId"),
@@ -89,7 +90,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/barcode/:code", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
     try {
-      const data = await findByBarcode(c.env.DB, c.req.param("code"));
+      const data = await findByBarcode(getShopDb(c), c.req.param("code"));
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -97,7 +98,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/:id", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
     try {
-      const data = await getProduct(c.env.DB, c.req.param("id"));
+      const data = await getProduct(getShopDb(c), c.req.param("id"));
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -112,7 +113,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      const data = await editProduct(c.env.DB, c.req.param("id"), parsed.data, c.get("userId"));
+      const data = await editProduct(getShopDb(c), c.req.param("id"), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -120,9 +121,9 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/:id/label", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
     try {
-      const { product } = await getProduct(c.env.DB, c.req.param("id"));
+      const { product } = await getProduct(getShopDb(c), c.req.param("id"));
       const { livePrice } = await priceFor(
-        c.env.DB,
+        getShopDb(c),
         product.purity_id,
         product.net_mg,
         product.making_cents
@@ -166,7 +167,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .post("/:id/images", requirePerm(PERMISSIONS.PRODUCTS_EDIT), async (c) => {
     const id = c.req.param("id");
-    const prev = await c.env.DB.prepare(
+    const prev = await getShopDb(c).prepare(
       "SELECT id, image_keys, branch_id FROM products WHERE id = ?"
     )
       .bind(id)
@@ -203,12 +204,12 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     const key = `products/${id}/${crypto.randomUUID()}.${ext}`;
     await c.env.R2.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
     const next = [...keys, key];
-    await c.env.DB.batch([
-      c.env.DB.prepare("UPDATE products SET image_keys = ? WHERE id = ?").bind(
+    await getShopDb(c).batch([
+      getShopDb(c).prepare("UPDATE products SET image_keys = ? WHERE id = ?").bind(
         JSON.stringify(next),
         id
       ),
-      buildAuditStmt(c.env.DB, {
+      buildAuditStmt(getShopDb(c), {
         userId: c.get("userId"),
         action: "product.image_add",
         entity: "product",
@@ -233,7 +234,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .delete("/:id/images/:img", requirePerm(PERMISSIONS.PRODUCTS_EDIT), async (c) => {
     const id = c.req.param("id");
     const key = `products/${id}/${c.req.param("img")}`;
-    const prev = await c.env.DB.prepare("SELECT image_keys, branch_id FROM products WHERE id = ?")
+    const prev = await getShopDb(c).prepare("SELECT image_keys, branch_id FROM products WHERE id = ?")
       .bind(id)
       .first<{ image_keys: string; branch_id: string }>();
     if (!prev)
@@ -250,9 +251,9 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     const next = keys.filter((k) => k !== key);
     // Row first: an orphaned object in R2 is harmless, a row pointing at a
     // deleted object is a broken image on every screen.
-    await c.env.DB.batch([
-      c.env.DB.prepare("UPDATE products SET image_keys = ? WHERE id = ?").bind(JSON.stringify(next), id),
-      buildAuditStmt(c.env.DB, {
+    await getShopDb(c).batch([
+      getShopDb(c).prepare("UPDATE products SET image_keys = ? WHERE id = ?").bind(JSON.stringify(next), id),
+      buildAuditStmt(getShopDb(c), {
         userId: c.get("userId"),
         action: "product.image_remove",
         entity: "product",
@@ -273,7 +274,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     try {
       if (await outOfScope(c, c.req.param("id"))) return c.json(forbiddenBranch, 403);
-      const data = await reserveProduct(c.env.DB, c.req.param("id"), parsed.data, c.get("userId"));
+      const data = await reserveProduct(getShopDb(c), c.req.param("id"), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -288,7 +289,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     try {
       if (await outOfScope(c, c.req.param("id"))) return c.json(forbiddenBranch, 403);
-      await releaseReservation(c.env.DB, c.req.param("id"), parsed.data.reason, c.get("userId"));
+      await releaseReservation(getShopDb(c), c.req.param("id"), parsed.data.reason, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -303,7 +304,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      await voidProduct(c.env.DB, c.req.param("id"), c.get("userId"), parsed.data.reason);
+      await voidProduct(getShopDb(c), c.req.param("id"), c.get("userId"), parsed.data.reason);
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);

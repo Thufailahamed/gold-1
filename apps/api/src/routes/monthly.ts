@@ -8,6 +8,7 @@ import { buildMonthlyReport, MONTHLY_SECTIONS, sectionRows } from "../services/m
 import { toCsv } from "../services/discrepancies";
 import { buildAuditStmt } from "../middleware/audit";
 import { serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 function shopWideAllowed(perms: string[], branchId: string | undefined): boolean {
   if (branchId) return true;
@@ -31,7 +32,7 @@ export const monthly = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     if (!shopWideAllowed(perms, parsed.data.branchId))
       return c.json({ success: false, error: { code: "FORBIDDEN", message: "branchId required without branches:manage" } }, 403);
     try {
-      const data = await buildMonthlyReport(c.env.DB, parsed.data);
+      const data = await buildMonthlyReport(getShopDb(c), parsed.data);
       if (c.req.query("format") === "csv") {
         if (!perms.includes(PERMISSIONS.AUDIT_EXPORT))
           return c.json({ success: false, error: { code: "FORBIDDEN", message: "CSV requires audit:export" } }, 403);
@@ -39,7 +40,7 @@ export const monthly = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         if (!section.success)
           return c.json({ success: false, error: { code: "VALIDATION", message: "section required" } }, 400);
         const branchRow = parsed.data.branchId
-          ? await c.env.DB.prepare("SELECT name FROM branches WHERE id = ?").bind(parsed.data.branchId).first<{ name: string }>()
+          ? await getShopDb(c).prepare("SELECT name FROM branches WHERE id = ?").bind(parsed.data.branchId).first<{ name: string }>()
           : null;
         const { cols, rows } = sectionRows(section.data, data);
         return new Response(
@@ -62,25 +63,25 @@ export const monthly = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     if (!parsed.success)
       return c.json({ success: false, error: { code: "VALIDATION", message: "month 1-12 and year required" } }, 400);
     try {
-      const report = await buildMonthlyReport(c.env.DB, parsed.data);
+      const report = await buildMonthlyReport(getShopDb(c), parsed.data);
       if (report.cashflow.unclassifiedCents !== 0)
         return c.json({ success: false, error: { code: "CONFLICT", message: `Unclassified cash ${report.cashflow.unclassifiedCents} blocks snapshot` } }, 409);
       if (report.warnings.length > 0 && !parsed.data.note?.trim())
         return c.json({ success: false, error: { code: "VALIDATION", message: "Snapshot with warnings requires note" } }, 400);
       const month = `${parsed.data.year}-${String(parsed.data.month).padStart(2, "0")}`;
-      const existing = await c.env.DB.prepare(
+      const existing = await getShopDb(c).prepare(
         `SELECT id FROM month_snapshots WHERE COALESCE(branch_id,'') = COALESCE(?, '') AND month = ?`
       ).bind(parsed.data.branchId ?? null, month).first<{ id: string }>();
       const id = existing?.id ?? crypto.randomUUID();
       const now = Date.now();
       const write = existing
-        ? c.env.DB.prepare(`UPDATE month_snapshots SET report_json=?, created_by=?, created_at=? WHERE id=?`).bind(JSON.stringify(report), c.get("userId"), now, id)
-        : c.env.DB.prepare(
+        ? getShopDb(c).prepare(`UPDATE month_snapshots SET report_json=?, created_by=?, created_at=? WHERE id=?`).bind(JSON.stringify(report), c.get("userId"), now, id)
+        : getShopDb(c).prepare(
             `INSERT INTO month_snapshots (id, branch_id, month, from_date, to_date, report_json, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
           ).bind(id, parsed.data.branchId ?? null, month, report.meta.from, report.meta.to, JSON.stringify(report), c.get("userId"), now);
-      await c.env.DB.batch([
+      await getShopDb(c).batch([
         write,
-        buildAuditStmt(c.env.DB, {
+        buildAuditStmt(getShopDb(c), {
           userId: c.get("userId"),
           action: "snapshot",
           entity: "month_snapshot",
@@ -96,7 +97,7 @@ export const monthly = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     }
   })
   .get("/monthly/:id", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
-    const row = await c.env.DB.prepare(`SELECT report_json AS json FROM month_snapshots WHERE id=?`)
+    const row = await getShopDb(c).prepare(`SELECT report_json AS json FROM month_snapshots WHERE id=?`)
       .bind(c.req.param("id"))
       .first<{ json: string }>();
     if (!row) return c.json({ success: false, error: { code: "NOT_FOUND", message: "Snapshot not found" } }, 404);
@@ -113,7 +114,7 @@ export const monthly = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     const perms = c.get("permissions") as string[];
     if (!shopWideAllowed(perms, parsed.data.branchId))
       return c.json({ success: false, error: { code: "FORBIDDEN", message: "branchId required without branches:manage" } }, 403);
-    const report = await buildMonthlyReport(c.env.DB, parsed.data);
+    const report = await buildMonthlyReport(getShopDb(c), parsed.data);
     return c.json({ success: true, data: report.profit }, 200);
   })
   .get("/cashflow", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
@@ -127,7 +128,7 @@ export const monthly = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     const perms = c.get("permissions") as string[];
     if (!shopWideAllowed(perms, parsed.data.branchId))
       return c.json({ success: false, error: { code: "FORBIDDEN", message: "branchId required without branches:manage" } }, 403);
-    const report = await buildMonthlyReport(c.env.DB, parsed.data);
+    const report = await buildMonthlyReport(getShopDb(c), parsed.data);
     return c.json({ success: true, data: report.cashflow }, 200);
   })
   .get("/aging", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
@@ -141,7 +142,7 @@ export const monthly = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     const perms = c.get("permissions") as string[];
     if (!shopWideAllowed(perms, parsed.data.branchId))
       return c.json({ success: false, error: { code: "FORBIDDEN", message: "branchId required without branches:manage" } }, 403);
-    const report = await buildMonthlyReport(c.env.DB, parsed.data);
+    const report = await buildMonthlyReport(getShopDb(c), parsed.data);
     return c.json({ success: true, data: { receivables: report.receivables, payables: report.payables } }, 200);
   })
   .get("/valuation", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
@@ -155,6 +156,6 @@ export const monthly = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     const perms = c.get("permissions") as string[];
     if (!shopWideAllowed(perms, parsed.data.branchId))
       return c.json({ success: false, error: { code: "FORBIDDEN", message: "branchId required without branches:manage" } }, 403);
-    const report = await buildMonthlyReport(c.env.DB, parsed.data);
+    const report = await buildMonthlyReport(getShopDb(c), parsed.data);
     return c.json({ success: true, data: report.inventory }, 200);
   });

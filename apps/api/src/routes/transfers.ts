@@ -7,6 +7,7 @@ import { requirePerm } from "../middleware/requirePerm";
 import { cancelTransfer, dispatchTransfer, getTransferDetail, listTransfers, receiveLines, recallLines, reconcileTransfer, requestTransfer } from "../services/transfers";
 import { branchScope, inScope } from "../services/branchAccess";
 import { serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 const receiveSchema = z.object({ barcodes: z.array(z.string().min(1).max(32)).min(1).max(100) });
 const recallSchema = z.object({ productIds: z.array(z.string().min(1)).min(1).max(100) });
@@ -20,9 +21,9 @@ type Side = "sender" | "receiver" | "either";
  * branch receives. Anyone at either end may read. branches:manage covers all.
  */
 async function guardTransfer(c: Ctx, id: string, side: Side): Promise<void> {
-  const t = await c.env.DB.prepare("SELECT from_branch_id, to_branch_id FROM transfers WHERE id = ?").bind(id).first<{ from_branch_id: string; to_branch_id: string }>();
+  const t = await getShopDb(c).prepare("SELECT from_branch_id, to_branch_id FROM transfers WHERE id = ?").bind(id).first<{ from_branch_id: string; to_branch_id: string }>();
   if (!t) throw Object.assign(new Error("Transfer not found"), { code: "NOT_FOUND" });
-  const scope = await branchScope(c.env.DB, c.get("userId") as string, c.get("permissions") as string[]);
+  const scope = await branchScope(getShopDb(c), c.get("userId") as string, c.get("permissions") as string[]);
   const ok =
     side === "sender" ? inScope(scope, t.from_branch_id)
     : side === "receiver" ? inScope(scope, t.to_branch_id)
@@ -39,38 +40,38 @@ export const stockTransferRoutes = new Hono<{ Bindings: Env; Variables: AppVaria
     const from = c.req.query("fromBranchId") || undefined;
     const to = c.req.query("toBranchId") || undefined;
     const status = c.req.query("status") || undefined;
-    const scope = await branchScope(c.env.DB, c.get("userId"), c.get("permissions") as string[]);
-    const data = await listTransfers(c.env.DB, { fromBranchId: from, toBranchId: to, status, scope });
+    const scope = await branchScope(getShopDb(c), c.get("userId"), c.get("permissions") as string[]);
+    const data = await listTransfers(getShopDb(c), { fromBranchId: from, toBranchId: to, status, scope });
     return c.json({ success: true, data }, 200);
   })
   // Destinations: every active branch, not just the caller's own — a clerk
   // sends stock to branches they do not work in. Names only, no stock data.
   .get("/branches", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
-    const scope = await branchScope(c.env.DB, c.get("userId"), c.get("permissions") as string[]);
-    const { results } = await c.env.DB.prepare("SELECT id, name, code FROM branches WHERE is_active = 1 ORDER BY name").all<{ id: string; name: string; code: string }>();
+    const scope = await branchScope(getShopDb(c), c.get("userId"), c.get("permissions") as string[]);
+    const { results } = await getShopDb(c).prepare("SELECT id, name, code FROM branches WHERE is_active = 1 ORDER BY name").all<{ id: string; name: string; code: string }>();
     return c.json({ success: true, data: (results ?? []).map((b) => ({ ...b, member: inScope(scope, b.id) })) }, 200);
   })
   .post("/", requirePerm(PERMISSIONS.PRODUCTS_EDIT), async (c) => {
     const parsed = requestTransferSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ success: false, error: { code: "VALIDATION", message: "Invalid transfer" } }, 400);
     try {
-      const scope = await branchScope(c.env.DB, c.get("userId"), c.get("permissions") as string[]);
+      const scope = await branchScope(getShopDb(c), c.get("userId"), c.get("permissions") as string[]);
       if (!inScope(scope, parsed.data.fromBranchId) && !inScope(scope, parsed.data.toBranchId))
         return c.json({ success: false, error: { code: "FORBIDDEN", message: "You must belong to the sending or receiving branch" } }, 403);
-      const data = await requestTransfer(c.env.DB, parsed.data, c.get("userId"));
+      const data = await requestTransfer(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) { return serviceError(c, err); }
   })
   .get("/:id", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
     try {
       await guardTransfer(c, c.req.param("id"), "either");
-      return c.json({ success: true, data: await getTransferDetail(c.env.DB, c.req.param("id")) }, 200);
+      return c.json({ success: true, data: await getTransferDetail(getShopDb(c), c.req.param("id")) }, 200);
     } catch (err) { return serviceError(c, err); }
   })
   .post("/:id/dispatch", requirePerm(PERMISSIONS.PRODUCTS_EDIT), async (c) => {
     try {
       await guardTransfer(c, c.req.param("id"), "sender");
-      await dispatchTransfer(c.env.DB, c.req.param("id"), c.get("userId"));
+      await dispatchTransfer(getShopDb(c), c.req.param("id"), c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) { return serviceError(c, err); }
   })
@@ -79,7 +80,7 @@ export const stockTransferRoutes = new Hono<{ Bindings: Env; Variables: AppVaria
     if (!parsed.success) return c.json({ success: false, error: { code: "VALIDATION", message: "barcodes required" } }, 400);
     try {
       await guardTransfer(c, c.req.param("id"), "receiver");
-      const data = await receiveLines(c.env.DB, c.req.param("id"), parsed.data.barcodes, c.get("userId"));
+      const data = await receiveLines(getShopDb(c), c.req.param("id"), parsed.data.barcodes, c.get("userId"));
       return c.json({ success: true, data }, 200);
     } catch (err) { return serviceError(c, err); }
   })
@@ -88,7 +89,7 @@ export const stockTransferRoutes = new Hono<{ Bindings: Env; Variables: AppVaria
     if (!parsed.success) return c.json({ success: false, error: { code: "VALIDATION", message: "productIds required" } }, 400);
     try {
       await guardTransfer(c, c.req.param("id"), "sender");
-      await recallLines(c.env.DB, c.req.param("id"), parsed.data.productIds, c.get("userId"));
+      await recallLines(getShopDb(c), c.req.param("id"), parsed.data.productIds, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) { return serviceError(c, err); }
   })
@@ -97,13 +98,13 @@ export const stockTransferRoutes = new Hono<{ Bindings: Env; Variables: AppVaria
     if (!parsed.success) return c.json({ success: false, error: { code: "VALIDATION", message: "reason required" } }, 400);
     try {
       await guardTransfer(c, c.req.param("id"), "sender");
-      await cancelTransfer(c.env.DB, c.req.param("id"), parsed.data.reason, c.get("userId"));
+      await cancelTransfer(getShopDb(c), c.req.param("id"), parsed.data.reason, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) { return serviceError(c, err); }
   })
   .get("/:id/reconcile", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
     try {
       await guardTransfer(c, c.req.param("id"), "either");
-      return c.json({ success: true, data: await reconcileTransfer(c.env.DB, c.req.param("id")) }, 200);
+      return c.json({ success: true, data: await reconcileTransfer(getShopDb(c), c.req.param("id")) }, 200);
     } catch (err) { return serviceError(c, err); }
   });

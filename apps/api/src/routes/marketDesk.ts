@@ -29,6 +29,7 @@ import {
   updateAlert,
 } from "../services/market-desk";
 import { serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 type C = Context<{ Bindings: Env; Variables: AppVariables }>;
 
@@ -98,12 +99,12 @@ const alertPatchSchema = z.object({ isActive: z.boolean().optional(), threshold:
 export const marketDesk = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
   /* ---------------------------------------------------------- settings */
-  .get("/settings", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => c.json({ success: true, data: await deskSettings(c.env.DB) }, 200))
+  .get("/settings", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => c.json({ success: true, data: await deskSettings(getShopDb(c)) }, 200))
   .put("/policy", requirePerm(PERMISSIONS.MASTERS_EDIT), async (c) => {
     const b = await body(c, policySchema);
     if (b instanceof Response) return b;
     try {
-      await savePolicy(c.env.DB, b, c.get("userId"));
+      await savePolicy(getShopDb(c), b, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (e) {
       return fail(c, e);
@@ -113,7 +114,7 @@ export const marketDesk = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     const b = await body(c, importSchema);
     if (b instanceof Response) return b;
     try {
-      await saveImportCosts(c.env.DB, b, c.get("userId"));
+      await saveImportCosts(getShopDb(c), b, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (e) {
       return fail(c, e);
@@ -123,8 +124,8 @@ export const marketDesk = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     const b = await body(c, eventsSchema);
     if (b instanceof Response) return b;
     try {
-      await saveEvents(c.env.DB, b.events, c.get("userId"));
-      return c.json({ success: true, data: { events: await readEvents(c.env.DB) } }, 200);
+      await saveEvents(getShopDb(c), b.events, c.get("userId"));
+      return c.json({ success: true, data: { events: await readEvents(getShopDb(c)) } }, 200);
     } catch (e) {
       return fail(c, e);
     }
@@ -132,14 +133,14 @@ export const marketDesk = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   /* ---------------------------------------------------------- pricing */
   .get("/suggest", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => {
     try {
-      return c.json({ success: true, data: await suggestBoard(c.env.DB) }, 200);
+      return c.json({ success: true, data: await suggestBoard(getShopDb(c)) }, 200);
     } catch (e) {
       return fail(c, e);
     }
   })
   .get("/import-parity", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => {
     try {
-      return c.json({ success: true, data: await importParity(c.env.DB) }, 200);
+      return c.json({ success: true, data: await importParity(getShopDb(c)) }, 200);
     } catch (e) {
       return fail(c, e);
     }
@@ -147,14 +148,14 @@ export const marketDesk = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   /* ---------------------------------------------------------- exposure */
   .get("/position", requirePerm(PERMISSIONS.GOLD_VIEW), async (c) => {
     try {
-      return c.json({ success: true, data: await goldPosition(c.env.DB) }, 200);
+      return c.json({ success: true, data: await goldPosition(getShopDb(c)) }, 200);
     } catch (e) {
       return fail(c, e);
     }
   })
   .get("/gains", requirePerm(PERMISSIONS.GOLD_VIEW), async (c) => {
     try {
-      return c.json({ success: true, data: await stockGains(c.env.DB) }, 200);
+      return c.json({ success: true, data: await stockGains(getShopDb(c)) }, 200);
     } catch (e) {
       return fail(c, e);
     }
@@ -162,7 +163,7 @@ export const marketDesk = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   /* ---------------------------------------------------------- records */
   .get("/rate-log", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => {
     try {
-      const log = await rateLog(c.env.DB, {
+      const log = await rateLog(getShopDb(c), {
         from: c.req.query("from") ?? "",
         to: c.req.query("to") ?? "",
         purityId: c.req.query("purityId") || undefined,
@@ -179,34 +180,34 @@ export const marketDesk = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/competitors", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => {
     const days = Number(c.req.query("days") ?? "30") || 30;
-    return c.json({ success: true, data: await competitorBoard(c.env.DB, days) }, 200);
+    return c.json({ success: true, data: await competitorBoard(getShopDb(c), days) }, 200);
   })
   .post("/competitors", requirePerm(PERMISSIONS.MASTERS_CREATE), async (c) => {
     const b = await body(c, competitorSchema);
     if (b instanceof Response) return b;
     try {
-      return c.json({ success: true, data: await addCompetitorRate(c.env.DB, b, c.get("userId")) }, 201);
+      return c.json({ success: true, data: await addCompetitorRate(getShopDb(c), b, c.get("userId")) }, 201);
     } catch (e) {
       return fail(c, e);
     }
   })
   .delete("/competitors/:id", requirePerm(PERMISSIONS.MASTERS_CANCEL), async (c) => {
     try {
-      await deleteCompetitorRate(c.env.DB, c.req.param("id"), c.get("userId"));
+      await deleteCompetitorRate(getShopDb(c), c.req.param("id"), c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (e) {
       return fail(c, e);
     }
   })
   /* ---------------------------------------------------------- alerts */
-  .get("/alerts", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => c.json({ success: true, data: await listAlerts(c.env.DB) }, 200))
+  .get("/alerts", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => c.json({ success: true, data: await listAlerts(getShopDb(c)) }, 200))
   .post("/alerts", requirePerm(PERMISSIONS.MASTERS_EDIT), async (c) => {
     const b = await body(c, alertSchema);
     if (b instanceof Response) return b;
     try {
-      const out = await createAlert(c.env.DB, b, c.get("userId"));
+      const out = await createAlert(getShopDb(c), b, c.get("userId"));
       // Check straight away so a rule that is already true shows as such.
-      await evaluateAlerts(c.env.DB, undefined, { force: true }).catch(() => null);
+      await evaluateAlerts(getShopDb(c), undefined, { force: true }).catch(() => null);
       return c.json({ success: true, data: out }, 201);
     } catch (e) {
       return fail(c, e);
@@ -214,20 +215,20 @@ export const marketDesk = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .post("/alerts/check", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => {
     try {
-      return c.json({ success: true, data: await evaluateAlerts(c.env.DB, undefined, { force: true }) }, 200);
+      return c.json({ success: true, data: await evaluateAlerts(getShopDb(c), undefined, { force: true }) }, 200);
     } catch (e) {
       return fail(c, e);
     }
   })
   .post("/alerts/seen", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => {
-    await markAlertsSeen(c.env.DB, c.get("userId"));
+    await markAlertsSeen(getShopDb(c), c.get("userId"));
     return c.json({ success: true, data: { ok: true } }, 200);
   })
   .patch("/alerts/:id", requirePerm(PERMISSIONS.MASTERS_EDIT), async (c) => {
     const b = await body(c, alertPatchSchema);
     if (b instanceof Response) return b;
     try {
-      await updateAlert(c.env.DB, c.req.param("id"), b, c.get("userId"));
+      await updateAlert(getShopDb(c), c.req.param("id"), b, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (e) {
       return fail(c, e);
@@ -235,7 +236,7 @@ export const marketDesk = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .delete("/alerts/:id", requirePerm(PERMISSIONS.MASTERS_EDIT), async (c) => {
     try {
-      await deleteAlert(c.env.DB, c.req.param("id"), c.get("userId"));
+      await deleteAlert(getShopDb(c), c.req.param("id"), c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (e) {
       return fail(c, e);
@@ -249,4 +250,4 @@ export const marketDesk = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return fail(c, e);
     }
   })
-  .get("/events", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => c.json({ success: true, data: await eventsCalendar(c.env.DB) }, 200));
+  .get("/events", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => c.json({ success: true, data: await eventsCalendar(getShopDb(c)) }, 200));

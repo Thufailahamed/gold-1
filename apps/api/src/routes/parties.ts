@@ -7,6 +7,7 @@ import { requirePerm } from "../middleware/requirePerm";
 import { createParty, getPartyDetail, listParties, updateParty, type PartyTable } from "../services/parties";
 import { partyLedger } from "../services/journal";
 import { pagination, serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 const updatePartySchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -34,7 +35,7 @@ function partyRouter(table: PartyTable) {
           400
         );
       try {
-        const row = await createParty(c.env.DB, table, parsed.data, c.get("userId"));
+        const row = await createParty(getShopDb(c), table, parsed.data, c.get("userId"));
         return c.json({ success: true, data: row }, 201);
       } catch (err) {
         return serviceError(c, err);
@@ -43,7 +44,7 @@ function partyRouter(table: PartyTable) {
     .get("/", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => {
       const perms = c.get("permissions") as string[];
       const canManageAll = perms.includes(PERMISSIONS.BRANCHES_MANAGE);
-      const data = await listParties(c.env.DB, table, c.get("userId"), canManageAll, pagination(c));
+      const data = await listParties(getShopDb(c), table, c.get("userId"), canManageAll, pagination(c));
       return c.json({ success: true, data }, 200);
     })
     .patch("/:id", requirePerm(PERMISSIONS.MASTERS_EDIT), async (c) => {
@@ -56,7 +57,7 @@ function partyRouter(table: PartyTable) {
         );
       try {
         await updateParty(
-          c.env.DB,
+          getShopDb(c),
           table,
           c.req.param("id"),
           {
@@ -84,7 +85,7 @@ function partyRouter(table: PartyTable) {
         );
       try {
         await updateParty(
-          c.env.DB,
+          getShopDb(c),
           table,
           c.req.param("id"),
           { isActive: parsed.data.isActive },
@@ -98,7 +99,7 @@ function partyRouter(table: PartyTable) {
     })
     .get("/:id", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => {
       try {
-        const data = await getPartyDetail(c.env.DB, table, c.req.param("id"));
+        const data = await getPartyDetail(getShopDb(c), table, c.req.param("id"));
         return c.json({ success: true, data }, 200);
       } catch (err) {
         return serviceError(c, err);
@@ -107,7 +108,7 @@ function partyRouter(table: PartyTable) {
     .get("/:id/ledger", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => {
       try {
         const kind = table === "customers" ? "customer" : "supplier";
-        const data = await partyLedger(c.env.DB, kind, c.req.param("id"), {
+        const data = await partyLedger(getShopDb(c), kind, c.req.param("id"), {
           branchId: c.req.query("branchId") ?? undefined,
         });
         return c.json({ success: true, data: { ...data.totals, lines: data.lines } }, 200);

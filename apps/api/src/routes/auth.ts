@@ -15,6 +15,7 @@ import { verifyPassword } from "../services/hash";
 import { changePassword, confirmReset, requestReset } from "../services/password";
 import { clearFailures, lockedFor, loginKeys, recordFailure } from "../services/throttle";
 import { serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 // Well-formed but matches no password: lets a failed lookup cost the same
 // scrypt run as a real check.
@@ -48,7 +49,7 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     }
     const ip = c.req.header("cf-connecting-ip") ?? undefined;
     const keys = loginKeys(parsed.data.email, ip);
-    const wait = await lockedFor(c.env.DB, keys);
+    const wait = await lockedFor(getShopDb(c), keys);
     if (wait > 0) {
       c.header("Retry-After", String(Math.ceil(wait / 1000)));
       return c.json(
@@ -59,7 +60,7 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         429
       );
     }
-    const user = await c.env.DB.prepare(
+    const user = await getShopDb(c).prepare(
       "SELECT id, email, name, password_hash, is_active FROM users WHERE email = ?"
     )
       .bind(parsed.data.email)
@@ -68,15 +69,15 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     // time does not reveal which emails have accounts.
     const ok = await verifyPassword(parsed.data.password, user?.password_hash ?? DUMMY_HASH);
     if (!user || !user.is_active || !ok) {
-      await recordFailure(c.env.DB, keys);
+      await recordFailure(getShopDb(c), keys);
       return c.json(
         { success: false, error: { code: "UNAUTHORIZED", message: "Invalid credentials" } },
         401
       );
     }
-    await clearFailures(c.env.DB, parsed.data.email);
-    const session = await createSession(c.env.DB, user.id);
-    await writeAudit(c.env.DB, {
+    await clearFailures(getShopDb(c), parsed.data.email);
+    const session = await createSession(getShopDb(c), user.id);
+    await writeAudit(getShopDb(c), {
       userId: user.id,
       action: "auth.login",
       entity: "session",
@@ -99,8 +100,8 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .post("/logout", requireAuth, async (c) => {
     const sessionId = extractSessionId(c);
-    if (sessionId) await destroySession(c.env.DB, sessionId);
-    await writeAudit(c.env.DB, {
+    if (sessionId) await destroySession(getShopDb(c), sessionId);
+    await writeAudit(getShopDb(c), {
       userId: c.get("userId"),
       action: "auth.logout",
       entity: "session",
@@ -111,7 +112,7 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/me", requireAuth, async (c) => {
     const userId = c.get("userId");
-    const user = await c.env.DB.prepare(
+    const user = await getShopDb(c).prepare(
       "SELECT id, email, name FROM users WHERE id = ? AND is_active = 1"
     )
       .bind(userId)
@@ -122,7 +123,7 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         401
       );
     }
-    const { results } = await c.env.DB.prepare(
+    const { results } = await getShopDb(c).prepare(
       "SELECT branch_id FROM branch_members WHERE user_id = ?"
     )
       .bind(userId)
@@ -149,7 +150,7 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     try {
       await changePassword(
-        c.env.DB,
+        getShopDb(c),
         c.get("userId"),
         parsed.data.currentPassword,
         parsed.data.newPassword
@@ -169,7 +170,7 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      const { token, userId } = await requestReset(c.env.DB, parsed.data.email, c.get("userId"));
+      const { token, userId } = await requestReset(getShopDb(c), parsed.data.email, c.get("userId"));
       return c.json(
         {
           success: true,
@@ -190,7 +191,7 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      await confirmReset(c.env.DB, parsed.data.token, parsed.data.newPassword);
+      await confirmReset(getShopDb(c), parsed.data.token, parsed.data.newPassword);
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);

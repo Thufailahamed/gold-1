@@ -1,5 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import type { Env } from "../db/client";
+import { getShopDb } from "../platform/resolve";
 
 const SESSION_RE = /(?:^|;\s*)session=([^;]+)/;
 const KEY_RE = /^[A-Za-z0-9_-]{8,128}$/;
@@ -50,7 +51,7 @@ export const idempotency = createMiddleware<{ Bindings: Env }>(async (c, next) =
   if (!KEY_RE.test(clientKey)) {
     return refuse("VALIDATION", "Idempotency-Key must be 8-128 letters, digits, '-' or '_'");
   }
-  const db = c.env.DB;
+  const db = getShopDb(c);
   const path = new URL(c.req.url).pathname;
   const key = await sha256Hex(`${sessionId}:${clientKey}`);
   const requestHash = await sha256Hex(`${method} ${path}\n${await c.req.text()}`);

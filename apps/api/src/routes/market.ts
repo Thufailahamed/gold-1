@@ -7,14 +7,15 @@ import { HISTORY_RANGES, liveMarket, marketHistory, type HistoryRange } from "..
 import { evaluateAlerts } from "../services/market-desk";
 import { ASSET_RANGES, isLongRange, longHistory, marketAsset, type AssetRange } from "../services/market-asset";
 import { serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 export const market = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
   .get("/live", requirePerm(PERMISSIONS.MASTERS_VIEW), async (c) => {
     try {
-      const data = await liveMarket(c.env.DB);
+      const data = await liveMarket(getShopDb(c));
       // Opening the board also checks price alerts (throttled inside).
-      const check = evaluateAlerts(c.env.DB, data).catch((e) => console.error("market alerts failed", e));
+      const check = evaluateAlerts(getShopDb(c), data).catch((e) => console.error("market alerts failed", e));
       try {
         c.executionCtx.waitUntil(check);
       } catch {
@@ -33,7 +34,7 @@ export const market = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     if (!(range in HISTORY_RANGES))
       return c.json({ success: false, error: { code: "VALIDATION", message: "Invalid range" } }, 400);
     try {
-      const data = await marketHistory(c.env.DB, symbol, range);
+      const data = await marketHistory(getShopDb(c), symbol, range);
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -45,7 +46,7 @@ export const market = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     if (!isLongRange(range))
       return c.json({ success: false, error: { code: "VALIDATION", message: "Invalid range" } }, 400);
     try {
-      return c.json({ success: true, data: await longHistory(c.env.DB, symbol, range) }, 200);
+      return c.json({ success: true, data: await longHistory(getShopDb(c), symbol, range) }, 200);
     } catch (err) {
       if ((err as { code?: string }).code === "UNAVAILABLE")
         return c.json({ success: false, error: { code: "UNAVAILABLE", message: (err as Error).message } }, 503);
@@ -58,7 +59,7 @@ export const market = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     if (!(range in ASSET_RANGES))
       return c.json({ success: false, error: { code: "VALIDATION", message: "Invalid range" } }, 400);
     try {
-      const data = await marketAsset(c.env.DB, symbol, range);
+      const data = await marketAsset(getShopDb(c), symbol, range);
       return c.json({ success: true, data }, 200);
     } catch (err) {
       if ((err as { code?: string }).code === "UNAVAILABLE")

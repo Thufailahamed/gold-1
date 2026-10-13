@@ -24,6 +24,7 @@ import {
   wipList,
 } from "../services/manufacturing";
 import { pagination, serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 /**
  * Report windows must agree with journal_entries.entry_date, which is
@@ -55,7 +56,7 @@ export const manufacturing = new Hono<{ Bindings: Env; Variables: AppVariables }
         400
       );
     try {
-      const data = await createOrder(c.env.DB, parsed.data, c.get("userId"));
+      const data = await createOrder(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -64,7 +65,7 @@ export const manufacturing = new Hono<{ Bindings: Env; Variables: AppVariables }
   .get("/orders", requirePerm(PERMISSIONS.MFG_VIEW), async (c) => {
     const perms = c.get("permissions") as string[];
     const data = await listOrders(
-      c.env.DB,
+      getShopDb(c),
       c.get("userId"),
       perms.includes(PERMISSIONS.BRANCHES_MANAGE),
       {
@@ -78,17 +79,17 @@ export const manufacturing = new Hono<{ Bindings: Env; Variables: AppVariables }
     return c.json({ success: true, data }, 200);
   })
   .get("/reports/summary", requirePerm(PERMISSIONS.MFG_VIEW), async (c) => {
-    const { from, to } = await dayBounds(c.env.DB, c.req.query("period") ?? "all");
-    const data = await mfgSummary(c.env.DB, { from, to, branchId: c.req.query("branchId") });
+    const { from, to } = await dayBounds(getShopDb(c), c.req.query("period") ?? "all");
+    const data = await mfgSummary(getShopDb(c), { from, to, branchId: c.req.query("branchId") });
     return c.json({ success: true, data }, 200);
   })
   .get("/reports/wip", requirePerm(PERMISSIONS.MFG_VIEW), async (c) => {
-    const data = await wipList(c.env.DB, c.req.query("branchId"));
+    const data = await wipList(getShopDb(c), c.req.query("branchId"));
     return c.json({ success: true, data }, 200);
   })
   .get("/orders/:id", requirePerm(PERMISSIONS.MFG_VIEW), async (c) => {
     try {
-      const data = await getOrder(c.env.DB, c.req.param("id"));
+      const data = await getOrder(getShopDb(c), c.req.param("id"));
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -103,7 +104,7 @@ export const manufacturing = new Hono<{ Bindings: Env; Variables: AppVariables }
         400
       );
     try {
-      const data = await addMaterials(c.env.DB, c.req.param("id"), parsed.data.lots, c.get("userId"));
+      const data = await addMaterials(getShopDb(c), c.req.param("id"), parsed.data.lots, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -118,7 +119,7 @@ export const manufacturing = new Hono<{ Bindings: Env; Variables: AppVariables }
         400
       );
     try {
-      const data = await produce(c.env.DB, c.req.param("id"), parsed.data, c.get("userId"));
+      const data = await produce(getShopDb(c), c.req.param("id"), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -133,7 +134,7 @@ export const manufacturing = new Hono<{ Bindings: Env; Variables: AppVariables }
         400
       );
     try {
-      await qcCheck(c.env.DB, c.req.param("id"), parsed.data.pass, parsed.data.reason, c.get("userId"));
+      await qcCheck(getShopDb(c), c.req.param("id"), parsed.data.pass, parsed.data.reason, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -146,7 +147,7 @@ export const manufacturing = new Hono<{ Bindings: Env; Variables: AppVariables }
     const parsed = finishSchema.safeParse(body);
     try {
       const data = await finishOrder(
-        c.env.DB,
+        getShopDb(c),
         c.req.param("id"),
         { paidFrom: parsed.success ? parsed.data.paidFrom : undefined },
         c.get("userId")
@@ -165,7 +166,7 @@ export const manufacturing = new Hono<{ Bindings: Env; Variables: AppVariables }
         400
       );
     try {
-      await voidOrder(c.env.DB, c.req.param("id"), parsed.data.reason, c.get("userId"));
+      await voidOrder(getShopDb(c), c.req.param("id"), parsed.data.reason, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);

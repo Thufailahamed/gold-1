@@ -35,6 +35,7 @@ import {
   updateAccount,
 } from "../services/journal";
 import { pagination, serviceError } from "./http";
+import { getShopDb } from "../platform/resolve";
 
 const validDate = (v: string | undefined) => (v && isBusinessDate(v) ? v : undefined);
 
@@ -67,34 +68,34 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   // would be read as an account code of "journal".
   // ── Accounts payable ────────────────────────────────────────────────
   .get("/payables", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
-    const asOf = validDate(c.req.query("asOf")) ?? (await businessDateFor(c.env.DB, Date.now()));
-    const data = await listPayables(c.env.DB, { branchId: c.req.query("branchId") || undefined, asOf });
+    const asOf = validDate(c.req.query("asOf")) ?? (await businessDateFor(getShopDb(c), Date.now()));
+    const data = await listPayables(getShopDb(c), { branchId: c.req.query("branchId") || undefined, asOf });
     return c.json({ success: true, data: { asOf, ...data } }, 200);
   })
   .get("/payables/suppliers/:id/open", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
-    const data = await supplierOpenInvoices(c.env.DB, c.req.param("id"), c.req.query("branchId") || undefined);
+    const data = await supplierOpenInvoices(getShopDb(c), c.req.param("id"), c.req.query("branchId") || undefined);
     return c.json({ success: true, data }, 200);
   })
   // ── Output tax (VAT) ────────────────────────────────────────────────
   .get("/tax/config", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
-    return c.json({ success: true, data: await getTaxConfig(c.env.DB) }, 200);
+    return c.json({ success: true, data: await getTaxConfig(getShopDb(c)) }, 200);
   })
   .put("/tax/config", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
     const parsed = taxConfigSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success)
       return c.json({ success: false, error: { code: "VALIDATION", message: "Invalid tax setting" } }, 400);
-    return c.json({ success: true, data: await setTaxConfig(c.env.DB, parsed.data, c.get("userId")) }, 200);
+    return c.json({ success: true, data: await setTaxConfig(getShopDb(c), parsed.data, c.get("userId")) }, 200);
   })
   .get("/tax/report", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
-    const to = validDate(c.req.query("to")) ?? (await businessDateFor(c.env.DB, Date.now()));
+    const to = validDate(c.req.query("to")) ?? (await businessDateFor(getShopDb(c), Date.now()));
     const from = validDate(c.req.query("from")) ?? `${to.slice(0, 8)}01`;
     if (from > to)
       return c.json({ success: false, error: { code: "VALIDATION", message: "From must be on or before to" } }, 400);
-    const data = await taxReport(c.env.DB, { from, to, branchId: c.req.query("branchId") || undefined });
+    const data = await taxReport(getShopDb(c), { from, to, branchId: c.req.query("branchId") || undefined });
     return c.json({ success: true, data }, 200);
   })
   .get("/tax/payments", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
-    const data = await listTaxPayments(c.env.DB, {
+    const data = await listTaxPayments(getShopDb(c), {
       from: validDate(c.req.query("from")),
       to: validDate(c.req.query("to")),
       branchId: c.req.query("branchId") || undefined,
@@ -106,18 +107,18 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     if (!parsed.success)
       return c.json({ success: false, error: { code: "VALIDATION", message: "Invalid tax payment" } }, 400);
     try {
-      return c.json({ success: true, data: await createTaxPayment(c.env.DB, parsed.data, c.get("userId")) }, 201);
+      return c.json({ success: true, data: await createTaxPayment(getShopDb(c), parsed.data, c.get("userId")) }, 201);
     } catch (err) {
       return serviceError(c, err);
     }
   })
   // ── Financial year ──────────────────────────────────────────────────
   .get("/fiscal-years", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
-    return c.json({ success: true, data: await listFiscalYears(c.env.DB) }, 200);
+    return c.json({ success: true, data: await listFiscalYears(getShopDb(c)) }, 200);
   })
   .get("/fiscal-years/:yearEnd", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     try {
-      return c.json({ success: true, data: await getFiscalClose(c.env.DB, c.req.param("yearEnd")) }, 200);
+      return c.json({ success: true, data: await getFiscalClose(getShopDb(c), c.req.param("yearEnd")) }, 200);
     } catch (err) {
       return serviceError(c, err);
     }
@@ -127,7 +128,7 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     if (!parsed.success)
       return c.json({ success: false, error: { code: "VALIDATION", message: "Invalid year end" } }, 400);
     try {
-      return c.json({ success: true, data: await closeFiscalYear(c.env.DB, parsed.data, c.get("userId")) }, 201);
+      return c.json({ success: true, data: await closeFiscalYear(getShopDb(c), parsed.data, c.get("userId")) }, 201);
     } catch (err) {
       return serviceError(c, err);
     }
@@ -137,7 +138,7 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     if (!parsed.success)
       return c.json({ success: false, error: { code: "VALIDATION", message: "A reason is required" } }, 400);
     try {
-      await reopenFiscalYear(c.env.DB, c.req.param("yearEnd"), parsed.data, c.get("userId"));
+      await reopenFiscalYear(getShopDb(c), c.req.param("yearEnd"), parsed.data, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -146,7 +147,7 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   // ── Opening stock ───────────────────────────────────────────────────
   .post("/opening-stock/backfill", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
     try {
-      return c.json({ success: true, data: await backfillOpeningStock(c.env.DB, c.get("userId")) }, 200);
+      return c.json({ success: true, data: await backfillOpeningStock(getShopDb(c), c.get("userId")) }, 200);
     } catch (err) {
       return serviceError(c, err);
     }
@@ -155,14 +156,14 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   // existed — the gap behind a failing gold_stock_consistency close gate.
   .post("/intake-gold/backfill", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
     try {
-      return c.json({ success: true, data: await backfillIntakeLedger(c.env.DB, c.get("userId")) }, 200);
+      return c.json({ success: true, data: await backfillIntakeLedger(getShopDb(c), c.get("userId")) }, 200);
     } catch (err) {
       return serviceError(c, err);
     }
   })
   .get("/journal", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     const q = (k: string) => c.req.query(k) ?? undefined;
-    const data = await listJournalEntries(c.env.DB, {
+    const data = await listJournalEntries(getShopDb(c), {
       ...pagination(c),
       from: q("from"),
       to: q("to"),
@@ -175,20 +176,20 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/journal/:id", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     try {
-      return c.json({ success: true, data: await getJournalEntry(c.env.DB, c.req.param("id")) }, 200);
+      return c.json({ success: true, data: await getJournalEntry(getShopDb(c), c.req.param("id")) }, 200);
     } catch (err) {
       return serviceError(c, err);
     }
   })
   .get("/trial-balance", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
-    const date = c.req.query("date") ?? (await businessDateFor(c.env.DB, Date.now()));
-    const rows = await trialBalance(c.env.DB, { date, branchId: c.req.query("branchId") ?? undefined });
+    const date = c.req.query("date") ?? (await businessDateFor(getShopDb(c), Date.now()));
+    const rows = await trialBalance(getShopDb(c), { date, branchId: c.req.query("branchId") ?? undefined });
     return c.json({ success: true, data: { date, rows } }, 200);
   })
   .get("/reconciliation", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     try {
-      const date = c.req.query("date") ?? (await businessDateFor(c.env.DB, Date.now()));
-      const data = await reconcile(c.env.DB, {
+      const date = c.req.query("date") ?? (await businessDateFor(getShopDb(c), Date.now()));
+      const data = await reconcile(getShopDb(c), {
         date,
         branchId: c.req.query("branchId") ?? undefined,
       });
@@ -201,29 +202,29 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     }
   })
   .get("/statements/pnl", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
-    const to = validDate(c.req.query("to")) ?? (await businessDateFor(c.env.DB, Date.now()));
+    const to = validDate(c.req.query("to")) ?? (await businessDateFor(getShopDb(c), Date.now()));
     const from = validDate(c.req.query("from")) ?? `${to.slice(0, 8)}01`;
     if (from > to)
       return c.json({ success: false, error: { code: "VALIDATION", message: "From must be on or before to" } }, 400);
-    const data = await profitAndLoss(c.env.DB, { from, to, branchId: c.req.query("branchId") || undefined });
+    const data = await profitAndLoss(getShopDb(c), { from, to, branchId: c.req.query("branchId") || undefined });
     return c.json({ success: true, data }, 200);
   })
   .get("/statements/balance-sheet", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
-    const date = validDate(c.req.query("date")) ?? (await businessDateFor(c.env.DB, Date.now()));
-    const data = await balanceSheet(c.env.DB, { date, branchId: c.req.query("branchId") || undefined });
+    const date = validDate(c.req.query("date")) ?? (await businessDateFor(getShopDb(c), Date.now()));
+    const data = await balanceSheet(getShopDb(c), { date, branchId: c.req.query("branchId") || undefined });
     return c.json({ success: true, data }, 200);
   })
   .get("/statements/cash-daily", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
-    const to = validDate(c.req.query("to")) ?? (await businessDateFor(c.env.DB, Date.now()));
+    const to = validDate(c.req.query("to")) ?? (await businessDateFor(getShopDb(c), Date.now()));
     const from = validDate(c.req.query("from")) ?? `${to.slice(0, 8)}01`;
-    const data = await dailyCashSummary(c.env.DB, { from, to, branchId: c.req.query("branchId") || undefined });
+    const data = await dailyCashSummary(getShopDb(c), { from, to, branchId: c.req.query("branchId") || undefined });
     return c.json({ success: true, data }, 200);
   })
   .get("/:code/statement", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
-    const to = c.req.query("to") ?? (await businessDateFor(c.env.DB, Date.now()));
+    const to = c.req.query("to") ?? (await businessDateFor(getShopDb(c), Date.now()));
     const from = c.req.query("from") ?? "1970-01-01";
     try {
-      const data = await accountStatement(c.env.DB, {
+      const data = await accountStatement(getShopDb(c), {
         code: c.req.param("code"),
         from,
         to,
@@ -235,7 +236,7 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     }
   })
   .get("/", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
-    const rows = await listAccounts(c.env.DB, c.req.query("branchId") ?? undefined);
+    const rows = await listAccounts(getShopDb(c), c.req.query("branchId") ?? undefined);
     return c.json({ success: true, data: rows }, 200);
   })
   .post("/", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
@@ -244,7 +245,7 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     if (!parsed.success)
       return c.json({ success: false, error: { code: "VALIDATION", message: "Invalid account" } }, 400);
     try {
-      const data = await createAccount(c.env.DB, parsed.data, c.get("userId"));
+      const data = await createAccount(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -256,7 +257,7 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     if (!parsed.success)
       return c.json({ success: false, error: { code: "VALIDATION", message: "Invalid update" } }, 400);
     try {
-      await updateAccount(c.env.DB, c.req.param("code"), parsed.data, c.get("userId"));
+      await updateAccount(getShopDb(c), c.req.param("code"), parsed.data, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -269,7 +270,7 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return c.json({ success: false, error: { code: "VALIDATION", message: "Invalid status" } }, 400);
     try {
       await setAccountActive(
-        c.env.DB,
+        getShopDb(c),
         c.req.param("code"),
         parsed.data.isActive,
         parsed.data.reason,
@@ -293,7 +294,7 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       // retry-with-approvalId model: no inline fast path on this route).
       if (parsed.data.approvalId) {
         await consumeApproval(
-          c.env.DB,
+          getShopDb(c),
           {
             action: "FIN_ADJUST",
             id: parsed.data.approvalId,
@@ -307,7 +308,7 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         // entityId is generated up front so the 202 payload binds the retry
         // to these exact terms.
         const req = await requestApproval(
-          c.env.DB,
+          getShopDb(c),
           {
             action: "FIN_ADJUST",
             entity: "adjustment",
@@ -328,7 +329,7 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         if (req.status === "PENDING") pendingApproval(req, "FIN_ADJUST");
       }
       const built = await buildEntryStmts(
-        c.env.DB,
+        getShopDb(c),
         {
           lines: [
             { account: parsed.data.debitAccount, debitCents: parsed.data.amountCents, creditCents: 0 },
@@ -344,9 +345,9 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
           auditEntityId: id,
           sourceModule: "manual",
         },
-        { entryDate: parsed.data.entryDate ?? (await businessDateFor(c.env.DB, Date.now())) }
+        { entryDate: parsed.data.entryDate ?? (await businessDateFor(getShopDb(c), Date.now())) }
       );
-      await c.env.DB.batch(built.stmts);
+      await getShopDb(c).batch(built.stmts);
       return c.json({ success: true, data: { id, entryId: built.entryId, entryNo: built.entryNo } }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -358,13 +359,13 @@ export const accounts = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     if (!parsed.success)
       return c.json({ success: false, error: { code: "VALIDATION", message: "Invalid reversal" } }, 400);
     try {
-      const built = await reverseEntry(c.env.DB, parsed.data.entryId, {
+      const built = await reverseEntry(getShopDb(c), parsed.data.entryId, {
         reason: parsed.data.reason,
         entryDate:
-          parsed.data.entryDate ?? (await businessDateFor(c.env.DB, Date.now())),
+          parsed.data.entryDate ?? (await businessDateFor(getShopDb(c), Date.now())),
         actorId: c.get("userId"),
       });
-      await c.env.DB.batch(built.stmts);
+      await getShopDb(c).batch(built.stmts);
       return c.json({ success: true, data: { entryId: built.entryId, entryNo: built.entryNo } }, 201);
     } catch (err) {
       return serviceError(c, err);
