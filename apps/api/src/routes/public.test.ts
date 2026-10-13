@@ -61,9 +61,11 @@ describe.skipIf(!sqliteAvailable)("public SaaS auth", () => {
     await pdb.db.prepare("UPDATE plans SET is_public = 0 WHERE code = 'enterprise'").run();
     const res = await t.request("/api/v1/public/plans", {}, env);
     expect(res.status).toBe(200);
-    const codes = (((await res.json()) as { data: { plans: Array<{ code: string }> } }).data.plans).map((p) => p.code);
+    const plans = ((await res.json()) as { data: { plans: Array<{ id: string; code: string }> } }).data.plans;
+    const codes = plans.map((p) => p.code);
     expect(codes).toContain("starter");
     expect(codes).not.toContain("enterprise");
+    expect(plans.every((p) => typeof p.id === "string" && p.id.length > 0)).toBe(true);
   });
 
   it("signs a shop up with a 14-day trial and logs the owner in", async () => {
@@ -78,6 +80,19 @@ describe.skipIf(!sqliteAvailable)("public SaaS auth", () => {
     const sub = await pdb.db.prepare("SELECT status, trial_ends_at, current_period_start FROM subscriptions WHERE tenant_id = (SELECT id FROM tenants WHERE slug = 'kandy-gold')").first<{ status: string; trial_ends_at: number; current_period_start: number }>();
     expect(sub?.status).toBe("TRIALING");
     expect(sub!.trial_ends_at - sub!.current_period_start).toBe(14 * 24 * 3600_000);
+  });
+
+  it("signs up using plan code as planId", async () => {
+    const res = await t.request(
+      "/api/v1/public/signup",
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(signupBody({ slug: "kandy-gold-code", planId: "starter" })) },
+      env
+    );
+    expect(res.status).toBe(201);
+    const sub = await pdb.db
+      .prepare("SELECT plan_id FROM subscriptions WHERE tenant_id = (SELECT id FROM tenants WHERE slug = 'kandy-gold-code')")
+      .first<{ plan_id: string }>();
+    expect(sub?.plan_id).toBe("plan-starter");
   });
 
   it("silently accepts honeypot fills without creating anything", async () => {

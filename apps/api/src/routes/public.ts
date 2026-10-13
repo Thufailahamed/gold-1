@@ -35,11 +35,11 @@ export function createPublicRoutes(deps: { provision: Provisioner }) {
       .get("/plans", async (c) => {
         if (!c.env.PLATFORM_DB) return c.json({ success: true, data: { plans: [] } }, 200);
         const { results } = await c.env.PLATFORM_DB.prepare(
-          `SELECT code, name, description, price_monthly_cents, price_yearly_cents, currency,
+          `SELECT id, code, name, description, price_monthly_cents, price_yearly_cents, currency,
                   trial_days, max_users, max_branches, max_products, max_storage_mb, features_json
            FROM plans WHERE is_public = 1 AND is_active = 1 ORDER BY sort_order`
         ).all<{
-          code: string; name: string; description: string; price_monthly_cents: number; price_yearly_cents: number;
+          id: string; code: string; name: string; description: string; price_monthly_cents: number; price_yearly_cents: number;
           currency: string; trial_days: number; max_users: number | null; max_branches: number | null;
           max_products: number | null; max_storage_mb: number | null; features_json: string;
         }>();
@@ -81,7 +81,10 @@ export function createPublicRoutes(deps: { provision: Provisioner }) {
         const settings = await getPlatformSettings(pdb);
         if (!settings.signup_enabled)
           return c.json({ success: false, error: { code: "SIGNUP_DISABLED", message: "Signup is currently closed. Contact us for an account." } }, 503);
-        const plan = await pdb.prepare("SELECT id FROM plans WHERE id = ? AND is_public = 1 AND is_active = 1").bind(input.planId).first<{ id: string }>();
+        const plan = await pdb
+          .prepare("SELECT id FROM plans WHERE (id = ? OR code = ?) AND is_public = 1 AND is_active = 1")
+          .bind(input.planId, input.planId)
+          .first<{ id: string }>();
         if (!plan)
           return c.json({ success: false, error: { code: "VALIDATION", message: "That plan is not available" } }, 400);
         const taken = await pdb.prepare("SELECT id FROM tenants WHERE slug = ?").bind(input.slug).first();
@@ -103,7 +106,7 @@ export function createPublicRoutes(deps: { provision: Provisioner }) {
               currency: input.currency,
               timezone: input.timezone,
               region: "apac",
-              planId: input.planId,
+              planId: plan.id,
               interval: input.interval,
               tags: [],
             },

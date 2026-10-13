@@ -8,7 +8,6 @@ import { BranchSwitcher } from "@/components/branch-switcher";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { PlatformBanner, usePlatformContext } from "@/components/platform-banner";
-import { Providers } from "@/components/providers";
 import { UserMenu } from "@/components/user-menu";
 import { ScanField } from "@/components/scan-field";
 import { Skeleton } from "@/components/ui";
@@ -83,7 +82,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (!me) return null;
 
   return (
-    <Providers>
+    <>
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-ink focus:px-3 focus:py-2 focus:text-sm focus:text-gold"
@@ -167,6 +166,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         ) : null}
       </div>
-    </Providers>
+    </>
   );
 }
