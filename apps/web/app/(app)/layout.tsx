@@ -1,19 +1,54 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { hasPermission } from "@goldos/shared";
 import { BranchSwitcher } from "@/components/branch-switcher";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Breadcrumbs } from "@/components/breadcrumbs";
-import { PlatformBanner } from "@/components/platform-banner";
+import { PlatformBanner, usePlatformContext } from "@/components/platform-banner";
 import { Providers } from "@/components/providers";
 import { UserMenu } from "@/components/user-menu";
 import { ScanField } from "@/components/scan-field";
 import { Skeleton } from "@/components/ui";
 import { MenuIcon, ScanBarcodeIcon } from "@/components/icons";
 import { MarketAlertBell } from "@/components/market-alert-bell";
-import { useSession } from "@/lib/auth";
+import { useSession, logout } from "@/lib/auth";
+
+function BlockedScreen({ status, supportEmail }: { status: string; supportEmail: string }) {
+  const router = useRouter();
+  return (
+    <div className="mx-auto max-w-md py-16 text-center">
+      <h2 className="g-display text-2xl text-ink">
+        {status === "SUSPENDED" ? "This workspace is suspended" : "This workspace is closed"}
+      </h2>
+      <p className="mt-3 text-sm leading-relaxed text-ink-4">
+        {status === "SUSPENDED" ? (
+          <>Contact <a className="underline" href={`mailto:${supportEmail}`}>{supportEmail}</a> to restore access.</>
+        ) : (
+          <>This shop account has been closed. Contact <a className="underline" href={`mailto:${supportEmail}`}>{supportEmail}</a> if this is a mistake.</>
+        )}
+      </p>
+      <button
+        type="button"
+        onClick={() => logout().finally(() => router.replace("/login"))}
+        className="g-btn mt-6 h-11 px-5 text-sm"
+      >
+        Sign out
+      </button>
+    </div>
+  );
+}
+
+function AccountGate({ children }: { children: React.ReactNode }) {
+  const ctx = usePlatformContext();
+  const d = ctx.data;
+  if (d && d.managed && (d.tenant.status === "SUSPENDED" || d.tenant.status === "ARCHIVED")) {
+    return <BlockedScreen status={d.tenant.status} supportEmail={d.supportEmail} />;
+  }
+  return <>{children}</>;
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { me, loading } = useSession();
@@ -108,8 +143,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           <main id="main-content" className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <PlatformBanner />
-            <Breadcrumbs />
-            {children}
+            <AccountGate>
+              <Breadcrumbs />
+              {children}
+            </AccountGate>
           </main>
         </div>
 

@@ -139,6 +139,16 @@ describe.skipIf(!sqliteAvailable)("bank-slip billing over real SQLite", () => {
     expect((((await theirs.json()) as { data: { rows: unknown[] } }).data.rows)).toHaveLength(0);
   });
 
+  it("lists the shop's own open invoices", async () => {
+    const mine = await app.request("/api/v1/billing/invoices", { headers: shopHeaders("sid-a", "shop-a") }, env);
+    expect(mine.status).toBe(200);
+    const rows = (((await mine.json()) as { data: { rows: Array<{ number: string; status: string }> } }).data.rows);
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    expect(rows.every((r) => r.status === "OPEN")).toBe(true);
+    const theirs = await app.request("/api/v1/billing/invoices", { headers: shopHeaders("sid-b", "shop-b") }, env);
+    expect((((await theirs.json()) as { data: { rows: unknown[] } }).data.rows)).toHaveLength(1);
+  });
+
   it("serves the slip bytes to its owner and to staff, nobody else", async () => {
     const bytes = new Uint8Array([1, 2, 3, 4]);
     const up = await upload("sid-a", "shop-a", new File([bytes], "slip.png", { type: "image/png" }), invoiceA);

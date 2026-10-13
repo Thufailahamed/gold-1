@@ -1,4 +1,5 @@
 import type { ApiResponse } from "@goldos/shared";
+import { readTenantSlug } from "./tenant";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
@@ -16,6 +17,10 @@ async function readBody<T>(res: Response): Promise<ApiResponse<T>> {
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
   const headers: Record<string, string> = { "Content-Type": "application/json", ...((init?.headers as Record<string, string>) ?? {}) };
+  // Single-domain SaaS: the shop cookie travels automatically; the header is
+  // the fallback for environments where third-party cookies are blocked.
+  const slug = readTenantSlug();
+  if (slug && !headers["X-Shop-Slug"]) headers["X-Shop-Slug"] = slug;
   // Every mutation carries its own key. If the network drops after the server
   // committed (flaky shop Wi-Fi, a POS mid-sale), the one retry below reuses
   // the key and the server replays the first result instead of writing twice.
@@ -46,6 +51,7 @@ export type MeData = {
   user: { id: string; email: string; name: string };
   permissions: string[];
   branchIds: string[];
+  tenant: { id: string; slug: string; name: string } | null;
 };
 
 /**

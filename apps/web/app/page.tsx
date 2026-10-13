@@ -4,6 +4,7 @@ import Link from "next/link";
 import { HomeNav, Reveal, ScrollScale } from "@/components/home/motion";
 import { ModuleExplorer } from "@/components/home/module-explorer";
 import { GoldDust, ScrollRibbon, SpotCard } from "@/components/home/effects";
+import { Plans } from "@/components/home/plans";
 import {
   CountStat,
   JourneyScroll,
@@ -268,14 +269,14 @@ function Hero() {
         <Reveal delay={240}>
           <div className="mt-9 flex flex-col items-center justify-center gap-5 sm:flex-row sm:gap-7">
             <Magnetic>
-              <Link href="/login" className="hx-btn hx-btn-dark h-12 px-7 text-[17px]">
-                Sign in to your branch
+              <Link href="/signup" className="hx-btn hx-btn-dark h-12 px-7 text-[17px]">
+                Start free trial
               </Link>
             </Magnetic>
-            <a href="#pricing" className="hx-link text-[17px]">
-              Try the price studio
+            <Link href="/login" className="hx-link text-[17px]">
+              Sign in to your shop
               <ChevronRightIcon size={16} />
-            </a>
+            </Link>
           </div>
         </Reveal>
       </div>
@@ -633,20 +634,20 @@ function Cta() {
           Open the <span className="home-gold-text">vault.</span>
         </h2>
         <p className="mx-auto mt-5 max-w-lg text-lg leading-relaxed text-[#93a29c] sm:text-[21px]">
-          Sign in with your branch credentials and pick up exactly where the last shift left off.
+          Start a 14-day free trial for your shop, or sign in with your shop credentials.
         </p>
         <div className="mt-10 flex flex-col items-center justify-center gap-5 sm:flex-row sm:gap-7">
           <Magnetic>
-            <Link href="/login" className="hx-btn hx-btn-gold h-12 px-7 text-[17px]">
-              Sign in
+            <Link href="/signup" className="hx-btn hx-btn-gold h-12 px-7 text-[17px]">
+              Start free trial
               <ArrowRightIcon size={16} />
             </Link>
           </Magnetic>
           <Link
-            href="/dashboard"
+            href="/login"
             className="inline-flex items-center gap-0.5 text-[17px] font-medium text-gold-light hover:underline hover:underline-offset-4"
           >
-            Go to dashboard
+            Sign in
             <ChevronRightIcon size={16} />
           </Link>
         </div>
@@ -779,6 +780,7 @@ export default function HomePage() {
         />
         <Ledger />
         <Modules />
+        <Plans />
         <Cta />
       </main>
       <Footer />

@@ -72,7 +72,7 @@ export function PlatformBanner() {
   const notices: Array<{ key: string; tone: "warning" | "danger" | "info"; text: React.ReactNode }> = [];
   const s = d.subscription;
   if (s?.status === "TRIALING" && s.trialEndsAt && s.trialEndsAt - now < 7 * 864e5)
-    notices.push({ key: "trial", tone: "info", text: <>Your {s.plan} trial ends in {days(s.trialEndsAt - now)} day{days(s.trialEndsAt - now) === 1 ? "" : "s"}. Contact <a className="underline" href={`mailto:${d.supportEmail}`}>{d.supportEmail}</a> to continue without interruption.</> });
+    notices.push({ key: "trial", tone: "info", text: <>Your {s.plan} trial ends in {days(s.trialEndsAt - now)} day{days(s.trialEndsAt - now) === 1 ? "" : "s"}. <Link className="font-medium underline" href="/billing">Pay to keep your shop open</Link> or contact <a className="underline" href={`mailto:${d.supportEmail}`}>{d.supportEmail}</a>.</> });
   if (s?.status === "PAST_DUE" || (d.billing?.firstDueAt && d.billing.firstDueAt < now && (d.billing.balanceCents ?? 0) > 0))
     notices.push({
       key: "pastdue",

@@ -68,6 +68,16 @@ export const billingReceipts = new Hono<BillingEnv>()
     });
     return c.json({ success: true, data: { id, invoiceId: inv.id, amountCents: remaining, status: "PENDING" } }, 201);
   })
+  .get("/invoices", requireAuth, async (c) => {
+    const pdb = c.env.PLATFORM_DB;
+    const tenantId = getTenantId(c);
+    if (!pdb || !tenantId) return c.json({ success: true, data: { rows: [], total: 0 } }, 200);
+    const { results } = await pdb.prepare(
+      `SELECT id, number, total_cents, amount_paid_cents, status, due_at, period_start, period_end
+       FROM invoices WHERE tenant_id = ? AND status = 'OPEN' ORDER BY due_at LIMIT 50`
+    ).bind(tenantId).all();
+    return c.json({ success: true, data: { rows: results ?? [], total: (results ?? []).length } }, 200);
+  })
   .get("/slips", requireAuth, async (c) => {
     const pdb = c.env.PLATFORM_DB;
     const tenantId = getTenantId(c);

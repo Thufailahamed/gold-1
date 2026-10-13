@@ -17,7 +17,7 @@ import { verifyPassword } from "../services/hash";
 import { changePassword, confirmReset, requestReset } from "../services/password";
 import { clearFailures, lockedFor, loginKeys, recordFailure } from "../services/throttle";
 import { serviceError } from "./http";
-import { getShopDb, resolveShopDb, tenantCookie, TenantResolveError } from "../platform/resolve";
+import { getShopDb, getTenantId, resolveShopDb, tenantCookie, TENANT_COOKIE, TenantResolveError } from "../platform/resolve";
 import { checkPublicThrottle } from "../platform/publicThrottle";
 
 // Well-formed but matches no password: lets a failed lookup cost the same
@@ -160,11 +160,13 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       entityId: sessionId ?? "unknown",
     });
     c.header("Set-Cookie", sessionCookie("", 0));
+    c.header("Set-Cookie", `${TENANT_COOKIE}=; Path=/; Max-Age=0`, { append: true });
     return c.json({ success: true, data: { ok: true } }, 200);
   })
   .get("/me", requireAuth, async (c) => {
     const userId = c.get("userId");
-    const user = await getShopDb(c).prepare(
+    const shopDb = getShopDb(c);
+    const user = await shopDb.prepare(
       "SELECT id, email, name FROM users WHERE id = ? AND is_active = 1"
     )
       .bind(userId)
@@ -175,11 +177,15 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         401
       );
     }
-    const { results } = await getShopDb(c).prepare(
+    const { results } = await shopDb.prepare(
       "SELECT branch_id FROM branch_members WHERE user_id = ?"
     )
       .bind(userId)
       .all<{ branch_id: string }>();
+    const tenantId = getTenantId(c);
+    const tenant = tenantId && c.env.PLATFORM_DB
+      ? await c.env.PLATFORM_DB.prepare("SELECT id, slug, name FROM tenants WHERE id = ?").bind(tenantId).first<{ id: string; slug: string; name: string }>()
+      : null;
     return c.json(
       {
         success: true,
@@ -187,6 +193,7 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
           user,
           permissions: c.get("permissions"),
           branchIds: (results ?? []).map((r) => r.branch_id),
+          tenant: tenant ?? null,
         },
       },
       200

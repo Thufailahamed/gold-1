@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type MeData } from "./api";
+import { clearTenant } from "./tenant";
 
 export function useSession() {
   const [me, setMe] = useState<MeData | null>(null);
@@ -20,5 +21,9 @@ export function useSession() {
 }
 
 export async function logout(): Promise<void> {
-  await api("/api/v1/auth/logout", { method: "POST" });
+  try {
+    await api("/api/v1/auth/logout", { method: "POST" });
+  } finally {
+    clearTenant();
+  }
 }
