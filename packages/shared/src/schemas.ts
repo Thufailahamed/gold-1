@@ -300,6 +300,28 @@ export const createReturnSchema = z.object({
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 export type CreateReturnInput = z.infer<typeof createReturnSchema>;
 
+/**
+ * Old-for-new exchange at the counter: VALUED old-gold items are bought from
+ * the customer and settled against a new sale in one atomic batch. The
+ * customer pays the difference when the new items cost more; when the old
+ * gold is worth more the shop pays the difference out of the drawer, or
+ * leaves it as store credit on the customer's account.
+ */
+export const exchangeSaleSchema = z.object({
+  customerId: z.string().min(1),
+  branchId: z.string().min(1),
+  oldGoldItemIds: z.array(z.string().min(1)).min(1),
+  items: z.array(saleItemSchema).min(1),
+  /** Real-money legs toward the difference the customer owes. */
+  payments: z.array(splitPaySchema).optional().default([]),
+  /** Where the surplus goes when the old gold is worth more than the bill. */
+  payout: z.enum(["cash", "store_credit"]).optional().default("cash"),
+  salespersonId: z.string().min(1).optional(),
+  notes: z.string().max(500).optional(),
+});
+
+export type ExchangeSaleInput = z.infer<typeof exchangeSaleSchema>;
+
 export const TEST_METHODS = ["acid", "touchstone", "xrf", "electronic", "fire_assay"] as const;
 export const OLDGOLD_STATUSES = ["RECEIVED", "TESTED", "VALUED", "PURCHASED", "AVAILABLE", "RESERVED_FOR_MELTING", "MELTED", "RESOLD", "TRANSFERRED", "VOID"] as const;
 

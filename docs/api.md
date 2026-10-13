@@ -164,6 +164,7 @@ Keys are per session. 5xx outcomes and multipart uploads are never stored.
 | GET | /sales/invoices/:id | sales:view | items + payments + journal + returns |
 | POST | /sales/returns | sales:cancel | full/partial/exchange + approval over threshold |
 | PATCH | /sales/returns/:id/link | sales:edit | link exchange sale |
+| POST | /sales/exchanges | sales:create + oldgold:edit | old-for-new exchange: valued old gold bought back and settled against a new sale in one batch; customer pays the difference or is paid |
 | GET | /sales/returns | sales:view | filterable by invoice |
 | GET | /sales/reports/summary | sales:view | ?period=today\|month\|all |
 | GET | /sales/reports/breakdown | sales:view | ?groupBy=category\|purity\|branch\|salesperson\|payment\|product |

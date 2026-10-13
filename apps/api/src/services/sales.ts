@@ -61,6 +61,15 @@ export type ReceiveSaleOpts = {
    * its credit leg is the advance, cleared by its own apply entry.
    */
   applyStoreCredit?: boolean;
+  /**
+   * Old-for-new exchange settlement: the caller buys VALUED old-gold worth
+   * this many cents from the customer in the SAME batch. The bill settles
+   * first from that store credit (recorded in store_credit_cents); the
+   * customer's real legs cover what the old gold does not, exactly. When the
+   * old gold is worth more than the bill no payment is taken and the surplus
+   * is returned by the caller's old-gold purchase entry, not here.
+   */
+  exchangeOldValueCents?: number;
 };
 
 type PayLeg = {
@@ -103,12 +112,12 @@ async function customerBalanceAllBranches(db: D1Database, customerId: string): P
   return row?.n ?? 0;
 }
 
-export async function receiveSale(
+export async function buildReceiveSaleStmts(
   db: D1Database,
   input: CreateSaleInput,
   actorId: string,
   opts: ReceiveSaleOpts = {}
-): Promise<{ invoiceId: string; number: string }> {
+): Promise<BuiltSale> {
   const now = Date.now();
   const branch = await db
     .prepare("SELECT id FROM branches WHERE id = ? AND is_active = 1")
@@ -242,7 +251,32 @@ export async function receiveSale(
   // are what is charged. Every change is still in the invoice and audit trail.
 
   const payTotal = input.payments.reduce((s, p) => s + lkrToCents(p.amountLkr), 0);
-  if (payTotal !== total)
+  // An exchange settles part of the bill from the old-gold value bought back
+  // in the same batch, so the real legs may fall short of the total by
+  // exactly that offset — and when the old gold is worth more than the bill,
+  // no payment is taken at all.
+  let exchangeOffsetCents = 0;
+  let exchangeSurplusCents = 0;
+  if (opts.exchangeOldValueCents !== undefined) {
+    const surplus = opts.exchangeOldValueCents - total;
+    if (surplus > 0) {
+      if (payTotal !== 0)
+        throw Object.assign(new Error("The old gold covers this bill — no payment is due"), {
+          code: "VALIDATION",
+        });
+      exchangeSurplusCents = surplus;
+      exchangeOffsetCents = total;
+    } else if (payTotal !== total - opts.exchangeOldValueCents) {
+      throw Object.assign(
+        new Error(
+          `Payments must sum to the difference (${centsToLkr(total - opts.exchangeOldValueCents).toLocaleString("en-US")} LKR)`
+        ),
+        { code: "VALIDATION" }
+      );
+    } else {
+      exchangeOffsetCents = opts.exchangeOldValueCents;
+    }
+  } else if (payTotal !== total)
     throw Object.assign(
       new Error(`Payments must sum to total (${total}c${taxTotal > 0 ? `, incl. ${taxTotal}c ${tax.label}` : ""})`),
       { code: "VALIDATION" }
@@ -252,20 +286,43 @@ export async function receiveSale(
   const payLegs = await resolvePayLegs(db, input.payments);
 
   // The credit leg is new debt on 1200 — unless the customer already holds
-  // store credit at this branch, which it draws down first.
-  const creditCents = payLegs.filter((p) => p.method === "credit").reduce((s, p) => s + p.amountCents, 0);
+  // store credit at this branch, which it draws down first. In an exchange
+  // the offset leg IS store credit, minted by the old-gold purchase entry in
+  // the same batch; it is not debt, so the credit limit reads only the legs
+  // the customer actually borrows.
+  const realCreditCents = input.payments
+    .filter((p) => p.method === "credit")
+    .reduce((s, p) => s + lkrToCents(p.amountLkr), 0);
   let storeCredit = 0;
-  if (creditCents > 0 && customer) {
+  if (opts.exchangeOldValueCents !== undefined) {
+    if (customer === null)
+      throw Object.assign(new Error("An exchange needs the customer the old gold belongs to"), {
+        code: "VALIDATION",
+      });
+    if (exchangeOffsetCents > 0)
+      payLegs.push({ method: "credit", amountCents: exchangeOffsetCents, accountCode: "1200", bankAccountId: null });
+    storeCredit = exchangeOffsetCents;
+    if (opts.enforceCreditLimit && realCreditCents > 0 && customer && customer.credit_limit_cents > 0) {
+      const owed = await customerBalanceAllBranches(db, customer.id);
+      if (owed + realCreditCents > customer.credit_limit_cents)
+        throw Object.assign(
+          new Error(
+            `${customer.name} would owe ${centsToLkr(owed + realCreditCents).toLocaleString("en-US")} LKR, over their ${centsToLkr(customer.credit_limit_cents).toLocaleString("en-US")} LKR credit limit`
+          ),
+          { code: "VALIDATION" }
+        );
+    }
+  } else if (realCreditCents > 0 && customer) {
     if (opts.applyStoreCredit !== false) {
       const branchBalance = await customerBalance(db, customer.id, input.branchId);
-      if (branchBalance < 0) storeCredit = Math.min(creditCents, -branchBalance);
+      if (branchBalance < 0) storeCredit = Math.min(realCreditCents, -branchBalance);
     }
     if (opts.enforceCreditLimit && customer.credit_limit_cents > 0) {
       const owed = await customerBalanceAllBranches(db, customer.id);
-      if (owed + creditCents > customer.credit_limit_cents)
+      if (owed + realCreditCents > customer.credit_limit_cents)
         throw Object.assign(
           new Error(
-            `${customer.name} would owe ${centsToLkr(owed + creditCents).toLocaleString("en-US")} LKR, over their ${centsToLkr(customer.credit_limit_cents).toLocaleString("en-US")} LKR credit limit`
+            `${customer.name} would owe ${centsToLkr(owed + realCreditCents).toLocaleString("en-US")} LKR, over their ${centsToLkr(customer.credit_limit_cents).toLocaleString("en-US")} LKR credit limit`
           ),
           { code: "VALIDATION" }
         );
@@ -441,8 +498,35 @@ export async function receiveSale(
     );
   }
   stmts.push(settlementStmt(db, invoiceId));
-  await db.batch(stmts);
-  return { invoiceId, number };
+  return { stmts, invoiceId, number, totalCents: total, exchangeOffsetCents, exchangeSurplusCents };
+}
+
+export type BuiltSale = {
+  /** The whole sale batch, unexecuted. Callers composing an exchange append their own statements and batch everything together. */
+  stmts: D1PreparedStatement[];
+  invoiceId: string;
+  number: string;
+  totalCents: number;
+  /** Store credit from the old gold that settled this bill (0 without an exchange). */
+  exchangeOffsetCents: number;
+  /** When the old gold is worth more than the bill: what the shop owes the customer, before the payout choice. */
+  exchangeSurplusCents: number;
+};
+
+/**
+ * A plain till sale: build the statements and run them as one batch. The
+ * exchange composes `buildReceiveSaleStmts` with its old-gold purchase
+ * statements instead, so both halves post atomically.
+ */
+export async function receiveSale(
+  db: D1Database,
+  input: CreateSaleInput,
+  actorId: string,
+  opts: ReceiveSaleOpts = {}
+): Promise<{ invoiceId: string; number: string }> {
+  const built = await buildReceiveSaleStmts(db, input, actorId, opts);
+  await db.batch(built.stmts);
+  return { invoiceId: built.invoiceId, number: built.number };
 }
 
 /**
@@ -819,6 +903,18 @@ export async function getSale(db: D1Database, id: string) {
     .prepare("SELECT r.id, r.number, i.id AS invoice_id, i.number AS invoice_number FROM sales_returns r JOIN sales_invoices i ON i.id = r.invoice_id WHERE r.exchange_sale_id = ?")
     .bind(id)
     .first();
+  // The old-for-new exchange this bill settled: the jewellery bought back in
+  // the same batch, with what the shop paid out in cash for it.
+  const { results: oldGoldExchange } = await db
+    .prepare(
+      `SELECT og.id, oi.id AS item_id, oi.number, oi.description, oi.fine_mg,
+              og.value_cents, og.paid_cents
+       FROM old_gold_purchases og JOIN old_gold_items oi ON oi.id = og.item_id
+       WHERE og.sales_invoice_id = ? ORDER BY oi.number`
+    )
+    .bind(id)
+    .all<{ id: string; item_id: string; number: string; description: string; fine_mg: number; value_cents: number; paid_cents: number }>();
+  const exchangeItems = oldGoldExchange ?? [];
   return {
     invoice: inv,
     items: items ?? [],
@@ -828,6 +924,13 @@ export async function getSale(db: D1Database, id: string) {
     returns: returns ?? [],
     returnedItemIds: (returnedItems ?? []).map((r) => r.invoice_item_id),
     exchangeOf: exchangeOf ?? null,
+    oldGoldExchange: exchangeItems.length
+      ? {
+          items: exchangeItems,
+          valueCents: exchangeItems.reduce((s, r) => s + r.value_cents, 0),
+          paidOutCents: exchangeItems.reduce((s, r) => s + r.paid_cents, 0),
+        }
+      : null,
   };
 }
 

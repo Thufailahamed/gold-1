@@ -71,6 +71,11 @@ Conventions: `id TEXT PK` (UUID), timestamps as INTEGER millis, FKs enforced.
 - `counters` += SINV, SRET.
 - `sales_invoices(id, number SINV-XXXX, customer_id NULL FK, branch_id FK, salesperson_id FK, subtotal_cents, discount_cents, total_cents, paid_cents, status, created_at, created_by)` + `sales_items(id, invoice_id FK, product_id FK, price_cents, discount_cents, cost_cents COGS snapshot)` + `sales_payments(id, invoice_id FK, amount_cents, method cash/card/bank/credit/other, ref, created_at, created_by)`.
 - `sales_returns(id, number SRET-XXXX, invoice_id FK, type FULL/PARTIAL/EXCHANGE, reason, approved_by NULL FK, refund_cents, credit_cents, exchange_sale_id NULL FK, status, created_at, created_by)` + `sales_return_items(return_id FK, product_id FK, invoice_item_id FK)`.
+- `old_gold_purchases.sales_invoice_id NULL FK` — set by an old-for-new exchange
+  (`POST /sales/exchanges`), which buys valued old gold and settles it against a new
+  sale in one atomic batch: the old-gold purchase entry pays the customer only the
+  surplus (`CR 1000`, or none when the payout is store credit) and the sale entry
+  takes the offset as a credit leg against the customer's party.
 - `gold_movements(id, product_id FK, direction IN/OUT, fine_mg, purity_permille, ref_entity, ref_id, branch_id, created_at, created_by)` — minimal outflow ledger; future gold module absorbs it.
 
 ## Purchases (migration `0009_purchases`)

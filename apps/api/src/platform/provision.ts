@@ -91,14 +91,17 @@ export function restCfClient(accountId: string, token: string, fetchFn?: typeof 
 
 /**
  * SQLite files hold many statements; the query API wants one per call.
- * Splits on semicolons outside `--` line comments and `'...'` literals
- * (migrations contain both — e.g. 0015's comments — but no triggers/views,
- * verified by the bundle test applying every statement).
+ * Splits on semicolons outside `--` line comments, `'...'` literals and
+ * trigger bodies. A `CREATE TRIGGER … BEGIN … END;` body holds semicolons of
+ * its own (0044, 0045), so BEGIN raises a depth that semicolons do not split
+ * until the matching END lowers it back to zero. A `CASE … END` without a
+ * BEGIN must not push the depth negative — END only lowers an open trigger.
  */
 export function splitMigration(sql: string): string[] {
   const out: string[] = [];
   let cur = "";
   let i = 0;
+  let depth = 0;
   const n = sql.length;
   while (i < n) {
     const ch = sql[i];
@@ -125,7 +128,17 @@ export function splitMigration(sql: string): string[] {
       i = j + 1;
       continue;
     }
-    if (ch === ";") {
+    if (ch !== undefined && /[A-Za-z_]/.test(ch)) {
+      let j = i;
+      while (j < n && /[A-Za-z0-9_]/.test(sql[j]!)) j += 1;
+      const word = sql.slice(i, j).toUpperCase();
+      if (word === "BEGIN") depth += 1;
+      else if (word === "END" && depth > 0) depth -= 1;
+      cur += sql.slice(i, j);
+      i = j;
+      continue;
+    }
+    if (ch === ";" && depth === 0) {
       if (cur.trim().length > 0) out.push(cur.trim());
       cur = "";
       i += 1;

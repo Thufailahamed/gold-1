@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   createReturnSchema,
   createSaleSchema,
+  exchangeSaleSchema,
   PERMISSIONS,
 } from "@goldos/shared";
 import type { Env } from "../db/client";
@@ -25,6 +26,7 @@ import {
   salesBreakdown,
   salesSummary,
 } from "../services/sales";
+import { exchangeSale as exchangeSaleService } from "../services/exchange";
 import { getTaxConfig } from "../services/taxes";
 import { buildCodeSvg, buildQrSvg } from "../services/label";
 import { pagination, serviceError } from "./http";
@@ -71,6 +73,29 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return serviceError(c, err);
     }
   })
+  // Old-for-new exchange: valued old gold bought back and settled against a
+  // new sale in one batch. It posts a purchase AND a sale, so both the till
+  // permission and the old-gold desk permission are required.
+  .post(
+    "/exchanges",
+    requirePerm(PERMISSIONS.SALES_CREATE),
+    requirePerm(PERMISSIONS.OLDGOLD_EDIT),
+    async (c) => {
+      const body = await c.req.json().catch(() => null);
+      const parsed = exchangeSaleSchema.safeParse(body);
+      if (!parsed.success)
+        return c.json(
+          { success: false, error: { code: "VALIDATION", message: "Invalid exchange data" } },
+          400
+        );
+      try {
+        const data = await exchangeSaleService(getShopDb(c), parsed.data, c.get("userId"));
+        return c.json({ success: true, data }, 201);
+      } catch (err) {
+        return serviceError(c, err);
+      }
+    }
+  )
   // Type-to-find at the till: name, tag, SKU, category or karat.
   .get("/catalog", requirePerm(PERMISSIONS.SALES_CREATE), async (c) => {
     const branchId = c.req.query("branchId");

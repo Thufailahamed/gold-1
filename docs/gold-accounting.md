@@ -43,6 +43,7 @@ Every transaction posts itself. Nothing is keyed twice:
 | Purchase payment | DR 2000 / CR 1000 or 1010 |
 | Purchase void | a **reversal** of the receive, linked, not a mirror |
 | Old-gold purchase | DR 1100 value / CR 1000 paid + CR 1200 remainder *(customer)* |
+| Old-for-new exchange | the old-gold purchase entry above with the offset as the remainder (cash only when the old gold wins) **+** the sale entry with the offset as a credit leg against the customer — one atomic batch, linked by `old_gold_purchases.sales_invoice_id`; the customer's 1200 balance nets to zero unless the surplus was left as store credit |
 | Melting loss | DR 5100 / CR 1100, at book cost |
 | Manufacturing finish | DR 1100 extras / CR 2200 (or 1000/1010 when paid on the spot) · DR 5200 loss / CR 1100 |
 | Gold adjustment | DR 5300 / CR 1100 for a loss, the reverse for a surplus |

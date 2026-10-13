@@ -8,6 +8,7 @@ import { api, type MeData } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import {
   ArchiveIcon,
+  ArrowLeftRightIcon,
   BookOpenIcon,
   CoinsIcon,
   CreditCardIcon,
@@ -23,12 +24,13 @@ import {
 } from "./icons";
 
 type IconCmp = (props: { size?: number | string; className?: string }) => React.ReactNode;
-export type ModulePage = { href: string; label: string; icon: IconCmp; perm: string };
+export type ModulePage = { href: string; label: string; icon: IconCmp; perm: string; /** A second permission the page needs (e.g. an exchange posts a sale AND an old-gold purchase). */ alsoPerm?: string };
 
 export const OLD_GOLD_PAGES: ModulePage[] = [
   { href: "/old-gold", label: "Overview", icon: GaugeIcon, perm: "oldgold:view" },
   { href: "/old-gold/intake", label: "Intake", icon: ScaleIcon, perm: "oldgold:create" },
   { href: "/old-gold/testing", label: "Testing", icon: FlaskConicalIcon, perm: "oldgold:edit" },
+  { href: "/old-gold/exchange", label: "Exchange", icon: ArrowLeftRightIcon, perm: "oldgold:edit", alsoPerm: "sales:create" },
   { href: "/old-gold/items", label: "Items", icon: ArchiveIcon, perm: "oldgold:view" },
   { href: "/old-gold/reports", label: "Reports", icon: TrendingUpIcon, perm: "oldgold:view" },
 ];
@@ -72,7 +74,9 @@ export function ModuleNav({ label, pages }: { label: string; pages: ModulePage[]
   const pathname = usePathname();
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
   const perms = me.data?.permissions ?? [];
-  const visible = pages.filter((p) => !me.data || hasPermission(perms, p.perm));
+  const visible = pages.filter(
+    (p) => !me.data || (hasPermission(perms, p.perm) && (!p.alsoPerm || hasPermission(perms, p.alsoPerm)))
+  );
   const root = pages[0]?.href;
 
   const isActive = (href: string) =>
