@@ -1,5 +1,6 @@
 import { DAY_MS, PLATFORM_SETTING_DEFAULTS } from "@goldos/shared";
 import type { Env } from "../../db/client";
+import { RestD1 } from "../../db/rest-d1";
 import { buildPlatformAudit, fail, getPlatformSettings, randomToken, sha256Hex, type Actor } from "../core";
 import { loadTenant } from "./tenants";
 
@@ -155,22 +156,16 @@ export async function housekeeping(db: D1Database, now = Date.now()) {
 
 /* ------------------------------------------------------------------ Usage */
 
-function isD1(x: unknown): x is D1Database {
-  return typeof x === "object" && x !== null && typeof (x as { prepare?: unknown }).prepare === "function";
-}
-
 /**
- * Finds the data-plane database for an account: `tenants.data_plane` names a
- * D1 binding on this worker (e.g. "DB_KANDY"); the account in TENANT_ID is
- * served by the default DB binding. Anything else is not reachable from here.
+ * Shop handle for background work (usage collection, console refresh): the
+ * test seam first, then a REST handle when secrets exist, else unreachable.
+ * Replaces the old binding-based resolveDataPlane.
  */
-export function resolveDataPlane(env: Env, tenant: { id: string; data_plane: string | null }): D1Database | null {
-  if (tenant.data_plane) {
-    const b = (env as unknown as Record<string, unknown>)[tenant.data_plane];
-    if (isD1(b)) return b;
-  }
-  if (env.TENANT_ID && env.TENANT_ID === tenant.id) return env.DB;
-  return null;
+export function shopHandleFor(env: Env, d1Id: string): D1Database | null {
+  const injected = (env as unknown as { TEST_HANDLES?: Record<string, D1Database> }).TEST_HANDLES?.[d1Id];
+  if (injected) return injected;
+  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_D1_API_TOKEN) return null;
+  return new RestD1(env.CLOUDFLARE_ACCOUNT_ID, d1Id, env.CLOUDFLARE_D1_API_TOKEN) as unknown as D1Database;
 }
 
 export async function snapshotUsage(pdb: D1Database, data: D1Database, tenantId: string, now = Date.now()) {
@@ -199,13 +194,13 @@ export async function snapshotUsage(pdb: D1Database, data: D1Database, tenantId:
 
 export async function collectAllUsage(pdb: D1Database, env: Env) {
   const { results } = await pdb
-    .prepare("SELECT id, data_plane FROM tenants WHERE status != 'ARCHIVED'")
-    .all<{ id: string; data_plane: string | null }>();
+    .prepare("SELECT t.id AS id, d.d1_id AS d1_id FROM tenants t LEFT JOIN tenant_databases d ON d.tenant_id = t.id WHERE t.status != 'ARCHIVED'")
+    .all<{ id: string; d1_id: string | null }>();
   let collected = 0;
   let unreachable = 0;
   const errors: Array<{ tenantId: string; message: string }> = [];
   for (const t of results ?? []) {
-    const data = resolveDataPlane(env, t);
+    const data = t.d1_id ? shopHandleFor(env, t.d1_id) : null;
     if (!data) {
       unreachable++;
       continue;

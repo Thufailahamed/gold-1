@@ -18,10 +18,10 @@ import { serviceError } from "../../routes/http";
 import { requirePlatformAuth, requirePlatformPerm } from "../auth";
 import type { PlatformEnv } from "../core";
 import { randomToken } from "../core";
-import { provisionShop, retryProvision } from "../provision";
+import { provisionShop, purgeTenantWithDatabase, retryProvision } from "../provision";
 import { actor, csv, ok, page, parseBody } from "../http";
 import { listInvoices } from "../services/billing";
-import { createImpersonation, listActiveImpersonations, listImpersonations, listPlatformAudit, resolveDataPlane, revokeAllImpersonations, revokeImpersonation, snapshotUsage } from "../services/ops";
+import { createImpersonation, listActiveImpersonations, listImpersonations, listPlatformAudit, revokeAllImpersonations, revokeImpersonation, shopHandleFor, snapshotUsage } from "../services/ops";
 import {
   applyDiscount,
   cancelSubscription,
@@ -42,7 +42,6 @@ import {
   getTenantDetail,
   listTenants,
   loadTenant,
-  purgeTenant,
   restoreTenant,
   setFlagOverride,
   suspendTenant,
@@ -260,9 +259,10 @@ export const platformTenants = new Hono<PlatformEnv>()
   .post("/:id/usage/refresh", requirePlatformPerm(P.TENANTS_VIEW), async (c) => {
     try {
       const t = await loadTenant(c.get("pdb"), c.req.param("id"));
-      const data = resolveDataPlane(c.env, t);
+      const row = await c.get("pdb").prepare("SELECT d1_id FROM tenant_databases WHERE tenant_id = ?").bind(t.id).first<{ d1_id: string }>();
+      const data = row ? shopHandleFor(c.env, row.d1_id) : null;
       if (!data)
-        return c.json({ success: false, error: { code: "CONFLICT", message: "This account's data plane is not reachable from this worker" } }, 409);
+        return c.json({ success: false, error: { code: "CONFLICT", message: "This account's shop database is not reachable from here" } }, 409);
       return ok(c, await snapshotUsage(c.get("pdb"), data, t.id));
     } catch (e) {
       return serviceError(c, e);
@@ -290,7 +290,7 @@ export const platformTenants = new Hono<PlatformEnv>()
     const p = await parseBody(c, platformReasonSchema);
     if (!p.ok) return p.res;
     try {
-      return ok(c, await purgeTenant(c.get("pdb"), c.req.param("id"), p.data.reason, actor(c)));
+      return ok(c, await purgeTenantWithDatabase(c.env, c.get("pdb"), c.req.param("id"), p.data.reason, actor(c)));
     } catch (e) {
       return serviceError(c, e);
     }

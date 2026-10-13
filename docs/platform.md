@@ -129,7 +129,9 @@ Every run, cron or manual, is recorded in `job_runs` and shown on System health.
 wrangler d1 create goldos-platform            # paste id into wrangler.toml
 pnpm --filter goldos-api platform:migrate:remote
 wrangler secret put PLATFORM_BOOTSTRAP_TOKEN
-# set TENANT_ID in [vars] once the shop's account exists
+wrangler secret put CLOUDFLARE_ACCOUNT_ID     # SaaS auto-provisioning
+wrangler secret put CLOUDFLARE_D1_API_TOKEN   # SaaS auto-provisioning
+# set TENANT_ID in [vars] only for a legacy pinned single-shop worker
 ```
 
 Local: `pnpm --filter goldos-api platform:migrate:local`, then
@@ -138,7 +140,17 @@ Local: `pnpm --filter goldos-api platform:migrate:local`, then
 ## Not built yet
 
 - Card gateway (Stripe/PayHere) and automated emails (invoices, dunning, trial reminders).
-- Public self-serve sign-up (the `signup_enabled` setting is reserved for it).
-- Automatic provisioning of a new D1 per account and routing requests to it.
-  Today an account's data plane is bound by config (`TENANT_ID` / `data_plane`).
-- Storage metering (R2 usage reports 0) and the actual purge of archived data.
+- Hot-path query coalescing (tenant DBs are reached over the D1 REST API).
+- Storage metering (R2 usage reports 0).
+
+## How multi-shop works (v1)
+
+- Signup (`/signup`) creates the tenant (14-day trial) and a dedicated D1
+  with all 43 shop migrations plus the owner and HQ branch — one Worker
+  serves every shop, reached per request via `goldos_tenant` → `tenant_databases`.
+- Login (`/login`) looks the email up in `tenant_members`, picks the shop,
+  and checks the password against that shop only. Same email may own N shops.
+- Shops pay by bank transfer: `/billing` uploads the slip, staff approve in
+  `/platform` Billing → Bank slips (full-amount only in v1).
+- Staff console shows each account's D1 id, retry-provisioning, receipts,
+  suspend/impersonate. Purge deletes the shop D1 first, then the rows.

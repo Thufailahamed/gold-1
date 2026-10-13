@@ -307,8 +307,11 @@ export async function getTenantDetail(db: D1Database, id: string) {
     : null;
 
   const { tags_json, ...rest } = tenant;
+  const database = await db.prepare("SELECT d1_id, d1_name FROM tenant_databases WHERE tenant_id = ?").bind(id).first<{ d1_id: string; d1_name: string }>();
   return {
     tenant: { ...rest, tags: parseJsonArray(tags_json) },
+    database: database ? { d1Id: database.d1_id, d1Name: database.d1_name } : null,
+    provisioning: database ? "ready" : "pending",
     subscription: sub ? { ...sub, mrr_cents: mrrOf(sub) } : null,
     plan: plan ? { ...plan, features: parseJsonArray(plan.features_json) } : null,
     usage,
@@ -574,6 +577,8 @@ export async function purgeTenant(db: D1Database, id: string, reason: string, ac
   stmts.push(
     db.prepare("DELETE FROM tenant_notes WHERE tenant_id = ?").bind(id),
     db.prepare("DELETE FROM tenant_feature_overrides WHERE tenant_id = ?").bind(id),
+    db.prepare("DELETE FROM tenant_databases WHERE tenant_id = ?").bind(id),
+    db.prepare("DELETE FROM tenant_members WHERE tenant_id = ?").bind(id),
     db.prepare("DELETE FROM usage_snapshots WHERE tenant_id = ?").bind(id),
     db.prepare("DELETE FROM impersonation_grants WHERE tenant_id = ?").bind(id),
     db.prepare("DELETE FROM support_messages WHERE ticket_id IN (SELECT id FROM support_tickets WHERE tenant_id = ?)").bind(id),

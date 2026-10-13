@@ -27,9 +27,9 @@ import { InvoiceTable, ManualInvoiceDialog, type InvoiceRow } from "@/components
 import { F } from "@/components/platform/dialogs";
 import { InvoiceDrawer } from "@/components/platform/invoice-drawer";
 import { cn } from "@/lib/cn";
-import { can, date, dateTime, money, papi, titleCase, usePlatformMe } from "@/lib/platform";
+import { can, date, dateTime, money, papi, pdownload, titleCase, usePlatformMe } from "@/lib/platform";
 
-type Tab = "invoices" | "payments" | "coupons";
+type Tab = "invoices" | "payments" | "coupons" | "receipts";
 
 function BillingInner() {
   const params = useSearchParams();
@@ -88,10 +88,19 @@ function BillingInner() {
           { key: "invoices", label: "Invoices", icon: <CoinsIcon size={14} />, count: summary.data?.total || null },
           { key: "payments", label: "Payments", icon: <CoinsIcon size={14} /> },
           { key: "coupons", label: "Coupons", icon: <PercentIcon size={14} /> },
+          { key: "receipts", label: "Bank slips", icon: <CoinsIcon size={14} /> },
         ]}
       />
 
-      {tab === "invoices" ? <InvoicesTab initialOverdue={params.get("overdue") === "1"} /> : tab === "payments" ? <PaymentsTab /> : <CouponsTab />}
+      {tab === "invoices" ? (
+        <InvoicesTab initialOverdue={params.get("overdue") === "1"} />
+      ) : tab === "payments" ? (
+        <PaymentsTab />
+      ) : tab === "receipts" ? (
+        <ReceiptsTab />
+      ) : (
+        <CouponsTab />
+      )}
 
       {manual ? <ManualInvoicePicker onClose={() => setManual(false)} /> : null}
       {cycle ? (
@@ -162,6 +171,127 @@ function InvoicesTab({ initialOverdue }: { initialOverdue: boolean }) {
 }
 
 type PaymentRow = { id: string; amount_cents: number; method: string; reference: string | null; received_at: number; invoice_number: string; invoice_id: string; currency: string; tenant_name: string; tenant_id: string; recorded_by: string | null };
+
+type SlipRow = {
+  id: string;
+  tenant_id: string;
+  tenant_slug: string;
+  tenant_name: string;
+  invoice_id: string;
+  invoice_number: string;
+  amount_cents: number;
+  bank_ref: string | null;
+  status: string;
+  created_at: number;
+};
+
+function ReceiptsTab() {
+  const qc = useQueryClient();
+  const me = usePlatformMe();
+  const [status, setStatus] = useState("PENDING");
+  const [rejectId, setRejectId] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
+  const q = useQuery({ queryKey: ["p-receipts", status], queryFn: () => papi<{ rows: SlipRow[]; total: number }>(`/billing/receipts?status=${status}`) });
+  const rows = q.data?.rows ?? [];
+  const manage = can(me.data, P.BILLING_MANAGE);
+  const done = (msg: string) => {
+    toast.success(msg);
+    qc.invalidateQueries({ queryKey: ["p-receipts"] });
+    qc.invalidateQueries({ queryKey: ["p-invoices"] });
+  };
+  const act = useMutation({
+    mutationFn: ({ id, action, body }: { id: string; action: "approve" | "reject"; body?: unknown }) =>
+      papi(`/billing/receipts/${id}/${action}`, { method: "POST", json: body ?? {} }),
+    onSuccess: (_, v) => {
+      setRejectId(null);
+      setReason("");
+      done(v.action === "approve" ? "Payment recorded" : "Slip rejected");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Action failed"),
+  });
+  return (
+    <TableCard
+      footer={
+        <div className="flex gap-1">
+          {["PENDING", "APPROVED", "REJECTED"].map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatus(s)}
+              className={cn("rounded-lg px-3 py-1.5 text-xs font-medium", status === s ? "bg-ink text-paper" : "text-ink-4 hover:bg-ink/5")}
+            >
+              {titleCase(s)}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      {q.isLoading ? (
+        <TableSkeleton rows={6} cols={6} />
+      ) : rows.length === 0 ? (
+        <EmptyBlock title={status === "PENDING" ? "No slips waiting" : `No ${status.toLowerCase()} slips`} />
+      ) : (
+        <table className="g-table">
+          <thead>
+            <tr>
+              <th>Uploaded</th>
+              <th>Account</th>
+              <th>Invoice</th>
+              <th className="!text-right">Amount</th>
+              <th>Reference</th>
+              <th className="!text-right">Decision</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id}>
+                <td className="whitespace-nowrap text-ink-3">{dateTime(r.created_at)}</td>
+                <td>
+                  <Link href={`/platform/tenants/${r.tenant_id}`} className="hover:underline">
+                    {r.tenant_name}
+                  </Link>
+                </td>
+                <td className="font-mono text-xs font-semibold">{r.invoice_number}</td>
+                <td className="num text-right font-semibold">{money(r.amount_cents)}</td>
+                <td className="text-ink-3">{r.bank_ref ?? "—"}</td>
+                <td className="text-right">
+                  <span className="mr-2 inline-flex gap-2">
+                    <button onClick={() => pdownload(`/billing/receipts/${r.id}/download`, `slip-${r.invoice_number}`).catch((e) => toast.error(e instanceof Error ? e.message : "Download failed"))} className="text-xs underline underline-offset-2">
+                      View
+                    </button>
+                    {manage && r.status === "PENDING" ? (
+                      <>
+                        <button onClick={() => act.mutate({ id: r.id, action: "approve" })} disabled={act.isPending} className="text-xs font-medium text-emerald-700 underline underline-offset-2">
+                          Approve
+                        </button>
+                        <button onClick={() => setRejectId(r.id)} className="text-xs font-medium text-rose-700 underline underline-offset-2">
+                          Reject
+                        </button>
+                      </>
+                    ) : null}
+                  </span>
+                  {rejectId === r.id ? (
+                    <form
+                      className="mt-2 flex gap-2"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        act.mutate({ id: r.id, action: "reject", body: { reason } });
+                      }}
+                    >
+                      <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for the shop" className="min-w-0 flex-1 rounded-lg px-2 py-1 text-xs ring-1 ring-ink/15" />
+                      <button type="submit" disabled={act.isPending || reason.trim().length < 3} className="text-xs font-medium text-rose-700 underline underline-offset-2">
+                        Send
+                      </button>
+                    </form>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </TableCard>
+  );
+}
 
 function PaymentsTab() {
   const [page, setPage] = useState(1);

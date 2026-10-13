@@ -21,6 +21,11 @@ ASSISTANT_VISION_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct"
 
 # Secrets (never in this file):
 #   wrangler secret put PLATFORM_BOOTSTRAP_TOKEN   # one-time: creates the first super admin
+#   wrangler secret put CLOUDFLARE_ACCOUNT_ID      # SaaS: auto-creates one D1 per signup
+#   wrangler secret put CLOUDFLARE_D1_API_TOKEN    # SaaS: API token with D1 edit rights
+# Selling? Workers Paid is required past 10 databases (Free caps at 10).
+# Set WEB_ORIGIN to the app origin (https://app.<domain>,http://localhost:3000)
+# once the domain is live — shop cookies are SameSite=None; Secure.
 
 [[d1_databases]]
 binding = "DB"

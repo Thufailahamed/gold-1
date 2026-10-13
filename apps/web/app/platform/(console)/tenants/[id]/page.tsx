@@ -95,6 +95,8 @@ type Detail = {
   events: Array<{ id: string; type: string; from_status: string | null; to_status: string | null; mrr_delta_cents: number; reason: string | null; created_at: number; from_plan: string | null; to_plan: string | null }>;
   flags: Array<{ key: string; description: string; override: boolean | null; enabled: boolean; source: string }>;
   openTickets: number;
+  database: { d1Id: string; d1Name: string } | null;
+  provisioning: "ready" | "pending";
 };
 
 type Tab = "overview" | "subscription" | "billing" | "features" | "notes" | "support" | "activity" | "profile";
@@ -320,6 +322,8 @@ function OverviewTab({ d, onRefreshUsage }: { d: Detail; onRefreshUsage: () => v
         )}
       </Panel>
 
+      <ProvisioningPanel d={d} onDone={onRefreshUsage} />
+
       <Panel className="lg:col-span-3" title="Lifecycle" description="Every subscription change, newest first" icon={<HistoryIcon size={16} />}>
         {d.events.length === 0 ? (
           <p className="text-sm text-ink-4">No events.</p>
@@ -369,6 +373,73 @@ function HealthBadge({ d }: { d: Detail }) {
   if (d.tenant.status !== "ACTIVE" || d.balance.overdue_cents > 0) return <Pill tone="danger" dot>At risk</Pill>;
   if (idleDays > 14 || (d.usage && d.usage.sales_30d === 0)) return <Pill tone="warning" dot>Drifting</Pill>;
   return <Pill tone="success" dot>Healthy</Pill>;
+}
+
+function ProvisioningPanel({ d, onDone }: { d: Detail; onDone: () => void }) {
+  const me = usePlatformMe();
+  const [open, setOpen] = useState(false);
+  const [ownerEmail, setOwnerEmail] = useState(d.tenant.owner_email);
+  const [tempPassword, setTempPassword] = useState("");
+  const retry = useMutation({
+    mutationFn: () =>
+      papi(`/tenants/${d.tenant.id}/retry-provision`, {
+        method: "POST",
+        json: { ownerEmail, tempPassword },
+      }),
+    onSuccess: () => {
+      toast.success("Shop database re-provisioned");
+      setOpen(false);
+      setTempPassword("");
+      onDone();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Retry failed"),
+  });
+  const manage = can(me.data, P.TENANTS_MANAGE);
+  return (
+    <Panel
+      title="Shop database"
+      description="One isolated D1 per shop, created automatically at signup"
+      icon={<GaugeIcon size={16} />}
+      actions={
+        d.provisioning === "pending" && manage ? (
+          <button onClick={() => setOpen(true)} className="g-btn g-btn-secondary h-8 px-3 text-xs">
+            Retry provisioning
+          </button>
+        ) : undefined
+      }
+    >
+      <DetailList
+        items={[
+          { label: "Status", value: d.provisioning === "ready" ? <Pill tone="success" dot>Ready</Pill> : <Pill tone="warning" dot>Pending</Pill> },
+          ...(d.database
+            ? [
+                { label: "D1 id", value: <span className="font-mono text-xs">{d.database.d1Id}</span> },
+                { label: "D1 name", value: <span className="font-mono text-xs">{d.database.d1Name}</span> },
+              ]
+            : [{ label: "Database", value: <span className="text-ink-4">Not created yet</span> }]),
+        ]}
+      />
+      {open ? (
+        <form
+          className="mt-4 space-y-2 border-t border-ink/[0.07] pt-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            retry.mutate();
+          }}
+        >
+          <F label="Owner email">
+            <input value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} className={cn(controlClass, "w-full")} />
+          </F>
+          <F label="Temporary password (10+ characters, shown once)">
+            <input value={tempPassword} onChange={(e) => setTempPassword(e.target.value)} className={cn(controlClass, "w-full")} />
+          </F>
+          <button type="submit" disabled={retry.isPending} className="g-btn g-btn-primary h-9 px-4 text-xs">
+            {retry.isPending ? "Re-provisioning…" : "Destroy and re-provision"}
+          </button>
+        </form>
+      ) : null}
+    </Panel>
+  );
 }
 
 /* ------------------------------------------------------------------ Subscription */

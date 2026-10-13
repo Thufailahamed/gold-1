@@ -1,7 +1,8 @@
 import type { Env } from "../db/client";
 import { SHOP_MIGRATIONS } from "../db/shop-migrations";
 import { hashPassword } from "../services/hash";
-import { loadTenant } from "./services/tenants";
+import { loadTenant, purgeTenant } from "./services/tenants";
+import type { Actor } from "./core";
 
 /**
  * In-worker tenant provisioning: one D1 per shop, created over the Cloudflare
@@ -241,4 +242,34 @@ function chunks<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
+}
+
+/**
+ * Full erasure of an ARCHIVED account: the shop D1 is deleted first (so a
+ * failed delete aborts before any row is touched), then the control-plane
+ * rows via purgeTenant. Accounts without a shop database only purge rows.
+ */
+export async function purgeTenantWithDatabase(
+  env: Env,
+  pdb: D1Database,
+  tenantId: string,
+  reason: string,
+  actor: Actor,
+  client?: CfClient
+): Promise<{ purged: string; d1Deleted: boolean }> {
+  const mapping = await pdb.prepare("SELECT d1_id FROM tenant_databases WHERE tenant_id = ?").bind(tenantId).first<{ d1_id: string }>();
+  let d1Deleted = false;
+  if (mapping) {
+    const cf =
+      client ??
+      ((!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_D1_API_TOKEN)
+        ? (() => {
+            throw Object.assign(new Error("Shop database credentials are not configured; delete the D1 in the Cloudflare dashboard, remove its tenant_databases row, and purge again"), { code: "CONFLICT", status: 409 });
+          })()
+        : restCfClient(env.CLOUDFLARE_ACCOUNT_ID, env.CLOUDFLARE_D1_API_TOKEN));
+    await cf.deleteDatabase(mapping.d1_id);
+    d1Deleted = true;
+  }
+  await purgeTenant(pdb, tenantId, reason, actor);
+  return { purged: tenantId, d1Deleted };
 }
