@@ -14,7 +14,14 @@ import {
   PLATFORM_PERMISSIONS,
   PLATFORM_ROLES,
   platformPermissionsFor,
+  publicSignupSchema,
+  RECEIPT_MAX_BYTES,
+  RECEIPT_MIME,
+  receiptUploadSchema,
   rolloutBucket,
+  SAAS_SLUG_BLOCKLIST,
+  shopLoginSchema,
+  shopLookupSchema,
   totpCode,
   verifyTotp,
 } from "./platform";
@@ -173,5 +180,74 @@ describe("schemas", () => {
   it("requires a target for non-global announcements", () => {
     expect(announcementSchema.safeParse({ title: "t", body: "b", audience: "TENANT" }).success).toBe(false);
     expect(announcementSchema.safeParse({ title: "t", body: "b", audience: "ALL" }).success).toBe(true);
+  });
+});
+
+describe("public SaaS signup", () => {
+  const base = {
+    shopName: "Kandy Gold House",
+    slug: "kandy-gold",
+    ownerName: "Amara Perera",
+    ownerEmail: "owner@kandygold.lk",
+    password: "correct-horse-10",
+    planId: "plan-starter",
+    interval: "MONTH",
+  };
+  it("rejects slugs outside the public shape", () => {
+    expect(publicSignupSchema.safeParse({ ...base, slug: "Admin!" }).success).toBe(false);
+    expect(publicSignupSchema.safeParse({ ...base, slug: "AB" }).success).toBe(false);
+    expect(publicSignupSchema.safeParse({ ...base, slug: "kandy-gold" }).success).toBe(true);
+  });
+  it("fills SaaS defaults (LK shop, 14-day trial comes from the plan)", () => {
+    const parsed = publicSignupSchema.safeParse(base);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.country).toBe("LK");
+      expect(parsed.data.currency).toBe("LKR");
+      expect(parsed.data.timezone).toBe("Asia/Colombo");
+      expect(parsed.data.interval).toBe("MONTH");
+    }
+  });
+  it("rejects short passwords", () => {
+    expect(publicSignupSchema.safeParse({ ...base, password: "short-1" }).success).toBe(false);
+  });
+  it("blocklists infrastructure slugs", () => {
+    for (const s of SAAS_SLUG_BLOCKLIST) {
+      expect(s).toMatch(/^[a-z0-9-]+$/);
+    }
+    expect(SAAS_SLUG_BLOCKLIST).toContain("admin");
+    expect(SAAS_SLUG_BLOCKLIST).toContain("signup");
+  });
+});
+
+describe("shop lookup and login", () => {
+  it("lookup takes an email only", () => {
+    expect(shopLookupSchema.safeParse({ email: "owner@kandygold.lk" }).success).toBe(true);
+    expect(shopLookupSchema.safeParse({ email: "not-an-email" }).success).toBe(false);
+  });
+  it("login requires a shop slug", () => {
+    expect(
+      shopLoginSchema.safeParse({ email: "owner@kandygold.lk", password: "x".repeat(10), slug: "kandy-gold" }).success
+    ).toBe(true);
+    expect(
+      shopLoginSchema.safeParse({ email: "owner@kandygold.lk", password: "x".repeat(10) }).success
+    ).toBe(false);
+  });
+});
+
+describe("receipt upload", () => {
+  it("caps size at 5MB with png/jpg/pdf only", () => {
+    expect(RECEIPT_MAX_BYTES).toBe(5 * 1024 * 1024);
+    expect([...RECEIPT_MIME].sort()).toEqual(["application/pdf", "image/jpeg", "image/png"]);
+  });
+  it("requires an invoice and caps the bank reference", () => {
+    expect(
+      receiptUploadSchema.safeParse({ invoiceId: "123e4567-e89b-12d3-a456-426614174000", bankRef: "DEP-1" }).success
+    ).toBe(true);
+    expect(receiptUploadSchema.safeParse({ invoiceId: "not-a-uuid" }).success).toBe(false);
+    expect(
+      receiptUploadSchema.safeParse({ invoiceId: "123e4567-e89b-12d3-a456-426614174000", bankRef: "x".repeat(121) })
+        .success
+    ).toBe(false);
   });
 });

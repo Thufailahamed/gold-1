@@ -577,3 +577,56 @@ export async function verifyTotp(secretB32: string, code: string, at: number): P
   }
   return false;
 }
+
+/* ------------------------------------------------------------------ Public SaaS (single-domain self-serve) */
+
+/** Slugs the public signup may never claim — infrastructure and auth paths. */
+export const SAAS_SLUG_BLOCKLIST = ["admin", "api", "platform", "support", "login", "signup", "billing"] as const;
+
+/** Bank-slip uploads: 5MB cap, scans and PDFs only. Enforced before any R2 write. */
+export const RECEIPT_MAX_BYTES = 5 * 1024 * 1024;
+export const RECEIPT_MIME = ["image/png", "image/jpeg", "application/pdf"] as const;
+
+const publicSlug = z
+  .string()
+  .min(3)
+  .max(30)
+  .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, "Lowercase letters, digits and dashes");
+
+/**
+ * Self-serve signup. Trial length is NOT an input — it comes from the plan's
+ * `trial_days` (14 on starter/growth). Staff override via `createTenantSchema.trialDays`.
+ */
+export const publicSignupSchema = z.object({
+  shopName: z.string().trim().min(2).max(120),
+  slug: publicSlug,
+  ownerName: z.string().trim().min(1).max(100),
+  ownerEmail: z.string().email(),
+  password: z.string().min(10).max(200),
+  phone: z.string().trim().max(40).optional(),
+  country: z.string().trim().length(2).default("LK"),
+  currency: z.string().trim().length(3).default("LKR"),
+  timezone: z.string().trim().max(60).default("Asia/Colombo"),
+  planId: z.string().min(1),
+  interval: z.enum(BILLING_INTERVALS).default("MONTH"),
+});
+export type PublicSignupInput = z.infer<typeof publicSignupSchema>;
+
+/** First step of shop-picker login: which shops know this email. Slugs only, no oracle. */
+export const shopLookupSchema = z.object({ email: z.string().email() });
+export type ShopLookupInput = z.infer<typeof shopLookupSchema>;
+
+/** Second step: password checked against exactly one shop's database. */
+export const shopLoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+  slug: publicSlug,
+});
+export type ShopLoginInput = z.infer<typeof shopLoginSchema>;
+
+/** One slip pays one invoice in full (v1) — partials are rejected with a message. */
+export const receiptUploadSchema = z.object({
+  invoiceId: z.string().uuid(),
+  bankRef: z.string().trim().max(120).optional(),
+});
+export type ReceiptUploadInput = z.infer<typeof receiptUploadSchema>;
