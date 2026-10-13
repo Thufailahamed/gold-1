@@ -139,4 +139,19 @@ describe.skipIf(!sqliteAvailable)("request hardening over real SQLite", () => {
       expect(again.headers.get("idempotent-replayed")).toBe("true");
     });
   });
+
+  describe("cors preflight", () => {
+    it("allows the shop-picker header cross-origin", async () => {
+      const res = await app.request("/api/v1/auth/lookup", {
+        method: "OPTIONS",
+        headers: {
+          origin: "http://localhost:3000",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "content-type, x-shop-slug",
+        },
+      }, env);
+      expect(res.status).toBe(204);
+      expect(res.headers.get("access-control-allow-headers") ?? "").toMatch(/x-shop-slug/i);
+    });
+  });
 });
