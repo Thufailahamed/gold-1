@@ -207,4 +207,18 @@ describe.skipIf(!sqliteAvailable)("in-worker provisioning", () => {
       expect((seen[0]!.init.headers as Record<string, string>).Authorization).toBe("Bearer tok-1");
     });
   });
+
+  it("applies SQL through /query with a batch body", async () => {
+    const seen: Array<{ url: string; init: RequestInit }> = [];
+    const fetchFn = (async (url: string, init: RequestInit) => {
+      seen.push({ url, init });
+      return { ok: true, json: async () => ({ success: true, result: [{ success: true }] }) } as Response;
+    }) as unknown as typeof fetch;
+    const client = restCfClient("acct-1", "tok-1", fetchFn);
+    await client.applySql("d1-x", [{ sql: "INSERT INTO a (id) VALUES (?)", params: ["1"] }]);
+    expect(seen[0]!.url).toBe("https://api.cloudflare.com/client/v4/accounts/acct-1/d1/database/d1-x/query");
+    expect(JSON.parse(seen[0]!.init.body as string)).toEqual({
+      batch: [{ sql: "INSERT INTO a (id) VALUES (?)", params: ["1"] }],
+    });
+  });
 });

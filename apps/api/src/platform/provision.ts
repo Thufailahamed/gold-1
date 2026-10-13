@@ -67,12 +67,12 @@ export function restCfClient(accountId: string, token: string, fetchFn?: typeof 
       return { id: json.result.uuid, name: json.result.name };
     },
     async applySql(d1Id: string, queries: CfQuery[]) {
-      // The batch endpoint takes one roundtrip per chunk.
+      // Batches go to /query with {batch: [...]} — there is no /batch path.
       for (const chunk of chunks(queries, 25)) {
-        const res = (await call(`${CF_BASE}/accounts/${accountId}/d1/database/${d1Id}/batch`, {
+        const res = (await call(`${CF_BASE}/accounts/${accountId}/d1/database/${d1Id}/query`, {
           method: "POST",
           headers,
-          body: JSON.stringify({ queries: chunk.map((q) => ({ sql: q.sql, params: q.params ?? [] })) }),
+          body: JSON.stringify({ batch: chunk.map((q) => ({ sql: q.sql, params: q.params ?? [] })) }),
         })) as Response;
         if (!res.ok) await fail(res, "D1 migrate");
         const json = (await res.json()) as { success: boolean };

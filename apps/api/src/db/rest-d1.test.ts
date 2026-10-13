@@ -47,11 +47,11 @@ describe("RestD1 transport", () => {
 
   it("runs writes and batches in one call", async () => {
     const seen: string[] = [];
-    const { fetcher, calls } = mockFetch((url) => {
+    const bodies: unknown[] = [];
+    const { fetcher, calls } = mockFetch((url, init) => {
       seen.push(url);
-      return url.endsWith("/batch")
-        ? { success: true, result: [{ success: true, meta: {} }, { success: true, meta: {} }] }
-        : { success: true, result: [{ success: true, meta: { changes: 1 } }] };
+      bodies.push(JSON.parse((init as RequestInit).body as string));
+      return { success: true, result: [{ success: true, meta: { changes: 1 } }] };
     });
     const db = new RestD1("acct-1", "d1-1", "tok", fetcher);
     const r = await db.prepare("UPDATE sessions SET expires_at = ? WHERE id = ?").bind(9, "s").run();
@@ -61,7 +61,14 @@ describe("RestD1 transport", () => {
       db.prepare("INSERT INTO a (id) VALUES (?)").bind("2"),
     ]);
     expect(calls).toHaveLength(2);
-    expect(seen[1]).toBe(`${BASE}/accounts/acct-1/d1/database/d1-1/batch`);
+    // The D1 REST API has no /batch endpoint: batches go to /query.
+    expect(seen[1]).toBe(`${BASE}/accounts/acct-1/d1/database/d1-1/query`);
+    expect(bodies[1]).toEqual({
+      batch: [
+        { sql: "INSERT INTO a (id) VALUES (?)", params: ["1"] },
+        { sql: "INSERT INTO a (id) VALUES (?)", params: ["2"] },
+      ],
+    });
   });
 
   it("surfaces API errors instead of inventing rows", async () => {

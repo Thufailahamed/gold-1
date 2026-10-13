@@ -90,12 +90,12 @@ export class RestD1 {
     return stmt;
   }
 
-  /** One roundtrip for many writes — mirrors D1 batch semantics. */
+  /** Batch over the same /query endpoint ({batch: [...]} — there is no /batch path). */
   async batch(stmts: Array<{ sql: string; params: unknown[] }>): Promise<Array<{ success: boolean }>> {
-    const res = await this.fetcher(`${this.url}/batch`, {
+    const res = await this.fetcher(`${this.url}/query`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ queries: stmts.map((s) => ({ sql: s.sql, params: s.params.map((x) => (x === undefined ? null : x)) })) }),
+      body: JSON.stringify({ batch: stmts.map((s) => ({ sql: s.sql, params: s.params.map((x) => (x === undefined ? null : x)) })) }),
     });
     const json = (await (res as Response).json()) as QueryResponse;
     if (!json.success || !json.result) {
