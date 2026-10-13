@@ -39,10 +39,14 @@ export class RestD1 {
   private token: string;
   private fetcher: typeof fetch;
 
-  constructor(accountId: string, databaseId: string, token: string, fetcher: typeof fetch = fetch) {
+  constructor(accountId: string, databaseId: string, token: string, fetcher?: typeof fetch) {
     this.url = `${D1_API_BASE}/accounts/${accountId}/d1/database/${databaseId}`;
     this.token = token;
-    this.fetcher = fetcher;
+    // Never capture the global fetch: Workers throws "Illegal invocation"
+    // when fetch is called off any reference but globalThis. Resolve it per
+    // call so the invocation stays globalThis.fetch(...).
+    this.fetcher =
+      fetcher ?? ((...args: Parameters<typeof fetch>) => (globalThis.fetch as typeof fetch)(...args));
   }
 
   prepare(sql: string): RestStatement {

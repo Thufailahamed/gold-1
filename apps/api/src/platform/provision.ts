@@ -38,7 +38,9 @@ export type CfClient = {
 const CF_BASE = "https://api.cloudflare.com/client/v4";
 
 /** Live Cloudflare client. Tests inject a sqlite-backed fake instead. */
-export function restCfClient(accountId: string, token: string, fetchFn: typeof fetch = fetch): CfClient {
+export function restCfClient(accountId: string, token: string, fetchFn?: typeof fetch): CfClient {
+  // Same Workers rule as RestD1: never capture the global fetch.
+  const call = fetchFn ?? ((...args: Parameters<typeof fetch>) => (globalThis.fetch as typeof fetch)(...args));
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
   const fail = async (res: Response, what: string): Promise<never> => {
     let message = `${what} failed`;
@@ -54,7 +56,7 @@ export function restCfClient(accountId: string, token: string, fetchFn: typeof f
   };
   return {
     async createDatabase(name: string) {
-      const res = (await fetchFn(`${CF_BASE}/accounts/${accountId}/d1/database`, {
+      const res = (await call(`${CF_BASE}/accounts/${accountId}/d1/database`, {
         method: "POST",
         headers,
         body: JSON.stringify({ name }),
@@ -67,7 +69,7 @@ export function restCfClient(accountId: string, token: string, fetchFn: typeof f
     async applySql(d1Id: string, queries: CfQuery[]) {
       // The batch endpoint takes one roundtrip per chunk.
       for (const chunk of chunks(queries, 25)) {
-        const res = (await fetchFn(`${CF_BASE}/accounts/${accountId}/d1/database/${d1Id}/batch`, {
+        const res = (await call(`${CF_BASE}/accounts/${accountId}/d1/database/${d1Id}/batch`, {
           method: "POST",
           headers,
           body: JSON.stringify({ queries: chunk.map((q) => ({ sql: q.sql, params: q.params ?? [] })) }),
@@ -78,7 +80,7 @@ export function restCfClient(accountId: string, token: string, fetchFn: typeof f
       }
     },
     async deleteDatabase(d1Id: string) {
-      const res = (await fetchFn(`${CF_BASE}/accounts/${accountId}/d1/database/${d1Id}`, {
+      const res = (await call(`${CF_BASE}/accounts/${accountId}/d1/database/${d1Id}`, {
         method: "DELETE",
         headers,
       })) as Response;

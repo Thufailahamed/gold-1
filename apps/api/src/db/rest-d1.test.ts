@@ -69,4 +69,21 @@ describe("RestD1 transport", () => {
     const db = new RestD1("acct-1", "d1-1", "tok", fetcher);
     await expect(db.prepare("SELECT 1").first()).rejects.toThrow(/no such table/);
   });
+
+  it("resolves the global fetch per call (Workers-safe, no captured reference)", async () => {
+    const db = new RestD1("acct-1", "d1-1", "tok");
+    const seen: string[] = [];
+    const realFetch = globalThis.fetch;
+    (globalThis as Record<string, unknown>).fetch = (async (url: string) => {
+      seen.push(String(url));
+      return { ok: true, json: async () => ({ success: true, result: [{ results: [{ n: 1 }], success: true, meta: {} }] }) } as Response;
+    }) as typeof fetch;
+    try {
+      // Stub installed AFTER construction: a captured reference would miss it.
+      expect(await db.prepare("SELECT 1").first<{ n: number }>("n")).toBe(1);
+      expect(seen[0]).toContain("/accounts/acct-1/d1/database/d1-1/query");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
 });
