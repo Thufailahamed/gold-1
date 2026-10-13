@@ -36,8 +36,8 @@ export type MonthlyReport = {
   warnings: string[];
 };
 
-/** Business "today" (Sri Lanka, UTC+5:30) as YYYY-MM-DD. */
-export const businessToday = (): string => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+/** Business "today" as YYYY-MM-DD, on the shop's clock. */
+export { businessToday } from "./format";
 
 /** First and last calendar day of a YYYY-MM month. */
 export function monthBounds(ym: string): { from: string; to: string; days: number } {

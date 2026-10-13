@@ -29,6 +29,7 @@ import {
   XIcon,
 } from "@/components/icons";
 import { api, formApi, type MeData } from "@/lib/api";
+import { businessToday } from "@/lib/busclock";
 import { SparklesIcon } from "@/components/icons";
 
 type BillScan = {
@@ -71,7 +72,7 @@ type Expense = {
 };
 
 const fmt = (c: number) => (c / 100).toLocaleString("en-US");
-const todayStr = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+const todayStr = businessToday;
 
 function rangeFor(key: string): { from: string; to: string } {
   const t = todayStr();

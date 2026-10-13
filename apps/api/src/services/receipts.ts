@@ -1,13 +1,13 @@
 import { agingBuckets, allocateReceipt, type CustomerReceiptInput, type OpenInvoice } from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
-import { businessDateFor } from "./busdate";
+import { businessDateFor, LOCAL_DAY } from "./busdate";
 import { fail } from "./cashbank";
 import { buildEntryStmts, reverseEntry } from "./journal";
 
 const RECEIVABLES = "1200";
 const CASH = "1000";
 const CARD_CLEARING = "1020";
-const LOCAL_DATE = (col: string) => `date(${col}/1000,'unixepoch','+330 minutes')`;
+const LOCAL_DATE = LOCAL_DAY;
 
 /**
  * A delivered custom order carries its advance into the sale as a 'credit'

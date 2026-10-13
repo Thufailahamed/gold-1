@@ -1,7 +1,8 @@
 import { agingBuckets } from "@goldos/shared";
+import { LOCAL_DAY } from "./busdate";
 
 const PAYABLES = "2000";
-const LOCAL_DATE = (col: string) => `date(${col}/1000,'unixepoch','+330 minutes')`;
+const LOCAL_DATE = LOCAL_DAY;
 
 type Aging = { "0-30": number; "31-60": number; "61-90": number; "90+": number };
 

@@ -236,6 +236,37 @@ name a branch** — a branchless entry belongs to no branch's day, so it can
 never be counted in one. `POST /accounts/adjustments` therefore requires
 `branchId`.
 
+### …and is backed by a trigger (migration `0044_day_lock_trigger`)
+
+`buildEntryStmts` reads `day_closings` before its batch runs, so a posting
+saved in the same instant as the close could pass the read and commit after
+it. `trg_journal_day_lock` aborts any `journal_entries` insert dated on a
+`CLOSED` branch-day *inside* the writing transaction, with `DAY_CLOSED`; the
+error handler answers it as 409 `TRANSITION_LOCKED`. The close's own Cash
+Short & Over correction is inserted before its close row turns `CLOSED`, so it
+passes. From the other side, `closeDay` counts the day's entries before
+building its report and its batch rolls back (409 `CONFLICT`) if that count
+moved, so the frozen report always matches the ledger it locked.
+
+### Gold is locked too (migration `0045_gold_day_lock`)
+
+Gold-only movements (melting, manufacturing, stock transfers) post no journal
+entry, so the journal lock never saw them. `trg_gold_day_lock` aborts any
+`gold_ledger` row whose shop-local date is `CLOSED` at a branch it touches:
+its `branch_id`, or `branch:<id>` in `source`/`destination` (so a transfer
+into a closed branch-day is refused at dispatch). `postGoldStmts` makes the
+same check first, so callers get a named refusal and the intake backfill
+reports closed-day rows as skipped instead of failing its whole batch. The
+close's change guard counts these gold rows alongside journal entries.
+
+### Shop-local days follow `business_tz_offset_minutes`
+
+Every SQL day boundary uses `LOCAL_DAY` / `TZ_MODIFIER_SQL` from
+`services/busdate.ts`, which reads the `business_tz_offset_minutes` setting
+(default 330) — the same setting `businessDateFor` uses — instead of a
+hardcoded `+330 minutes`. `/auth/me` returns `tzOffsetMinutes`, and the web and
+mobile apps set their "today" from it.
+
 ## Later-phase reservations (not yet created)
 
 - Gold ledger: gross/stone/net weight, purity, karat, fine-gold equiv, rate,

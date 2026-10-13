@@ -156,7 +156,8 @@ export async function heldGoldMg(db: D1Database, branchId?: string): Promise<num
 }
 
 /** Local business date for an epoch-millis column, for day-scoped gold checks. */
-export const LOCAL_DAY = (col: string) => `date(${col} / 1000, 'unixepoch', '+330 minutes')`;
+export { LOCAL_DAY } from "./busdate";
+import { LOCAL_DAY } from "./busdate";
 
 export async function reconcile(
   db: D1Database,

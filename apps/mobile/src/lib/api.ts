@@ -251,6 +251,7 @@ export type MeData = {
   user: { id: string; email: string; name: string };
   permissions: string[];
   branchIds: string[];
+  tzOffsetMinutes?: number;
 };
 
 export type LoginData = {

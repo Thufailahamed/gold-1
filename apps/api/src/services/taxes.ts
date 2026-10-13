@@ -1,6 +1,6 @@
 import type { TaxConfigInput, TaxPaymentInput } from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
-import { businessDateFor } from "./busdate";
+import { businessDateFor, LOCAL_DAY } from "./busdate";
 import { fail } from "./cashbank";
 import { buildEntryStmts } from "./journal";
 import { moneyAccount } from "./receipts";
@@ -133,7 +133,7 @@ export async function taxReport(
     )
     .bind(opts.from, opts.to, ...bv)
     .all<{ date: string; outputCents: number; refundedCents: number }>();
-  const LOCAL = (col: string) => `date(${col}/1000,'unixepoch','+330 minutes')`;
+  const LOCAL = LOCAL_DAY;
   const sb = opts.branchId ? " AND si.branch_id = ?" : "";
   const sales = await db
     .prepare(

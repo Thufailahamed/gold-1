@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type MeData } from "./api";
 import { clearTenant } from "./tenant";
+import { setShopOffsetMinutes } from "./busclock";
 
 export function useSession() {
   const [me, setMe] = useState<MeData | null>(null);
@@ -12,7 +13,10 @@ export function useSession() {
 
   useEffect(() => {
     api<MeData>("/api/v1/auth/me")
-      .then(setMe)
+      .then((m) => {
+        setShopOffsetMinutes(m.tzOffsetMinutes);
+        setMe(m);
+      })
       .catch(() => router.replace("/login"))
       .finally(() => setLoading(false));
   }, [router]);

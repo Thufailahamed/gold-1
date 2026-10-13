@@ -11,7 +11,7 @@ import { businessDateFor } from "./busdate";
 import { buildAuditStmt } from "../middleware/audit";
 import { fail } from "./cashbank";
 import { batchOrConflict, staleGuard } from "./guard";
-import { LOCAL_DAY, reconcile } from "./reconcile";
+import { LOCAL_DAY, reconcile, type ReconcileReport } from "./reconcile";
 
 const CASH = "1000";
 const CARD_CLEARING = "1020";
@@ -199,7 +199,7 @@ async function goldSummary(db: D1Database, branchId: string, date: string): Prom
 
 export async function buildClosingReport(
   db: D1Database,
-  opts: { branchId: string; date: string }
+  opts: { branchId: string; date: string; recon?: ReconcileReport }
 ): Promise<ClosingReport> {
   const { branchId, date } = opts;
   if (!isBusinessDate(date)) fail("VALIDATION", `${date} is not a real date`);
@@ -301,7 +301,8 @@ export async function buildClosingReport(
           .all<{ account_code: string; net: number }>();
         return results ?? [];
       })(),
-      reconcile(db, { date, branchId }),
+      // The survey has usually just run this; it is the heaviest query set here.
+      opts.recon ?? reconcile(db, { date, branchId }),
     ]);
 
   const bankTotal = bankResult.reduce((s: number, r: { net: number }) => s + (r.net ?? 0), 0);
@@ -419,6 +420,10 @@ export async function closeDay(
     .bind(input.branchId)
     .first();
   if (!branch) fail("NOT_FOUND", "Branch not found");
+  // Taken BEFORE the report, so anything posted to the day while the report
+  // is built (or while this request waits to commit) makes the close roll
+  // back rather than freeze figures that no longer match the ledger.
+  const entriesSeen = await dayEntryCount(db, input.branchId, input.date);
   const report = await buildClosingReport(db, {
     branchId: input.branchId,
     date: input.date,
@@ -498,8 +503,14 @@ export async function closeDay(
   const cardActual = input.cardTerminalCents ?? null;
   const frozen: ClosingReport = {
     ...report,
-    closing: { ...report.closing, differenceCents, reasonRequired: differenceCents !== 0 },
+    closing: { ...report.closing, differenceCents, reasonRequired: differenceCents !== 0 || cardDifference !== 0 },
   };
+  // First in the batch: before the correction adds its own entry to the day.
+  const unchanged = db
+    .prepare(
+      `SELECT json('day-changed-while-closing') WHERE (${DAY_ROWS_SQL}) <> ?`
+    )
+    .bind(...dayRowsBinds(input.branchId, input.date), entriesSeen);
   // A reopened day closes by UPDATING its row, never by inserting a second
   // one (the unique index would 500). The prior snapshot survives in the
   // audit trail's prev_json, and the reopen trail in day_reopens is untouched.
@@ -511,6 +522,7 @@ export async function closeDay(
     await batchOrConflict(
       db,
       [
+        unchanged,
         ...(correction?.stmts ?? []),
         db
           .prepare(
@@ -554,12 +566,13 @@ export async function closeDay(
           branchId: input.branchId,
         }),
       ],
-      "This day was just closed by someone else — refresh"
+      CHANGED_WHILE_CLOSING
     );
     return { id, report: frozen };
   }
   try {
     await db.batch([
+      unchanged,
       ...(correction?.stmts ?? []),
       db
         .prepare(
@@ -609,9 +622,30 @@ export async function closeDay(
     // (branch, date) index. Say so, rather than surface a raw database error.
     if (err instanceof Error && /UNIQUE|constraint/i.test(err.message))
       fail("CONFLICT", "This day was just closed by someone else — refresh");
+    if (err instanceof Error && /malformed JSON/i.test(err.message)) fail("CONFLICT", CHANGED_WHILE_CLOSING);
     throw err;
   }
   return { id, report: frozen };
+}
+
+const CHANGED_WHILE_CLOSING =
+  "The day changed while it was being closed (a posting landed, or someone else closed it) — review the figures and close again";
+
+/**
+ * Everything the frozen report is built from that can only grow: the day's
+ * journal entries at the branch (reversals add entries, never remove them),
+ * and the gold rows touching the branch on that shop-local day.
+ */
+const DAY_ROWS_SQL = `(SELECT COUNT(*) FROM journal_entries WHERE branch_id = ? AND entry_date = ?)
+  + (SELECT COUNT(*) FROM gold_ledger WHERE (branch_id = ? OR source = ? OR destination = ?) AND ${LOCAL_DAY("occurred_at")} = ?)`;
+const dayRowsBinds = (branchId: string, date: string) => [branchId, date, branchId, `branch:${branchId}`, `branch:${branchId}`, date];
+
+async function dayEntryCount(db: D1Database, branchId: string, date: string): Promise<number> {
+  const row = await db
+    .prepare(`SELECT ${DAY_ROWS_SQL} AS n`)
+    .bind(...dayRowsBinds(branchId, date))
+    .first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 async function priorCorrection(db: D1Database, closingId: string): Promise<number> {

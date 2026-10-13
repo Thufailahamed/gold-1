@@ -23,6 +23,7 @@ import {
   StoreIcon,
 } from "@/components/icons";
 import { api, downloadCsv, type MeData } from "@/lib/api";
+import { businessToday } from "@/lib/busclock";
 import { DayChip, InvestigatePanel, SummaryPanel, UnclosedPanel, VariancePanel, dayInputCls, diffTone, fmt, signed } from "./panels";
 import { AutoCloseModal, surveyParams, type AutoCloseResult, type DaySurvey } from "./auto-close";
 
@@ -71,7 +72,7 @@ type Closing = {
 
 type TabKey = "close" | "investigate" | "unclosed" | "variance" | "summary";
 
-const today = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+const today = businessToday;
 const toCentsOrNull = (v: string) => (v === "" ? null : Math.round(Number(v) * 100));
 
 const shiftDay = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);

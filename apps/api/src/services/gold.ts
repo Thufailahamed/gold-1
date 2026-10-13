@@ -1,6 +1,6 @@
-import { fineGoldMg, goldValueCents } from "@goldos/shared";
+import { businessDate, fineGoldMg, goldValueCents } from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
-import { businessDateFor } from "./busdate";
+import { businessDateFor, tzOffsetMinutes } from "./busdate";
 import { buildEntryStmts } from "./journal";
 import { currentGoldRatesCents } from "./rates";
 import type { PageOpts } from "./catalog";
@@ -38,6 +38,40 @@ export type GoldEntry = {
   notes?: string;
 };
 
+/**
+ * A closed day is closed for gold as well as money: its frozen report holds
+ * the branch's gold balance, and a melt or transfer landing on it afterwards
+ * would make that record disagree with the ledger. A row touches every branch
+ * it names — its own, and either end of a transfer — so each must be open on
+ * the row's shop-local date. Migration 0045 enforces the same rule inside the
+ * write; this check is what gives callers (and the backfill's skip list) a
+ * readable refusal first.
+ */
+async function assertGoldDaysOpen(
+  db: D1Database,
+  entries: { occurredAt?: number; branchId?: string; source: string; destination: string }[],
+  now: number
+): Promise<void> {
+  const offset = await tzOffsetMinutes(db);
+  const seen = new Set<string>();
+  for (const e of entries) {
+    const date = businessDate(e.occurredAt ?? now, offset);
+    const branches = [e.branchId, ...[e.source, e.destination].filter((x) => x.startsWith("branch:")).map((x) => x.slice(7))];
+    for (const b of branches) {
+      if (!b || seen.has(`${b}|${date}`)) continue;
+      seen.add(`${b}|${date}`);
+      const locked = await db
+        .prepare(
+          "SELECT COALESCE(br.name, d.branch_id) AS name FROM day_closings d LEFT JOIN branches br ON br.id = d.branch_id WHERE d.branch_id = ? AND d.close_date = ? AND d.status = 'CLOSED'"
+        )
+        .bind(b, date)
+        .first<{ name: string }>();
+      if (locked)
+        throw Object.assign(new Error(`The day ${date} is closed at ${locked.name}`), { code: "TRANSITION_LOCKED" });
+    }
+  }
+}
+
 export async function postGoldStmts(
   db: D1Database,
   entries: GoldEntry[],
@@ -58,6 +92,7 @@ export async function postGoldStmts(
       throw Object.assign(new Error("Invalid weight/purity"), { code: "VALIDATION" });
   }
   const now = Date.now();
+  await assertGoldDaysOpen(db, entries.map((e) => ({ ...e, branchId: e.branchId ?? opts.branchId })), now);
   const stmts = entries.map((e) => {
     const fineMg = Math.round((e.weightMg * e.permille) / 1000);
     return db

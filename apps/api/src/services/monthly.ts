@@ -1,5 +1,6 @@
 import { agingBuckets, cashflowClose, goldClose, KNOWN_CASH_REFS, monthBounds, monthlyPnl } from "@goldos/shared";
 import { APPLIED_ADVANCE_SQL } from "./receipts";
+import { LOCAL_DAY } from "./busdate";
 
 export type AgingBuckets = { "0-30": number; "31-60": number; "61-90": number; "90+": number };
 
@@ -124,10 +125,10 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
   const staff = opts.staffId ? " AND si.salesperson_id=?" : "";
   const staffv: unknown[] = opts.staffId ? [opts.staffId] : [];
   const grossRow = await db.prepare(
-    `SELECT COALESCE(SUM(si.total_cents - si.tax_cents),0) AS g, COUNT(*) AS c FROM sales_invoices si WHERE si.status<>'VOID' AND date(si.created_at/1000,'unixepoch','+330 minutes')>=? AND date(si.created_at/1000,'unixepoch','+330 minutes')<=?${sib}${staff}`
+    `SELECT COALESCE(SUM(si.total_cents - si.tax_cents),0) AS g, COUNT(*) AS c FROM sales_invoices si WHERE si.status<>'VOID' AND ${LOCAL_DAY("si.created_at")}>=? AND ${LOCAL_DAY("si.created_at")}<=?${sib}${staff}`
   ).bind(from, to, ...sibv, ...staffv).first<{ g: number; c: number }>();
   const retRow = await db.prepare(
-    `SELECT COALESCE(SUM(sr.refund_cents+sr.credit_cents-sr.tax_cents),0) AS r FROM sales_returns sr JOIN sales_invoices si2 ON si2.id=sr.invoice_id WHERE sr.status='COMPLETE' AND date(sr.created_at/1000,'unixepoch','+330 minutes')>=? AND date(sr.created_at/1000,'unixepoch','+330 minutes')<=?`
+    `SELECT COALESCE(SUM(sr.refund_cents+sr.credit_cents-sr.tax_cents),0) AS r FROM sales_returns sr JOIN sales_invoices si2 ON si2.id=sr.invoice_id WHERE sr.status='COMPLETE' AND ${LOCAL_DAY("sr.created_at")}>=? AND ${LOCAL_DAY("sr.created_at")}<=?`
   ).bind(from, to).first<{ r: number }>();
   const grossCents = grossRow?.g ?? 0;
   const returnsCents = retRow?.r ?? 0;
@@ -147,7 +148,7 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
   const warnings: string[] = [];
   const slug = opts.branchId ? `branch:${opts.branchId}` : null;
   async function goldSum(dirCol: "source" | "destination", f: string, t: string, before: boolean): Promise<number> {
-    const cmp = before ? `<?` : `>=? AND date(occurred_at/1000,'unixepoch','+330 minutes')<=?`;
+    const cmp = before ? `<?` : `>=? AND ${LOCAL_DAY("occurred_at")}<=?`;
     // Placeholder order is the slug first (when present), then the dates —
     // the bind array must follow the same order.
     const like = slug
@@ -155,7 +156,7 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
       : (dirCol === "destination" ? `${dirCol} LIKE 'branch:%'` : `${dirCol} LIKE 'branch:%'`);
     const vals: unknown[] = before ? (slug ? [slug, f] : [f]) : slug ? [slug, f, t] : [f, t];
     const row = await db.prepare(
-      `SELECT COALESCE(SUM(fine_mg),0) AS n FROM gold_ledger WHERE ${like} AND date(occurred_at/1000,'unixepoch','+330 minutes')${cmp}`
+      `SELECT COALESCE(SUM(fine_mg),0) AS n FROM gold_ledger WHERE ${like} AND ${LOCAL_DAY("occurred_at")}${cmp}`
     ).bind(...vals).first<{ n: number }>();
     return row?.n ?? 0;
   }
@@ -167,7 +168,7 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
   const { closingMg: closingFineMg } = goldClose(openingFineMg, gIn, gOut);
   const goldFineMg = await (async () => {
     const row = await db.prepare(
-      `SELECT COALESCE(SUM(fine_mg),0) AS n FROM gold_ledger WHERE type IN ('PURCHASE','OLD_GOLD_PURCHASE') AND date(occurred_at/1000,'unixepoch','+330 minutes')>=? AND date(occurred_at/1000,'unixepoch','+330 minutes')<=?${slug ? " AND destination=?" : ""}`
+      `SELECT COALESCE(SUM(fine_mg),0) AS n FROM gold_ledger WHERE type IN ('PURCHASE','OLD_GOLD_PURCHASE') AND ${LOCAL_DAY("occurred_at")}>=? AND ${LOCAL_DAY("occurred_at")}<=?${slug ? " AND destination=?" : ""}`
     ).bind(...(slug ? [from, to, slug] : [from, to])).first<{ n: number }>();
     return row?.n ?? 0;
   })();
@@ -225,13 +226,13 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
   const siB2 = opts.branchId ? " AND si.branch_id = ?" : "";
   const siB2v: unknown[] = opts.branchId ? [opts.branchId] : [];
   const { results: sinvs } = await db.prepare(
-    `SELECT si.id, si.number, si.total_cents, date(si.created_at/1000,'unixepoch','+330 minutes') AS d,
-            COALESCE((SELECT SUM(sp.amount_cents) FROM sales_payments sp WHERE sp.invoice_id = si.id AND sp.method <> 'credit' AND date(sp.created_at/1000,'unixepoch','+330 minutes') <= ?), 0)
+    `SELECT si.id, si.number, si.total_cents, ${LOCAL_DAY("si.created_at")} AS d,
+            COALESCE((SELECT SUM(sp.amount_cents) FROM sales_payments sp WHERE sp.invoice_id = si.id AND sp.method <> 'credit' AND ${LOCAL_DAY("sp.created_at")} <= ?), 0)
             + COALESCE((SELECT SUM(a.amount_cents) FROM customer_receipt_allocations a JOIN customer_receipts r ON r.id = a.receipt_id WHERE a.invoice_id = si.id AND r.status = 'POSTED' AND r.receipt_date <= ?), 0)
             + ${APPLIED_ADVANCE_SQL}
             + COALESCE((SELECT SUM(rl.credit_cents) FROM sales_returns sr JOIN journal_entries re ON re.id = sr.journal_entry_id JOIN journal_lines rl ON rl.entry_id = re.id AND rl.account_code = '1200' WHERE sr.invoice_id = si.id AND re.entry_date <= ?), 0)
             + si.store_credit_cents AS paid
-     FROM sales_invoices si WHERE si.status <> 'VOID' AND date(si.created_at/1000,'unixepoch','+330 minutes') <= ?${siB2}`
+     FROM sales_invoices si WHERE si.status <> 'VOID' AND ${LOCAL_DAY("si.created_at")} <= ?${siB2}`
   ).bind(to, to, to, to, ...siB2v).all<{ id: string; number: string; total_cents: number; d: string; paid: number }>();
   const receivablesOut = (sinvs ?? []).map((r) => ({ id: r.id, number: r.number, date: r.d, totalCents: r.total_cents, outstandingCents: r.total_cents - r.paid })).filter((r) => r.outstandingCents > 0);
   const receivablesAging = agingBuckets(to, receivablesOut.map((r) => ({ id: r.id, date: r.date, outstandingCents: r.outstandingCents })));
@@ -247,9 +248,9 @@ export async function buildMonthlyReport(db: D1Database, opts: { month: number; 
   const piB = opts.branchId ? " AND pi.branch_id = ?" : "";
   const piBv: unknown[] = opts.branchId ? [opts.branchId] : [];
   const { results: pinvs } = await db.prepare(
-    `SELECT pi.id, pi.number, pi.total_cents, date(pi.created_at/1000,'unixepoch','+330 minutes') AS d,
-            COALESCE((SELECT SUM(pp.amount_cents) FROM purchase_payments pp WHERE pp.invoice_id = pi.id AND date(pp.created_at/1000,'unixepoch','+330 minutes') <= ?), 0) AS paid
-     FROM purchase_invoices pi WHERE pi.status <> 'VOID' AND date(pi.created_at/1000,'unixepoch','+330 minutes') <= ?${piB}`
+    `SELECT pi.id, pi.number, pi.total_cents, ${LOCAL_DAY("pi.created_at")} AS d,
+            COALESCE((SELECT SUM(pp.amount_cents) FROM purchase_payments pp WHERE pp.invoice_id = pi.id AND ${LOCAL_DAY("pp.created_at")} <= ?), 0) AS paid
+     FROM purchase_invoices pi WHERE pi.status <> 'VOID' AND ${LOCAL_DAY("pi.created_at")} <= ?${piB}`
   ).bind(to, to, ...piBv).all<{ id: string; number: string; total_cents: number; d: string; paid: number }>();
   const payablesOut = (pinvs ?? []).map((r) => ({ id: r.id, number: r.number, date: r.d, totalCents: r.total_cents, outstandingCents: r.total_cents - r.paid })).filter((r) => r.outstandingCents > 0);
   const payablesAging = agingBuckets(to, payablesOut.map((r) => ({ id: r.id, date: r.date, outstandingCents: r.outstandingCents })));

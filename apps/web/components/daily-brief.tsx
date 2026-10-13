@@ -7,6 +7,7 @@ import { hasPermission } from "@goldos/shared";
 import { SparklesIcon } from "@/components/icons";
 import { api, type MeData } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { shopDateTime } from "@/lib/busclock";
 
 type Finding = { id: string; severity: "alert" | "warn" | "info"; branchId: string; branch: string; title: string; detail: string };
 type Brief = {
@@ -32,8 +33,7 @@ function fixHref(id: string): string | null {
   return null;
 }
 
-const when = (ms: number) =>
-  new Date(ms + 330 * 60_000).toISOString().slice(0, 16).replace("T", " ");
+const when = shopDateTime;
 
 /**
  * The end-of-day brief on the Accounts overview. The findings are computed

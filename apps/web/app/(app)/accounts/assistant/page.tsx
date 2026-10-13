@@ -34,6 +34,7 @@ import {
 } from "@/components/icons";
 import { Markdown } from "@/components/markdown";
 import { cn } from "@/lib/cn";
+import { shopOffsetMs } from "@/lib/busclock";
 import { useAccountsScope } from "@/lib/accounts";
 import {
   assistantApi,
@@ -45,17 +46,15 @@ import {
 } from "@/lib/assistant";
 
 const MAX_CHARS = 4000;
-/** Shop time (UTC+05:30), the same clock the books and the assistant use. */
-const SHOP_OFFSET_MS = 330 * 60_000;
 const ACTION_TTL_MS = 30 * 60_000;
 
 type IconCmp = (p: { size?: number | string; className?: string }) => ReactNode;
 
-const shopDate = (ms: number) => new Date(ms + SHOP_OFFSET_MS).toISOString().slice(0, 10);
-const shopTime = (ms: number) => new Date(ms + SHOP_OFFSET_MS).toISOString().slice(11, 16);
-const shopHour = (ms: number) => new Date(ms + SHOP_OFFSET_MS).getUTCHours();
+const shopDate = (ms: number) => new Date(ms + shopOffsetMs()).toISOString().slice(0, 10);
+const shopTime = (ms: number) => new Date(ms + shopOffsetMs()).toISOString().slice(11, 16);
+const shopHour = (ms: number) => new Date(ms + shopOffsetMs()).getUTCHours();
 const longDay = (ms: number) =>
-  new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(ms + SHOP_OFFSET_MS));
+  new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(ms + shopOffsetMs()));
 
 function greeting(ms: number): string {
   const h = shopHour(ms);
@@ -586,7 +585,7 @@ function CommandBar({
 /** Today: the time. Earlier: the day and month. */
 function stamp(ms: number, now: number): string {
   if (shopDate(ms) === shopDate(now)) return shopTime(ms);
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(ms + SHOP_OFFSET_MS));
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(ms + shopOffsetMs()));
 }
 
 function groupSessions(rows: ConversationSummary[], now: number): { label: string; rows: ConversationSummary[] }[] {

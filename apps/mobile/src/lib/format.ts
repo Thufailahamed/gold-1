@@ -98,8 +98,14 @@ export function greeting(): string {
   return "Good evening";
 }
 
-/** Business "today" (Sri Lanka, UTC+5:30) as YYYY-MM-DD. */
-export const businessToday = (): string => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+/** The shop's UTC offset, from /auth/me; UTC+05:30 until the session loads. */
+let shopOffsetMinutes = 330;
+export function setShopOffsetMinutes(m: number | undefined): void {
+  if (typeof m === "number" && Number.isFinite(m)) shopOffsetMinutes = m;
+}
+
+/** Business "today" as YYYY-MM-DD, on the shop's clock (the same date the books use). */
+export const businessToday = (): string => new Date(Date.now() + shopOffsetMinutes * 60_000).toISOString().slice(0, 10);
 
 /** YYYY-MM-DD for a local Date. */
 export const isoDate = (d: Date) =>

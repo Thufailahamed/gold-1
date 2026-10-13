@@ -52,6 +52,7 @@ export type MeData = {
   permissions: string[];
   branchIds: string[];
   tenant: { id: string; slug: string; name: string } | null;
+  tzOffsetMinutes?: number;
 };
 
 /**

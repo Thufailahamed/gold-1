@@ -1,7 +1,7 @@
 import { addDays, denominationTotalCents, type CloseDayInput } from "@goldos/shared";
 import { buildClosingReport, closeDay, type ClosingReport, type ClosingRow } from "./dayclose";
 import { closingReportCsv, investigateDay, listUnclosedDays, type DayInvestigation } from "./dayreports";
-import { tzOffsetMinutes } from "./busdate";
+import { businessDateFor, tzOffsetMinutes } from "./busdate";
 import { PdfDoc, type Rgb } from "./pdf";
 import { reconcile, type CheckResult } from "./reconcile";
 
@@ -124,7 +124,7 @@ function frozenReport(json: string): ClosingReport {
  */
 export async function surveyDay(db: D1Database, input: SurveyInput): Promise<DaySurvey> {
   const { branchId, date } = input;
-  const [branch, closing, tz] = await Promise.all([
+  const [branch, closing, tz, today] = await Promise.all([
     db.prepare("SELECT name FROM branches WHERE id = ?").bind(branchId).first<{ name: string }>(),
     db
       .prepare(
@@ -133,17 +133,20 @@ export async function surveyDay(db: D1Database, input: SurveyInput): Promise<Day
       .bind(branchId, date)
       .first<ClosingRow & { closer: string | null }>(),
     tzOffsetMinutes(db),
+    businessDateFor(db, Date.now()),
   ]);
   const closed = closing?.status === "CLOSED";
   const status: DaySurvey["status"] = closed ? "CLOSED" : closing?.status === "REOPENED" ? "REOPENED" : "OPEN";
 
   // A closed day is reported from its frozen snapshot: the record, not a
   // re-derivation that its own correction entry would since have moved.
-  const [report, recon, unclosedDays] = await Promise.all([
-    closed ? Promise.resolve(frozenReport(closing!.report_json)) : buildClosingReport(db, { branchId, date }),
+  const [recon, unclosedDays] = await Promise.all([
     reconcile(db, { date, branchId }),
     listUnclosedDays(db, { branchId, from: addDays(date, -60), to: addDays(date, -1) }),
   ]);
+  // The open-day report reuses the reconciliation just run, so the checks it
+  // carries are the same ones the findings below are built from.
+  const report = closed ? frozenReport(closing!.report_json) : await buildClosingReport(db, { branchId, date, recon });
 
   const countedCents = closed ? closing!.actual_cents : (input.actualCents ?? null);
   const investigation = await investigateDay(
@@ -162,6 +165,15 @@ export async function surveyDay(db: D1Database, input: SurveyInput): Promise<Day
 
   // Blockers: what closeDay itself would refuse. Only meaningful while open.
   if (!closed) {
+    if (date > today)
+      add({
+        severity: "blocker",
+        area: "Date",
+        title: "This day has not started yet",
+        detail: `The business date is ${today}. Closing a future day would lock it before anyone has traded.`,
+      });
+    if (countedCents !== null && (countedCents < 0 || !Number.isInteger(countedCents)))
+      add({ severity: "blocker", area: "Cash", title: "Counted cash is not valid", detail: "The counted cash must be zero or more, in whole cents.", cents: countedCents });
     for (const c of recon.checks.filter((x) => !x.pass))
       add({
         severity: "blocker",

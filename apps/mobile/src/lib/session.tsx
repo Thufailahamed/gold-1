@@ -3,6 +3,7 @@ import * as SecureStore from "expo-secure-store";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { hasPermission } from "@goldos/shared";
 import { api, clearSession, loadSession, login as apiLogin, logout as apiLogout, onUnauthorized, type MeData } from "./api";
+import { setShopOffsetMinutes } from "./format";
 
 /**
  * Who is signed in, what they may do, and which branch the device works in.
@@ -43,7 +44,11 @@ type SessionState = {
 const SessionContext = createContext<SessionState | null>(null);
 
 export const meQueryKey = ["me"] as const;
-export const fetchMe = () => api<MeData>("/api/v1/auth/me");
+export const fetchMe = () =>
+  api<MeData>("/api/v1/auth/me").then((m) => {
+    setShopOffsetMinutes(m.tzOffsetMinutes);
+    return m;
+  });
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();

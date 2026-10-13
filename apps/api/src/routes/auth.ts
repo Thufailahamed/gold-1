@@ -19,6 +19,7 @@ import { clearFailures, lockedFor, loginKeys, recordFailure } from "../services/
 import { serviceError } from "./http";
 import { getShopDb, getTenantId, resolveShopDb, tenantCookie, TENANT_COOKIE, TenantResolveError } from "../platform/resolve";
 import { checkPublicThrottle } from "../platform/publicThrottle";
+import { tzOffsetMinutes } from "../services/busdate";
 
 // Well-formed but matches no password: lets a failed lookup cost the same
 // scrypt run as a real check.
@@ -194,6 +195,8 @@ export const auth = new Hono<{ Bindings: Env; Variables: AppVariables }>()
           permissions: c.get("permissions"),
           branchIds: (results ?? []).map((r) => r.branch_id),
           tenant: tenant ?? null,
+          // The shop's business clock, so the screens' "today" is the books' today.
+          tzOffsetMinutes: await tzOffsetMinutes(getShopDb(c)),
         },
       },
       200
