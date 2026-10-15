@@ -133,7 +133,6 @@ export const DEFAULT_ROLES: Record<string, string[]> = {
     "branches:view",
     "masters:view",
     "products:view",
-    "purchases:view",
     "sales:view",
     "sales:create",
     "oldgold:view",

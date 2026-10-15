@@ -36,7 +36,6 @@ INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES
   ('staff', 'branches:view'),
   ('staff', 'masters:view'),
   ('staff', 'products:view'),
-  ('staff', 'purchases:view'),
   ('staff', 'sales:view'),
   ('staff', 'sales:create'),
   ('staff', 'oldgold:view'),

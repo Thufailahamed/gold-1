@@ -520,7 +520,7 @@ const ACTIONS: { label: string; desc: string; href: string; icon: IconCmp; perm:
   { label: "Old gold", desc: "Weigh an intake", href: "/old-gold/intake", icon: ScaleIcon, perm: "oldgold:create", tone: "#D97706" },
   { label: "Purchase", desc: "Supplier invoice", href: "/purchases/invoices", icon: TruckIcon, perm: "purchases:view", tone: "#EA580C" },
   { label: "Melting", desc: "Batch old gold", href: "/gold/melting", icon: FlaskConicalIcon, perm: "gold:view", tone: "#E11D48" },
-  { label: "Day closing", desc: "Reconcile & lock", href: "/day-closing", icon: ClipboardCheckIcon, perm: "accounts:view", tone: "#4F46E5" },
+  { label: "Day closing", desc: "Reconcile & lock", href: "/day-closing", icon: ClipboardCheckIcon, perm: "dayclose:view", tone: "#4F46E5" },
   { label: "Catalogue", desc: "Pieces & labels", href: "/products", icon: PackageIcon, perm: "products:view", tone: "#7C3AED" },
   { label: "Gold rates", desc: "Publish board", href: "/gold-rates", icon: CoinsIcon, perm: "masters:view", tone: "#0284C7" },
 ];

@@ -24,7 +24,7 @@ type BranchView = {
   branch: { id: string; name: string };
   asOf: number;
   month: string;
-  jewellery: { pieces: number; netMg: number; fineMg: number; costCents: number; hasData: boolean };
+  jewellery: { pieces: number; netMg: number; fineMg: number; costCents?: number; hasData: boolean };
   gold: { products: number; oldGold: number; lots: number; wip: number; recovered: number; fineMg: number; hasData: boolean };
   cash: { drawer: number; cardClearing: number; hasData: boolean };
   banks: { name: string; balanceCents: number; shared: boolean }[];
@@ -50,6 +50,8 @@ export default function BranchOverviewPage() {
   const [year, setYear] = useState(now.getFullYear());
   const { me, perms, canShop, visibleBranches, branchId, setBranchId } = useAccountsScope();
   const canExport = hasPermission(perms, "audit:export");
+  const canSeeCost = hasPermission(perms, "purchases:view");
+  const canSeePurchases = hasPermission(perms, "purchases:view");
 
   // Opened from a branch card: /branches/overview?branch=<id>.
   useEffect(() => {
@@ -104,7 +106,9 @@ export default function BranchOverviewPage() {
           { label: "Pieces in stock", value: v?.jewellery.pieces, loading, accent: true, sub: v ? (v.jewellery.hasData ? "in stock + reserved" : "no stock on hand") : undefined },
           { label: "Net weight", value: v?.jewellery.netMg, format: grams, unit: "g", loading },
           { label: "Fine in stock", value: v?.jewellery.fineMg, format: grams, unit: "g", loading },
-          { label: "Book cost", value: v ? v.jewellery.costCents / 100 : undefined, format: (n) => Math.round(n).toLocaleString("en-US"), unit: "LKR", loading, sub: "at cost" },
+          ...(canSeeCost
+            ? [{ label: "Book cost", value: v && v.jewellery.costCents !== undefined ? v.jewellery.costCents / 100 : undefined, format: (n: number) => Math.round(n).toLocaleString("en-US"), unit: "LKR", loading, sub: "at cost" }]
+            : []),
           { label: "Gold held", value: v?.gold.fineMg, format: grams, unit: "g", loading, sub: "fine, all stages" },
           { label: "Cash drawer", value: v ? v.cash.drawer / 100 : undefined, format: (n) => Math.round(n).toLocaleString("en-US"), unit: "LKR", loading, tone: v && v.cash.drawer < 0 ? "bad" : undefined },
           { label: "Net sales · MTD", value: v ? v.sales.netCents / 100 : undefined, format: (n) => Math.round(n).toLocaleString("en-US"), unit: "LKR", loading, tone: "good", sub: v ? `${count(v.sales.invoiceCount)} invoices` : undefined },
@@ -217,7 +221,7 @@ export default function BranchOverviewPage() {
                           </span>
                         </td>
                         <td className="g-metric px-2 text-right">{count(b.jewellery.pieces)}</td>
-                        <td className="g-metric px-2 text-right text-ink-3">{whole(b.jewellery.costCents)}</td>
+                        <td className="g-metric px-2 text-right text-ink-3">{whole(b.jewellery.costCents ?? 0)}</td>
                         <td className="g-metric px-2 text-right">{grams(b.gold.fineMg)} g</td>
                         <td className={cn("g-metric px-2 text-right", b.cash.drawer < 0 ? "text-rose-700" : "text-ink-3")}>{whole(b.cash.drawer)}</td>
                         <td className="g-metric px-2 text-right text-ink-3">{whole(b.cash.cardClearing)}</td>

@@ -66,7 +66,7 @@ export const NAV: NavSection[] = [
     title: "Accounts",
     items: [
       { href: "/accounts", label: "Accounts", icon: "balance", color: INK, perm: "accounts:view", subtitle: "Books, cash, dues & tax" },
-      { href: "/day-closing", label: "Day Closing", icon: "lock", color: INDIGO, perm: "accounts:view" },
+      { href: "/day-closing", label: "Day Closing", icon: "lock", color: INDIGO, perm: "dayclose:view" },
       { href: "/expenses", label: "Expenses", icon: "wallet", color: PINK, perm: "accounts:view" },
       { href: "/reports/monthly", label: "Monthly Report", icon: "calendar", color: BLUE, perm: "accounts:view" },
     ],
@@ -92,7 +92,7 @@ export const NAV: NavSection[] = [
       { href: "/branches", label: "Branches", icon: "building", color: BLUE, perm: "branches:view" },
       { href: "/branches/overview", label: "Branch Overview", icon: "gauge", color: INDIGO, perm: "branches:view" },
       { href: "/users", label: "Users & Roles", icon: "people", color: TEAL, perm: "users:view" },
-      { href: "/analytics", label: "Analytics", icon: "trendUp", color: GREEN, perm: "branches:manage" },
+      { href: "/analytics", label: "Analytics", icon: "trendUp", color: GREEN, perm: "accounts:view" },
     ],
   },
   {

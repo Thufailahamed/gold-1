@@ -79,9 +79,9 @@ describe.skipIf(!sqliteAvailable)("rbac: owner/admin/staff", () => {
       "/api/v1/accounts/reconciliation",
       "/api/v1/reports/monthly/pnl",
     ]) {
-      expect(await req("u1", path).then((r) => r.status)).not.toBe(403);
-      expect(await req("u2", path).then((r) => r.status)).toBe(403);
-      expect(await req("u3", path).then((r) => r.status)).toBe(403);
+      expect((await req("u1", path)).status).not.toBe(403);
+      expect((await req("u2", path)).status).toBe(403);
+      expect((await req("u3", path)).status).toBe(403);
     }
   });
 

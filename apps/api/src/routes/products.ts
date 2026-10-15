@@ -37,13 +37,13 @@ const releaseSchema = z.object({ reason: z.string().max(500).optional() });
 type Ctx = { env: Env; get: (k: "userId" | "permissions") => unknown };
 
 /**
- * Book cost reveals margin: only accounts viewers receive it. Everyone else
- * gets the payload with every cost_cents removed, at any depth (rows,
- * product wrappers, till catalog lists). Selling price stays — the till needs it.
+ * Book cost reveals margin: only stock managers (purchases:view) and accounts
+ * viewers receive it — never counter staff. Selling price stays for everyone;
+ * the till needs it.
  */
 function stripCost<T>(c: Ctx, row: T): T {
   const perms = (c.get("permissions") ?? []) as string[];
-  if (perms.includes(PERMISSIONS.ACCOUNTS_VIEW)) return row;
+  if (perms.includes(PERMISSIONS.ACCOUNTS_VIEW) || perms.includes(PERMISSIONS.PURCHASES_VIEW)) return row;
   if (Array.isArray(row)) return row.map((r) => stripCost(c, r)) as unknown as T;
   if (row !== null && typeof row === "object") {
     const out: Record<string, unknown> = {};

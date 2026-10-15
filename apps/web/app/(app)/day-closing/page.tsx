@@ -127,7 +127,8 @@ export default function DayClosingPage() {
   const [survey, setSurvey] = useState<{ result: AutoCloseResult; query: string } | null>(null);
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
-  const canManage = hasPermission(me.data?.permissions ?? [], "accounts:manage");
+  const canManage = hasPermission(me.data?.permissions ?? [], "dayclose:manage");
+  const canReopen = hasPermission(me.data?.permissions ?? [], "users:edit");
 
   const branches = useQuery({
     queryKey: ["branches"],
@@ -626,7 +627,7 @@ export default function DayClosingPage() {
                   </>
                 ) : (
                   <>
-                    <span className="mr-auto text-[11px] text-ink-4">You can read this screen; closing the day needs accounts:manage.</span>
+                    <span className="mr-auto text-[11px] text-ink-4">You can read this screen; closing the day needs dayclose:manage.</span>
                     <button type="button" onClick={() => autoClose.mutate()} disabled={autoClose.isPending} className="g-btn g-btn-secondary h-9 px-3.5 text-sm">
                       <ClipboardCheckIcon size={14} /> {autoClose.isPending ? "Surveying…" : "Run day-close survey"}
                     </button>
@@ -771,7 +772,7 @@ export default function DayClosingPage() {
                             <PrinterIcon size={11} />
                             Report
                           </Link>
-                          {canManage && c.status === "CLOSED" ? (
+                          {canReopen && c.status === "CLOSED" ? (
                             <button type="button" onClick={() => setReopenFor(c)} className="inline-flex h-7 items-center rounded-md px-2.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-500/10">
                               Re-open
                             </button>

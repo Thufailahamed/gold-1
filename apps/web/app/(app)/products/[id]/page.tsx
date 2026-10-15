@@ -43,7 +43,7 @@ type Detail = {
     fine_gold_mg: number;
     making_cents: number;
     wastage_mg: number;
-    cost_cents: number | null;
+    cost_cents?: number | null;
     selling_price_cents: number | null;
     location: string | null;
     notes: string | null;
@@ -215,7 +215,10 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const holdExpired = product.reserved_until !== null && product.reserved_until < Date.now();
   const branchName = branches.data?.rows.find((b) => b.id === product.branch_id)?.name;
   const price = product.selling_price_cents ?? livePrice?.amount_cents ?? null;
-  const margin = price !== null && product.cost_cents !== null ? price - product.cost_cents : null;
+  // cost_cents is absent (undefined) when the viewer may not see book cost;
+  // null means the piece genuinely has no cost recorded yet.
+  const costHidden = product.cost_cents === undefined;
+  const margin = price !== null && product.cost_cents != null ? price - product.cost_cents : null;
   const marginPct = margin !== null && price ? (margin / price) * 100 : null;
   const metalValue = livePrice ? livePrice.amount_cents - product.making_cents : null;
   const imgs = product.image_keys.map((k) => k.split("/").pop()!);
@@ -312,19 +315,26 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
           { label: "Net", value: product.net_mg, format: g, unit: "g", sub: product.stone_mg ? `${g(product.stone_mg)} g stones` : "no stones" },
           { label: "Fine gold", value: product.fine_gold_mg, format: g, unit: "g", sub: `${product.permille}‰` },
           { label: "Making", value: centsToLkr(product.making_cents), format: (n) => Math.round(n).toLocaleString("en-US"), unit: "LKR" },
-          {
-            label: "Book cost",
-            value: product.cost_cents !== null ? centsToLkr(product.cost_cents) : null,
-            format: (n) => Math.round(n).toLocaleString("en-US"),
-            unit: "LKR",
-          },
-          {
-            label: "Margin",
-            value: marginPct,
-            format: (n) => `${n.toFixed(1)}%`,
-            tone: margin === null ? undefined : margin < 0 ? "bad" : "good",
-            sub: margin !== null ? `LKR ${whole(margin)}` : "needs cost and price",
-          },
+          ...(costHidden
+            ? []
+            : [
+                {
+                  label: "Book cost",
+                  value:
+                    product.cost_cents !== null && product.cost_cents !== undefined
+                      ? centsToLkr(product.cost_cents)
+                      : null,
+                  format: (n: number) => Math.round(n).toLocaleString("en-US"),
+                  unit: "LKR",
+                },
+                {
+                  label: "Margin",
+                  value: marginPct,
+                  format: (n: number) => `${n.toFixed(1)}%`,
+                  tone: margin === null ? undefined : margin < 0 ? ("bad" as const) : ("good" as const),
+                  sub: margin !== null ? `LKR ${whole(margin)}` : "needs cost and price",
+                },
+              ]),
         ]}
       />
 
@@ -478,10 +488,11 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                 />
               ) : null}
             </div>
+            {costHidden ? null : (
             <div className="mt-auto border-t border-ink/[0.06] px-4 py-2.5">
               <div className="flex items-baseline justify-between text-[11px]">
                 <span className="text-ink-4">
-                  Cost <span className="g-metric text-ink-2">{product.cost_cents !== null ? whole(product.cost_cents) : "—"}</span>
+                  Cost <span className="g-metric text-ink-2">{product.cost_cents != null ? whole(product.cost_cents) : "—"}</span>
                 </span>
                 <span className={cn("g-metric font-semibold", margin === null ? "text-ink-5" : margin < 0 ? "text-rose-700" : "text-emerald-700")}>
                   {margin !== null ? `${margin > 0 ? "+" : ""}${whole(margin)} · ${marginPct!.toFixed(1)}%` : "Margin needs a cost"}
@@ -496,6 +507,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                 </div>
               ) : null}
             </div>
+            )}
           </Card>
 
           <Card>
@@ -630,7 +642,7 @@ function EditDialog({
   const [name, setName] = useState(product.name);
   const [makingLkr, setMakingLkr] = useState(String(centsToLkr(product.making_cents)));
   const [wastageG, setWastageG] = useState(String(mgToG(product.wastage_mg)));
-  const [costLkr, setCostLkr] = useState(product.cost_cents !== null ? String(centsToLkr(product.cost_cents)) : "");
+  const [costLkr, setCostLkr] = useState(product.cost_cents != null ? String(centsToLkr(product.cost_cents)) : "");
   const [sellingPriceLkr, setSellingPriceLkr] = useState(product.selling_price_cents !== null ? String(centsToLkr(product.selling_price_cents)) : "");
   const [location, setLocation] = useState(product.location ?? "");
   const [notes, setNotes] = useState(product.notes ?? "");

@@ -24,6 +24,7 @@ import {
   GaugeIcon,
   HammerIcon,
   BookOpenIcon,
+  ClipboardCheckIcon,
   SparklesIcon,
   ChevronRightIcon,
 } from "./icons";
@@ -107,7 +108,13 @@ const SECTIONS: NavSection[] = [
         label: "Accounts",
         icon: BookOpenIcon,
         perm: "accounts:view",
-        also: ["/expenses", "/day-closing"],
+        also: ["/expenses"],
+      },
+      {
+        href: "/day-closing",
+        label: "Day Closing",
+        icon: ClipboardCheckIcon,
+        perm: "dayclose:view",
       },
       {
         href: "/accounts/assistant",
@@ -116,7 +123,7 @@ const SECTIONS: NavSection[] = [
         perm: "accounts:view",
         anyPerm: ["accounts:manage"],
       },
-      { href: "/analytics", label: "Reports", icon: TrendingUpIcon, perm: "branches:manage", also: ["/reports"] },
+      { href: "/analytics", label: "Reports", icon: TrendingUpIcon, perm: "accounts:view", also: ["/reports"] },
     ],
   },
 ];

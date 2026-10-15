@@ -18,6 +18,13 @@ export const overview = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return c.json({ success: false, error: { code: "FORBIDDEN", message: "CSV requires audit:export" } }, 403);
     try {
       const data = await branchOverview(getShopDb(c), parsed.data.branchId, { year: parsed.data.year, month: parsed.data.month, userId: c.get("userId"), permissions: c.get("permissions") as string[] });
+      // Book cost reveals margin: only stock managers (purchases:view) and
+      // accounts viewers receive it — never counter staff.
+      const perms = c.get("permissions") as string[];
+      if (!perms.includes(PERMISSIONS.ACCOUNTS_VIEW) && !perms.includes(PERMISSIONS.PURCHASES_VIEW)) {
+        const { costCents, ...jewellery } = data.jewellery;
+        return c.json({ success: true, data: { ...data, jewellery } }, 200);
+      }
       if (csv) {
         const flat = { branch: data.branch.name, asOf: new Date(data.asOf).toISOString(), pieces: data.jewellery.pieces, netMg: data.jewellery.netMg, fineMg: data.jewellery.fineMg, costCents: data.jewellery.costCents, goldMg: data.gold.fineMg, drawer: data.cash.drawer, cardClearing: data.cash.cardClearing, salesNet: data.sales.netCents, invoices: data.sales.invoiceCount, purchases: data.purchases.valueCents };
         return new Response(toCsv([`generated_at: ${new Date().toISOString()}`, `branch: ${data.branch.name}`, "source: live-read"], Object.keys(flat), [flat as unknown as Record<string, unknown>]), { status: 200, headers: { "Content-Type": "text/csv" } });

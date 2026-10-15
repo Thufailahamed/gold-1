@@ -14,7 +14,7 @@ describe("purchases", () => {
     expect(PERMISSIONS.PURCHASES_CREATE).toBe("purchases:create");
     expect(DEFAULT_ROLES["owner"]).toContain("purchases:cancel");
     expect(DEFAULT_ROLES["admin"]).toContain("purchases:create");
-    expect(DEFAULT_ROLES["staff"]).toContain("purchases:view");
+    expect(DEFAULT_ROLES["staff"]).not.toContain("purchases:view");
     expect(DEFAULT_ROLES["staff"]).not.toContain("purchases:create");
   });
   it("allocates charges by weight summing to total", () => {
