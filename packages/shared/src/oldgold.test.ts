@@ -19,9 +19,10 @@ export function valuateOldGold(args: {
 describe("old gold", () => {
   it("seeds oldgold permissions", () => {
     expect(PERMISSIONS.OLDGOLD_APPROVE).toBe("oldgold:approve");
-    expect(DEFAULT_ROLES["gold_officer"]).toContain("oldgold:create");
-    expect(DEFAULT_ROLES["gold_officer"]).not.toContain("oldgold:approve");
-    expect(DEFAULT_ROLES["manufacturing_staff"]).not.toContain("oldgold:view");
+    expect(DEFAULT_ROLES["admin"]).toContain("oldgold:create");
+    expect(DEFAULT_ROLES["admin"]).toContain("oldgold:approve");
+    expect(DEFAULT_ROLES["staff"]).toContain("oldgold:create");
+    expect(DEFAULT_ROLES["staff"]).not.toContain("oldgold:approve");
   });
   it("values the spec example: 5g chain 22K @28500 buy 92% minus 2000", () => {
     const v = valuateOldGold({ netMg: 5000, permille: 916, rateCentsPerG: 2850000, ratePermille: 916, buyPct: 92, stoneDeductionCents: 0, processingDeductionCents: 200000 });

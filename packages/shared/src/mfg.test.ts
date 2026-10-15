@@ -8,10 +8,10 @@ export function mfgBalance(allocatedMg: number, outputsMg: number, lossMg: numbe
 describe("manufacturing", () => {
   it("seeds mfg permissions", () => {
     expect(PERMISSIONS.MFG_APPROVE).toBe("mfg:approve");
-    expect(DEFAULT_ROLES["manufacturing_staff"]).toContain("mfg:create");
-    expect(DEFAULT_ROLES["manufacturing_staff"]).toContain("mfg:edit");
-    expect(DEFAULT_ROLES["manufacturing_staff"]).not.toContain("mfg:approve");
-    expect(DEFAULT_ROLES["cashier"]).not.toContain("mfg:view");
+    expect(DEFAULT_ROLES["admin"]).toContain("mfg:create");
+    expect(DEFAULT_ROLES["admin"]).toContain("mfg:edit");
+    expect(DEFAULT_ROLES["admin"]).toContain("mfg:approve");
+    expect(DEFAULT_ROLES["staff"]).not.toContain("mfg:view");
   });
   it("balances the spec example: 8000 in, 7500 out, 500 loss", () => {
     expect(mfgBalance(8000, 7500, 500)).toBe(true);

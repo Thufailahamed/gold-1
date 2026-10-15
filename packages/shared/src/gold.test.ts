@@ -15,10 +15,9 @@ describe("gold ledger", () => {
   it("seeds gold permissions", () => {
     expect(PERMISSIONS.GOLD_VIEW).toBe("gold:view");
     expect(PERMISSIONS.GOLD_MANAGE).toBe("gold:manage");
-    expect(DEFAULT_ROLES["gold_officer"]).toContain("gold:manage");
-    expect(DEFAULT_ROLES["cashier"]).toContain("gold:view");
-    expect(DEFAULT_ROLES["cashier"]).not.toContain("gold:manage");
-    expect(DEFAULT_ROLES["manufacturing_staff"]).not.toContain("gold:view");
+    expect(DEFAULT_ROLES["admin"]).toContain("gold:manage");
+    expect(DEFAULT_ROLES["staff"]).toContain("gold:view");
+    expect(DEFAULT_ROLES["staff"]).not.toContain("gold:manage");
   });
   it("reproduces the spec example: 7780 in, 7400 out, 200 waste", () => {
     const d = meltDifference(7780, 7400, 200);

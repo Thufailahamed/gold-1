@@ -9,16 +9,7 @@ export const createUserSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(100),
   password: z.string().min(8),
-  role: z.enum([
-    "owner",
-    "manager",
-    "accountant",
-    "cashier",
-    "salesperson",
-    "inventory_officer",
-    "gold_officer",
-    "manufacturing_staff",
-  ]),
+  role: z.enum(["owner", "admin", "staff"]),
   branchIds: z.array(z.string().min(1)).min(1),
 });
 
@@ -182,16 +173,7 @@ export const resetConfirmSchema = z.object({
   newPassword: z.string().min(8),
 });
 
-const roleEnum = z.enum([
-  "owner",
-  "manager",
-  "accountant",
-  "cashier",
-  "salesperson",
-  "inventory_officer",
-  "gold_officer",
-  "manufacturing_staff",
-]);
+const roleEnum = z.enum(["owner", "admin", "staff"]);
 
 export const editUserSchema = z.object({
   name: z.string().min(1).max(100).optional(),

@@ -13,7 +13,9 @@ describe("purchases", () => {
   it("seeds purchase permissions", () => {
     expect(PERMISSIONS.PURCHASES_CREATE).toBe("purchases:create");
     expect(DEFAULT_ROLES["owner"]).toContain("purchases:cancel");
-    expect(DEFAULT_ROLES["manufacturing_staff"]).not.toContain("purchases:view");
+    expect(DEFAULT_ROLES["admin"]).toContain("purchases:create");
+    expect(DEFAULT_ROLES["staff"]).toContain("purchases:view");
+    expect(DEFAULT_ROLES["staff"]).not.toContain("purchases:create");
   });
   it("allocates charges by weight summing to total", () => {
     expect(allocateCharges(5000, [5000, 2500, 2500])).toEqual([2500, 1250, 1250]);

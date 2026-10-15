@@ -7,9 +7,10 @@ describe("ledger perms", () => {
     expect(PERMISSIONS.ACCOUNTS_VIEW).toBe("accounts:view");
     expect(PERMISSIONS.ACCOUNTS_MANAGE).toBe("accounts:manage");
   });
-  it("accountant can manage accounts, cashier cannot", () => {
-    expect(DEFAULT_ROLES["accountant"]).toContain("accounts:manage");
-    expect(DEFAULT_ROLES["cashier"]).not.toContain("accounts:manage");
+  it("only owner manages accounts", () => {
+    expect(DEFAULT_ROLES["owner"]).toContain("accounts:manage");
+    expect(DEFAULT_ROLES["admin"]).not.toContain("accounts:manage");
+    expect(DEFAULT_ROLES["staff"]).not.toContain("accounts:manage");
   });
   it("owner holds all permissions", () => {
     for (const p of Object.values(PERMISSIONS)) expect(DEFAULT_ROLES["owner"]).toContain(p);

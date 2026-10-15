@@ -9,9 +9,9 @@ export function discountPct(discountCents: number, subtotalCents: number): numbe
 describe("sales", () => {
   it("seeds sales permissions", () => {
     expect(PERMISSIONS.SALES_APPROVE).toBe("sales:approve");
-    expect(DEFAULT_ROLES["cashier"]).toContain("sales:create");
-    expect(DEFAULT_ROLES["cashier"]).not.toContain("sales:approve");
-    expect(DEFAULT_ROLES["manufacturing_staff"]).not.toContain("sales:view");
+    expect(DEFAULT_ROLES["staff"]).toContain("sales:create");
+    expect(DEFAULT_ROLES["staff"]).not.toContain("sales:approve");
+    expect(DEFAULT_ROLES["admin"]).toContain("sales:approve");
   });
   it("computes discount percent", () => {
     expect(discountPct(10000, 200000)).toBe(5);

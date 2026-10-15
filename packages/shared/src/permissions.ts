@@ -52,6 +52,8 @@ export const PERMISSIONS = {
   MFG_CREATE: "mfg:create",
   MFG_EDIT: "mfg:edit",
   MFG_APPROVE: "mfg:approve",
+  DAYCLOSE_VIEW: "dayclose:view",
+  DAYCLOSE_MANAGE: "dayclose:manage",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -62,34 +64,35 @@ export function hasPermission(granted: string[], required: string): boolean {
 
 const ALL = Object.values(PERMISSIONS);
 
+/**
+ * Three roles only.
+ * - owner: everything, the only role that sees final accounts + profits
+ *   (accounts:view / accounts:manage) and the only role that approves
+ *   users/branches (users:approve / branches:approve) or manages roles.
+ * - admin: runs the shop — users, stock, purchases, sales, gold, mfg,
+ *   expenses/day-close operations — but no financial statements.
+ * - staff: sells at the counter (sales:create, oldgold:create) and closes
+ *   the day (dayclose:view/manage). Cannot manage users, cannot reopen a
+ *   closed day (reopen needs users:edit), cannot see any accounts pages.
+ */
 export const DEFAULT_ROLES: Record<string, string[]> = {
   owner: [...ALL],
-  manager: ALL.filter((p) => p !== "users:approve" && p !== "branches:approve"),
-  accountant: [
+  admin: [
     "users:view",
+    "users:create",
+    "users:edit",
+    "users:cancel",
+    "users:export",
     "roles:view",
     "branches:view",
+    "branches:create",
+    "branches:edit",
+    "branches:manage",
     "settings:view",
+    "settings:edit",
+    "settings:manage",
     "audit:view",
     "audit:export",
-    "masters:view",
-    "masters:export",
-    "products:view",
-    "products:export",
-    "accounts:manage",
-    "purchases:view",
-    "purchases:export",
-    "sales:view",
-    "sales:export",
-    "oldgold:view",
-    "oldgold:export",
-    "gold:view",
-    "mfg:view",
-  ],
-  cashier: ["users:view", "branches:view", "masters:view", "products:view", "accounts:view", "purchases:view", "sales:view", "sales:create", "oldgold:view", "oldgold:create", "gold:view"],
-  salesperson: ["branches:view", "masters:view", "products:view", "purchases:view", "sales:view", "sales:create", "oldgold:view"],
-  inventory_officer: [
-    "branches:view",
     "masters:view",
     "masters:create",
     "masters:edit",
@@ -103,24 +106,40 @@ export const DEFAULT_ROLES: Record<string, string[]> = {
     "purchases:view",
     "purchases:create",
     "purchases:edit",
+    "purchases:cancel",
+    "purchases:export",
     "sales:view",
-    "oldgold:view",
-    "mfg:view",
-  ],
-  gold_officer: [
-    "branches:view",
-    "masters:view",
-    "masters:create",
-    "masters:export",
-    "products:view",
-    "purchases:view",
-    "sales:view",
+    "sales:create",
+    "sales:edit",
+    "sales:cancel",
+    "sales:export",
+    "sales:approve",
     "oldgold:view",
     "oldgold:create",
     "oldgold:edit",
+    "oldgold:cancel",
+    "oldgold:export",
+    "oldgold:approve",
     "gold:view",
     "gold:manage",
     "mfg:view",
+    "mfg:create",
+    "mfg:edit",
+    "mfg:approve",
+    "dayclose:view",
+    "dayclose:manage",
   ],
-  manufacturing_staff: ["products:view", "mfg:view", "mfg:create", "mfg:edit"],
+  staff: [
+    "branches:view",
+    "masters:view",
+    "products:view",
+    "purchases:view",
+    "sales:view",
+    "sales:create",
+    "oldgold:view",
+    "oldgold:create",
+    "gold:view",
+    "dayclose:view",
+    "dayclose:manage",
+  ],
 };
