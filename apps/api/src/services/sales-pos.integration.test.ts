@@ -18,7 +18,7 @@ describe.skipIf(!sqliteAvailable)("POS sale flow over real SQLite", () => {
     raw.exec(`
       INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES
         ('u1','o@x','Owner','x',0,0), ('u2','m@x','Manager','x',0,0), ('u3','c@x','Cashier','x',0,0);
-      INSERT INTO user_roles (user_id, role_id) VALUES ('u1','owner'), ('u2','owner'), ('u3','salesperson');
+      INSERT INTO user_roles (user_id, role_id) VALUES ('u1','owner'), ('u2','owner'), ('u3','staff');
       INSERT INTO branches (id, name, code, created_at) VALUES ('b1','Main','MAIN',0);
       INSERT INTO customers (id, name, phone, branch_id, created_at) VALUES ('c1','Nimal','0771111111','b1',0);
     `);

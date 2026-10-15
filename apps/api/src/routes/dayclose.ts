@@ -65,7 +65,7 @@ function invalid(c: Ctx, message: string): Response {
 
 export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .use(requireAuth)
-  .get("/", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+  .get("/", requirePerm(PERMISSIONS.DAYCLOSE_VIEW), async (c) => {
     const q = (k: string) => c.req.query(k) ?? undefined;
     const data = await listClosings(getShopDb(c), {
       ...pagination(c),
@@ -77,7 +77,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
   })
   // Registered BEFORE /:id. Hono matches in registration order, so a literal
   // path chained after the parameterised one is read as a closing id.
-  .get("/preview", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+  .get("/preview", requirePerm(PERMISSIONS.DAYCLOSE_VIEW), async (c) => {
     const parsed = previewSchema.safeParse({
       branchId: c.req.query("branchId"),
       date: c.req.query("date"),
@@ -93,7 +93,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
   })
   // Finding a missing amount: failing checks, mis-posted documents, every
   // drawer movement, what is pending, and what exactly matches the difference.
-  .get("/investigate", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+  .get("/investigate", requirePerm(PERMISSIONS.DAYCLOSE_VIEW), async (c) => {
     const parsed = previewSchema.safeParse({ branchId: c.req.query("branchId"), date: c.req.query("date") });
     if (!parsed.success) return invalid(c, "branchId is required");
     const actualRaw = c.req.query("actualCents");
@@ -107,7 +107,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
       return serviceError(c, err);
     }
   })
-  .get("/unclosed", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+  .get("/unclosed", requirePerm(PERMISSIONS.DAYCLOSE_VIEW), async (c) => {
     const branchId = c.req.query("branchId");
     if (!branchId) return invalid(c, "branchId is required");
     try {
@@ -120,7 +120,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
       return serviceError(c, err);
     }
   })
-  .get("/variance", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+  .get("/variance", requirePerm(PERMISSIONS.DAYCLOSE_VIEW), async (c) => {
     const today = await businessDateFor(getShopDb(c), Date.now());
     const to = dateOr(c.req.query("to"), today);
     const from = dateOr(c.req.query("from"), addDays(to, -30));
@@ -132,7 +132,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
       return serviceError(c, err);
     }
   })
-  .get("/summary", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+  .get("/summary", requirePerm(PERMISSIONS.DAYCLOSE_VIEW), async (c) => {
     const date = dateOr(c.req.query("date"), await businessDateFor(getShopDb(c), Date.now()));
     try {
       return c.json({ success: true, data: await dailySummary(getShopDb(c), date) }, 200);
@@ -142,7 +142,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
   })
   // The day's report as CSV: the frozen one when the day is closed, a live
   // preview otherwise (and labelled so).
-  .get("/report.csv", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+  .get("/report.csv", requirePerm(PERMISSIONS.DAYCLOSE_VIEW), async (c) => {
     const parsed = previewSchema.safeParse({ branchId: c.req.query("branchId"), date: c.req.query("date") });
     if (!parsed.success) return invalid(c, "branchId is required");
     try {
@@ -179,7 +179,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
   })
   // The full pre-close survey: every check, document fault, pending item and
   // earlier unclosed day, ranked by whether it stops the close.
-  .get("/survey", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+  .get("/survey", requirePerm(PERMISSIONS.DAYCLOSE_VIEW), async (c) => {
     const input = surveyQuery(c);
     if (typeof input === "string") return invalid(c, input);
     try {
@@ -188,7 +188,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
       return serviceError(c, err);
     }
   })
-  .get("/survey.csv", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+  .get("/survey.csv", requirePerm(PERMISSIONS.DAYCLOSE_VIEW), async (c) => {
     const input = surveyQuery(c);
     if (typeof input === "string") return invalid(c, input);
     try {
@@ -204,7 +204,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
       return serviceError(c, err);
     }
   })
-  .get("/survey.pdf", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+  .get("/survey.pdf", requirePerm(PERMISSIONS.DAYCLOSE_VIEW), async (c) => {
     const input = surveyQuery(c);
     if (typeof input === "string") return invalid(c, input);
     try {
@@ -222,7 +222,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
   })
   // Survey, then close only if nothing blocks it. Returns the survey either
   // way, so a refused auto-close still says every reason at once.
-  .post("/auto-close", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
+  .post("/auto-close", requirePerm(PERMISSIONS.DAYCLOSE_MANAGE), async (c) => {
     const parsed = autoCloseSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return invalid(c, "Invalid auto-close");
     try {
@@ -232,7 +232,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
       return serviceError(c, err);
     }
   })
-  .get("/:id", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+  .get("/:id", requirePerm(PERMISSIONS.DAYCLOSE_VIEW), async (c) => {
     const parsed = idSchema.safeParse({ id: c.req.param("id") });
     if (!parsed.success) return invalid(c, "Invalid closing id");
     try {
@@ -241,7 +241,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
       return serviceError(c, err);
     }
   })
-  .get("/:id/report", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
+  .get("/:id/report", requirePerm(PERMISSIONS.DAYCLOSE_VIEW), async (c) => {
     const parsed = idSchema.safeParse({ id: c.req.param("id") });
     if (!parsed.success) return invalid(c, "Invalid closing id");
     try {
@@ -256,7 +256,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
       return serviceError(c, err);
     }
   })
-  .post("/", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
+  .post("/", requirePerm(PERMISSIONS.DAYCLOSE_MANAGE), async (c) => {
     const parsed = closeDaySchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return invalid(c, "Invalid close");
     try {
@@ -266,7 +266,9 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
       return serviceError(c, err);
     }
   })
-  .post("/:id/reopen", requirePerm(PERMISSIONS.ACCOUNTS_MANAGE), async (c) => {
+  // Reopening unlocks the books, so only admin/owner (users:edit holders)
+  // may do it — staff can close but never reopen.
+  .post("/:id/reopen", requirePerm(PERMISSIONS.USERS_EDIT), async (c) => {
     const id = idSchema.safeParse({ id: c.req.param("id") });
     const body = reopenDaySchema.safeParse(await c.req.json().catch(() => null));
     if (!id.success || !body.success) return invalid(c, "A re-open needs a reason");

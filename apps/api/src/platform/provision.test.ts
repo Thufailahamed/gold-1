@@ -100,9 +100,9 @@ describe.skipIf(!sqliteAvailable)("in-worker provisioning", () => {
     const { d1Id, d1Name } = await provisionShop(env, pdb, { ...input, tenantId: id }, world.client);
     expect(d1Name.startsWith("goldos-kandy-gold-")).toBe(true);
     const raw = world.dbs.get(d1Id)!;
-    // Migrations ran: the six foundation roles exist.
+    // Migrations ran: exactly the three roles exist (owner, admin, staff).
     const roles = raw.prepare("SELECT COUNT(*) AS n FROM roles").get() as { n: number };
-    expect(roles.n).toBe(6);
+    expect(roles.n).toBe(3);
     // Owner seeded with lowercase email, HQ branch linked.
     const owner = raw.prepare("SELECT id, email FROM users WHERE email = ?").get("owner@kandygold.lk") as { id: string; email: string };
     expect(owner.email).toBe("owner@kandygold.lk");

@@ -74,7 +74,7 @@ describe.skipIf(!sqliteAvailable)("accounts assistant over real SQLite", () => {
         ('u3','viewer@shop.lk','Viewer','${hash}',0,0);
       INSERT INTO roles (id, name) VALUES ('books_viewer', 'books_viewer');
       INSERT INTO role_permissions (role_id, permission_id) VALUES ('books_viewer', 'accounts:view');
-      INSERT INTO user_roles (user_id, role_id) VALUES ('u1','owner'), ('u2','salesperson'), ('u3','books_viewer');
+      INSERT INTO user_roles (user_id, role_id) VALUES ('u1','owner'), ('u2','staff'), ('u3','books_viewer');
       INSERT INTO branches (id, name, code, created_at) VALUES ('b1','Main','MAIN',0), ('b2','City','CITY',0);
       INSERT INTO branch_members (user_id, branch_id) VALUES ('u1','b1'), ('u2','b1'), ('u3','b2');
     `);

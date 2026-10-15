@@ -45,7 +45,7 @@ describe.skipIf(!sqliteAvailable)("day-close auto close over HTTP", () => {
       INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES
         ('u1','owner@shop.lk','Owner','${hash}',0,0), ('u2','cashier@shop.lk','Cashier','${hash}',0,0);
       INSERT INTO roles (id, name) VALUES ('viewer','viewer');
-      INSERT INTO role_permissions (role_id, permission_id) VALUES ('viewer','accounts:view');
+      INSERT INTO role_permissions (role_id, permission_id) VALUES ('viewer','accounts:view'), ('viewer','dayclose:view');
       INSERT INTO user_roles (user_id, role_id) VALUES ('u1','owner'), ('u2','viewer');
       INSERT INTO branches (id, name, code, created_at) VALUES ('b1','Main','MAIN',0), ('b2','Kandy','KDY',0);
       INSERT INTO branch_members (user_id, branch_id) VALUES ('u1','b1'), ('u1','b2'), ('u2','b1');

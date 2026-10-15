@@ -36,6 +36,26 @@ const releaseSchema = z.object({ reason: z.string().max(500).optional() });
 
 type Ctx = { env: Env; get: (k: "userId" | "permissions") => unknown };
 
+/**
+ * Book cost reveals margin: only accounts viewers receive it. Everyone else
+ * gets the payload with every cost_cents removed, at any depth (rows,
+ * product wrappers, till catalog lists). Selling price stays — the till needs it.
+ */
+function stripCost<T>(c: Ctx, row: T): T {
+  const perms = (c.get("permissions") ?? []) as string[];
+  if (perms.includes(PERMISSIONS.ACCOUNTS_VIEW)) return row;
+  if (Array.isArray(row)) return row.map((r) => stripCost(c, r)) as unknown as T;
+  if (row !== null && typeof row === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(row as Record<string, unknown>)) {
+      if (k === "cost_cents") continue;
+      out[k] = stripCost(c, v as unknown);
+    }
+    return out as T;
+  }
+  return row;
+}
+
 /** Branch staff act only on pieces at their own branches (as /inventory/movements). */
 async function outOfScope(c: Ctx, productId: string): Promise<boolean> {
   const prod = await getShopDb(c).prepare("SELECT branch_id FROM products WHERE id = ?")
@@ -86,12 +106,12 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       minPriceLkr: num("minPriceLkr"),
       maxPriceLkr: num("maxPriceLkr"),
     });
-    return c.json({ success: true, data }, 200);
+    return c.json({ success: true, data: stripCost(c, data) }, 200);
   })
   .get("/barcode/:code", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
     try {
       const data = await findByBarcode(getShopDb(c), c.req.param("code"));
-      return c.json({ success: true, data }, 200);
+      return c.json({ success: true, data: stripCost(c, data) }, 200);
     } catch (err) {
       return serviceError(c, err);
     }
@@ -99,7 +119,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .get("/:id", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
     try {
       const data = await getProduct(getShopDb(c), c.req.param("id"));
-      return c.json({ success: true, data }, 200);
+      return c.json({ success: true, data: stripCost(c, data) }, 200);
     } catch (err) {
       return serviceError(c, err);
     }

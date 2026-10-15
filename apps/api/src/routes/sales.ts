@@ -107,6 +107,20 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       customerId: c.req.query("customerId"),
       limit: Number(c.req.query("limit") ?? 12) || 12,
     });
+    // Book cost reveals margin: only accounts viewers receive it at the till.
+    const perms = (c.get("permissions") ?? []) as string[];
+    if (!perms.includes(PERMISSIONS.ACCOUNTS_VIEW) && Array.isArray(data)) {
+      return c.json(
+        {
+          success: true,
+          data: data.map((r: Record<string, unknown>) => {
+            const { cost_cents, ...rest } = r;
+            return rest;
+          }),
+        },
+        200
+      );
+    }
     return c.json({ success: true, data }, 200);
   })
   // Which bank a "bank" payment went into, so it posts to that account.
@@ -206,6 +220,15 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   .get("/invoices/:id", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
     try {
       const data = await getSale(getShopDb(c), c.req.param("id"));
+      // Book cost and COGS lines reveal margin: only accounts viewers see them.
+      const perms = (c.get("permissions") ?? []) as string[];
+      if (!perms.includes(PERMISSIONS.ACCOUNTS_VIEW)) {
+        const items = (data.items ?? []).map((it: Record<string, unknown>) => {
+          const { cost_cents, ...rest } = it;
+          return rest;
+        });
+        return c.json({ success: true, data: { ...data, items, journal: [] } }, 200);
+      }
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
