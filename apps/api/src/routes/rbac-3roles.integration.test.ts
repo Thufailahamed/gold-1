@@ -13,6 +13,8 @@ describe.skipIf(!sqliteAvailable)("rbac: owner/admin/staff", () => {
   const sessions: Record<string, string> = {};
   let today = "";
   let pid = "";
+  let pid2 = "";
+  let db: D1Database;
 
   const req = (user: string, path: string, init: { method?: string; body?: unknown } = {}) =>
     app.request(
@@ -28,6 +30,7 @@ describe.skipIf(!sqliteAvailable)("rbac: owner/admin/staff", () => {
   beforeAll(async () => {
     const m = migratedDb();
     raw = m.raw;
+    db = m.db;
     env = { DB: m.db, R2: {} as R2Bucket, WEB_ORIGIN: "http://localhost:3000" };
     const { hashPassword } = await import("../services/hash");
     const hash = await hashPassword(PASSWORD);
@@ -49,6 +52,12 @@ describe.skipIf(!sqliteAvailable)("rbac: owner/admin/staff", () => {
       "u1"
     );
     pid = p.id;
+    const p2 = await createProduct(
+      m.db,
+      { name: "Ring B", categoryId: "cat-test", branchId: "b1", metalTypeId: "metal-gold", purityId: "purity-test", grossG: 3, stoneG: 0, makingLkr: 0, wastageG: 0, costLkr: 12000, sellingPriceLkr: 60000 },
+      "u1"
+    );
+    pid2 = p2.id;
     const { businessDateFor } = await import("../services/busdate");
     today = await businessDateFor(m.db, Date.now());
     ({ app } = await import("../app"));
@@ -114,6 +123,60 @@ describe.skipIf(!sqliteAvailable)("rbac: owner/admin/staff", () => {
     expect(asOwner.data.product.cost_cents).toBe(1000000);
   });
 
+  it("staff sells over HTTP at the counter", async () => {
+    const res = await req("u3", "/api/v1/sales/invoices", {
+      method: "POST",
+      body: {
+        branchId: "b1",
+        items: [{ productId: pid2, priceLkr: 60000, discountLkr: 0 }],
+        payments: [{ method: "cash", amountLkr: 60000 }],
+      },
+    });
+    expect(res.status).toBe(201);
+    const { data } = (await res.json()) as { data: { invoiceId: string } };
+    expect(data.invoiceId).toBeTruthy();
+  });
+
+  it("staff completes normal sales but never old-for-new exchanges", async () => {
+    // The exchange route needs oldgold:edit: staff is denied before validation.
+    const denied = await req("u3", "/api/v1/sales/exchanges", { method: "POST", body: {} });
+    expect(denied.status).toBe(403);
+    // An admin passes the gate and reaches validation instead.
+    const reachesHandler = await req("u2", "/api/v1/sales/exchanges", { method: "POST", body: {} });
+    expect(reachesHandler.status).toBe(400);
+  });
+
+  it("staff sees turnover but no margin on the sale and the overview", async () => {
+    const { receiveSale } = await import("../services/sales");
+    const sale = await receiveSale(
+      db,
+      { branchId: "b1", items: [{ productId: pid, priceLkr: 50000, discountLkr: 0 }], payments: [{ method: "cash", amountLkr: 50000 }] },
+      "u3",
+      { enforceShelfPrice: false }
+    );
+    const asStaff = (await (await req("u3", `/api/v1/sales/invoices/${sale.invoiceId}`)).json()) as {
+      data: { invoice: { total_cents: number }; items: Record<string, unknown>[]; journal: unknown[] };
+    };
+    expect(asStaff.data.invoice.total_cents).toBe(5000000);
+    expect(asStaff.data.items[0]).not.toHaveProperty("cost_cents");
+    expect(asStaff.data.journal).toEqual([]);
+    const asOwner = (await (await req("u1", `/api/v1/sales/invoices/${sale.invoiceId}`)).json()) as {
+      data: { items: Record<string, unknown>[]; journal: unknown[] };
+    };
+    expect(asOwner.data.items[0]).toHaveProperty("cost_cents");
+    expect(asOwner.data.journal.length).toBeGreaterThan(0);
+
+    const now = new Date();
+    const ovStaff = (await (
+      await req("u3", `/api/v1/branch-overview?branchId=b1&month=${now.getMonth() + 1}&year=${now.getFullYear()}`)
+    ).json()) as { data: { jewellery: Record<string, unknown>; purchases: { valueCents: number } } };
+    expect(ovStaff.data.jewellery).not.toHaveProperty("costCents");
+    expect(ovStaff.data.purchases.valueCents).toBe(0);
+    const ovOwner = (await (
+      await req("u1", `/api/v1/branch-overview?branchId=b1&month=${now.getMonth() + 1}&year=${now.getFullYear()}`)
+    ).json()) as { data: { jewellery: Record<string, unknown> } };
+    expect(ovOwner.data.jewellery).toHaveProperty("costCents");
+  });
   it("staff can create users but cannot grant roles (users:approve is owner-only)", async () => {
     // Staff cannot even create users.
     const denied = await req("u3", "/api/v1/users", {

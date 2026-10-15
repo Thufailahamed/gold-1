@@ -66,7 +66,9 @@ export const NAV: NavSection[] = [
     title: "Accounts",
     items: [
       { href: "/accounts", label: "Accounts", icon: "balance", color: INK, perm: "accounts:view", subtitle: "Books, cash, dues & tax" },
-      { href: "/day-closing", label: "Day Closing", icon: "lock", color: INDIGO, perm: "dayclose:view" },
+      // No /day-closing screen exists on mobile yet: keep owner-only until the
+      // screen ships, so staff never taps a dead link. Web already serves it.
+      { href: "/day-closing", label: "Day Closing", icon: "lock", color: INDIGO, perm: "accounts:view" },
       { href: "/expenses", label: "Expenses", icon: "wallet", color: PINK, perm: "accounts:view" },
       { href: "/reports/monthly", label: "Monthly Report", icon: "calendar", color: BLUE, perm: "accounts:view" },
     ],

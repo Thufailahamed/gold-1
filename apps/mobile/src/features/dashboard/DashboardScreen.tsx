@@ -441,7 +441,9 @@ const OP_ACTIONS: { label: string; href: string; icon: IconName; color: string; 
   { label: "Purchases", href: "/purchases/invoices", icon: "truck", color: "#30B0C7", perm: "purchases:view" },
   { label: "Melting", href: "/gold/melting", icon: "flame", color: "#FF6B3D", perm: "gold:view" },
   { label: "Transfers", href: "/inventory/transfers", icon: "swap", color: "#5856D6", perm: "products:view" },
-  { label: "Day Close", href: "/day-closing", icon: "lock", color: "#34C759", perm: "dayclose:view" },
+  // No /day-closing screen exists on mobile yet: keep this owner-only until the
+  // screen ships, so staff never taps a dead link. Web already serves it.
+  { label: "Day Close", href: "/day-closing", icon: "lock", color: "#34C759", perm: "accounts:view" },
 ];
 
 const OP_COLS = 4;

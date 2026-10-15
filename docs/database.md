@@ -7,8 +7,9 @@ Engine: Cloudflare D1 (SQLite). Migrations: sequential SQL in
 ## Phase-1 tables (migration `0001_core`)
 
 - `users(id, email UNIQUE, name, password_hash, is_active, created_at, updated_at, created_by)`
-- `roles(id, name UNIQUE)` — owner, admin, staff
-- `permissions(id, name UNIQUE)` — 28 `domain:action` permissions (users, roles, branches, settings, audit, masters, products × view/create/edit/approve/cancel/export/manage as applicable; `reverse` reserved for transaction modules)
+- `roles(id, name UNIQUE)` — owner, admin, staff (exactly 3; see
+  `0047_rbac_three_roles.sql`; 55 `domain:action` permissions)
+- `permissions(id, name UNIQUE)` — 55 `domain:action` permissions (users, roles, branches, settings, audit, masters, products, accounts, purchases, sales, oldgold, gold, mfg, dayclose × view/create/edit/approve/cancel/export/manage as applicable; `reverse` reserved for transaction modules)
 - `role_permissions(role_id, permission_id)` — composite PK
 - `user_roles(user_id, role_id)` — composite PK
 - `branches(id, name, code UNIQUE, address, is_active, created_at, created_by)`

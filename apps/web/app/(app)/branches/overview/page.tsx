@@ -112,7 +112,9 @@ export default function BranchOverviewPage() {
           { label: "Gold held", value: v?.gold.fineMg, format: grams, unit: "g", loading, sub: "fine, all stages" },
           { label: "Cash drawer", value: v ? v.cash.drawer / 100 : undefined, format: (n) => Math.round(n).toLocaleString("en-US"), unit: "LKR", loading, tone: v && v.cash.drawer < 0 ? "bad" : undefined },
           { label: "Net sales · MTD", value: v ? v.sales.netCents / 100 : undefined, format: (n) => Math.round(n).toLocaleString("en-US"), unit: "LKR", loading, tone: "good", sub: v ? `${count(v.sales.invoiceCount)} invoices` : undefined },
-          { label: "Purchases · MTD", value: v ? v.purchases.valueCents / 100 : undefined, format: (n) => Math.round(n).toLocaleString("en-US"), unit: "LKR", loading },
+          ...(canSeePurchases
+            ? [{ label: "Purchases · MTD", value: v ? v.purchases.valueCents / 100 : undefined, format: (n: number) => Math.round(n).toLocaleString("en-US"), unit: "LKR", loading }]
+            : []),
         ]}
       >
         <div className="flex flex-wrap items-center gap-1.5">

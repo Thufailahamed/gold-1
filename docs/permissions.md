@@ -18,11 +18,23 @@ checks role names. Sidebar links hide without the matching permission.
 - **staff** works the counter: `branches:view`, `masters:view`,
   `products:view`, `sales:view` + `sales:create`, `oldgold:view` +
   `oldgold:create`, `gold:view`, `dayclose:view` + `dayclose:manage`.
-  Staff can make sales (including old-for-new exchanges at the till with an
-  admin-valued item) and close the day. Staff never sees book costs
+  Staff can make sales and close the day. Staff never sees book costs
   (`cost_cents` and COGS lines are stripped from product, catalog and sale
-  responses), never sees purchasing, and cannot reopen a closed day —
-  reopening needs `users:edit`, which staff does not hold.
+  responses), never sees purchasing (supplier spend is stripped from the
+  branch overview), and cannot reopen a closed day — reopening needs
+  `users:edit`, which staff does not hold.
+- Old-for-new exchanges are a two-person flow: staff records the counter
+  intake (`oldgold:create`); valuing, purchasing and settling the exchange
+  need `oldgold:edit`, so an admin completes the exchange at the till
+  (`POST /sales/exchanges` requires `sales:create` + `oldgold:edit`).
+- Expenses are owner-only: every expense endpoint sits under `accounts:*`,
+  so only the owner books petty cash and supplier-side spend. Admins and
+  staff record nothing; unapproved spend shows on the close as a cash
+  difference, never silently.
+- Sales turnover (invoice totals, day-close sales lines, monthly sales
+  summaries) is visible to anyone with `sales:view` / `dayclose:view` —
+  turnover is not profit. Margins and profit figures (COGS, P&L, balance
+  sheet, trial balance, journal) never leave the owner.
 
 Day close lives under its own permissions so staff can close without seeing
 the books: `dayclose:view` (preview, investigate, survey, reports, variance,
