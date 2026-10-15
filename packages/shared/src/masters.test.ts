@@ -14,7 +14,7 @@ describe("masters schemas", () => {
       createGoldRateSchema.parse({ purityId: "p1", ratePerGram: 0, effectiveFrom: Date.now() })
     ).toThrow();
   });
-  it("grants masters:write to admin only (not cashier)", () => {
+  it("denies masters:write without the grant (staff holds view only)", () => {
     expect(hasPermission(["users:read", "masters:read"], "masters:write")).toBe(false);
   });
 });
