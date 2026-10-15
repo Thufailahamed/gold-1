@@ -44,7 +44,7 @@ export function ErrorState({ error, onRetry, title = "Couldn't load" }: { error:
     <EmptyState
       icon={forbidden ? "lock" : "warning"}
       title={forbidden ? "Not available for your role" : title}
-      message={forbidden ? "Ask an owner or manager for access." : errorMessage(error)}
+      message={forbidden ? "Ask an owner or admin for access." : errorMessage(error)}
       action={onRetry && !forbidden ? { label: "Try again", onPress: onRetry, icon: "refresh" } : undefined}
     />
   );
