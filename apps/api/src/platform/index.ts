@@ -10,6 +10,7 @@ import { platformSearch } from "./routes/search";
 import { platformSupport } from "./routes/support";
 import { platformTenants } from "./routes/tenants";
 import { runBillingCycle } from "./services/billing";
+import { runFleetMigrations } from "./services/fleet";
 import { collectAllUsage, housekeeping, runJob } from "./services/ops";
 
 /** The control-plane API, mounted at /platform/v1. */
@@ -44,6 +45,7 @@ export async function platformScheduled(event: { cron: string }, env: Env): Prom
     : [
         () => runJob(pdb, "billing_cycle", "cron", null, () => runBillingCycle(pdb, null)),
         () => runJob(pdb, "housekeeping", "cron", null, () => housekeeping(pdb)),
+        () => runJob(pdb, "migrate_fleet", "cron", null, () => runFleetMigrations(env, pdb)),
       ];
   for (const job of jobs) {
     try {

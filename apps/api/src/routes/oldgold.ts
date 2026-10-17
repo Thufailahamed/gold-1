@@ -1,3 +1,4 @@
+import { shopR2 } from "../services/shopStorage";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import {
@@ -237,7 +238,7 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         const rawExt = f.name.includes(".") ? (f.name.split(".").pop() ?? "") : "";
         const ext = /^[a-z0-9]{1,8}$/i.test(rawExt) ? rawExt.toLowerCase() : "bin";
         const key = `oldgold/${id}/${crypto.randomUUID()}.${ext}`;
-        await c.env.R2.put(key, await f.arrayBuffer(), { httpMetadata: { contentType: f.type || "application/octet-stream" } });
+        await shopR2(c).put(key, await f.arrayBuffer(), { httpMetadata: { contentType: f.type || "application/octet-stream" } });
         keys.push(key);
       }
       try {
@@ -245,7 +246,7 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         return c.json({ success: true, data }, 201);
       } catch (err) {
         // Not recorded on the item, so nothing would ever reference them.
-        await Promise.all(keys.map((k) => c.env.R2.delete(k).catch(() => undefined)));
+        await Promise.all(keys.map((k) => shopR2(c).delete(k).catch(() => undefined)));
         throw err;
       }
     } catch (err) {
@@ -259,7 +260,7 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return serviceError(c, err);
     }
     const key = `oldgold/${c.req.param("id")}/${c.req.param("file")}`;
-    const obj = await c.env.R2.get(key);
+    const obj = await shopR2(c).get(key);
     if (!obj)
       return c.json(
         { success: false, error: { code: "NOT_FOUND", message: "File not found" } },

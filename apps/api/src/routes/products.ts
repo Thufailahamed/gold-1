@@ -1,3 +1,4 @@
+import { shopR2 } from "../services/shopStorage";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
@@ -222,7 +223,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
     const key = `products/${id}/${crypto.randomUUID()}.${ext}`;
-    await c.env.R2.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
+    await shopR2(c).put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
     const next = [...keys, key];
     await getShopDb(c).batch([
       getShopDb(c).prepare("UPDATE products SET image_keys = ? WHERE id = ?").bind(
@@ -242,7 +243,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/:id/images/:img", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
     const key = `products/${c.req.param("id")}/${c.req.param("img")}`;
-    const obj = await c.env.R2.get(key);
+    const obj = await shopR2(c).get(key);
     if (!obj)
       return c.json(
         { success: false, error: { code: "NOT_FOUND", message: "Image not found" } },
@@ -282,7 +283,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         branchId: prev.branch_id,
       }),
     ]);
-    await c.env.R2.delete(key);
+    await shopR2(c).delete(key);
     return c.json({ success: true, data: { image_keys: next } }, 200);
   })
   .post("/:id/reserve", requirePerm(PERMISSIONS.PRODUCTS_EDIT), async (c) => {

@@ -4,6 +4,12 @@ import { hashPassword } from "../services/hash";
 import { loadTenant, purgeTenant } from "./services/tenants";
 import type { Actor } from "./core";
 
+/** Each shop database records the migrations it has applied here. */
+export const SCHEMA_MIGRATIONS_DDL =
+  "CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)";
+
+export const LATEST_MIGRATION = SHOP_MIGRATIONS[SHOP_MIGRATIONS.length - 1]!.name;
+
 /**
  * In-worker tenant provisioning: one D1 per shop, created over the Cloudflare
  * API. Migrations are bundled at build time (scripts/bundle-migrations.mjs);
@@ -31,7 +37,13 @@ export type CfQuery = { sql: string; params?: unknown[] };
 
 export type CfClient = {
   createDatabase: (name: string) => Promise<{ id: string; name: string }>;
-  applySql: (d1Id: string, queries: CfQuery[]) => Promise<void>;
+  /**
+   * `atomic` sends every statement as ONE batch (one transaction) with foreign
+   * keys deferred to commit. D1 enforces constraints per request, and the
+   * migrations insert children before parents across files (role_permissions
+   * in 0002 before roles in 0004), so they only apply as a single unit.
+   */
+  applySql: (d1Id: string, queries: CfQuery[], opts?: { atomic?: boolean }) => Promise<void>;
   deleteDatabase: (d1Id: string) => Promise<void>;
 };
 
@@ -66,9 +78,12 @@ export function restCfClient(accountId: string, token: string, fetchFn?: typeof 
       if (!json.success) await fail(res, "D1 create");
       return { id: json.result.uuid, name: json.result.name };
     },
-    async applySql(d1Id: string, queries: CfQuery[]) {
+    async applySql(d1Id: string, queries: CfQuery[], opts?: { atomic?: boolean }) {
       // Batches go to /query with {batch: [...]} — there is no /batch path.
-      for (const chunk of chunks(queries, 25)) {
+      const groups = opts?.atomic
+        ? [[{ sql: "PRAGMA defer_foreign_keys = on" }, ...queries]]
+        : chunks(queries, 25);
+      for (const chunk of groups) {
         const res = (await call(`${CF_BASE}/accounts/${accountId}/d1/database/${d1Id}/query`, {
           method: "POST",
           headers,
@@ -187,10 +202,16 @@ export async function provisionShop(
   }
   if (!created) throw new Error("D1 create failed");
   try {
-    const migrationQueries: CfQuery[] = SHOP_MIGRATIONS.flatMap((m) =>
-      splitMigration(m.sql).map((sql) => ({ sql }))
-    );
-    await cf.applySql(created.id, migrationQueries);
+    // A new shop gets every bundled migration and records each one, so the
+    // fleet runner knows exactly where it stands.
+    const migrationQueries: CfQuery[] = [
+      { sql: SCHEMA_MIGRATIONS_DDL },
+      ...SHOP_MIGRATIONS.flatMap((m) => [
+        ...splitMigration(m.sql).map((sql) => ({ sql })),
+        { sql: "INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)", params: [m.name, Date.now()] },
+      ]),
+    ];
+    await cf.applySql(created.id, migrationQueries, { atomic: true });
     const now = Date.now();
     const ownerId = crypto.randomUUID();
     const branchId = crypto.randomUUID();
@@ -203,7 +224,7 @@ export async function provisionShop(
       { sql: "INSERT INTO branch_members (user_id, branch_id) VALUES (?, ?)", params: [ownerId, branchId] },
     ]);
     await pdb.batch([
-      pdb.prepare("INSERT INTO tenant_databases (tenant_id, d1_id, d1_name, created_at) VALUES (?, ?, ?, ?)").bind(input.tenantId, created.id, created.name, Date.now()),
+      pdb.prepare("INSERT INTO tenant_databases (tenant_id, d1_id, d1_name, created_at, schema_version, schema_checked_at) VALUES (?, ?, ?, ?, ?, ?)").bind(input.tenantId, created.id, created.name, Date.now(), LATEST_MIGRATION, Date.now()),
       pdb.prepare("INSERT INTO tenant_members (tenant_id, email, created_at) VALUES (?, ?, ?) ON CONFLICT (tenant_id, email) DO NOTHING").bind(input.tenantId, input.ownerEmail.toLowerCase(), Date.now()),
       pdb.prepare("UPDATE tenants SET data_plane = ?, updated_at = ? WHERE id = ?").bind(created.id, Date.now(), input.tenantId),
     ]);

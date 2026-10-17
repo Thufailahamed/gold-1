@@ -1,3 +1,4 @@
+import { shopR2 } from "../services/shopStorage";
 import { Hono, type Context } from "hono";
 import {
   approveExpenseSchema,
@@ -182,7 +183,7 @@ export const expenses = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     const file = form["file"];
     if (!(file instanceof File)) return invalid(c, "Attach a receipt file under 'file'");
     try {
-      const data = await attachReceipt(getShopDb(c), c.env.R2, c.req.param("id"), file, c.get("userId"));
+      const data = await attachReceipt(getShopDb(c), shopR2(c), c.req.param("id"), file, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -190,7 +191,7 @@ export const expenses = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/:id/receipt", requirePerm(PERMISSIONS.ACCOUNTS_VIEW), async (c) => {
     try {
-      const { body, contentType } = await getReceipt(getShopDb(c), c.env.R2, c.req.param("id"));
+      const { body, contentType } = await getReceipt(getShopDb(c), shopR2(c), c.req.param("id"));
       c.header("Content-Type", contentType);
       return c.body(body, 200);
     } catch (err) {

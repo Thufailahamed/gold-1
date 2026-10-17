@@ -23,6 +23,7 @@ const JOB_INFO: Record<string, { label: string; schedule: string; description: s
   billing_cycle: { label: "Billing cycle", schedule: "Hourly", description: "Converts trials, renews periods, issues invoices, marks past due, applies dunning." },
   collect_usage: { label: "Usage collection", schedule: "Nightly 02:15 UTC", description: "Snapshots users, branches, products and sales from each reachable shop database." },
   housekeeping: { label: "Housekeeping", schedule: "Hourly", description: "Purges expired staff sessions, old impersonation grants and job history." },
+  migrate_fleet: { label: "Shop migrations", schedule: "Hourly", description: "Brings every shop database up to the latest schema. Each shop migrates atomically; a failure leaves it on its old version." },
 };
 
 export default function SystemPage() {
@@ -72,7 +73,7 @@ export default function SystemPage() {
         </Callout>
       ) : null}
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-4">
         {Object.entries(JOB_INFO).map(([job, info]) => {
           const last = h?.lastRuns[job];
           return (
@@ -173,8 +174,82 @@ export default function SystemPage() {
         )}
       </TableCard>
 
+      <FleetPanel canRun={canRun} />
+
       <ActiveGrantsPanel />
     </Page>
+  );
+}
+
+type Fleet = {
+  latest: string;
+  total: number;
+  behind: number;
+  shops: Array<{ tenant_id: string; slug: string; name: string; status: string; d1_name: string; schema_version: string | null; schema_checked_at: number | null; schema_error: string | null; behind: boolean }>;
+};
+
+function FleetPanel({ canRun }: { canRun: boolean }) {
+  const qc = useQueryClient();
+  const fleet = useQuery({ queryKey: ["p-fleet"], queryFn: () => papi<Fleet>("/system/fleet") });
+  const migrate = useMutation({
+    mutationFn: () => papi<unknown>("/system/jobs/migrate_fleet/run", { method: "POST" }),
+    onSuccess: () => {
+      toast.success("Shop migrations finished");
+      qc.invalidateQueries({ queryKey: ["p-fleet"] });
+      qc.invalidateQueries({ queryKey: ["p-jobs"] });
+      qc.invalidateQueries({ queryKey: ["p-health"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Migration run failed"),
+  });
+  const f = fleet.data;
+  return (
+    <TableCard
+      title="Shop schema versions"
+      description={f ? `Latest ${f.latest} · ${f.behind === 0 ? "every shop is current" : `${f.behind} of ${f.total} behind`}` : "Which migration each shop database is on"}
+      icon={<ServerIcon size={16} />}
+      actions={
+        canRun ? (
+          <button onClick={() => migrate.mutate()} disabled={migrate.isPending} className="g-btn g-btn-secondary h-9 text-sm">
+            {migrate.isPending ? "Migrating…" : "Migrate all shops"}
+          </button>
+        ) : undefined
+      }
+    >
+      {fleet.isLoading ? (
+        <TableSkeleton rows={3} cols={4} />
+      ) : (f?.shops ?? []).length === 0 ? (
+        <EmptyBlock title="No shop databases" description="Shops appear here once they have a provisioned database." />
+      ) : (
+        <table className="g-table">
+          <thead>
+            <tr>
+              <th>Shop</th>
+              <th>Database</th>
+              <th>Schema</th>
+              <th>Checked</th>
+            </tr>
+          </thead>
+          <tbody>
+            {f!.shops.map((s) => (
+              <tr key={s.tenant_id}>
+                <td>{s.name} <span className="text-ink-4">· {s.slug}</span></td>
+                <td className="font-mono text-xs text-ink-3">{s.d1_name}</td>
+                <td>
+                  {s.schema_error ? (
+                    <span title={s.schema_error}><StatusPill status="failed" label="Failed" /></span>
+                  ) : s.behind ? (
+                    <StatusPill status="processing" label={s.schema_version ?? "Unknown"} />
+                  ) : (
+                    <StatusPill status="success" label="Current" />
+                  )}
+                </td>
+                <td className="text-ink-3">{s.schema_checked_at ? relative(s.schema_checked_at) : "Never"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </TableCard>
   );
 }
 

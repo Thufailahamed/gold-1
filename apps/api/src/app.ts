@@ -46,6 +46,7 @@ import { platform, platformScheduled } from "./platform";
 import { enforcePlanLimit, platformBridge, tenantGate } from "./platform/bridge";
 import { resolveTenant } from "./platform/resolve";
 import { createPublicRoutes } from "./routes/public";
+import { enforceStorageLimit } from "./services/shopStorage";
 import { provisionShop } from "./platform/provision";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -68,6 +69,9 @@ app.post("/api/v1/users", enforcePlanLimit("users"));
 app.patch("/api/v1/users/:id/activate", enforcePlanLimit("users"));
 app.post("/api/v1/branches", enforcePlanLimit("branches"));
 app.post("/api/v1/products", enforcePlanLimit("products"));
+app.post("/api/v1/products/:id/images", enforceStorageLimit);
+app.post("/api/v1/oldgold/items/:id/files", enforceStorageLimit);
+app.post("/api/v1/expenses/:id/receipt", enforceStorageLimit);
 app.route("/api/v1/health", health);
 app.route("/api/v1/auth", auth);
 app.route("/api/v1/users", users);

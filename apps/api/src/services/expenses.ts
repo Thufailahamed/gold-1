@@ -1,3 +1,4 @@
+import type { ShopBucket } from "./shopStorage";
 import {
   expensePosting,
   expenseThresholds,
@@ -446,7 +447,7 @@ const RECEIPT_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 export async function attachReceipt(
   db: D1Database,
-  r2: R2Bucket,
+  r2: ShopBucket,
   id: string,
   file: File,
   actorId: string
@@ -474,7 +475,7 @@ export async function attachReceipt(
 
 export async function getReceipt(
   db: D1Database,
-  r2: R2Bucket,
+  r2: ShopBucket,
   id: string
 ): Promise<{ body: ArrayBuffer; contentType: string }> {
   const exp = await loadExpense(db, id);

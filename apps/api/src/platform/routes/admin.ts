@@ -37,6 +37,7 @@ import {
   updatePlatformSettings,
   type JobName,
 } from "../services/ops";
+import { fleetStatus, runFleetMigrations } from "../services/fleet";
 
 const passwordResetSchema = z.object({ password: z.string().min(12) });
 
@@ -144,6 +145,7 @@ export const platformImpersonations = new Hono<PlatformEnv>()
 export const platformSystem = new Hono<PlatformEnv>()
   .use(requirePlatformAuth)
   .get("/health", requirePlatformPerm(P.SYSTEM_VIEW), async (c) => ok(c, await systemHealth(c.get("pdb"), c.env)))
+  .get("/fleet", requirePlatformPerm(P.SYSTEM_VIEW), async (c) => ok(c, await fleetStatus(c.get("pdb"))))
   .get("/jobs", requirePlatformPerm(P.SYSTEM_VIEW), async (c) => ok(c, await listJobRuns(c.get("pdb"), c.req.query("job") || undefined)))
   .post("/jobs/:job/run", requirePlatformPerm(P.SETTINGS_MANAGE), async (c) => {
     const job = c.req.param("job") as JobName;
@@ -155,6 +157,7 @@ export const platformSystem = new Hono<PlatformEnv>()
         billing_cycle: () => runBillingCycle(pdb, by),
         collect_usage: () => collectAllUsage(pdb, c.env),
         housekeeping: () => housekeeping(pdb),
+        migrate_fleet: () => runFleetMigrations(c.env, pdb),
       }[job];
       return ok(c, await runJob(pdb, job, "manual", by, fn));
     } catch (e) {

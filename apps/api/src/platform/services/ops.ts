@@ -2,6 +2,7 @@ import { DAY_MS, PLATFORM_SETTING_DEFAULTS } from "@goldos/shared";
 import type { Env } from "../../db/client";
 import { RestD1 } from "../../db/rest-d1";
 import { buildPlatformAudit, fail, getPlatformSettings, randomToken, sha256Hex, type Actor } from "../core";
+import { shopStorageBytes } from "../../services/shopStorage";
 import { loadTenant } from "./tenants";
 
 /* ------------------------------------------------------------------ Settings */
@@ -97,7 +98,7 @@ export function auditCsv(rows: Record<string, unknown>[]): string {
 
 /* ------------------------------------------------------------------ Jobs */
 
-export const JOBS = ["billing_cycle", "collect_usage", "housekeeping"] as const;
+export const JOBS = ["billing_cycle", "collect_usage", "housekeeping", "migrate_fleet"] as const;
 export type JobName = (typeof JOBS)[number];
 
 /** Records every run — cron or button — so the System page can show what ran and what broke. */
@@ -168,7 +169,26 @@ export function shopHandleFor(env: Env, d1Id: string): D1Database | null {
   return new RestD1(env.CLOUDFLARE_ACCOUNT_ID, d1Id, env.CLOUDFLARE_D1_API_TOKEN) as unknown as D1Database;
 }
 
-export async function snapshotUsage(pdb: D1Database, data: D1Database, tenantId: string, now = Date.now()) {
+/**
+ * Bucket usage for one shop, in whole MB. A failed R2 listing keeps the last
+ * known figure rather than recording 0, which would silently lift the plan limit.
+ */
+async function measureStorageMb(pdb: D1Database, r2: R2Bucket | undefined, tenantId: string): Promise<number> {
+  if (r2) {
+    try {
+      return Math.ceil((await shopStorageBytes(r2, tenantId)) / (1024 * 1024));
+    } catch (e) {
+      console.error("storage measurement failed", tenantId, e);
+    }
+  }
+  const last = await pdb
+    .prepare("SELECT storage_mb FROM usage_snapshots WHERE tenant_id = ? ORDER BY captured_at DESC LIMIT 1")
+    .bind(tenantId)
+    .first<{ storage_mb: number }>();
+  return last?.storage_mb ?? 0;
+}
+
+export async function snapshotUsage(pdb: D1Database, data: D1Database, tenantId: string, now = Date.now(), r2?: R2Bucket) {
   const n = async (sql: string, ...binds: unknown[]) =>
     (await data.prepare(sql).bind(...binds).first<{ n: number | null }>())?.n ?? 0;
   const since = now - 30 * DAY_MS;
@@ -178,7 +198,7 @@ export async function snapshotUsage(pdb: D1Database, data: D1Database, tenantId:
   const sales = await n("SELECT COUNT(*) AS n FROM sales_invoices WHERE created_at >= ? AND status != 'VOID'", since);
   const salesCents = await n("SELECT COALESCE(SUM(total_cents), 0) AS n FROM sales_invoices WHERE created_at >= ? AND status != 'VOID'", since);
   const lastActive = (await data.prepare("SELECT MAX(created_at) AS n FROM audit_logs").first<{ n: number | null }>())?.n ?? null;
-  const snap = { users, branches, products, sales_30d: sales, sales_30d_cents: salesCents, storage_mb: 0, last_active_at: lastActive };
+  const snap = { users, branches, products, sales_30d: sales, sales_30d_cents: salesCents, storage_mb: await measureStorageMb(pdb, r2, tenantId), last_active_at: lastActive };
   await pdb.batch([
     pdb
       .prepare(
@@ -206,7 +226,7 @@ export async function collectAllUsage(pdb: D1Database, env: Env) {
       continue;
     }
     try {
-      await snapshotUsage(pdb, data, t.id);
+      await snapshotUsage(pdb, data, t.id, Date.now(), env.R2);
       collected++;
     } catch (e) {
       errors.push({ tenantId: t.id, message: e instanceof Error ? e.message : String(e) });

@@ -51,15 +51,15 @@ INSERT INTO counters (name, next) VALUES ('EXP', 1);
 -- the shop has a usable set on day one and no account sits empty and
 -- unexplained.
 INSERT INTO expense_categories (id, name, description, account_code, is_active, created_at, created_by) VALUES
-  ('exp-rent',      'Rent & Rates',         'Shop rent, rates and common service charges', '6000', 1, 1759000000000, 'admin-1'),
-  ('exp-utilities', 'Utilities',             'Electricity, water, gas, internet',           '6010', 1, 1759000000000, 'admin-1'),
-  ('exp-salaries',  'Salaries & Wages',      'Staff wages, bonuses and EPF',               '6020', 1, 1759000000000, 'admin-1'),
-  ('exp-repairs',   'Repairs & Maintenance', 'Tools, machinery, servicing and spares',      '6030', 1, 1759000000000, 'admin-1'),
-  ('exp-transport', 'Transport & Delivery',  'Fuel, delivery and staff transport',          '6040', 1, 1759000000000, 'admin-1'),
-  ('exp-marketing', 'Marketing & Advertising','Promotion, signage and advertising',           '6050', 1, 1759000000000, 'admin-1'),
-  ('exp-bankfees',  'Bank & Card Charges',   'Bank fees, card processing and interest',    '6060', 1, 1759000000000, 'admin-1'),
-  ('exp-office',    'Office & Consumables',  'Stationery and consumables',                  '6070', 1, 1759000000000, 'admin-1'),
-  ('exp-other',     'Other Expenses',        'Anything the categories above do not cover',  '6080', 1, 1759000000000, 'admin-1');
+  ('exp-rent',      'Rent & Rates',         'Shop rent, rates and common service charges', '6000', 1, 1759000000000, NULL),
+  ('exp-utilities', 'Utilities',             'Electricity, water, gas, internet',           '6010', 1, 1759000000000, NULL),
+  ('exp-salaries',  'Salaries & Wages',      'Staff wages, bonuses and EPF',               '6020', 1, 1759000000000, NULL),
+  ('exp-repairs',   'Repairs & Maintenance', 'Tools, machinery, servicing and spares',      '6030', 1, 1759000000000, NULL),
+  ('exp-transport', 'Transport & Delivery',  'Fuel, delivery and staff transport',          '6040', 1, 1759000000000, NULL),
+  ('exp-marketing', 'Marketing & Advertising','Promotion, signage and advertising',           '6050', 1, 1759000000000, NULL),
+  ('exp-bankfees',  'Bank & Card Charges',   'Bank fees, card processing and interest',    '6060', 1, 1759000000000, NULL),
+  ('exp-office',    'Office & Consumables',  'Stationery and consumables',                  '6070', 1, 1759000000000, NULL),
+  ('exp-other',     'Other Expenses',        'Anything the categories above do not cover',  '6080', 1, 1759000000000, NULL);
 
 -- Both gates are configuration, not code. 0 means "gate everything".
 INSERT INTO settings (key, value_json, type) VALUES

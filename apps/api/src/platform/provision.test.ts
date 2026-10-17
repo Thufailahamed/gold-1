@@ -38,18 +38,26 @@ function fakeWorld(opts: { clashFirstCreate?: boolean } = {}): FakeWorld {
       dbs.set(id, new DatabaseSync(":memory:"));
       return { id, name };
     },
-    async applySql(d1Id: string, queries: CfQuery[]) {
+    async applySql(d1Id: string, queries: CfQuery[], opts?: { atomic?: boolean }) {
       calls.push(`apply:${d1Id}:${queries.length}`);
       const raw = dbs.get(d1Id);
       if (!raw) throw new Error("unknown database");
-      // Like the real migration runner: constraints off while the schema
-      // lands (0002 references roles 0004 creates), on for the seed.
-      const first = !migrated.has(d1Id);
-      if (first) raw.exec("PRAGMA foreign_keys = OFF");
-      for (const q of queries) raw.exec(fill(q.sql, q.params ?? []));
-      if (first) {
-        raw.exec("PRAGMA foreign_keys = ON");
-        migrated.add(d1Id);
+      // Like real D1: constraints are always enforced, per request. An atomic
+      // batch is one transaction with checks deferred to commit; anything else
+      // must satisfy foreign keys statement by statement.
+      raw.exec("PRAGMA foreign_keys = ON");
+      if (opts?.atomic) {
+        raw.exec("BEGIN");
+        raw.exec("PRAGMA defer_foreign_keys = on");
+        try {
+          for (const q of queries) raw.exec(fill(q.sql, q.params ?? []));
+          raw.exec("COMMIT");
+        } catch (e) {
+          raw.exec("ROLLBACK");
+          throw e;
+        }
+      } else {
+        for (const q of queries) raw.exec(fill(q.sql, q.params ?? []));
       }
     },
     async deleteDatabase(d1Id: string) {

@@ -123,11 +123,51 @@ percentage rollout (stable FNV-1a bucket per tenant+flag) → default.
 
 Every run, cron or manual, is recorded in `job_runs` and shown on System health.
 
+## File storage (R2)
+
+One bucket serves every shop. A request's workspace scopes it: product images,
+old-gold files and expense receipts are read and written through `shopR2(c)`
+(`services/shopStorage.ts`), which prefixes every key with `t/{tenantId}/`. A shop
+cannot resolve another shop's object even with its exact key; the keys stored in
+the shop's own database stay unprefixed. Billing slips live under
+`receipts/{tenantId}/` in the control plane and are separate.
+
+Pinned/unmanaged single-shop deploys resolve no workspace and keep their
+existing unprefixed objects.
+
+Nightly `collect_usage` measures each shop's bytes (`storage_mb`; a failed
+listing keeps the last figure). Uploads are refused with `PLAN_LIMIT` when the
+latest snapshot plus the incoming size exceeds the plan's `max_storage_mb`.
+The check uses the snapshot, so it can lag up to a day.
+
+## Fleet migrations
+
+Every shop is its own D1, so a new file in `apps/api/drizzle/` has to reach each
+one. Each shop records applied migrations in `schema_migrations`; the
+`migrate_fleet` job (hourly, or System → Shop schema versions → Migrate all
+shops) applies what is pending.
+
+- One shop's pending migrations go to D1 as **one atomic batch** with
+  `PRAGMA defer_foreign_keys = on`. Migrations insert children before parents
+  across files, which D1 only allows inside a deferred transaction. A failure
+  rolls that shop back to its previous version; the error shows in the
+  console and the other shops carry on.
+- The marker row is a plain INSERT in the same batch, so two runners racing on
+  one shop collide and the loser rolls back.
+- Shops created before tracking are adopted at `FLEET_BASELINE`
+  (`services/fleet.ts`) without re-running anything.
+- New shops record every bundled migration at provisioning.
+- Max 25 shops migrated per run; the rest are `deferred` to the next tick.
+
+Adding a shop migration: add `drizzle/00NN_*.sql`, run
+`pnpm --filter goldos-api bundle:migrations`, deploy. Do not assume foreign
+keys are off, and do not seed rows that reference users (fresh shops have none).
+
 ## Deploy
 
 ```
 wrangler d1 create goldos-platform            # paste id into wrangler.toml
-pnpm --filter goldos-api platform:migrate:remote
+pnpm --filter goldos-api platform:migrate:remote   # also run after any new drizzle-platform/ file
 wrangler secret put PLATFORM_BOOTSTRAP_TOKEN
 wrangler secret put CLOUDFLARE_ACCOUNT_ID     # SaaS auto-provisioning
 wrangler secret put CLOUDFLARE_D1_API_TOKEN   # SaaS auto-provisioning
@@ -141,7 +181,6 @@ Local: `pnpm --filter goldos-api platform:migrate:local`, then
 
 - Card gateway (Stripe/PayHere) and automated emails (invoices, dunning, trial reminders).
 - Hot-path query coalescing (tenant DBs are reached over the D1 REST API).
-- Storage metering (R2 usage reports 0).
 
 ## How multi-shop works (v1)
 
