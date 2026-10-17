@@ -3,6 +3,7 @@ import { View } from "react-native";
 import { router, Stack, useLocalSearchParams, type Href } from "expo-router";
 import { dateTime } from "@/lib/format";
 import { useTheme } from "@/theme";
+import { useBranch } from "@/lib/session";
 import { chooseAction, Chips, Row, ScreenList, SearchField, StatusPill, Text, usePagedQuery } from "@/ui";
 
 type Invoice = {
@@ -21,14 +22,20 @@ const fmt = (c: number) => (c / 100).toLocaleString("en-US");
 
 export default function InvoicesScreen() {
   const { c } = useTheme();
+  // Scope the list to the shop the user is working in (the branch switcher's
+  // choice) so another shop's invoices never appear here.
+  const { branchId: activeBranch } = useBranch();
   const params = useLocalSearchParams<{ status?: string }>();
   const [search, setSearch] = useState("");
   // The sales dashboard links here with ?status= to open a settlement state.
   const [fStatus, setFStatus] = useState<string>(params.status && (STATUSES as readonly string[]).includes(params.status) ? params.status : "");
 
-  const list = usePagedQuery<Invoice>(["sales", search, fStatus], (page) =>
-    `/api/v1/sales/invoices?search=${encodeURIComponent(search)}&page=${page}&limit=20${fStatus ? `&status=${fStatus}` : ""}`
-  );
+  const list = usePagedQuery<Invoice>(["sales", search, fStatus, activeBranch], (page) => {
+    const p = new URLSearchParams({ search, page: String(page), limit: "20" });
+    if (fStatus) p.set("status", fStatus);
+    if (activeBranch) p.set("branchId", activeBranch);
+    return `/api/v1/sales/invoices?${p.toString()}`;
+  });
   const value = list.rows.reduce((n, r) => n + (r.status === "VOID" ? 0 : r.total_cents), 0);
   const due = list.rows.reduce((n, r) => n + (r.status === "VOID" ? 0 : Math.max(0, r.balance_cents ?? 0)), 0);
 

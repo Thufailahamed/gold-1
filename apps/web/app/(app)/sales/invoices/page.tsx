@@ -47,11 +47,20 @@ type Paged = { rows: Invoice[]; total: number };
 const STATUSES: readonly string[] = INVOICE_STATUSES;
 const PAGE_SIZE = 20;
 
+function branchDefault(): string {
+  if (typeof document === "undefined") return "";
+  return document.cookie.split("; ").find((c) => c.startsWith("goldos_branch="))?.split("=")[1] ?? "";
+}
+
 export default function SalesInvoicesPage() {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [fStatus, setFStatus] = useState("");
+  // Scope the list to the shop the user is working in (the branch switcher's
+  // choice) so another shop's invoices never appear here. Switch shops from
+  // the branch switcher to see their invoices instead.
+  const [branchId] = useState(branchDefault);
 
   // The sales dashboard links here with ?status= to open a settlement state.
   useEffect(() => {
@@ -60,9 +69,9 @@ export default function SalesInvoicesPage() {
   }, []);
 
   const list = useQuery({
-    queryKey: ["sales", search, page, fStatus],
+    queryKey: ["sales", search, page, fStatus, branchId],
     queryFn: () =>
-      api<Paged>(`/api/v1/sales/invoices?search=${encodeURIComponent(search)}&page=${page}&limit=${PAGE_SIZE}${fStatus ? `&status=${fStatus}` : ""}`),
+      api<Paged>(`/api/v1/sales/invoices?search=${encodeURIComponent(search)}&page=${page}&limit=${PAGE_SIZE}${fStatus ? `&status=${fStatus}` : ""}${branchId ? `&branchId=${branchId}` : ""}`),
   });
 
   // Same cache keys as the sales overview: the credit states carry rows so the open balance can be summed.
@@ -72,8 +81,8 @@ export default function SalesInvoicesPage() {
       return {
         retry: false,
         staleTime: 30_000,
-        queryKey: ["sales-dash", "state", s],
-        queryFn: () => api<Paged>(`/api/v1/sales/invoices?status=${s}&limit=${credit ? 100 : 1}`),
+        queryKey: ["sales-dash", "state", s, branchId],
+        queryFn: () => api<Paged>(`/api/v1/sales/invoices?status=${s}&limit=${credit ? 100 : 1}${branchId ? `&branchId=${branchId}` : ""}`),
       };
     }),
   });

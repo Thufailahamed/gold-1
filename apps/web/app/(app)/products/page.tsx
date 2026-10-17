@@ -363,12 +363,19 @@ function PageNav({
 
 /* ------------------------------------------------------------------ page */
 
+function branchDefault(): string {
+  if (typeof document === "undefined") return "";
+  return document.cookie.split("; ").find((c) => c.startsWith("goldos_branch="))?.split("=")[1] ?? "";
+}
+
 export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [fCat, setFCat] = useState("");
   const [fPur, setFPur] = useState("");
-  const [fBranch, setFBranch] = useState("");
+  // Default to the shop the user is working in (the branch switcher's choice);
+  // "All branches" stays available as an explicit filter choice.
+  const [fBranch, setFBranch] = useState(branchDefault);
   const [fStatus, setFStatus] = useState("");
   const [fMinG, setFMinG] = useState("");
   const [fMaxG, setFMaxG] = useState("");
@@ -417,14 +424,14 @@ export default function ProductsPage() {
     queryFn: () => api<{ rows: Product[]; total: number }>(query()),
   });
   const allCount = useQuery({
-    queryKey: ["products-count", "all"],
-    queryFn: () => api<{ rows: Product[]; total: number }>("/api/v1/products?limit=1&page=1"),
+    queryKey: ["products-count", "all", fBranch],
+    queryFn: () => api<{ rows: Product[]; total: number }>(`/api/v1/products?limit=1&page=1${fBranch ? `&branchId=${fBranch}` : ""}`),
   });
   // One `limit=1` read per quick status: the pill counts and header figures.
   const statusCounts = useQueries({
     queries: QUICK_STATUSES.map((st) => ({
-      queryKey: ["products-count", st],
-      queryFn: () => api<{ rows: Product[]; total: number }>(`/api/v1/products?limit=1&page=1&status=${st}`),
+      queryKey: ["products-count", st, fBranch],
+      queryFn: () => api<{ rows: Product[]; total: number }>(`/api/v1/products?limit=1&page=1&status=${st}${fBranch ? `&branchId=${fBranch}` : ""}`),
     })),
   });
   const countOf = (st: string) => statusCounts[QUICK_STATUSES.indexOf(st)]?.data?.total;
@@ -516,7 +523,7 @@ export default function ProductsPage() {
           </>
         }
         stats={[
-          { label: "Pieces", value: allN, loading: allCount.isLoading, accent: true, sub: "all branches" },
+          { label: "Pieces", value: allN, loading: allCount.isLoading, accent: true, sub: fBranch ? "this shop" : "all branches" },
           {
             label: "In stock",
             value: stockN,

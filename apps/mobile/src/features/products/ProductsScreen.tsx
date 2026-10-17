@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { router, Stack, useLocalSearchParams, type Href } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { mgToG } from "@goldos/shared";
 import { api } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
-import { useSession } from "@/lib/session";
+import { useBranch, useSession } from "@/lib/session";
 import { GUTTER, radius, useTheme } from "@/theme";
 import {
   Button,
@@ -57,11 +57,22 @@ let savedView: "grid" | "list" = "grid";
 export default function ProductsScreen() {
   const { c } = useTheme();
   const { can } = useSession();
+  const { branchId: activeBranch } = useBranch();
   const params = useLocalSearchParams<{ status?: string }>();
   const [search, setSearch] = useState("");
   const [fCat, setFCat] = useState("");
   const [fPur, setFPur] = useState("");
+  // Default to the shop the user is working in once it is known; "All branches"
+  // stays available as an explicit filter choice (clearing the chip). Seeded
+  // once so an explicit choice survives later branch loads.
   const [fBranch, setFBranch] = useState("");
+  const branchSeeded = useRef(false);
+  useEffect(() => {
+    if (!branchSeeded.current && activeBranch) {
+      branchSeeded.current = true;
+      setFBranch(activeBranch);
+    }
+  }, [activeBranch]);
   // Deep links like /products?status=IN_REPAIR preselect the status filter.
   const [fStatus, setFStatus] = useState(params.status && STATUSES.includes(params.status) ? params.status : "");
   const [fMinG, setFMinG] = useState("");
