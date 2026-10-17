@@ -21,7 +21,7 @@ import { randomToken } from "../core";
 import { provisionShop, purgeTenantWithDatabase, retryProvision } from "../provision";
 import { actor, csv, ok, page, parseBody } from "../http";
 import { listInvoices } from "../services/billing";
-import { createImpersonation, listActiveImpersonations, listImpersonations, listPlatformAudit, revokeAllImpersonations, revokeImpersonation, shopHandleFor, snapshotUsage } from "../services/ops";
+import { createImpersonation, listActiveImpersonations, setOwnerPassword, listImpersonations, listPlatformAudit, revokeAllImpersonations, revokeImpersonation, shopHandleFor, snapshotUsage } from "../services/ops";
 import {
   applyDiscount,
   cancelSubscription,
@@ -136,6 +136,15 @@ export const platformTenants = new Hono<PlatformEnv>()
     try {
       const out = await retryProvision(c.env, c.get("pdb"), c.req.param("id"), p.data);
       return ok(c, { provisioning: { status: "ready", ...out } }, 200);
+    } catch (e) {
+      return serviceError(c, e);
+    }
+  })
+  .post("/:id/owner-password", requirePlatformPerm(P.TENANTS_MANAGE), async (c) => {
+    const p = await parseBody(c, z.object({ password: z.string().min(8).max(200), reason: z.string().trim().min(3).max(500) }));
+    if (!p.ok) return p.res;
+    try {
+      return ok(c, await setOwnerPassword(c.get("pdb"), c.env, c.req.param("id"), p.data, actor(c)));
     } catch (e) {
       return serviceError(c, e);
     }

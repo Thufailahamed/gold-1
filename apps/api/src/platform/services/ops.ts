@@ -2,6 +2,7 @@ import { DAY_MS, PLATFORM_SETTING_DEFAULTS } from "@goldos/shared";
 import type { Env } from "../../db/client";
 import { shopDbFor } from "../../db/shop-handle";
 import { buildPlatformAudit, fail, getPlatformSettings, randomToken, sha256Hex, type Actor } from "../core";
+import { hashPassword } from "../../services/hash";
 import { shopStorageBytes } from "../../services/shopStorage";
 import { loadTenant } from "./tenants";
 
@@ -274,6 +275,48 @@ export async function createImpersonation(
     ? `https://${tenant.custom_domain}`
     : (env.WEB_ORIGIN ?? "http://localhost:3000").split(",")[0]!.trim();
   return { url: `${origin}/impersonate?token=${token}`, expiresAt, targetEmail: target };
+}
+
+/**
+ * Staff reset of a shop owner's password, written straight into the shop's
+ * database. Signs the owner out everywhere and lifts any login lockout. The
+ * password itself never reaches the control plane or the audit row.
+ */
+export async function setOwnerPassword(
+  pdb: D1Database,
+  env: Env,
+  tenantId: string,
+  input: { password: string; reason: string },
+  actor: Actor
+): Promise<{ email: string }> {
+  const tenant = await loadTenant(pdb, tenantId);
+  if (tenant.status === "ARCHIVED") fail("CONFLICT", "Account is archived");
+  const link = await pdb.prepare("SELECT d1_id FROM tenant_databases WHERE tenant_id = ?").bind(tenantId).first<{ d1_id: string }>();
+  if (!link) fail("CONFLICT", "This account has no shop database yet");
+  const shop = shopDbFor(env, link.d1_id);
+  if (!shop) fail("CONFLICT", "Shop database is unreachable from here");
+  const email = tenant.owner_email.toLowerCase();
+  const owner = await shop
+    .prepare("SELECT u.id FROM users u JOIN user_roles r ON r.user_id = u.id AND r.role_id = 'owner' WHERE u.email = ? AND u.is_active = 1")
+    .bind(email)
+    .first<{ id: string }>();
+  if (!owner) fail("NOT_FOUND", `No active owner ${email} in this shop`);
+  await shop.batch([
+    shop.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").bind(await hashPassword(input.password), Date.now(), owner.id),
+    shop.prepare("DELETE FROM sessions WHERE user_id = ?").bind(owner.id),
+    shop.prepare("DELETE FROM login_attempts WHERE key = ?").bind(`email:${email}`),
+  ]);
+  await buildPlatformAudit(pdb, {
+    adminId: actor.id,
+    action: "tenant.owner_password_reset",
+    entity: "tenant",
+    entityId: tenant.id,
+    tenantId: tenant.id,
+    next: { email },
+    reason: input.reason,
+    ip: actor.ip,
+  }).run();
+  return { email };
 }
 
 export async function listImpersonations(db: D1Database, tenantId: string) {

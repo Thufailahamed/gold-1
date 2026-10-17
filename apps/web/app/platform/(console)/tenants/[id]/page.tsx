@@ -32,6 +32,7 @@ import {
   FlagIcon,
   GaugeIcon,
   HistoryIcon,
+  KeyIcon,
   LifeBuoyIcon,
   LogInIcon,
   PauseCircleIcon,
@@ -106,7 +107,7 @@ export default function TenantDetailPage() {
   const me = usePlatformMe();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("overview");
-  const [dialog, setDialog] = useState<null | "suspend" | "unsuspend" | "archive" | "restore" | "impersonate">(null);
+  const [dialog, setDialog] = useState<null | "suspend" | "unsuspend" | "archive" | "restore" | "impersonate" | "owner-password">(null);
   const q = useQuery({ queryKey: ["p-tenant", id], queryFn: () => papi<Detail>(`/tenants/${id}`) });
   const d = q.data;
   const t = d?.tenant;
@@ -151,6 +152,11 @@ export default function TenantDetailPage() {
               {can(me.data, P.TENANTS_IMPERSONATE) && t.status !== "ARCHIVED" ? (
                 <button onClick={() => setDialog("impersonate")} className={heroBtnPrimary}>
                   <LogInIcon size={15} /> Sign in as shop
+                </button>
+              ) : null}
+              {can(me.data, P.TENANTS_MANAGE) && t.status !== "ARCHIVED" && d?.database ? (
+                <button onClick={() => setDialog("owner-password")} className={heroBtnGhost}>
+                  <KeyIcon size={15} /> Set owner password
                 </button>
               ) : null}
               {can(me.data, P.TENANTS_SUSPEND) && t.status === "ACTIVE" ? (
@@ -236,7 +242,8 @@ export default function TenantDetailPage() {
       )}
 
       {dialog === "impersonate" && t ? <ImpersonateDialog tenant={t} onClose={() => setDialog(null)} /> : null}
-      {dialog && dialog !== "impersonate" && t ? (
+      {dialog === "owner-password" && t ? <OwnerPasswordDialog tenant={t} onClose={() => setDialog(null)} /> : null}
+      {dialog && dialog !== "impersonate" && dialog !== "owner-password" && t ? (
         <ReasonDialog
           title={{ suspend: `Suspend ${t.name}`, unsuspend: `Lift suspension`, archive: `Close ${t.name}`, restore: `Restore ${t.name}` }[dialog]}
           danger={dialog === "suspend" || dialog === "archive"}
@@ -1082,6 +1089,28 @@ function DangerZone({ d, onChange }: { d: Detail; onChange: () => void }) {
 }
 
 /* ------------------------------------------------------------------ Impersonation */
+
+function OwnerPasswordDialog({ tenant, onClose }: { tenant: Detail["tenant"]; onClose: () => void }) {
+  const [password, setPassword] = useState("");
+  return (
+    <ReasonDialog
+      title={`Set owner password for ${tenant.name}`}
+      kicker="Security"
+      submitLabel="Set password"
+      description={`Replaces the password for ${tenant.owner_email}, signs them out everywhere and clears any login lockout.`}
+      onClose={onClose}
+      onSubmit={async (reason) => {
+        if (password.length < 8) throw new Error("Password must be at least 8 characters");
+        await papi(`/tenants/${tenant.id}/owner-password`, { method: "POST", json: { password, reason } });
+        toast.success("Owner password updated");
+      }}
+    >
+      <F label="New password" hint="8+ characters. Not stored anywhere but the shop.">
+        <input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className={cn(controlClass, "w-full")} />
+      </F>
+    </ReasonDialog>
+  );
+}
 
 function ImpersonateDialog({ tenant, onClose }: { tenant: Detail["tenant"]; onClose: () => void }) {
   const [target, setTarget] = useState(tenant.owner_email);
