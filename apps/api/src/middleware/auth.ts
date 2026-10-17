@@ -48,11 +48,20 @@ export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   // A session is only valid in the workspace it was minted in: the resolved
   // shop database, never any other account's. No fallback across tenants.
   const shopDb = getShopDb(c);
-  const row = await shopDb.prepare(
-    "SELECT s.id, s.user_id, s.expires_at, s.created_at, u.is_active FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?"
+  // One round trip for the session, its user and the user's permissions: the
+  // shop database may be a network hop away, and this runs on every request.
+  const { results: rows } = await shopDb.prepare(
+    `SELECT s.user_id AS user_id, s.expires_at AS expires_at, s.created_at AS created_at, u.is_active AS is_active, p.name AS perm
+     FROM sessions s
+     JOIN users u ON u.id = s.user_id
+     LEFT JOIN user_roles ur ON ur.user_id = s.user_id
+     LEFT JOIN role_permissions rp ON rp.role_id = ur.role_id
+     LEFT JOIN permissions p ON p.id = rp.permission_id
+     WHERE s.id = ?`
   )
     .bind(sessionId)
-    .first<{ user_id: string; expires_at: number; created_at: number; is_active: number }>();
+    .all<{ user_id: string; expires_at: number; created_at: number; is_active: number; perm: string | null }>();
+  const row = rows?.[0];
   const now = Date.now();
   if (
     !row ||
@@ -72,15 +81,8 @@ export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   if (slid - row.expires_at >= SESSION_TOUCH_MS) {
     await shopDb.prepare("UPDATE sessions SET expires_at = ? WHERE id = ?").bind(slid, sessionId).run();
   }
-  const { results } = await shopDb.prepare(
-    `SELECT p.name AS name FROM user_roles ur
-     JOIN role_permissions rp ON rp.role_id = ur.role_id
-     JOIN permissions p ON p.id = rp.permission_id
-     WHERE ur.user_id = ?`
-  )
-    .bind(row.user_id)
-    .all<{ name: string }>();
+  const results = rows.filter((r) => r.perm !== null).map((r) => ({ name: r.perm as string }));
   c.set("userId", row.user_id);
-  c.set("permissions", [...new Set((results ?? []).map((r) => r.name))]);
+  c.set("permissions", [...new Set(results.map((r) => r.name))]);
   await next();
 });
