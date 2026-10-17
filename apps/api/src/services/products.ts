@@ -80,21 +80,52 @@ function randomCode(prefix: "JW-" | "SKU-"): string {
   return s;
 }
 
-async function uniqueCode(
-  db: D1Database,
-  column: "barcode" | "sku",
-  prefix: "JW-" | "SKU-"
-): Promise<string> {
+/**
+ * A fresh barcode and SKU, checked together in ONE query (the unique indexes
+ * remain the backstop). Retries only on the rare collision.
+ */
+async function uniqueCodes(db: D1Database): Promise<{ barcode: string; sku: string }> {
   for (let attempt = 0; attempt < 5; attempt++) {
-    const candidate = randomCode(prefix);
-    if (prefix === "JW-" && !BARCODE_RE.test(candidate)) continue;
+    const barcode = randomCode("JW-");
+    if (!BARCODE_RE.test(barcode)) continue;
+    const sku = randomCode("SKU-");
     const dup = await db
-      .prepare(`SELECT id FROM products WHERE ${column} = ?`)
-      .bind(candidate)
+      .prepare("SELECT 1 AS x FROM products WHERE barcode = ? OR sku = ? LIMIT 1")
+      .bind(barcode, sku)
       .first();
-    if (!dup) return candidate;
+    if (!dup) return { barcode, sku };
   }
   throw Object.assign(new Error("Could not generate unique code"), { code: "INTERNAL" });
+}
+
+/**
+ * Every reference a new product names, validated in a single round trip.
+ * Returns the purity's permille (needed for the fine weight).
+ */
+async function validateRefs(db: D1Database, input: CreateProductInput, branchId: string): Promise<number> {
+  const checks: { sql: string; id: string; label: string }[] = [];
+  const active = (table: string, id: string, label: string) =>
+    checks.push({ sql: `(SELECT 1 FROM ${table} WHERE id = ? AND is_active = 1)`, id, label });
+  active("categories", input.categoryId, "Category");
+  if (input.subcategoryId) active("subcategories", input.subcategoryId, "Subcategory");
+  if (input.designId) active("designs", input.designId, "Design");
+  if (input.productTypeId) active("product_types", input.productTypeId, "Product type");
+  active("metal_types", input.metalTypeId, "Metal type");
+  if (input.stoneTypeId) active("stone_types", input.stoneTypeId, "Stone type");
+  active("purities", input.purityId, "Purity");
+  checks.push({ sql: "(SELECT 1 FROM branches WHERE id = ? AND is_active = 1)", id: branchId, label: "Branch" });
+  const cols = checks.map((c, i) => `${c.sql} AS c${i}`).join(", ");
+  const row = await db
+    .prepare(`SELECT ${cols}, (SELECT permille FROM purities WHERE id = ?) AS permille`)
+    .bind(...checks.map((c) => c.id), input.purityId)
+    .first<Record<string, number | null>>();
+  const missing = checks.findIndex((_, i) => !row?.[`c${i}`]);
+  if (missing >= 0) {
+    const label = checks[missing]!.label;
+    throw Object.assign(new Error(label === "Branch" ? "Branch not found" : `${label} not found or inactive`), { code: "NOT_FOUND" });
+  }
+  if (!row?.permille) throw Object.assign(new Error("Purity not found"), { code: "NOT_FOUND" });
+  return row.permille;
 }
 
 async function checkRef(db: D1Database, table: string, id: string, label: string): Promise<void> {
@@ -130,6 +161,7 @@ export type BuiltProduct = {
   barcode: string;
   sku: string;
   netMg: number;
+  permille: number;
 };
 
 export async function buildCreateProductStmts(
@@ -139,13 +171,6 @@ export async function buildCreateProductStmts(
   branchId: string,
   now: number
 ): Promise<BuiltProduct> {
-  await checkRef(db, "categories", input.categoryId, "Category");
-  if (input.subcategoryId) await checkRef(db, "subcategories", input.subcategoryId, "Subcategory");
-  if (input.designId) await checkRef(db, "designs", input.designId, "Design");
-  if (input.productTypeId) await checkRef(db, "product_types", input.productTypeId, "Product type");
-  await checkRef(db, "metal_types", input.metalTypeId, "Metal type");
-  if (input.stoneTypeId) await checkRef(db, "stone_types", input.stoneTypeId, "Stone type");
-  await checkRef(db, "purities", input.purityId, "Purity");
   const grossMg = gToMg(input.grossG);
   const stoneMg = gToMg(input.stoneG);
   const netMg = grossMg - stoneMg;
@@ -153,18 +178,10 @@ export async function buildCreateProductStmts(
     throw Object.assign(new Error("Stone weight must be less than gross weight"), {
       code: "VALIDATION",
     });
-  const branch = await db
-    .prepare("SELECT id FROM branches WHERE id = ? AND is_active = 1")
-    .bind(branchId)
-    .first();
-  if (!branch) throw Object.assign(new Error("Branch not found"), { code: "NOT_FOUND" });
-  const purity = await db
-    .prepare("SELECT permille FROM purities WHERE id = ?")
-    .bind(input.purityId)
-    .first<{ permille: number }>();
-  if (!purity) throw Object.assign(new Error("Purity not found"), { code: "NOT_FOUND" });
-  const barcode = await uniqueCode(db, "barcode", "JW-");
-  const sku = await uniqueCode(db, "sku", "SKU-");
+  // Independent reads, run together instead of one after another.
+  const [permilleValue, codes] = await Promise.all([validateRefs(db, input, branchId), uniqueCodes(db)]);
+  const purity = { permille: permilleValue };
+  const { barcode, sku } = codes;
   const makingCents = lkrToCents(input.makingLkr);
   const id = crypto.randomUUID();
   const stmts = [
@@ -213,7 +230,7 @@ export async function buildCreateProductStmts(
       branchId,
     }),
   ];
-  return { stmts, id, barcode, sku, netMg };
+  return { stmts, id, barcode, sku, netMg, permille: purity.permille };
 }
 
 export async function createProduct(
@@ -229,37 +246,34 @@ export async function createProduct(
   // deliberately excluded from the day-scoped PURCHASE cross-foot (that query
   // matches invoice documents only). The book cost, when known, enters 1100
   // against 3100 Opening Balances in the same batch (see openingstock.ts).
-  const purity = await db
-    .prepare("SELECT permille FROM purities WHERE id = ?")
-    .bind(input.purityId)
-    .first<{ permille: number }>();
-  if (!purity) throw Object.assign(new Error("Purity not found"), { code: "NOT_FOUND" });
-  const goldStmts = await postGoldStmts(
-    db,
-    [
-      {
-        branchId: input.branchId,
-        source: "opening",
-        destination: `branch:${input.branchId}`,
-        type: "OPENING",
-        weightMg: built.netMg,
-        permille: purity.permille,
-        refEntity: "product_intake",
-        refId: built.id,
-        productId: built.id,
-        notes: `Direct intake ${built.barcode}`,
-      },
-    ],
-    { actorId, auditAction: "product.intake.gold", auditEntity: "product", auditEntityId: built.id, branchId: input.branchId }
-  );
-  const opening = await buildOpeningStockStmts(db, {
-    productId: built.id,
-    barcode: built.barcode,
-    branchId: input.branchId,
-    deltaCents: input.costLkr !== undefined ? lkrToCents(input.costLkr) : 0,
-    actorId,
-    reason: "direct intake",
-  });
+  const [goldStmts, opening] = await Promise.all([
+    postGoldStmts(
+      db,
+      [
+        {
+          branchId: input.branchId,
+          source: "opening",
+          destination: `branch:${input.branchId}`,
+          type: "OPENING",
+          weightMg: built.netMg,
+          permille: built.permille,
+          refEntity: "product_intake",
+          refId: built.id,
+          productId: built.id,
+          notes: `Direct intake ${built.barcode}`,
+        },
+      ],
+      { actorId, auditAction: "product.intake.gold", auditEntity: "product", auditEntityId: built.id, branchId: input.branchId }
+    ),
+    buildOpeningStockStmts(db, {
+      productId: built.id,
+      barcode: built.barcode,
+      branchId: input.branchId,
+      deltaCents: input.costLkr !== undefined ? lkrToCents(input.costLkr) : 0,
+      actorId,
+      reason: "direct intake",
+    }),
+  ]);
   await db.batch([...built.stmts, ...goldStmts, ...(opening?.stmts ?? [])]);
   const created = await db.prepare(`${WITH_NAMES} WHERE p.id = ?`).bind(built.id).first<RawRow>();
   if (!created) throw new Error("Product insert failed");

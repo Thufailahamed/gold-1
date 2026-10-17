@@ -554,14 +554,24 @@ export default function NewProductPage() {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      for (const f of images.slice(0, 10)) {
-        const form = new FormData();
-        form.append("file", f);
-        await fetch(`${API}/api/v1/products/${created.id}/images`, {
-          method: "POST",
-          body: form,
-          credentials: "include",
-        });
+      // The product is saved; photos upload in parallel in the background so
+      // the screen moves on at once. The detail page refreshes as they land.
+      const files = images.slice(0, 10);
+      if (files.length) {
+        void Promise.all(
+          files.map(async (f) => {
+            const form = new FormData();
+            form.append("file", f);
+            const res = await fetch(`${API}/api/v1/products/${created.id}/images`, {
+              method: "POST",
+              body: form,
+              credentials: "include",
+            });
+            if (!res.ok) throw new Error(f.name);
+          })
+        )
+          .catch(() => toast.error("Some photos did not upload — add them from the product page"))
+          .finally(() => qc.invalidateQueries({ queryKey: ["product", created.id] }));
       }
       return created;
     },
