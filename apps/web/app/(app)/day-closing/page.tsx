@@ -25,6 +25,7 @@ import {
 import { api, downloadCsv, type MeData } from "@/lib/api";
 import { businessToday } from "@/lib/busclock";
 import { DayChip, InvestigatePanel, SummaryPanel, UnclosedPanel, VariancePanel, dayInputCls, diffTone, fmt, signed } from "./panels";
+import { DrawerTakes } from "./drawer-takes";
 import { AutoCloseModal, surveyParams, type AutoCloseResult, type DaySurvey } from "./auto-close";
 
 type CashLine = { label: string; refEntity: string; cents: number };
@@ -475,6 +476,8 @@ export default function DayClosingPage() {
               Nobody counted those drawers; a shortage on a skipped day is only found by closing it.
             </Banner>
           ) : null}
+
+          <DrawerTakes branchId={branchId} date={date} canRecord={canManage} locked={alreadyClosed} />
 
           <div className="grid gap-4 xl:grid-cols-12">
             {/* ---------------- the drawer */}

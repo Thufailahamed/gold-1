@@ -75,4 +75,29 @@ describe.skipIf(!sqliteAvailable)("sale flows in day close and accounts", () => 
     expect(r.closing.expectedCents).toBe(3_000_000 - 8_110_000);
     expect(r.checks.failing).toEqual([]);
   });
+
+  it("balances the drawer after an employee and the owner take cash", async () => {
+    const { createCashEntry } = await import("./cashentries");
+    const { buildClosingReport, closeDay } = await import("./dayclose");
+    await expect(
+      createCashEntry(db, { branchId: "b1", kind: "STAFF_TAKE", amountCents: 100_000, method: "cash", note: "advance" }, "u1")
+    ).rejects.toMatchObject({ code: "VALIDATION" }); // an employee must be named
+    await createCashEntry(db, { branchId: "b1", kind: "STAFF_TAKE", amountCents: 100_000, method: "cash", person: "Kamal", note: "salary advance" }, "u1");
+    await createCashEntry(db, { branchId: "b1", kind: "OWNER_DRAWING", amountCents: 50_000, method: "cash", note: "personal" }, "u1");
+
+    // The earlier exchange paid out more than the till held: top the drawer up.
+    await createCashEntry(db, { branchId: "b1", kind: "OWNER_CAPITAL", amountCents: 20_000_000, method: "cash", note: "float" }, "u1");
+    const before = 3_000_000 - 8_110_000 + 20_000_000;
+    const r = await buildClosingReport(db, { branchId: "b1", date: today });
+    expect(r.cashOut.totalCents).toBe(8_110_000 + 150_000);
+    expect(r.cashIn.totalCents).toBe(3_000_000 + 20_000_000);
+    expect(r.cashOut.lines.map((l) => l.label)).toEqual(expect.arrayContaining(["Staff took money", "Owner took money out"]));
+    expect(r.cashIn.unclassifiedNetCents).toBe(0);
+    expect(r.closing.expectedCents).toBe(before - 150_000);
+    expect(r.checks.failing).toEqual([]);
+
+    // Counting exactly the expected cash closes with no difference.
+    const closed = await closeDay(db, { branchId: "b1", date: today, actualCents: before - 150_000 }, "u1");
+    expect(closed.report.closing.differenceCents).toBe(0);
+  });
 });

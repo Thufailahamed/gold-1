@@ -13,6 +13,7 @@ export type CashEntryRow = {
   amount_cents: number;
   account_code: string;
   note: string;
+  person: string | null;
   journal_entry_id: string | null;
   created_at: number;
 };
@@ -42,6 +43,7 @@ export async function createCashEntry(
 ): Promise<{ id: string; number: string; entryNo: string }> {
   if ((input.kind === "CASH_OVER" || input.kind === "CASH_SHORT") && input.method !== "cash")
     fail("VALIDATION", "A cash correction applies to the drawer, not a bank account");
+  if (input.kind === "STAFF_TAKE" && !input.person?.trim()) fail("VALIDATION", "Say which employee took the money");
   const branch = await db
     .prepare("SELECT id FROM branches WHERE id = ? AND is_active = 1")
     .bind(input.branchId)
@@ -61,7 +63,7 @@ export async function createCashEntry(
       refEntity: kind.refEntity,
       refId: id,
       refNo: number,
-      memo: `${kind.label}: ${input.note}`,
+      memo: `${kind.label}${input.person ? ` (${input.person.trim()})` : ""}: ${input.note}`,
       branchId: input.branchId,
       actorId,
       auditAction: "cash.entry",
@@ -74,10 +76,10 @@ export async function createCashEntry(
   await db.batch([
     db
       .prepare(
-        `INSERT INTO cash_entries (id, number, branch_id, entry_date, kind, amount_cents, account_code, bank_account_id, note, journal_entry_id, created_at, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`
+        `INSERT INTO cash_entries (id, number, branch_id, entry_date, kind, amount_cents, account_code, bank_account_id, note, person, journal_entry_id, created_at, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`
       )
-      .bind(id, number, input.branchId, entryDate, input.kind, input.amountCents, money.accountCode, money.bankAccountId, input.note, now, actorId),
+      .bind(id, number, input.branchId, entryDate, input.kind, input.amountCents, money.accountCode, money.bankAccountId, input.note, input.person?.trim() || null, now, actorId),
     ...built.stmts,
     db.prepare("UPDATE cash_entries SET journal_entry_id = ? WHERE id = ?").bind(built.entryId, id),
   ]);
@@ -107,7 +109,7 @@ export async function listCashEntries(
   const count = await (vals.length ? countStmt.bind(...vals) : countStmt).first<{ total: number }>();
   const { results } = await db
     .prepare(
-      `SELECT id, number, branch_id, entry_date, kind, amount_cents, account_code, note, journal_entry_id, created_at
+      `SELECT id, number, branch_id, entry_date, kind, amount_cents, account_code, note, person, journal_entry_id, created_at
        FROM cash_entries ${where} ORDER BY entry_date DESC, created_at DESC LIMIT ? OFFSET ?`
     )
     .bind(...vals, opts.limit, (opts.page - 1) * opts.limit)

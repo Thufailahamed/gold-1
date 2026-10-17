@@ -307,6 +307,8 @@ export const KNOWN_CASH_REFS = [
   "customer_receipt",
   "owner_capital",
   "owner_drawing",
+  // An employee takes cash from the drawer (an advance, recovered from pay).
+  "staff_advance",
   "other_income",
   "cash_correction",
   // VAT paid to the revenue authority from the drawer.
@@ -324,6 +326,7 @@ export const KNOWN_CASH_REFS = [
 export const CASH_ENTRY_KINDS = {
   OWNER_CAPITAL: { direction: "in", counterAccount: "3000", refEntity: "owner_capital", label: "Owner put money in" },
   OWNER_DRAWING: { direction: "out", counterAccount: "3200", refEntity: "owner_drawing", label: "Owner took money out" },
+  STAFF_TAKE: { direction: "out", counterAccount: "1250", refEntity: "staff_advance", label: "Staff took money" },
   OTHER_INCOME: { direction: "in", counterAccount: "4900", refEntity: "other_income", label: "Other income" },
   CASH_OVER: { direction: "in", counterAccount: "6090", refEntity: "cash_correction", label: "Cash over (found extra)" },
   CASH_SHORT: { direction: "out", counterAccount: "6090", refEntity: "cash_correction", label: "Cash short (missing)" },

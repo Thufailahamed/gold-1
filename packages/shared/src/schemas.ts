@@ -566,9 +566,11 @@ export const voidReceiptSchema = z.object({
 
 export const cashEntrySchema = z.object({
   branchId: z.string().min(1),
-  kind: z.enum(["OWNER_CAPITAL", "OWNER_DRAWING", "OTHER_INCOME", "CASH_OVER", "CASH_SHORT"]),
+  kind: z.enum(["OWNER_CAPITAL", "OWNER_DRAWING", "STAFF_TAKE", "OTHER_INCOME", "CASH_OVER", "CASH_SHORT"]),
   amountCents: CENTS.positive(),
   method: z.enum(["cash", "bank"]),
+  /** Who took the money (owner or employee). Required for STAFF_TAKE. */
+  person: z.string().min(1).max(100).optional(),
   bankAccountId: z.string().min(1).optional(),
   entryDate: BUSINESS_DATE.optional(),
   note: z.string().min(1).max(500),

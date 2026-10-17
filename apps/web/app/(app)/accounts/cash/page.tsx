@@ -461,6 +461,7 @@ function useSubmit<T>(path: string, success: (r: T) => string, onDone: () => voi
 const KIND_HINT: Record<CashEntryKind, string> = {
   OWNER_CAPITAL: "The owner adds their own money to the till or bank. Not income — it is recorded as owner's equity.",
   OWNER_DRAWING: "The owner takes money for personal use. Not an expense — it reduces owner's equity.",
+  STAFF_TAKE: "An employee takes cash from the drawer. Recorded as a staff advance to recover from pay; name the employee.",
   OTHER_INCOME: "Money earned that is not a jewellery sale: commission, polishing fees, rent received.",
   CASH_OVER: "The counted drawer has more than the books say. Records the extra so tomorrow starts right.",
   CASH_SHORT: "The counted drawer has less than the books say. Records the loss so tomorrow starts right.",

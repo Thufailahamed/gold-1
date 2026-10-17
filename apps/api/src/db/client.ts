@@ -16,6 +16,8 @@ export type Env = {
   CLOUDFLARE_D1_API_TOKEN?: string;
   /** One-time secret that authorises creating the first platform super admin. */
   PLATFORM_BOOTSTRAP_TOKEN?: string;
+  /** Deploy-time secret that lets scripts/migrate-all.sh run the fleet migration without a login. */
+  FLEET_MIGRATE_TOKEN?: string;
   /** Workers AI binding. Every assistant call is routed through AI Gateway. */
   AI?: AiRunner;
   /** AI Gateway id the assistant routes through ("default" when unset). */

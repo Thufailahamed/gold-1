@@ -11,3 +11,4 @@ seed.sql
 .turbo/
 .claude/
 .open-next/
+.migrate-token

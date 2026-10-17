@@ -15,6 +15,7 @@ import {
   reopenDay,
 } from "../services/dayclose";
 import { autoCloseDay, surveyCsv, surveyDay, surveyPdf, type SurveyInput } from "../services/daysurvey";
+import { createCashEntry } from "../services/cashentries";
 import { getSetting } from "../services/settings";
 import { pagination, serviceError } from "./http";
 import { getShopDb } from "../platform/resolve";
@@ -70,6 +71,16 @@ async function shopName(db: D1Database): Promise<string> {
 
 const previewSchema = z.object({
   branchId: z.string().min(1),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
+const takeSchema = z.object({
+  branchId: z.string().min(1),
+  kind: z.enum(["OWNER_DRAWING", "STAFF_TAKE"]),
+  amountCents: z.number().int().positive(),
+  person: z.string().min(1).max(100).optional(),
+  note: z.string().min(1).max(500),
+  /** The business day it belongs to; defaults to today. Lets it be keyed while closing an earlier day. */
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
@@ -262,6 +273,50 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
       await access(c, parsed.data.branchId);
       const data = await autoCloseDay(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, data.closed ? 201 : 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  // Cash the owner or an employee took out of the drawer. Posted at once, so
+  // it can be keyed the moment it happens or while the day is being closed;
+  // either way the day's expected cash drops by it.
+  .get("/drawer-takes", requirePerm(PERMISSIONS.DAYCLOSE_VIEW), async (c) => {
+    const parsed = previewSchema.safeParse({ branchId: c.req.query("branchId"), date: c.req.query("date") });
+    if (!parsed.success) return invalid(c, "branchId is required");
+    try {
+      await access(c, parsed.data.branchId);
+      const date = parsed.data.date ?? (await businessDateFor(getShopDb(c), Date.now()));
+      const { results } = await getShopDb(c)
+        .prepare(
+          "SELECT id, number, kind, amount_cents, person, note, created_at FROM cash_entries WHERE branch_id = ? AND entry_date = ? AND kind IN ('OWNER_DRAWING','STAFF_TAKE') ORDER BY created_at"
+        )
+        .bind(parsed.data.branchId, date)
+        .all();
+      return c.json({ success: true, data: { date, rows: results ?? [] } }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  .post("/drawer-takes", requirePerm(PERMISSIONS.DAYCLOSE_MANAGE), async (c) => {
+    const parsed = takeSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return invalid(c, "Invalid cash taken");
+    const d = parsed.data;
+    try {
+      const db = getShopDb(c);
+      await access(c, d.branchId);
+      const date = d.date ?? (await businessDateFor(db, Date.now()));
+      if (date > (await businessDateFor(db, Date.now()))) return invalid(c, "Cash cannot be recorded for a future day");
+      const closed = await db
+        .prepare("SELECT 1 AS x FROM day_closings WHERE branch_id = ? AND close_date = ? AND status = 'CLOSED'")
+        .bind(d.branchId, date)
+        .first();
+      if (closed) return c.json({ success: false, error: { code: "CONFLICT", message: "This day is closed — re-open it to record cash taken" } }, 409);
+      const data = await createCashEntry(
+        db,
+        { branchId: d.branchId, kind: d.kind, amountCents: d.amountCents, method: "cash", person: d.person, note: d.note, entryDate: date },
+        c.get("userId")
+      );
+      return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
     }
