@@ -1,6 +1,7 @@
 import { createMiddleware } from "hono/factory";
 import type { Env } from "../db/client";
 import { RestD1 } from "../db/rest-d1";
+import { shopDbFor } from "../db/shop-handle";
 import type { AppVariables } from "../middleware/auth";
 
 /** Cookie (and header/query fallback) naming the shop on a single-domain deploy. */
@@ -109,9 +110,8 @@ export async function resolveShopDb(
   if (injected) return { db: injected, tenant };
   const cachedHandle = handleCache.get(d1Id);
   if (cachedHandle) return { db: cachedHandle, tenant };
-  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_D1_API_TOKEN)
-    throw new TenantResolveError(503, "PROVISIONING", "This workspace is being prepared. Try again in a minute.");
-  const handle = new RestD1(env.CLOUDFLARE_ACCOUNT_ID, d1Id, env.CLOUDFLARE_D1_API_TOKEN) as unknown as D1Database;
+  const handle = shopDbFor(env, d1Id);
+  if (!handle) throw new TenantResolveError(503, "PROVISIONING", "This workspace is being prepared. Try again in a minute.");
   handleCache.set(d1Id, handle);
   return { db: handle, tenant };
 }

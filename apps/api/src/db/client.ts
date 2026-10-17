@@ -9,6 +9,8 @@ export type Env = {
   PLATFORM_DB?: D1Database;
   /** Legacy single-shop pin: the platform tenant id this worker serves. Falls back to `DB` for old deploys. */
   TENANT_ID?: string;
+  /** Per-shop Durable Object storage. Present = new shops are created here instead of as D1 databases. */
+  SHOP?: DurableObjectNamespace;
   /** D1 REST credentials for auto-created tenant databases (wrangler secrets, never in repo). */
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_D1_API_TOKEN?: string;

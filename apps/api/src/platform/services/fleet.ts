@@ -1,6 +1,6 @@
 import type { Env } from "../../db/client";
 import { SHOP_MIGRATIONS } from "../../db/shop-migrations";
-import { LATEST_MIGRATION, restCfClient, SCHEMA_MIGRATIONS_DDL, splitMigration, type CfClient, type CfQuery } from "../provision";
+import { LATEST_MIGRATION, routedCfClient, SCHEMA_MIGRATIONS_DDL, splitMigration, type CfClient, type CfQuery } from "../provision";
 import { shopHandleFor } from "./ops";
 
 /**
@@ -77,8 +77,7 @@ export function planShopMigration(
 }
 
 function clientFor(env: Env): CfClient | null {
-  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_D1_API_TOKEN) return null;
-  return restCfClient(env.CLOUDFLARE_ACCOUNT_ID, env.CLOUDFLARE_D1_API_TOKEN);
+  return routedCfClient(env);
 }
 
 export async function runFleetMigrations(
