@@ -277,6 +277,65 @@ function slugify(s: string) {
     .slice(0, 40);
 }
 
+type CreateResult = {
+  id: string;
+  invoiceNumber: string | null;
+  provisioning?: { status: "ready" } | { status: "failed"; error: string };
+  tempPassword: string | null;
+};
+
+/** Shown once after create: the temp password is never stored, so this is the only chance to copy it. */
+function CreatedCredentials({ result, ownerEmail, onDone }: { result: CreateResult; ownerEmail: string; onDone: () => void }) {
+  const failed = result.provisioning?.status === "failed";
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied");
+    } catch {
+      /* clipboard blocked: the value is on screen anyway */
+    }
+  };
+
+  return (
+    <Modal title={failed ? "Account created · database pending" : "Owner sign-in"} kicker="Provision" onClose={onDone} footer={false}>
+      {failed ? (
+        <p className="text-sm text-ink-3">
+          The account exists but its shop database failed to provision:{" "}
+          <span className="font-mono text-rose-700">{result.provisioning?.status === "failed" ? result.provisioning.error : ""}</span>. Retry from the account
+          page.
+        </p>
+      ) : result.tempPassword ? (
+        <>
+          <p className="text-sm text-ink-3">Send these to the owner. The password is shown only once and is not stored — copy it before closing.</p>
+          <div className="space-y-3 rounded-xl bg-bone/70 p-4 ring-1 ring-ink/[0.06]">
+            <F label="Owner email">
+              <div className="flex gap-2">
+                <input readOnly value={ownerEmail} className={cn(controlClass, "w-full font-mono")} />
+                <button type="button" onClick={() => copy(ownerEmail)} className="g-btn g-btn-secondary h-10 px-3 text-sm">
+                  Copy
+                </button>
+              </div>
+            </F>
+            <F label="Temporary password" hint="The owner should change it after first sign-in">
+              <div className="flex gap-2">
+                <input readOnly value={result.tempPassword} onFocus={(e) => e.target.select()} className={cn(controlClass, "w-full font-mono")} />
+                <button type="button" onClick={() => copy(result.tempPassword ?? "")} className="g-btn g-btn-secondary h-10 px-3 text-sm">
+                  Copy
+                </button>
+              </div>
+            </F>
+          </div>
+        </>
+      ) : null}
+      <div className="flex justify-end pt-1">
+        <button type="button" onClick={onDone} className="g-btn g-btn-primary h-10 px-4 text-sm">
+          {failed ? "Open account" : "I've saved it"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 function CreateTenantDialog({ plans, onClose, onCreated }: { plans: PlanOpt[]; onClose: () => void; onCreated: (id: string) => void }) {
   const [f, setF] = useState({
     name: "",
@@ -292,12 +351,13 @@ function CreateTenantDialog({ plans, onClose, onCreated }: { plans: PlanOpt[]; o
     trialDays: "",
   });
   const [slugTouched, setSlugTouched] = useState(false);
+  const [result, setResult] = useState<CreateResult | null>(null);
   const plan = plans.find((p) => p.id === f.planId);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((s) => ({ ...s, [k]: v }));
 
   const create = useMutation({
     mutationFn: () =>
-      papi<{ id: string; invoiceNumber: string | null }>("/tenants", {
+      papi<CreateResult>("/tenants", {
         method: "POST",
         json: {
           name: f.name,
@@ -316,10 +376,14 @@ function CreateTenantDialog({ plans, onClose, onCreated }: { plans: PlanOpt[]; o
       }),
     onSuccess: (r) => {
       toast.success(r.invoiceNumber ? `Account created · invoice ${r.invoiceNumber} issued` : "Account created · trial started");
-      onCreated(r.id);
+      // The owner's temp password exists only in this response — hold the
+      // dialog open on it instead of navigating away.
+      setResult(r);
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Create failed"),
   });
+
+  if (result) return <CreatedCredentials result={result} ownerEmail={f.ownerEmail.toLowerCase()} onDone={() => onCreated(result.id)} />;
 
   const valid = f.name.length >= 2 && f.slug.length >= 3 && f.ownerName && /.+@.+\..+/.test(f.ownerEmail) && f.planId;
 
