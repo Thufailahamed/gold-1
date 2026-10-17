@@ -495,7 +495,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                   Cost <span className="g-metric text-ink-2">{product.cost_cents != null ? whole(product.cost_cents) : "—"}</span>
                 </span>
                 <span className={cn("g-metric font-semibold", margin === null ? "text-ink-5" : margin < 0 ? "text-rose-700" : "text-emerald-700")}>
-                  {margin !== null ? `${margin > 0 ? "+" : ""}${whole(margin)} · ${marginPct!.toFixed(1)}%` : "Margin needs a cost"}
+                  {margin !== null ? `${margin > 0 ? "+" : ""}${whole(margin)}${marginPct !== null ? ` · ${marginPct.toFixed(1)}%` : ""}` : "Margin needs a cost"}
                 </span>
               </div>
               {marginPct !== null ? (

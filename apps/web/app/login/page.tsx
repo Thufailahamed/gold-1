@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { api, errorCode } from "@/lib/api";
-import { readTenantSlug, writeTenantSlug } from "@/lib/tenant";
+import { clearTenant, readTenantSlug, writeTenantSlug } from "@/lib/tenant";
 import { cn } from "@/lib/cn";
 import { controlClass } from "@/components/ui";
 import {
@@ -68,7 +68,11 @@ function LoginForm() {
       setEmail(values.email);
       setShops(data.shops);
       // Preselect: URL hint, saved shop, the only shop — in that order.
-      const hinted = searchParams.get("shop") ?? readTenantSlug();
+      // A hint that is not one of this email's shops (a deleted or renamed
+      // shop left in the cookie) is ignored and the stale cookie dropped.
+      const hint = searchParams.get("shop") ?? readTenantSlug();
+      const hinted = hint && data.shops.some((s) => s.slug === hint) ? hint : undefined;
+      if (hint && !hinted) clearTenant();
       setSlug(hinted ?? (data.shops.length === 1 ? data.shops[0]?.slug : undefined));
       setStep("shop");
     } catch (err) {

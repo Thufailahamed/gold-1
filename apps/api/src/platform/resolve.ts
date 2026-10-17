@@ -129,6 +129,15 @@ export const resolveTenant = createMiddleware<{ Bindings: Env; Variables: AppVar
     c.set("shopDb", c.env.DB);
     return next();
   }
+  // The shop picker runs before any workspace is chosen, so a stale
+  // goldos_tenant cookie (a deleted or renamed shop) must not 404 it.
+  if (c.req.path.endsWith("/auth/lookup")) {
+    c.set("shopDb", c.env.DB);
+    return next();
+  }
+  // Login names its shop in the body and resolves it itself; the cookie is
+  // only a hint here, so a dead one must not block signing in to another shop.
+  const isLogin = c.req.path.endsWith("/auth/login");
   const slug = extractTenantSlug(c);
   if (!slug) {
     // Legacy pinned deploy: the worker serves one account from the default DB.
@@ -146,8 +155,13 @@ export const resolveTenant = createMiddleware<{ Bindings: Env; Variables: AppVar
     c.set("tenantSlug", tenant?.slug ?? slug);
     c.set("shopDb", db);
   } catch (e) {
-    if (e instanceof TenantResolveError)
+    if (e instanceof TenantResolveError) {
+      if (isLogin && e.code === "NOT_FOUND") {
+        c.set("shopDb", c.env.DB);
+        return next();
+      }
       return c.json({ success: false, error: { code: e.code, message: e.message } }, e.status as 401);
+    }
     throw e;
   }
   await next();

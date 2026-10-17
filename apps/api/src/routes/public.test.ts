@@ -120,6 +120,19 @@ describe.skipIf(!sqliteAvailable)("public SaaS auth", () => {
     expect(((await unknown.json()) as { data: { shops: unknown[] } }).data.shops).toEqual([]);
   });
 
+  it("looks up shops even when a stale workspace cookie points at a deleted shop", async () => {
+    await t.request("/api/v1/public/signup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(signupBody()) }, env);
+    const res = await t.request("/api/v1/auth/lookup", { method: "POST", headers: { "Content-Type": "application/json", Cookie: "goldos_tenant=deleted-shop" }, body: JSON.stringify({ email: "owner@kandygold.lk" }) }, env);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { data: { shops: Array<{ slug: string }> } }).data.shops.map((s) => s.slug)).toEqual(["kandy-gold"]);
+  });
+
+  it("logs in to the picked shop even when a stale workspace cookie points at a deleted shop", async () => {
+    await t.request("/api/v1/public/signup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(signupBody()) }, env);
+    const res = await t.request("/api/v1/auth/login", { method: "POST", headers: { "Content-Type": "application/json", Cookie: "goldos_tenant=deleted-shop" }, body: JSON.stringify({ email: "owner@kandygold.lk", password: "correct-horse-10", slug: "kandy-gold" }) }, env);
+    expect(res.status).toBe(200);
+  });
+
   it("logs in against the picked shop only", async () => {
     await t.request("/api/v1/public/signup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(signupBody()) }, env);
     await t.request("/api/v1/public/signup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(signupBody({ slug: "galle-gold", shopName: "Galle Gold", ownerEmail: "owner@kandygold.lk", password: "other-password-11" })) }, env);
