@@ -133,3 +133,4 @@ export default {
 };
 
 export { app };
+export { ShopDatabase } from "./db/shop-do";

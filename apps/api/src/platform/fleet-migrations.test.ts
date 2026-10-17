@@ -5,7 +5,7 @@ import type { Env } from "../db/client";
 import { SHOP_MIGRATIONS } from "../db/shop-migrations";
 import { LATEST_MIGRATION, SCHEMA_MIGRATIONS_DDL, type CfClient, type CfQuery } from "./provision";
 import { createTenant } from "./services/tenants";
-import { appliedMigrations, fleetStatus, planShopMigration, runFleetMigrations } from "./services/fleet";
+import { appliedMigrations, FLEET_BASELINE, fleetStatus, planShopMigration, runFleetMigrations } from "./services/fleet";
 
 const require = createRequire(import.meta.url);
 const DatabaseSync = require("node:sqlite").DatabaseSync as new (path: string) => SqliteDb;
@@ -131,7 +131,10 @@ describe.skipIf(!sqliteAvailable)("fleet migrations", () => {
   it("plans nothing for a fully applied shop", () => {
     const all = new Set(SHOP_MIGRATIONS.map((m) => m.name));
     expect(planShopMigration(all).pending).toEqual([]);
-    expect(planShopMigration(null).pending).toEqual([]);
+    // An untracked shop is assumed to sit at the baseline: only later migrations are pending.
+    expect(planShopMigration(null).pending).toEqual(
+      SHOP_MIGRATIONS.map((m) => m.name).filter((n) => n > FLEET_BASELINE)
+    );
     expect(planShopMigration(null).queries[0]!.sql).toBe(SCHEMA_MIGRATIONS_DDL);
   });
 });

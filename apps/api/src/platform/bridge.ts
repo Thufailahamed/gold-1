@@ -21,25 +21,32 @@ type TenantEnv = { Bindings: Env; Variables: AppVariables };
 
 type GateState = { status: string; reason: string | null; maintenance: boolean; maintenanceMessage: string };
 const GATE_TTL_MS = 30_000;
-let gateCache: { at: number; tenantId: string; value: GateState | null } | null = null;
+/** Per shop, so traffic from many shops in one isolate does not evict each other's entry. */
+const gateCache = new Map<string, { at: number; value: GateState | null }>();
+const GATE_CACHE_MAX = 500;
 
 /** For tests and for the portal's own writes to take effect without waiting out the cache. */
 export function resetGateCache(): void {
-  gateCache = null;
+  gateCache.clear();
 }
 
 async function gateState(env: Env, tenantId: string | undefined): Promise<GateState | null> {
   if (!env.PLATFORM_DB || !tenantId) return null;
   const now = Date.now();
-  if (gateCache && gateCache.tenantId === tenantId && now - gateCache.at < GATE_TTL_MS) return gateCache.value;
-  const t = await env.PLATFORM_DB.prepare("SELECT status, suspended_reason FROM tenants WHERE id = ?")
-    .bind(tenantId)
-    .first<{ status: string; suspended_reason: string | null }>();
-  const settings = await getPlatformSettings(env.PLATFORM_DB);
+  const hit = gateCache.get(tenantId);
+  if (hit && now - hit.at < GATE_TTL_MS) return hit.value;
+  // The shop's status and the platform maintenance flags are independent reads: fetch them together.
+  const [settings, t] = await Promise.all([
+    getPlatformSettings(env.PLATFORM_DB),
+    env.PLATFORM_DB.prepare("SELECT status, suspended_reason FROM tenants WHERE id = ?")
+      .bind(tenantId)
+      .first<{ status: string; suspended_reason: string | null }>(),
+  ]);
   const value = t
     ? { status: t.status, reason: t.suspended_reason, maintenance: settings.maintenance_mode, maintenanceMessage: settings.maintenance_message }
     : null;
-  gateCache = { at: now, tenantId, value };
+  if (gateCache.size >= GATE_CACHE_MAX) gateCache.clear();
+  gateCache.set(tenantId, { at: now, value });
   return value;
 }
 

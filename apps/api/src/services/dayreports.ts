@@ -395,7 +395,7 @@ export type VarianceReport = {
  * mistake; the same closer short every Friday is a pattern, and this is the
  * report that shows it.
  */
-export async function varianceReport(db: D1Database, opts: { from: string; to: string; branchId?: string }): Promise<VarianceReport> {
+export async function varianceReport(db: D1Database, opts: { from: string; to: string; branchId?: string; branchIds?: string[] | null }): Promise<VarianceReport> {
   if (opts.branchId) {
     const branch = await db
       .prepare("SELECT id FROM branches WHERE id = ? AND is_active = 1")
@@ -404,7 +404,12 @@ export async function varianceReport(db: D1Database, opts: { from: string; to: s
     if (!branch)
       throw Object.assign(new Error("Branch not found"), { code: "NOT_FOUND" });
   }
-  const b = opts.branchId ? " AND d.branch_id = ?" : "";
+  const scoped = !opts.branchId && opts.branchIds ? opts.branchIds : null;
+  const b = opts.branchId
+    ? " AND d.branch_id = ?"
+    : scoped
+      ? ` AND d.branch_id IN (${scoped.map(() => "?").join(",") || "NULL"})`
+      : "";
   const rows = await all<{
     id: string; branch_id: string; close_date: string; expected_cents: number; actual_cents: number; difference_cents: number;
     difference_reason: string | null; closer: string | null; card_expected_cents: number | null; card_actual_cents: number | null; correction_cents: number;
@@ -415,7 +420,7 @@ export async function varianceReport(db: D1Database, opts: { from: string; to: s
      FROM day_closings d LEFT JOIN users u ON u.id = d.closed_by
      WHERE d.status = 'CLOSED' AND d.close_date >= ? AND d.close_date <= ?${b}
      ORDER BY d.close_date DESC`,
-    [opts.from, opts.to, ...(opts.branchId ? [opts.branchId] : [])]
+    [opts.from, opts.to, ...(opts.branchId ? [opts.branchId] : scoped ?? [])]
   );
   const out: VarianceReport = {
     from: opts.from, to: opts.to, days: rows.length, daysShort: 0, daysOver: 0, shortCents: 0, overCents: 0, netCents: 0, correctedCents: 0, cardDifferenceCents: 0,
@@ -470,8 +475,9 @@ export type BranchDaySummary = {
  * One line per branch for a date: closed branches from their frozen report,
  * open ones from a live preview. The owner's end-of-day view of the shop.
  */
-export async function dailySummary(db: D1Database, date: string): Promise<{ date: string; branches: BranchDaySummary[]; totals: { salesCents: number; expensesCents: number; differenceCents: number; closed: number; open: number } }> {
-  const branches = await all<{ id: string; name: string }>(db, "SELECT id, name FROM branches WHERE is_active = 1 AND 1 = ? ORDER BY name", [1]);
+export async function dailySummary(db: D1Database, date: string, scope: string[] | null = null): Promise<{ date: string; branches: BranchDaySummary[]; totals: { salesCents: number; expensesCents: number; differenceCents: number; closed: number; open: number } }> {
+  const allBranches = await all<{ id: string; name: string }>(db, "SELECT id, name FROM branches WHERE is_active = 1 ORDER BY name", []);
+  const branches = scope === null ? allBranches : allBranches.filter((b) => scope.includes(b.id));
   const closings = await all<ClosingRow>(db, "SELECT * FROM day_closings WHERE close_date = ?", [date]);
   const byBranch = new Map(closings.map((c) => [c.branch_id, c]));
   const out: BranchDaySummary[] = [];

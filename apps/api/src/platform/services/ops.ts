@@ -1,6 +1,6 @@
 import { DAY_MS, PLATFORM_SETTING_DEFAULTS } from "@goldos/shared";
 import type { Env } from "../../db/client";
-import { RestD1 } from "../../db/rest-d1";
+import { shopDbFor } from "../../db/shop-handle";
 import { buildPlatformAudit, fail, getPlatformSettings, randomToken, sha256Hex, type Actor } from "../core";
 import { shopStorageBytes } from "../../services/shopStorage";
 import { loadTenant } from "./tenants";
@@ -163,10 +163,7 @@ export async function housekeeping(db: D1Database, now = Date.now()) {
  * Replaces the old binding-based resolveDataPlane.
  */
 export function shopHandleFor(env: Env, d1Id: string): D1Database | null {
-  const injected = (env as unknown as { TEST_HANDLES?: Record<string, D1Database> }).TEST_HANDLES?.[d1Id];
-  if (injected) return injected;
-  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_D1_API_TOKEN) return null;
-  return new RestD1(env.CLOUDFLARE_ACCOUNT_ID, d1Id, env.CLOUDFLARE_D1_API_TOKEN) as unknown as D1Database;
+  return shopDbFor(env, d1Id);
 }
 
 /**

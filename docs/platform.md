@@ -123,6 +123,28 @@ percentage rollout (stable FNV-1a bucket per tenant+flag) → default.
 
 Every run, cron or manual, is recorded in `job_runs` and shown on System health.
 
+## Shop database: Durable Objects
+
+Each new shop is one Durable Object with SQLite storage (`SHOP` binding,
+class `ShopDatabase`, `src/db/shop-do.ts`). Queries run beside the data: a shop
+route costs milliseconds of database time, where the D1 REST API cost about
+0.5 s per query (2-3 s per request). It also needs no per-shop D1, no
+Cloudflare API token and has no database-count cap.
+
+- `DoD1` (`src/db/do-d1.ts`) is a D1-shaped facade (`prepare/bind/first/all/run`,
+  `batch`), so services are unchanged. A batch is one transaction.
+- A shop's database reference is `do:<name>` in `tenant_databases.d1_id`. Anything
+  else is a legacy D1 id and still goes through the REST client, so old shops
+  keep working. `shopDbFor` / `routedCfClient` route by that prefix.
+- Provisioning, retry, purge and fleet migrations all go through `routedCfClient`;
+  purge empties the Durable Object's storage.
+- The stub is created per call, never stored: handles are cached across requests
+  and Workers forbid reusing an object from another request.
+- Without the `SHOP` binding the Worker behaves exactly as before.
+
+Moving a D1-backed shop onto a Durable Object is not automated yet; recreate the
+shop (test accounts) or copy its tables across.
+
 ## File storage (R2)
 
 One bucket serves every shop. A request's workspace scopes it: product images,
@@ -180,12 +202,12 @@ Local: `pnpm --filter goldos-api platform:migrate:local`, then
 ## Not built yet
 
 - Card gateway (Stripe/PayHere) and automated emails (invoices, dunning, trial reminders).
-- Hot-path query coalescing (tenant DBs are reached over the D1 REST API).
+- Moving existing D1-backed shops onto Durable Objects (new shops are already there).
 
 ## How multi-shop works (v1)
 
 - Signup (`/signup`) creates the tenant (14-day trial) and a dedicated D1
-  with all 43 shop migrations plus the owner and HQ branch — one Worker
+  with all shop migrations plus the owner and HQ branch (a Durable Object when the `SHOP` binding exists) — one Worker
   serves every shop, reached per request via `goldos_tenant` → `tenant_databases`.
 - Login (`/login`) looks the email up in `tenant_members`, picks the shop,
   and checks the password against that shop only. Same email may own N shops.

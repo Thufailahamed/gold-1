@@ -41,6 +41,16 @@ database_name = "goldos-platform"
 database_id = "4aa27d78-db29-42c8-b76f-295f30d48dc4"
 migrations_dir = "drizzle-platform"
 
+# One Durable Object (with its own SQLite) per shop. New shops live here; shops
+# created earlier as D1 databases keep working through the D1 REST client.
+[[durable_objects.bindings]]
+name = "SHOP"
+class_name = "ShopDatabase"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ShopDatabase"]
+
 [ai]
 binding = "AI"
 

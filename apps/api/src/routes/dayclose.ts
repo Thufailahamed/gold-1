@@ -18,8 +18,26 @@ import { autoCloseDay, surveyCsv, surveyDay, surveyPdf, type SurveyInput } from 
 import { getSetting } from "../services/settings";
 import { pagination, serviceError } from "./http";
 import { getShopDb } from "../platform/resolve";
+import { assertBranchAccess, branchScope, inScope } from "../services/branchAccess";
 
 type Ctx = Context<{ Bindings: Env; Variables: AppVariables }>;
+
+const access = (c: Ctx, branchId: string) =>
+  assertBranchAccess(getShopDb(c), c.get("userId"), c.get("permissions") as string[], branchId, "this branch");
+
+/** Closing-id routes act only on a closing from a branch the caller works in. */
+async function accessClosing(c: Ctx, id: string): Promise<void> {
+  const row = await getShopDb(c).prepare("SELECT branch_id FROM day_closings WHERE id = ?").bind(id).first<{ branch_id: string }>();
+  if (!row) throw Object.assign(new Error("Day closing not found"), { code: "NOT_FOUND" });
+  await access(c, row.branch_id);
+}
+
+async function readScope(c: Ctx, branchId: string | undefined): Promise<string[] | null> {
+  const scope = await branchScope(getShopDb(c), c.get("userId"), c.get("permissions") as string[]);
+  if (branchId && !inScope(scope, branchId))
+    throw Object.assign(new Error("You are not a member of this branch"), { code: "FORBIDDEN" });
+  return scope;
+}
 
 const autoCloseSchema = closeDaySchema.partial({ actualCents: true });
 
@@ -67,13 +85,19 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
   .use(requireAuth)
   .get("/", requirePerm(PERMISSIONS.DAYCLOSE_VIEW), async (c) => {
     const q = (k: string) => c.req.query(k) ?? undefined;
-    const data = await listClosings(getShopDb(c), {
-      ...pagination(c),
-      branchId: q("branchId"),
-      from: q("from"),
-      to: q("to"),
-    });
-    return c.json({ success: true, data }, 200);
+    try {
+      const scope = await readScope(c, q("branchId"));
+      const data = await listClosings(getShopDb(c), {
+        ...pagination(c),
+        branchId: q("branchId"),
+        branchIds: scope,
+        from: q("from"),
+        to: q("to"),
+      });
+      return c.json({ success: true, data }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
   })
   // Registered BEFORE /:id. Hono matches in registration order, so a literal
   // path chained after the parameterised one is read as a closing id.
@@ -84,6 +108,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
     });
     if (!parsed.success) return invalid(c, "branchId is required");
     try {
+      await access(c, parsed.data.branchId);
       const date = parsed.data.date ?? (await businessDateFor(getShopDb(c), Date.now()));
       const data = await buildClosingReport(getShopDb(c), { branchId: parsed.data.branchId, date });
       return c.json({ success: true, data }, 200);
@@ -100,6 +125,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
     const actualCents = actualRaw !== undefined && actualRaw !== "" ? Number(actualRaw) : undefined;
     if (actualCents !== undefined && !Number.isInteger(actualCents)) return invalid(c, "actualCents must be whole cents");
     try {
+      await access(c, parsed.data.branchId);
       const date = parsed.data.date ?? (await businessDateFor(getShopDb(c), Date.now()));
       const data = await investigateDay(getShopDb(c), { branchId: parsed.data.branchId, date, actualCents });
       return c.json({ success: true, data }, 200);
@@ -111,6 +137,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
     const branchId = c.req.query("branchId");
     if (!branchId) return invalid(c, "branchId is required");
     try {
+      await access(c, branchId);
       const today = await businessDateFor(getShopDb(c), Date.now());
       const to = dateOr(c.req.query("to"), addDays(today, -1));
       const from = dateOr(c.req.query("from"), addDays(to, -60));
@@ -126,7 +153,9 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
     const from = dateOr(c.req.query("from"), addDays(to, -30));
     if (from > to) return invalid(c, "From must be on or before to");
     try {
-      const data = await varianceReport(getShopDb(c), { from, to, branchId: c.req.query("branchId") || undefined });
+      const branchId = c.req.query("branchId") || undefined;
+      const scope = await readScope(c, branchId);
+      const data = await varianceReport(getShopDb(c), { from, to, branchId, branchIds: scope });
       return c.json({ success: true, data }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -135,7 +164,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
   .get("/summary", requirePerm(PERMISSIONS.DAYCLOSE_VIEW), async (c) => {
     const date = dateOr(c.req.query("date"), await businessDateFor(getShopDb(c), Date.now()));
     try {
-      return c.json({ success: true, data: await dailySummary(getShopDb(c), date) }, 200);
+      return c.json({ success: true, data: await dailySummary(getShopDb(c), date, await readScope(c, undefined)) }, 200);
     } catch (err) {
       return serviceError(c, err);
     }
@@ -146,6 +175,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
     const parsed = previewSchema.safeParse({ branchId: c.req.query("branchId"), date: c.req.query("date") });
     if (!parsed.success) return invalid(c, "branchId is required");
     try {
+      await access(c, parsed.data.branchId);
       const db = getShopDb(c);
       const date = parsed.data.date ?? (await businessDateFor(db, Date.now()));
       const branch = await db.prepare("SELECT name FROM branches WHERE id = ?").bind(parsed.data.branchId).first<{ name: string }>();
@@ -183,6 +213,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
     const input = surveyQuery(c);
     if (typeof input === "string") return invalid(c, input);
     try {
+      await access(c, input.branchId);
       return c.json({ success: true, data: await surveyDay(getShopDb(c), input) }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -192,6 +223,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
     const input = surveyQuery(c);
     if (typeof input === "string") return invalid(c, input);
     try {
+      await access(c, input.branchId);
       const csv = surveyCsv(await surveyDay(getShopDb(c), input));
       return new Response(csv, {
         status: 200,
@@ -208,6 +240,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
     const input = surveyQuery(c);
     if (typeof input === "string") return invalid(c, input);
     try {
+      await access(c, input.branchId);
       const [survey, shop] = await Promise.all([surveyDay(getShopDb(c), input), shopName(getShopDb(c))]);
       return new Response(surveyPdf(survey, shop), {
         status: 200,
@@ -226,6 +259,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
     const parsed = autoCloseSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return invalid(c, "Invalid auto-close");
     try {
+      await access(c, parsed.data.branchId);
       const data = await autoCloseDay(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, data.closed ? 201 : 200);
     } catch (err) {
@@ -236,6 +270,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
     const parsed = idSchema.safeParse({ id: c.req.param("id") });
     if (!parsed.success) return invalid(c, "Invalid closing id");
     try {
+      await accessClosing(c, parsed.data.id);
       return c.json({ success: true, data: await getClosing(getShopDb(c), parsed.data.id) }, 200);
     } catch (err) {
       return serviceError(c, err);
@@ -247,6 +282,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
     try {
       // The frozen report, not a re-derivation. A report from six months ago
       // must be a record, not a guess about what the code would say today.
+      await accessClosing(c, parsed.data.id);
       const { report, closing } = await getClosing(getShopDb(c), parsed.data.id);
       return c.json(
         { success: true, data: { report, closeDate: closing.close_date, branchId: closing.branch_id } },
@@ -260,6 +296,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
     const parsed = closeDaySchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return invalid(c, "Invalid close");
     try {
+      await access(c, parsed.data.branchId);
       const data = await closeDay(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
@@ -273,6 +310,7 @@ export const dayClosings = new Hono<{ Bindings: Env; Variables: AppVariables }>(
     const body = reopenDaySchema.safeParse(await c.req.json().catch(() => null));
     if (!id.success || !body.success) return invalid(c, "A re-open needs a reason");
     try {
+      await accessClosing(c, id.data.id);
       const data = await reopenDay(getShopDb(c), id.data.id, body.data, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {

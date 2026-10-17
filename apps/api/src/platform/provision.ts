@@ -1,4 +1,6 @@
 import type { Env } from "../db/client";
+import { destroyShopDo, doTransport } from "../db/do-d1";
+import { doName, DO_PREFIX, isDoRef } from "../db/shop-handle";
 import { SHOP_MIGRATIONS } from "../db/shop-migrations";
 import { hashPassword } from "../services/hash";
 import { loadTenant, purgeTenant } from "./services/tenants";
@@ -105,6 +107,42 @@ export function restCfClient(accountId: string, token: string, fetchFn?: typeof 
 }
 
 /**
+ * The client provisioning, retry, purge and fleet migrations use. New shops are
+ * Durable Objects whenever the SHOP binding exists (no Cloudflare API calls, no
+ * token); existing D1 shops keep working through the REST client, routed by
+ * the `do:` prefix on their database reference. Null = nothing configured.
+ */
+export function routedCfClient(env: Env): CfClient | null {
+  const rest = env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_D1_API_TOKEN ? restCfClient(env.CLOUDFLARE_ACCOUNT_ID, env.CLOUDFLARE_D1_API_TOKEN) : null;
+  const ns = env.SHOP;
+  if (!rest && !ns) return null;
+  const unconfigured = () => Object.assign(new Error("Provisioning is not configured"), { code: "PROVISIONING", status: 503 });
+  return {
+    async createDatabase(name: string) {
+      if (ns) return { id: `${DO_PREFIX}${name}`, name };
+      return rest!.createDatabase(name);
+    },
+    async applySql(d1Id: string, queries: CfQuery[], opts?: { atomic?: boolean }) {
+      if (isDoRef(d1Id)) {
+        if (!ns) throw unconfigured();
+        await doTransport(ns, doName(d1Id))({ stmts: queries.map((q) => ({ sql: q.sql, params: q.params ?? [] })), deferFk: opts?.atomic });
+        return;
+      }
+      if (!rest) throw unconfigured();
+      return rest.applySql(d1Id, queries, opts);
+    },
+    async deleteDatabase(d1Id: string) {
+      if (isDoRef(d1Id)) {
+        if (!ns) throw unconfigured();
+        return destroyShopDo(ns, doName(d1Id));
+      }
+      if (!rest) throw unconfigured();
+      return rest.deleteDatabase(d1Id);
+    },
+  };
+}
+
+/**
  * SQLite files hold many statements; the query API wants one per call.
  * Splits on semicolons outside `--` line comments, `'...'` literals and
  * trigger bodies. A `CREATE TRIGGER … BEGIN … END;` body holds semicolons of
@@ -179,12 +217,9 @@ export async function provisionShop(
   client?: CfClient
 ): Promise<ProvisionResult> {
   const cf =
-    client ??
-    ((!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_D1_API_TOKEN)
-      ? (() => {
-          throw Object.assign(new Error("Provisioning is not configured"), { code: "PROVISIONING", status: 503 });
-        })()
-      : restCfClient(env.CLOUDFLARE_ACCOUNT_ID, env.CLOUDFLARE_D1_API_TOKEN));
+    client ?? routedCfClient(env) ?? (() => {
+      throw Object.assign(new Error("Provisioning is not configured"), { code: "PROVISIONING", status: 503 });
+    })();
   const shortid = () => crypto.randomUUID().slice(0, 8);
   let name = `goldos-${input.slug}-${shortid()}`;
   let created: { id: string; name: string } | null = null;
@@ -258,12 +293,9 @@ export async function retryProvision(
     throw Object.assign(new Error("This shop already has a database. Suspend the account first if its database is actually gone, then retry."), { code: "CONFLICT", status: 409 });
   }
   const cf =
-    client ??
-    ((!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_D1_API_TOKEN)
-      ? (() => {
-          throw Object.assign(new Error("Provisioning is not configured"), { code: "PROVISIONING", status: 503 });
-        })()
-      : restCfClient(env.CLOUDFLARE_ACCOUNT_ID, env.CLOUDFLARE_D1_API_TOKEN));
+    client ?? routedCfClient(env) ?? (() => {
+      throw Object.assign(new Error("Provisioning is not configured"), { code: "PROVISIONING", status: 503 });
+    })();
   const old = existing;
   if (old) {
     await cf.deleteDatabase(old.d1_id).catch(() => undefined);
@@ -305,12 +337,9 @@ export async function purgeTenantWithDatabase(
   let d1Deleted = false;
   if (mapping) {
     const cf =
-      client ??
-      ((!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_D1_API_TOKEN)
-        ? (() => {
-            throw Object.assign(new Error("Shop database credentials are not configured; delete the D1 in the Cloudflare dashboard, remove its tenant_databases row, and purge again"), { code: "CONFLICT", status: 409 });
-          })()
-        : restCfClient(env.CLOUDFLARE_ACCOUNT_ID, env.CLOUDFLARE_D1_API_TOKEN));
+      client ?? routedCfClient(env) ?? (() => {
+        throw Object.assign(new Error("Shop database credentials are not configured; delete the D1 in the Cloudflare dashboard, remove its tenant_databases row, and purge again"), { code: "CONFLICT", status: 409 });
+      })();
     await cf.deleteDatabase(mapping.d1_id);
     d1Deleted = true;
   }

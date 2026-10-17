@@ -91,6 +91,7 @@ export async function exchangeSale(
     if (item.status !== "VALUED")
       throw Object.assign(new Error(`Old gold ${item.number} needs a valuation first`), { code: "CONFLICT" });
     if (item.purchase_value_cents === null || item.purchase_value_cents <= 0)
+      throw Object.assign(new Error(`Old gold ${item.number} has no valuation`), { code: "VALIDATION" });
     if (item.tested_permille === null || item.tested_permille <= 0 || item.tested_permille > 1000)
       throw Object.assign(new Error(`Old gold ${item.number} has no tested purity`), { code: "VALIDATION" });
     if (item.net_mg <= 0)
@@ -111,7 +112,7 @@ export async function exchangeSale(
       notes: input.notes,
     },
     actorId,
-    { enforceShelfPrice: true, exchangeOldValueCents: oldGoldValueCents }
+    { enforceShelfPrice: true, enforceCreditLimit: true, exchangeOldValueCents: oldGoldValueCents }
   );
   const payoutCents = input.payout === "cash" ? sale.exchangeSurplusCents : 0;
 

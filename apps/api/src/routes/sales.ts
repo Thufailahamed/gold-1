@@ -30,6 +30,8 @@ import { exchangeSale as exchangeSaleService } from "../services/exchange";
 import { getTaxConfig } from "../services/taxes";
 import { buildCodeSvg, buildQrSvg } from "../services/label";
 import { pagination, serviceError } from "./http";
+import { assertBranchAccess, branchScope, inScope } from "../services/branchAccess";
+import type { Context } from "hono";
 import { getShopDb } from "../platform/resolve";
 
 /**
@@ -44,6 +46,29 @@ async function dayBounds(db: D1Database, period: string): Promise<{ from: number
   const fromDate =
     period === "today" ? today : period === "month" ? `${today.slice(0, 7)}-01` : "1970-01-01";
   return { from: Date.parse(`${fromDate}T00:00:00Z`), to: now };
+}
+
+type Ctx = Context<{ Bindings: Env; Variables: AppVariables }>;
+
+const access = (c: Ctx, branchId: string, what = "this branch") =>
+  assertBranchAccess(getShopDb(c), c.get("userId"), c.get("permissions") as string[], branchId, what);
+
+/** Detail routes act only on bills from a branch the caller works in. */
+async function assertInvoiceAccess(c: Ctx, invoiceId: string): Promise<void> {
+  const row = await getShopDb(c)
+    .prepare("SELECT branch_id FROM sales_invoices WHERE id = ?")
+    .bind(invoiceId)
+    .first<{ branch_id: string }>();
+  if (!row) throw Object.assign(new Error("Sale not found"), { code: "NOT_FOUND" });
+  await access(c, row.branch_id, "this bill's branch");
+}
+
+/** Scope for report/list reads; a requested branch outside it is refused. */
+async function readScope(c: Ctx, branchId: string | undefined): Promise<string[] | null> {
+  const scope = await branchScope(getShopDb(c), c.get("userId"), c.get("permissions") as string[]);
+  if (branchId && !inScope(scope, branchId))
+    throw Object.assign(new Error("You are not a member of this branch"), { code: "FORBIDDEN" });
+  return scope;
 }
 
 const linkSchema = z.object({ saleId: z.string().min(1) });
@@ -64,6 +89,7 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
+      await access(c, parsed.data.branchId);
       const data = await receiveSale(getShopDb(c), parsed.data, c.get("userId"), {
         enforceShelfPrice: true,
         enforceCreditLimit: true,
@@ -89,6 +115,7 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
           400
         );
       try {
+        await access(c, parsed.data.branchId);
         const data = await exchangeSaleService(getShopDb(c), parsed.data, c.get("userId"));
         return c.json({ success: true, data }, 201);
       } catch (err) {
@@ -101,6 +128,11 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     const branchId = c.req.query("branchId");
     if (!branchId)
       return c.json({ success: false, error: { code: "VALIDATION", message: "branchId required" } }, 400);
+    try {
+      await access(c, branchId);
+    } catch (err) {
+      return serviceError(c, err);
+    }
     const data = await posCatalog(getShopDb(c), {
       q: c.req.query("q") ?? "",
       branchId,
@@ -151,6 +183,11 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     }
   })
   .get("/invoices/:id/barcode", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
+    try {
+      await assertInvoiceAccess(c, c.req.param("id"));
+    } catch (err) {
+      return serviceError(c, err);
+    }
     const inv = await getShopDb(c).prepare("SELECT number FROM sales_invoices WHERE id = ?")
       .bind(c.req.param("id"))
       .first<{ number: string }>();
@@ -161,6 +198,11 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     return c.body(buildCodeSvg(inv.number), 200);
   })
   .get("/invoices/:id/qr", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
+    try {
+      await assertInvoiceAccess(c, c.req.param("id"));
+    } catch (err) {
+      return serviceError(c, err);
+    }
     const inv = await getShopDb(c).prepare("SELECT number FROM sales_invoices WHERE id = ?")
       .bind(c.req.param("id"))
       .first<{ number: string }>();
@@ -171,6 +213,11 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     return c.body(buildQrSvg(inv.number), 200);
   })
   .get("/invoices", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
+    try {
+      await readScope(c, c.req.query("branchId"));
+    } catch (err) {
+      return serviceError(c, err);
+    }
     const perms = c.get("permissions") as string[];
     const num = (k: string) => {
       const v = c.req.query(k);
@@ -192,13 +239,15 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     return c.json({ success: true, data }, 200);
   })
   .get("/reports/summary", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
-    const { from, to } = await dayBounds(getShopDb(c), c.req.query("period") ?? "all");
-    const data = await salesSummary(getShopDb(c), {
-      from,
-      to,
-      branchId: c.req.query("branchId"),
-    });
-    return c.json({ success: true, data }, 200);
+    try {
+      const branchId = c.req.query("branchId");
+      const scope = await readScope(c, branchId);
+      const { from, to } = await dayBounds(getShopDb(c), c.req.query("period") ?? "all");
+      const data = await salesSummary(getShopDb(c), { from, to, branchId, branchIds: scope });
+      return c.json({ success: true, data }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
   })
   .get("/reports/breakdown", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
     const parsed = z
@@ -209,17 +258,19 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         { success: false, error: { code: "VALIDATION", message: "Invalid groupBy" } },
         400
       );
-    const { from, to } = await dayBounds(getShopDb(c), c.req.query("period") ?? "all");
-    const data = await salesBreakdown(getShopDb(c), {
-      from,
-      to,
-      branchId: c.req.query("branchId"),
-      groupBy: parsed.data.groupBy,
-    });
-    return c.json({ success: true, data }, 200);
+    try {
+      const branchId = c.req.query("branchId");
+      const scope = await readScope(c, branchId);
+      const { from, to } = await dayBounds(getShopDb(c), c.req.query("period") ?? "all");
+      const data = await salesBreakdown(getShopDb(c), { from, to, branchId, branchIds: scope, groupBy: parsed.data.groupBy });
+      return c.json({ success: true, data }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
   })
   .get("/invoices/:id", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
     try {
+      await assertInvoiceAccess(c, c.req.param("id"));
       const data = await getSale(getShopDb(c), c.req.param("id"));
       // Book cost and COGS lines reveal margin: only stock managers and
       // accounts viewers see them — never counter staff.
@@ -245,6 +296,7 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
+      await assertInvoiceAccess(c, parsed.data.invoiceId);
       const data = await createReturn(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
@@ -260,6 +312,11 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
+      const ret = await getShopDb(c)
+        .prepare("SELECT i.branch_id FROM sales_returns r JOIN sales_invoices i ON i.id = r.invoice_id WHERE r.id = ?")
+        .bind(c.req.param("id"))
+        .first<{ branch_id: string }>();
+      if (ret) await access(c, ret.branch_id, "this return's branch");
       await linkExchange(getShopDb(c), c.req.param("id"), parsed.data.saleId, c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
@@ -268,10 +325,13 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
   })
   .get("/returns", requirePerm(PERMISSIONS.SALES_VIEW), async (c) => {
     try {
+      const branchId = c.req.query("branchId");
+      const scope = await readScope(c, branchId);
       const data = await listReturns(getShopDb(c), {
         ...pagination(c),
         invoiceId: c.req.query("invoiceId"),
-        branchId: c.req.query("branchId"),
+        branchId,
+        branchIds: scope,
       });
       return c.json({ success: true, data }, 200);
     } catch (err) {
