@@ -675,6 +675,15 @@ export async function reopenDay(
   if (!closing) fail("NOT_FOUND", "Day closing not found");
   if (closing.status !== "CLOSED") fail("CONFLICT", "This day is not closed");
   if (!input.reason?.trim()) fail("VALIDATION", "A re-open needs a reason");
+  // Days chain: tomorrow's frozen opening cash is today's closing. Re-closing
+  // today with a correction would leave a later closed day's figures stale, so
+  // later days are reopened first.
+  const later = await db
+    .prepare("SELECT close_date FROM day_closings WHERE branch_id = ? AND close_date > ? AND status = 'CLOSED' ORDER BY close_date LIMIT 1")
+    .bind(closing.branch_id, closing.close_date)
+    .first<{ close_date: string }>();
+  if (later)
+    fail("CONFLICT", `${later.close_date} is closed after this day — re-open it first, then this one`);
   const id = crypto.randomUUID();
   const now = Date.now();
   // The close row is KEPT, snapshot and all. The trail is a new row, so a day
@@ -732,13 +741,16 @@ export async function getClosing(
 
 export async function listClosings(
   db: D1Database,
-  opts: { page: number; limit: number; branchId?: string; from?: string; to?: string }
+  opts: { page: number; limit: number; branchId?: string; branchIds?: string[] | null; from?: string; to?: string }
 ): Promise<{ rows: ClosingRow[]; total: number }> {
   const conds: string[] = [];
   const vals: unknown[] = [];
   if (opts.branchId) {
     conds.push("branch_id = ?");
     vals.push(opts.branchId);
+  } else if (opts.branchIds) {
+    conds.push(`branch_id IN (${opts.branchIds.map(() => "?").join(",") || "NULL"})`);
+    vals.push(...opts.branchIds);
   }
   if (opts.from) {
     conds.push("close_date >= ?");

@@ -774,22 +774,27 @@ export async function linkExchange(
 ): Promise<void> {
   const ret = await db
     .prepare(
-      "SELECT r.id, r.type, i.branch_id FROM sales_returns r JOIN sales_invoices i ON i.id = r.invoice_id WHERE r.id = ?"
+      "SELECT r.id, r.type, r.exchange_sale_id, i.branch_id, i.customer_id FROM sales_returns r JOIN sales_invoices i ON i.id = r.invoice_id WHERE r.id = ?"
     )
     .bind(returnId)
-    .first<{ id: string; type: string; branch_id: string }>();
+    .first<{ id: string; type: string; exchange_sale_id: string | null; branch_id: string; customer_id: string | null }>();
   if (!ret) throw Object.assign(new Error("Return not found"), { code: "NOT_FOUND" });
   if (ret.type !== "EXCHANGE")
     throw Object.assign(new Error("Only EXCHANGE returns can link a sale"), { code: "VALIDATION" });
   const sale = await db
-    .prepare("SELECT id, branch_id FROM sales_invoices WHERE id = ?")
+    .prepare("SELECT id, branch_id, customer_id FROM sales_invoices WHERE id = ?")
     .bind(saleId)
-    .first<{ id: string; branch_id: string }>();
+    .first<{ id: string; branch_id: string; customer_id: string | null }>();
   if (!sale) throw Object.assign(new Error("Sale not found"), { code: "NOT_FOUND" });
+  if (ret.exchange_sale_id)
+    throw Object.assign(new Error("Exchange return already linked to a sale"), { code: "CONFLICT" });
   if (sale.branch_id !== ret.branch_id)
     throw Object.assign(new Error("Exchange sale must be same branch"), { code: "VALIDATION" });
+  if (ret.customer_id && ret.customer_id !== sale.customer_id)
+    throw Object.assign(new Error("Exchange sale must be for the same customer"), { code: "VALIDATION" });
   await db.batch([
-    db.prepare("UPDATE sales_returns SET exchange_sale_id = ? WHERE id = ?").bind(saleId, returnId),
+    // Guarded so a concurrent link cannot overwrite the first one.
+    db.prepare("UPDATE sales_returns SET exchange_sale_id = ? WHERE id = ? AND exchange_sale_id IS NULL").bind(saleId, returnId),
     buildAuditStmt(db, {
       userId: actorId,
       action: "sale.exchange_link",
@@ -803,7 +808,7 @@ export async function linkExchange(
 
 export async function listReturns(
   db: D1Database,
-  opts: PageOpts & { invoiceId?: string; branchId?: string }
+  opts: PageOpts & { invoiceId?: string; branchId?: string; branchIds?: string[] | null }
 ) {
   const offset = (opts.page - 1) * opts.limit;
   const conds: string[] = [];
@@ -815,6 +820,9 @@ export async function listReturns(
   if (opts.branchId) {
     conds.push("i.branch_id = ?");
     vals.push(opts.branchId);
+  } else if (opts.branchIds) {
+    conds.push(`i.branch_id IN (${opts.branchIds.map(() => "?").join(",") || "NULL"})`);
+    vals.push(...opts.branchIds);
   }
   if (opts.search) {
     conds.push("(r.number LIKE ? OR i.number LIKE ?)");
@@ -983,33 +991,42 @@ export async function listSales(
 
 export async function salesSummary(
   db: D1Database,
-  opts: { from: number; to: number; branchId?: string }
+  opts: { from: number; to: number; branchId?: string; branchIds?: string[] | null }
 ) {
-  const conds = ["i.created_at >= ?", "i.created_at <= ?"];
+  // A voided bill is not a sale: it stays out of every figure.
+  const conds = ["i.created_at >= ?", "i.created_at <= ?", "i.status <> 'VOID'"];
   const vals: unknown[] = [opts.from, opts.to];
   if (opts.branchId) {
     conds.push("i.branch_id = ?");
     vals.push(opts.branchId);
+  } else if (opts.branchIds) {
+    conds.push(`i.branch_id IN (${opts.branchIds.map(() => "?").join(",") || "NULL"})`);
+    vals.push(...opts.branchIds);
   }
   const where = `WHERE ${conds.join(" AND ")}`;
+  // Pieces taken back are not sales: net them out of value, discount and gold.
+  const returned = "it.id IN (SELECT invoice_item_id FROM sales_return_items)";
   const head = await db
     .prepare(
       `SELECT COUNT(*) AS invoices, COALESCE(SUM(i.total_cents), 0) AS value_cents, COALESCE(SUM(i.discount_cents), 0) AS discount_cents,
-              COALESCE(SUM(CASE WHEN i.status <> 'VOID' THEN i.total_cents - i.paid_cents ELSE 0 END), 0) AS due_cents
+              COALESCE(SUM(i.total_cents - i.paid_cents), 0) AS due_cents
        FROM sales_invoices i ${where}`
     )
     .bind(...vals)
     .first<{ invoices: number; value_cents: number; discount_cents: number; due_cents: number }>();
   const gold = await db
     .prepare(
-      `SELECT COALESCE(SUM(p.net_mg), 0) AS gold_mg FROM sales_items it JOIN products p ON p.id = it.product_id JOIN sales_invoices i ON i.id = it.invoice_id ${where}`
+      `SELECT COALESCE(SUM(CASE WHEN ${returned} THEN 0 ELSE p.net_mg END), 0) AS gold_mg,
+              COALESCE(SUM(CASE WHEN ${returned} THEN it.price_cents - it.discount_cents + COALESCE(it.tax_cents, 0) ELSE 0 END), 0) AS returned_cents,
+              COALESCE(SUM(CASE WHEN ${returned} THEN it.discount_cents ELSE 0 END), 0) AS returned_discount_cents
+       FROM sales_items it JOIN products p ON p.id = it.product_id JOIN sales_invoices i ON i.id = it.invoice_id ${where}`
     )
     .bind(...vals)
-    .first<{ gold_mg: number }>();
+    .first<{ gold_mg: number; returned_cents: number; returned_discount_cents: number }>();
   return {
     invoices: head?.invoices ?? 0,
-    value_cents: head?.value_cents ?? 0,
-    discount_cents: head?.discount_cents ?? 0,
+    value_cents: (head?.value_cents ?? 0) - (gold?.returned_cents ?? 0),
+    discount_cents: (head?.discount_cents ?? 0) - (gold?.returned_discount_cents ?? 0),
     due_cents: head?.due_cents ?? 0,
     gold_mg: gold?.gold_mg ?? 0,
   };
@@ -1142,6 +1159,7 @@ export async function salesBreakdown(
     from: number;
     to: number;
     branchId?: string;
+    branchIds?: string[] | null;
     groupBy: "category" | "purity" | "branch" | "salesperson" | "payment" | "product";
   }
 ) {
@@ -1168,14 +1186,23 @@ export async function salesBreakdown(
             : opts.groupBy === "salesperson"
               ? "LEFT JOIN users u ON u.id = i.salesperson_id"
               : "");
-  const bcond = opts.branchId ? "AND i.branch_id = ?" : "";
-  const vals: unknown[] = opts.branchId ? [opts.from, opts.to, opts.branchId] : [opts.from, opts.to];
+  const vals: unknown[] = [opts.from, opts.to];
+  let bcond = "";
+  if (opts.branchId) {
+    bcond = "AND i.branch_id = ?";
+    vals.push(opts.branchId);
+  } else if (opts.branchIds) {
+    bcond = `AND i.branch_id IN (${opts.branchIds.map(() => "?").join(",") || "NULL"})`;
+    vals.push(...opts.branchIds);
+  }
+  // Pieces taken back are not sales (cash taken is, so payments are untouched).
+  if (opts.groupBy !== "payment") bcond += " AND it.id NOT IN (SELECT invoice_item_id FROM sales_return_items)";
   const valueCol = opts.groupBy === "payment" ? "pay.amount_cents" : "it.price_cents - it.discount_cents";
   const mgCol = opts.groupBy === "payment" ? "0" : "p.net_mg";
   const countCol = opts.groupBy === "payment" ? "COUNT(*)" : "COUNT(DISTINCT i.id)";
   const { results } = await db
     .prepare(
-      `SELECT ${col} AS key, ${countCol} AS invoices, COALESCE(SUM(${valueCol}), 0) AS value_cents, COALESCE(SUM(${mgCol}), 0) AS gold_mg FROM sales_invoices i ${join} WHERE i.created_at >= ? AND i.created_at <= ? ${bcond} GROUP BY ${col} ORDER BY value_cents DESC`
+      `SELECT ${col} AS key, ${countCol} AS invoices, COALESCE(SUM(${valueCol}), 0) AS value_cents, COALESCE(SUM(${mgCol}), 0) AS gold_mg FROM sales_invoices i ${join} WHERE i.created_at >= ? AND i.created_at <= ? AND i.status <> 'VOID' ${bcond} GROUP BY ${col} ORDER BY value_cents DESC`
     )
     .bind(...vals)
     .all();
