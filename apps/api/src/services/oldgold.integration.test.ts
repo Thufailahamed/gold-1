@@ -17,7 +17,7 @@ describe.skipIf(!sqliteAvailable)("old gold lifecycle over real SQLite", () => {
   };
   const intake = async (grossG = 5, stoneG = 0) => {
     const og = await import("./oldgold");
-    return og.intakeItem(db, { customerId: "c1", branchId: "b1", itemType: "chain", description: "Old chain", grossG, stoneG }, "u1");
+    return og.intakeItem(db, { needsTesting: true, customerId: "c1", branchId: "b1", itemType: "chain", description: "Old chain", grossG, stoneG }, "u1");
   };
   const bought = async (paidLkr: number) => {
     const og = await import("./oldgold");
@@ -30,6 +30,7 @@ describe.skipIf(!sqliteAvailable)("old gold lifecycle over real SQLite", () => {
 
   beforeAll(async () => {
     ({ db, raw } = migratedDb());
+    raw.exec("INSERT INTO categories (id, name, code, created_at) VALUES ('cat-og', 'OLD GOLD OG', 'OG', 0)");
     raw.exec(`
       INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES ('u1','o@x','Owner','x',0,0), ('u2','m@x','Manager','x',0,0);
       INSERT INTO user_roles (user_id, role_id) VALUES ('u1','owner'), ('u2','owner');

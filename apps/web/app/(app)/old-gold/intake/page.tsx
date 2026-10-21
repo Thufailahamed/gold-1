@@ -25,8 +25,6 @@ import {
 
 type Customer = { id: string; name: string; code: string };
 
-const ITEM_TYPES = ["chain", "ring", "bangle", "bracelet", "necklace", "earrings", "pendant", "coin"];
-
 function branchDefault(): string {
   if (typeof document === "undefined") return "";
   return (
@@ -150,14 +148,20 @@ export default function IntakePage() {
   const qc = useQueryClient();
   const [customerSearch, setCustomerSearch] = useState("");
   const [customer, setCustomer] = useState<Customer | null>(null);
-  const [itemType, setItemType] = useState("chain");
-  const [description, setDescription] = useState("");
+  // The old gold category the piece is filed under. Blank means the default (OG).
+  const [categoryId, setCategoryId] = useState("");
   const [grossG, setGrossG] = useState("");
   const [stoneG, setStoneG] = useState("");
+  const [ratePerG, setRatePerG] = useState("");
+  // A customer created here, before the intake: name, mobile and address.
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [newAddress, setNewAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [drag, setDrag] = useState(false);
-  const [created, setCreated] = useState<{ id: string; number: string } | null>(null);
+  const [created, setCreated] = useState<{ id: string; number: string; needsTesting?: boolean } | null>(null);
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
   // The selected-branch cookie, else the first branch the user works in. An
   // empty branch used to reach the server and come back as "Branch not found".
@@ -176,6 +180,27 @@ export default function IntakePage() {
     queryFn: () => api<{ rows: unknown[]; total: number }>("/api/v1/oldgold/items?status=RECEIVED&limit=1"),
   });
 
+  const oldGoldCats = useQuery({
+    queryKey: ["og-categories"],
+    queryFn: () =>
+      api<{ rows: { id: string; name: string; code: string; isDefault: boolean }[] }>("/api/v1/oldgold/categories"),
+    staleTime: 5 * 60_000,
+  });
+  const categoryRows = oldGoldCats.data?.rows ?? [];
+  const selectedCategory = categoryRows.find((c) => c.id === categoryId) ?? categoryRows.find((c) => c.isDefault);
+
+  // Testing is off by default: the karat is picked here and the piece is Tested at once.
+  // Tick Needs testing to send it to the testing queue instead.
+  const [needsTesting, setNeedsTesting] = useState(false);
+  const [purityId, setPurityId] = useState("");
+  const purities = useQuery({
+    queryKey: ["og-purities"],
+    queryFn: () => api<{ rows: { id: string; karat: string; permille: number; is_active?: number }[] }>("/api/v1/masters/purities?limit=100"),
+    staleTime: 5 * 60_000,
+  });
+  const purityRows = (purities.data?.rows ?? []).filter((p) => p.is_active !== 0).sort((a, b) => b.permille - a.permille);
+  const selectedPurity = purityRows.find((p) => p.id === purityId);
+
   const customers = useQuery({
     queryKey: ["og-customers", customerSearch],
     queryFn: () =>
@@ -188,6 +213,29 @@ export default function IntakePage() {
   const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
   useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
 
+  const createCustomer = useMutation({
+    mutationFn: () =>
+      api<Customer>("/api/v1/customers", {
+        method: "POST",
+        body: JSON.stringify({
+          name: newName.trim(),
+          phone: newPhone.trim() || undefined,
+          address: newAddress.trim() || undefined,
+          branchId,
+        }),
+      }),
+    onSuccess: (c) => {
+      setCustomer({ id: c.id, name: c.name, code: c.code });
+      setCreating(false);
+      setNewName("");
+      setNewPhone("");
+      setNewAddress("");
+      toast.success(`Customer ${c.code} added`);
+      qc.invalidateQueries({ queryKey: ["og-customers"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not add the customer"),
+  });
+
   const intake = useMutation({
     mutationFn: async () => {
       const res = await api<{ id: string; number: string }>("/api/v1/oldgold/items", {
@@ -195,10 +243,12 @@ export default function IntakePage() {
         body: JSON.stringify({
           customerId: customer?.id ?? "",
           branchId,
-          itemType,
-          description,
+          categoryId: selectedCategory?.id,
+          needsTesting,
+          purityId: !needsTesting ? purityId || undefined : undefined,
           grossG: Number(grossG),
           stoneG: stoneG === "" ? 0 : Number(stoneG),
+          quotedRateLkr: quoteRate > 0 ? quoteRate : undefined,
           notes: notes || undefined,
         }),
       });
@@ -214,7 +264,7 @@ export default function IntakePage() {
           failed++;
         }
       }
-      return { ...res, failed };
+      return { ...res, failed, needsTesting };
     },
     onSuccess: (d) => {
       setCreated(d);
@@ -231,20 +281,23 @@ export default function IntakePage() {
   const grossOk = gross > 0;
   const stoneOk = stoneG === "" || (Number(stoneG) >= 0 && Number(stoneG) < Number(grossG));
   const net = grossOk && stoneOk ? gross - stone : null;
-  const canSubmit = !intake.isPending && !!customer && !!description && !!branchId && grossOk && stoneOk;
+  // Price per gram, typed at intake and optional. The price is net weight × that rate.
+  const quoteRate = Number(ratePerG);
+  const quote = net !== null && quoteRate > 0 ? Math.round(net * quoteRate) : null;
+  const canSubmit = !intake.isPending && !!customer && !!branchId && grossOk && stoneOk && (needsTesting || !!purityId);
 
   const steps = [
     { t: "Customer", done: !!customer },
-    { t: "Describe", done: !!description.trim() && !!itemType.trim() },
+    { t: "Category", done: !!selectedCategory },
     { t: "Weigh", done: grossOk && stoneOk },
     { t: "Photograph", done: files.length > 0 },
   ];
   const missing = [
     !customer && "customer",
-    !description.trim() && "description",
     !grossOk && "gross weight",
     !stoneOk && "a valid stone weight",
     !branchId && "a branch",
+    !needsTesting && !purityId && "the karat, or tick Needs testing",
   ].filter(Boolean) as string[];
 
   const addFiles = (list: FileList | File[] | null) => {
@@ -254,9 +307,11 @@ export default function IntakePage() {
 
   function reset() {
     setCreated(null);
-    setDescription("");
     setGrossG("");
     setStoneG("");
+    setRatePerG("");
+    setPurityId("");
+    setNeedsTesting(false);
     setNotes("");
     setFiles([]);
   }
@@ -311,7 +366,9 @@ export default function IntakePage() {
               <p className="text-[15px] font-semibold text-ink">
                 Item <span className="g-metric rounded-md bg-void px-2 py-0.5 text-gold-light">{created.number}</span> received
               </p>
-              <p className="mt-1 text-sm text-ink-3">Tag it with the OG number — it is now in the testing queue.</p>
+              <p className="mt-1 text-sm text-ink-3">
+                {created.needsTesting ? "Tag it with the OG number — it is now in the testing queue." : "Tag it with the OG number — it is tested and ready to value."}
+              </p>
             </div>
           </div>
           <div className="relative flex flex-wrap gap-2">
@@ -362,7 +419,56 @@ export default function IntakePage() {
                     <span className="absolute right-3.5 top-1/2 size-3.5 -translate-y-1/2 animate-spin rounded-full border-2 border-gold/30 border-t-gold" />
                   ) : null}
                 </div>
-                {customerSearch ? (
+                {creating ? (
+                  <div className="mt-2 space-y-3 rounded-2xl bg-bone/60 p-4 ring-1 ring-ink/[0.06]">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block sm:col-span-2">
+                        <Label extra={<span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Required</span>}>Name</Label>
+                        <input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Full name" className={inputCls} />
+                      </label>
+                      <label className="block">
+                        <Label extra={<span className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-5">Optional</span>}>Mobile number</Label>
+                        <input type="tel" inputMode="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="07X XXX XXXX" className={inputCls} />
+                      </label>
+                      <label className="block">
+                        <Label extra={<span className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-5">Optional</span>}>Address</Label>
+                        <input value={newAddress} onChange={(e) => setNewAddress(e.target.value)} placeholder="Street, town" className={inputCls} />
+                      </label>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCreating(false)}
+                        className="inline-flex h-9 items-center rounded-xl px-3.5 text-xs font-medium text-ink-3 hover:bg-paper hover:text-ink"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => createCustomer.mutate()}
+                        disabled={!newName.trim() || !branchId || createCustomer.isPending}
+                        className="home-btn-gold h-9 px-4 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {createCustomer.isPending ? "Saving…" : "Save and select"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <p className="text-xs text-ink-4">{customerSearch ? "Pick the customer from the results, or add a new one." : "Search, then pick the customer from the results."}</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewName(customerSearch.trim());
+                        setCreating(true);
+                      }}
+                      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-gold-deep hover:bg-gold-pale/60"
+                    >
+                      <PlusIcon size={12} /> New customer
+                    </button>
+                  </div>
+                )}
+                {customerSearch && !creating ? (
                   <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto rounded-2xl bg-bone/50 p-1.5 ring-1 ring-ink/[0.06] scrollbar-thin">
                     {(customers.data?.rows ?? []).length === 0 && !customers.isFetching ? (
                       <li className="px-3 py-4 text-center text-xs text-ink-4">No customers match “{customerSearch}”</li>
@@ -386,67 +492,61 @@ export default function IntakePage() {
                       </li>
                     ))}
                   </ul>
-                ) : (
-                  <p className="mt-2 text-xs text-ink-4">Search, then pick the customer from the results.</p>
-                )}
+                ) : null}
               </div>
             )}
           </Section>
 
           {/* 2 Item */}
-          <Section
-            n="2"
-            title="The piece"
-            sub="What it is, as handed over"
-            icon={<FileTextIcon size={17} />}
-            done={!!description.trim() && !!itemType.trim()}
-          >
-            <div className="space-y-4">
-              <div>
-                <Label>Item type</Label>
-                <div className="flex flex-wrap gap-1.5">
-                  {ITEM_TYPES.map((t) => {
-                    const on = itemType.trim().toLowerCase() === t;
-                    return (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setItemType(t)}
-                        className={cn(
-                          "inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-medium capitalize ring-1 transition-all duration-200",
-                          on
-                            ? "bg-void text-paper ring-gold/40 shadow-[0_8px_18px_-10px_rgba(6,42,34,0.8)]"
-                            : "bg-paper text-ink-3 ring-ink/10 hover:-translate-y-px hover:bg-gold-pale/50 hover:text-ink"
-                        )}
-                      >
-                        {on ? <CheckIcon size={11} className="text-gold-light" /> : null}
-                        {t}
-                      </button>
-                    );
-                  })}
-                </div>
-                <input
-                  value={itemType}
-                  onChange={(e) => setItemType(e.target.value)}
-                  placeholder="Or type another — anklet, chain links…"
-                  className={cn(inputCls, "mt-2")}
-                />
-              </div>
+          <Section n="2" title="The piece" sub="Filed under an old gold category" icon={<FileTextIcon size={17} />} done={!!selectedCategory}>
+            <div className="grid gap-4 sm:grid-cols-2">
               <label className="block">
-                <Label extra={<span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Required</span>}>Description</Label>
+                <Label extra={<span className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-5">Default OG</span>}>Category</Label>
+                <select
+                  value={selectedCategory?.id ?? ""}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                  disabled={categoryRows.length === 0}
+                  className={cn(inputCls, "pr-8")}
+                >
+                  {categoryRows.length === 0 ? <option value="">No old gold category</option> : null}
+                  {categoryRows.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.code})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {needsTesting ? null : (
+                <label className="block">
+                  <Label extra={<span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Required</span>}>Karat</Label>
+                  <select value={purityId} onChange={(e) => setPurityId(e.target.value)} className={cn(inputCls, "pr-8")}>
+                    <option value="">Choose the karat…</option>
+                    {purityRows.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.karat} ({p.permille}‰)
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <label className="flex items-start gap-2.5 sm:col-span-2">
                 <input
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="e.g. 22K rope chain, broken clasp"
-                  className={inputCls}
+                  type="checkbox"
+                  checked={needsTesting}
+                  onChange={(e) => setNeedsTesting(e.target.checked)}
+                  className="mt-0.5 size-4 accent-[#CDA853]"
                 />
+                <span>
+                  <span className="block text-[13px] font-medium text-ink">Needs testing</span>
+                  <span className="block text-xs text-ink-4">Send it to the testing queue. Leave off when the karat is known.</span>
+                </span>
               </label>
             </div>
           </Section>
 
           {/* 3 Weigh */}
           <Section n="3" title="Weigh" sub="Grams on the counter scale" icon={<ScaleIcon size={17} />} done={grossOk && stoneOk}>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-3">
               <label className="block">
                 <Label extra={<span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Required</span>}>Gross weight</Label>
                 <UnitInput id="og-gross" unit="g" value={grossG} onChange={setGrossG} invalid={grossG !== "" && !grossOk} />
@@ -464,6 +564,19 @@ export default function IntakePage() {
                     <AlertCircleIcon size={12} /> Must be 0 or more and less than gross
                   </span>
                 ) : null}
+              </label>
+              <label className="block">
+                <Label extra={<span className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-5">Optional</span>}>Price per gram</Label>
+                <UnitInput id="og-rate" unit="LKR/g" value={ratePerG} onChange={setRatePerG} />
+                <span className="mt-1.5 block text-xs text-ink-4">
+                  {quote !== null ? (
+                    <>
+                      Price <span className="g-metric font-semibold text-ink">LKR {quote.toLocaleString("en-US")}</span> for {grams((net ?? 0) * 1000)} g net
+                    </>
+                  ) : (
+                    "Type a rate to price the piece"
+                  )}
+                </span>
               </label>
             </div>
             <div className="relative mt-4 flex items-center justify-between overflow-hidden rounded-xl bg-void px-4 py-2.5 text-paper">
@@ -564,14 +677,17 @@ export default function IntakePage() {
               <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">Intake ticket</span>
               <span className="g-metric rounded-md bg-paper/[0.06] px-2 py-0.5 text-[11px] text-paper/50 ring-1 ring-paper/10">OG-·····</span>
             </div>
-            <p className="relative mt-3 truncate text-lg font-semibold text-paper">{description.trim() || <span className="text-paper/40">Untitled piece</span>}</p>
-            <p className="relative mt-0.5 truncate text-xs capitalize text-paper/50">{itemType || "Item type"}</p>
+            <p className="relative mt-3 truncate text-lg font-semibold text-paper">{"Old gold"}</p>
 
             <dl className="relative mt-4 space-y-2 border-t border-dashed border-paper/15 pt-4 text-sm">
               {[
                 ["Customer", customer ? customer.name : "—"],
                 ["Gross", grossOk ? `${gross.toLocaleString("en-US", { maximumFractionDigits: 3 })} g` : "—"],
                 ["Stone", stoneG !== "" && stoneOk ? `${stone.toLocaleString("en-US", { maximumFractionDigits: 3 })} g` : "—"],
+                ["Category", selectedCategory ? selectedCategory.code : "—"],
+                ["Karat", needsTesting ? "To test" : selectedPurity ? selectedPurity.karat : "—"],
+                ["Price / g", ratePerG !== "" && quoteRate > 0 ? `LKR ${quoteRate.toLocaleString("en-US")}` : "—"],
+                ["Price", quote !== null ? `LKR ${quote.toLocaleString("en-US")}` : "—"],
                 ["Photos", files.length ? String(files.length) : "—"],
               ].map(([k, v]) => (
                 <div key={k} className="flex items-center justify-between gap-3">

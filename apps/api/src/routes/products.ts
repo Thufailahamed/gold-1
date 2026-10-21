@@ -2,6 +2,7 @@ import { shopR2 } from "../services/shopStorage";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
+  bulkCreateProductsSchema,
   centsToLkr,
   createProductSchema,
   editProductSchema,
@@ -15,10 +16,12 @@ import { buildAuditStmt } from "../middleware/audit";
 import { buildLabelSvg } from "../services/label";
 import {
   createProduct,
+  createProductsBulk,
   editProduct,
   findByBarcode,
   getProduct,
   listProducts,
+  nextCategoryBarcode,
   priceFor,
   voidProduct,
 } from "../services/products";
@@ -89,6 +92,34 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       return serviceError(c, err);
     }
   })
+  .post("/bulk", requirePerm(PERMISSIONS.PRODUCTS_CREATE), async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = bulkCreateProductsSchema.safeParse(body);
+    if (!parsed.success) {
+      // Point at the row the counter has to fix, not just "invalid".
+      const issue = parsed.error.issues[0];
+      const row = issue?.path[0] === "items" && typeof issue.path[1] === "number" ? `Row ${issue.path[1] + 1}: ` : "";
+      const field = issue?.path[issue.path.length - 1];
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: "VALIDATION",
+            message: issue?.path[0] === "items" && issue.path.length === 1
+              ? issue.message
+              : `${row}Invalid ${typeof field === "string" ? field : "product data"}`,
+          },
+        },
+        400
+      );
+    }
+    try {
+      const data = await createProductsBulk(getShopDb(c), parsed.data, c.get("userId"));
+      return c.json({ success: true, data }, 201);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
   .get("/", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
     const perms = c.get("permissions") as string[];
     const canManageAll = perms.includes(PERMISSIONS.BRANCHES_MANAGE);
@@ -113,6 +144,18 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     try {
       const data = await findByBarcode(getShopDb(c), c.req.param("code"));
       return c.json({ success: true, data: stripCost(c, data) }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  // The barcode the next piece in this category will get, shown before saving.
+  .get("/next-barcode", requirePerm(PERMISSIONS.PRODUCTS_CREATE), async (c) => {
+    const categoryId = c.req.query("categoryId");
+    if (!categoryId)
+      return c.json({ success: false, error: { code: "VALIDATION", message: "categoryId required" } }, 400);
+    try {
+      const barcode = await nextCategoryBarcode(getShopDb(c), categoryId);
+      return c.json({ success: true, data: { barcode } }, 200);
     } catch (err) {
       return serviceError(c, err);
     }
@@ -152,7 +195,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       // The tag must show what the till charges: POS and createSale price a
       // piece at its selling-price override when one is set, live rate otherwise.
       const tagPrice =
-        product.selling_price_cents !== null
+        product.selling_price_cents !== null && product.selling_price_cents > 0
           ? {
               amount: centsToLkr(product.selling_price_cents),
               ratePerGram: livePrice ? centsToLkr(livePrice.rate_cents_per_g) : 0,

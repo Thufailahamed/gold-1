@@ -1,10 +1,15 @@
-import { type ExchangeSaleInput } from "@goldos/shared";
+import { gToMg, lkrToCents, type ExchangeSaleInput } from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
 import { buildEntryStmts } from "./journal";
 import { businessDateFor } from "./busdate";
 import { postGoldStmts } from "./gold";
 import { batchOrConflict, staleGuard } from "./guard";
+import { creditToOpenBills } from "./receipts";
+import { intakeStatements } from "./oldgold";
 import { buildReceiveSaleStmts } from "./sales";
+
+/** Purity the counter records for old gold taken in with a sale (22K). */
+const TAKE_IN_PERMILLE = 916;
 
 /**
  * Old-for-new exchange: the shop buys the customer's jewellery (VALUED
@@ -31,14 +36,20 @@ import { buildReceiveSaleStmts } from "./sales";
  * ref_entities, so the day-close classification and the payments cross-foot
  * read the exchange like the purchase and sale it is made of.
  */
+/** The request as the route parses it, or as a caller builds it (where new old gold may be left out). */
+type ExchangeInput = Omit<ExchangeSaleInput, "newOldGold"> & { newOldGold?: ExchangeSaleInput["newOldGold"] };
+
 export async function exchangeSale(
   db: D1Database,
-  input: ExchangeSaleInput,
+  input: ExchangeInput,
   actorId: string
 ): Promise<{
   invoiceId: string;
   number: string;
   oldGoldValueCents: number;
+  /** Old gold that cleared the customer's open bills before the new bill. */
+  /** Credit left after the bill that settled the customer's open bills. */
+  creditedOpenCents: number;
   saleTotalCents: number;
   customerPaysCents: number;
   shopPaysCents: number;
@@ -98,7 +109,78 @@ export async function exchangeSale(
       throw Object.assign(new Error(`Old gold ${item.number} has no net weight`), { code: "VALIDATION" });
     olds.push(item);
   }
+  // Old gold brought in with this sale is recorded here, as statements in the
+  // same batch as the sale: a sale that fails, or is never completed, leaves no
+  // piece behind. Each piece is recorded already valued, at the counter's
+  // purity and the amount the cashier paid.
+  const newPieces = input.newOldGold ?? [];
+  if (olds.length === 0 && newPieces.length === 0)
+    throw Object.assign(new Error("Take in at least one piece of old gold"), { code: "VALIDATION" });
+  const intakeStmts: D1PreparedStatement[] = [];
+  for (const p of newPieces) {
+    const purity = await db
+      .prepare("SELECT id, karat FROM purities WHERE permille = ? AND is_active = 1")
+      .bind(TAKE_IN_PERMILLE)
+      .first<{ id: string; karat: string }>();
+    const grossMg = gToMg(p.grossG);
+    const fineMg = Math.round((grossMg * TAKE_IN_PERMILLE) / 1000);
+    const valueCents = lkrToCents(p.valueLkr);
+    const notes = "Taken in at the counter with an exchange";
+    // The same intake the desk uses: the piece is recorded with its description,
+    // then valued at the typed amount, so it sits in the same old gold list.
+    const built = await intakeStatements(
+      db,
+      {
+        customerId: customer.id,
+        branchId: input.branchId,
+        itemType: "Old gold",
+        description: p.description?.trim() || `Old gold, ${p.grossG} g`,
+        categoryId: p.categoryId,
+        // The till tests the piece itself (touchstone), below, so it waits as received.
+        needsTesting: true,
+        grossG: p.grossG,
+        stoneG: 0,
+        notes,
+      },
+      actorId
+    );
+    intakeStmts.push(
+      ...built.stmts,
+      db
+        .prepare(
+          "UPDATE old_gold_items SET purity_id = ?, tested_permille = ?, karat = ?, fine_mg = ?, purchase_rate_cents = ?, negotiated_cents = ?, purchase_value_cents = ?, status = 'VALUED' WHERE id = ? AND status = 'RECEIVED'"
+        )
+        .bind(
+          purity?.id ?? null,
+          TAKE_IN_PERMILLE,
+          purity?.karat ?? null,
+          fineMg,
+          fineMg > 0 ? Math.round((valueCents / fineMg) * 1000) : 0,
+          valueCents,
+          valueCents,
+          built.id
+        ),
+      db
+        .prepare(
+          "INSERT INTO gold_tests (id, item_id, method, tested_permille, tester_id, result, approved_by, notes, created_at) VALUES (?, ?, 'touchstone', ?, ?, 'pass', NULL, ?, ?)"
+        )
+        .bind(crypto.randomUUID(), built.id, TAKE_IN_PERMILLE, actorId, notes, Date.now())
+    );
+    olds.push({
+      id: built.id,
+      number: built.number,
+      status: "VALUED",
+      customer_id: customer.id,
+      branch_id: input.branchId,
+      net_mg: grossMg,
+      tested_permille: TAKE_IN_PERMILLE,
+      fine_mg: fineMg,
+      purchase_value_cents: valueCents,
+    });
+  }
+
   const oldGoldValueCents = olds.reduce((s, o) => s + (o.purchase_value_cents ?? 0), 0);
+
 
   // The sale half — priced, validated and built as statements, not yet run.
   const sale = await buildReceiveSaleStmts(
@@ -233,11 +315,16 @@ export async function exchangeSale(
   // purchase writes and vice versa — so the purchase may follow the sale in
   // the one batch, even though it was priced first. A lost race (the guard
   // fired) surfaces as CONFLICT, not a raw 500.
-  await batchOrConflict(db, [...sale.stmts, ...stmts], "Item was already exchanged or bought; reload and try again");
+  // The intake of new pieces goes first: the purchase statements below update
+  // those rows, and D1 runs a batch in order.
+  // Old gold left over after the bill goes to the customer's credit (store-credit payout): it settles their open bills, oldest first.
+  const credit = await creditToOpenBills(db, customer.id, input.payout === "store_credit" ? sale.exchangeSurplusCents : 0);
+  await batchOrConflict(db, [...intakeStmts, ...sale.stmts, ...credit.stmts, ...stmts], "Item was already exchanged or bought; reload and try again");
   return {
     invoiceId: sale.invoiceId,
     number: sale.number,
     oldGoldValueCents,
+    creditedOpenCents: credit.appliedCents,
     saleTotalCents: sale.totalCents,
     customerPaysCents: sale.totalCents - sale.exchangeOffsetCents,
     shopPaysCents: payoutCents,

@@ -22,6 +22,9 @@ import {
   createStoneType,
   createSubcategory,
   deactivateCategory,
+  deleteCategory,
+  reactivateCategory,
+  updateCategory,
   deactivatePurity,
   listCategories,
   listDesigns,
@@ -67,6 +70,34 @@ export const catalog = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     try {
       await deactivateCategory(getShopDb(c), c.req.param("id"), c.get("userId"), parsed.data.reason);
+      return c.json({ success: true, data: { ok: true } }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  .patch("/categories/:id", requirePerm(PERMISSIONS.MASTERS_EDIT), async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = createCategorySchema.safeParse(body);
+    if (!parsed.success)
+      return c.json({ success: false, error: { code: "VALIDATION", message: "Invalid category data" } }, 400);
+    try {
+      await updateCategory(getShopDb(c), c.req.param("id"), parsed.data, c.get("userId"));
+      return c.json({ success: true, data: { ok: true } }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  .patch("/categories/:id/reactivate", requirePerm(PERMISSIONS.MASTERS_EDIT), async (c) => {
+    try {
+      await reactivateCategory(getShopDb(c), c.req.param("id"), c.get("userId"));
+      return c.json({ success: true, data: { ok: true } }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  .delete("/categories/:id", requirePerm(PERMISSIONS.MASTERS_CANCEL), async (c) => {
+    try {
+      await deleteCategory(getShopDb(c), c.req.param("id"), c.get("userId"));
       return c.json({ success: true, data: { ok: true } }, 200);
     } catch (err) {
       return serviceError(c, err);

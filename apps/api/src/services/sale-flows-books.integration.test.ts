@@ -22,6 +22,7 @@ describe.skipIf(!sqliteAvailable)("sale flows in day close and accounts", () => 
 
   beforeAll(async () => {
     ({ db, raw } = migratedDb());
+    raw.exec("INSERT INTO categories (id, name, code, created_at) VALUES ('cat-og', 'OLD GOLD OG', 'OG', 0)");
     raw.exec(`
       INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES ('u1','o@x','Owner','x',0,0);
       INSERT INTO user_roles (user_id, role_id) VALUES ('u1','owner');
@@ -57,14 +58,14 @@ describe.skipIf(!sqliteAvailable)("sale flows in day close and accounts", () => 
 
     // Exchange: old gold worth 131,100 against a 50,000 piece, 81,100 paid out in cash.
     const og = await import("./oldgold");
-    const { id } = await og.intakeItem(db, { customerId: "c1", branchId: "b1", itemType: "chain", description: "Old chain", grossG: 5, stoneG: 0 }, "u1");
+    const { id } = await og.intakeItem(db, { needsTesting: true, customerId: "c1", branchId: "b1", itemType: "chain", description: "Old chain", grossG: 5, stoneG: 0 }, "u1");
     await og.recordTest(db, id, { method: "xrf", permille: 916, result: "pass" }, "u1");
     await og.valuateItem(db, id, { stoneDeductionLkr: 0, processingDeductionLkr: 0 }, "u1");
     const b = await product("Ring B");
     const x = await exchangeSale(db, { customerId: "c1", branchId: "b1", oldGoldItemIds: [id], items: [{ productId: b, discountLkr: 0 }], payments: [], payout: "cash" }, "u1");
     expect(x.shopPaysCents).toBe(8_110_000);
 
-    // The receivable is untouched by the exchange.
+    // The open bill is untouched: the old gold went to the new bill and the surplus was paid out.
     expect((await listReceivables(db, { branchId: "b1", asOf: today })).totalCents).toBe(2_000_000);
 
     // Day close: 20,000 + 10,000 in, 81,100 out; nothing unclassified; checks pass.
@@ -85,7 +86,7 @@ describe.skipIf(!sqliteAvailable)("sale flows in day close and accounts", () => 
     await createCashEntry(db, { branchId: "b1", kind: "STAFF_TAKE", amountCents: 100_000, method: "cash", person: "Kamal", note: "salary advance" }, "u1");
     await createCashEntry(db, { branchId: "b1", kind: "OWNER_DRAWING", amountCents: 50_000, method: "cash", note: "personal" }, "u1");
 
-    // The earlier exchange paid out more than the till held: top the drawer up.
+    // Top the drawer up for the cash the employee and owner take.
     await createCashEntry(db, { branchId: "b1", kind: "OWNER_CAPITAL", amountCents: 20_000_000, method: "cash", note: "float" }, "u1");
     const before = 3_000_000 - 8_110_000 + 20_000_000;
     const r = await buildClosingReport(db, { branchId: "b1", date: today });

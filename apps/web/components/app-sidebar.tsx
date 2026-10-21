@@ -27,6 +27,7 @@ import {
   ClipboardCheckIcon,
   SparklesIcon,
   ChevronRightIcon,
+  UsersIcon,
 } from "./icons";
 
 type IconCmp = (props: { size?: number | string; className?: string }) => React.ReactNode;
@@ -110,6 +111,7 @@ const SECTIONS: NavSection[] = [
         perm: "accounts:view",
         also: ["/expenses"],
       },
+      { href: "/credits", label: "Credits", icon: UsersIcon, perm: "sales:view" },
       {
         href: "/day-closing",
         label: "Day Closing",

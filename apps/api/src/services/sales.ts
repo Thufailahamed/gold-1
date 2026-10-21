@@ -26,6 +26,7 @@ export function discountPct(discountCents: number, subtotalCents: number): numbe
 
 const PAY_ACCOUNT: Record<string, string> = {
   cash: "1000",
+  cheque: "1000",
   card: "1020",
   bank: "1010",
   other: "1010",
@@ -77,6 +78,7 @@ type PayLeg = {
   amountCents: number;
   accountCode: string;
   bankAccountId: string | null;
+  cheque?: { no: string | null; bank: string | null; date: string | null };
 };
 
 /**
@@ -96,7 +98,15 @@ async function resolvePayLegs(db: D1Database, payments: CreateSaleInput["payment
       accountCode = m.accountCode;
       bankAccountId = m.bankAccountId;
     }
-    legs.push({ method: p.method, amountCents: lkrToCents(p.amountLkr), accountCode, bankAccountId });
+    legs.push({
+      method: p.method,
+      amountCents: lkrToCents(p.amountLkr),
+      accountCode,
+      bankAccountId,
+      ...(p.method === "cheque"
+        ? { cheque: { no: p.chequeNo || null, bank: p.chequeBank || null, date: p.chequeDate || null } }
+        : {}),
+    });
   }
   return legs;
 }
@@ -195,7 +205,8 @@ export async function buildReceiveSaleStmts(
     // Shelf price: the selling-price override when set, else the live rate —
     // the same price the tag and the scan lookup show.
     const shelfPrice = async (): Promise<number> => {
-      if (p.selling_price_cents !== null) return p.selling_price_cents;
+      // A zero price is not a price: it would sell the piece for nothing.
+      if (p.selling_price_cents !== null && p.selling_price_cents > 0) return p.selling_price_cents;
       const { livePrice, noRate } = await priceFor(db, p.purity_id, p.net_mg, p.making_cents);
       if (noRate || !livePrice)
         throw Object.assign(new Error(`No rate for product: ${p.barcode}`), { code: "VALIDATION" });
@@ -480,6 +491,12 @@ export async function buildReceiveSaleStmts(
         )
         .bind(payId, invoiceId, p.amountCents, p.method, p.accountCode, p.bankAccountId, payId, now, actorId)
     );
+    if (p.cheque)
+      stmts.push(
+        db
+          .prepare("INSERT INTO sales_payment_cheques (payment_id, cheque_no, cheque_bank, cheque_date) VALUES (?, ?, ?, ?)")
+          .bind(payId, p.cheque.no, p.cheque.bank, p.cheque.date)
+      );
   }
   if (input.exchangeReturnId) {
     stmts.push(
@@ -867,7 +884,7 @@ export async function getSale(db: D1Database, id: string) {
     .all();
   const { results: payments } = await db
     .prepare(
-      "SELECT sp.*, ba.name AS bank_account_name, ba.bank_name FROM sales_payments sp LEFT JOIN bank_accounts ba ON ba.id = sp.bank_account_id WHERE sp.invoice_id = ? ORDER BY sp.created_at"
+      "SELECT sp.*, ba.name AS bank_account_name, ba.bank_name, ch.cheque_no, ch.cheque_bank, ch.cheque_date FROM sales_payments sp LEFT JOIN bank_accounts ba ON ba.id = sp.bank_account_id LEFT JOIN sales_payment_cheques ch ON ch.payment_id = sp.id WHERE sp.invoice_id = ? ORDER BY sp.created_at"
     )
     .bind(id)
     .all();
@@ -923,10 +940,22 @@ export async function getSale(db: D1Database, id: string) {
     .bind(id)
     .all<{ id: string; item_id: string; number: string; description: string; fine_mg: number; value_cents: number; paid_cents: number }>();
   const exchangeItems = oldGoldExchange ?? [];
+  const oldGoldCents = exchangeItems.reduce((s, r) => s + r.value_cents, 0);
+  // An exchange settles part of the bill with a credit leg for the old gold
+  // value (account 1200). That leg is shown as the old gold taken in, not as a
+  // credit sale, so it is left out of the payment list.
+  const oldGoldLeg = exchangeItems.length ? Math.min(oldGoldCents, (inv as { total_cents: number }).total_cents) : 0;
+  let shownPayments = (payments ?? []) as Record<string, unknown>[];
+  if (oldGoldLeg > 0) {
+    const at = shownPayments.findIndex(
+      (p) => p.method === "credit" && p.account_code === "1200" && p.amount_cents === oldGoldLeg
+    );
+    if (at >= 0) shownPayments = shownPayments.filter((_, j) => j !== at);
+  }
   return {
     invoice: inv,
     items: items ?? [],
-    payments: payments ?? [],
+    payments: shownPayments,
     receipts: receipts ?? [],
     journal: journal ?? [],
     returns: returns ?? [],
@@ -950,8 +979,8 @@ export async function listSales(
 ) {
   const like = `%${opts.search ?? ""}%`;
   const offset = (opts.page - 1) * opts.limit;
-  const conds = ["(i.number LIKE ? OR i.customer_id IN (SELECT id FROM customers WHERE name LIKE ? OR phone LIKE ?))"];
-  const vals: unknown[] = [like, like, like];
+  const conds = ["(i.number LIKE ? OR i.customer_id IN (SELECT id FROM customers WHERE name LIKE ? OR phone LIKE ? OR address LIKE ?))"];
+  const vals: unknown[] = [like, like, like, like];
   if (opts.customerId) {
     conds.push("i.customer_id = ?");
     vals.push(opts.customerId);
@@ -1080,10 +1109,11 @@ export async function posCatalog(
     }>();
   const rows = [];
   for (const r of results ?? []) {
-    const { livePrice } = r.selling_price_cents === null
+    const hasPrice = r.selling_price_cents !== null && r.selling_price_cents > 0;
+    const { livePrice } = !hasPrice
       ? await priceFor(db, r.purity_id, r.net_mg, r.making_cents)
       : { livePrice: null };
-    rows.push({ ...r, price_cents: r.selling_price_cents ?? livePrice?.amount_cents ?? null });
+    rows.push({ ...r, price_cents: hasPrice ? r.selling_price_cents : (livePrice?.amount_cents ?? null) });
   }
   return rows;
 }

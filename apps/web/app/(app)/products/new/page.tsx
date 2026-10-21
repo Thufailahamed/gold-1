@@ -13,8 +13,8 @@ import { cn } from "@/lib/cn";
 import { Page } from "@/components/ui";
 import { GoldHero, HeroBadge, heroGhost, heroGold } from "@/components/console-kit";
 import { Select, type SelectOption } from "@/components/select";
+import { Field, FormSection, UnitInput, fmtG, inputCls, toOptions, type Option } from "../product-form-kit";
 import {
-  AlertCircleIcon,
   ArrowRightIcon,
   CheckIcon,
   CoinsIcon,
@@ -32,12 +32,9 @@ import {
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
-type Option = { id: string; name?: string; karat?: string; permille?: number };
-
 const productSchema = z.object({
-  name: z.string().min(1).max(100),
   categoryId: z.string().min(1),
-  subcategoryId: z.string().optional(),
+  subcategoryName: z.string().max(100).optional(),
   designId: z.string().optional(),
   productTypeId: z.string().optional(),
   metalTypeId: z.string().min(1),
@@ -46,6 +43,8 @@ const productSchema = z.object({
   grossG: z.coerce.number().gt(0),
   stoneG: z.coerce.number().min(0).optional().default(0),
   makingLkr: z.coerce.number().min(0).optional().default(0),
+  /** Gold rate per gram typed at the counter; prices the piece when no selling price is given. Not saved itself. */
+  ratePerGLkr: z.coerce.number().min(0).optional(),
   wastageG: z.coerce.number().min(0).optional().default(0),
   costLkr: z.coerce.number().min(0).optional(),
   sellingPriceLkr: z.coerce.number().min(0).optional(),
@@ -54,6 +53,19 @@ const productSchema = z.object({
   branchId: z.string().min(1),
 });
 type FormValues = z.infer<typeof productSchema>;
+
+/**
+ * The selling price a typed gold rate gives: net weight × rate per gram, plus
+ * making charge. Null when no rate has been typed or there is no net weight.
+ */
+function priceFromRate(v: Partial<FormValues>): number | null {
+  const rate = Number(v.ratePerGLkr);
+  const gross = Number(v.grossG);
+  const stone = Number(v.stoneG) || 0;
+  if (!(rate > 0) || !(gross > stone)) return null;
+  const making = Number(v.makingLkr) || 0;
+  return Math.round((gross - stone) * rate + making);
+}
 
 function branchDefault(): Partial<FormValues> | undefined {
   if (typeof document === "undefined") return undefined;
@@ -64,124 +76,7 @@ function branchDefault(): Partial<FormValues> | undefined {
   return saved ? { branchId: saved } : undefined;
 }
 
-/** Matches the trigger of the themed <Select> so every control reads as one family. */
-const inputCls = cn(
-  "h-9 w-full rounded-lg bg-paper px-3 text-[13px] text-ink placeholder:text-ink-5",
-  "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-[box-shadow,background-color] duration-200",
-  "hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26),0_1px_2px_rgba(16,32,27,0.04)]",
-  "focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]",
-  "aria-[invalid=true]:shadow-[inset_0_0_0_1px_#e11d48,0_0_0_4px_rgba(225,29,72,0.12)]"
-);
-
-const fmtG = (v: number | null) => (v !== null && Number.isFinite(v) ? v.toFixed(3) : "—");
-const toOptions = (rows: Option[] | undefined, none?: string): SelectOption[] => [
-  ...(none ? [{ value: "", label: none }] : []),
-  ...(rows ?? []).map((r) => ({ value: r.id, label: r.name ?? r.karat ?? r.id })),
-];
-
 /* ---------------------------------------------------------------- controls */
-
-function Field({
-  label,
-  required,
-  optional,
-  error,
-  hint,
-  children,
-  className,
-}: {
-  label: string;
-  required?: boolean;
-  optional?: boolean;
-  error?: string;
-  hint?: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("block min-w-0", className)}>
-      <span className="mb-1 flex items-center justify-between gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-4">
-          {label}
-          {required ? <span className="ml-0.5 text-gold-dark">*</span> : null}
-        </span>
-        {optional ? <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-5">Optional</span> : null}
-      </span>
-      {children}
-      {error ? (
-        <span role="alert" className="mt-1 flex items-center gap-1 text-[11px] font-medium text-rose-700">
-          <AlertCircleIcon size={12} />
-          {error}
-        </span>
-      ) : hint ? (
-        <span className="mt-1 block text-[10.5px] text-ink-5">{hint}</span>
-      ) : null}
-    </div>
-  );
-}
-
-function FormSection({
-  id,
-  n,
-  title,
-  description,
-  icon,
-  done,
-  required,
-  children,
-}: {
-  id: string;
-  n: string;
-  title: string;
-  description: string;
-  icon: ReactNode;
-  done: boolean;
-  required?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <fieldset
-      id={id}
-      className={cn(
-        "relative scroll-mt-24 rounded-2xl bg-paper transition-shadow duration-320",
-        "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]",
-        "focus-within:shadow-[inset_0_0_0_1px_rgba(205,168,83,0.45),0_1px_2px_rgba(16,32,27,0.04),0_28px_56px_-34px_rgba(16,32,27,0.45)]"
-      )}
-    >
-      <legend className="sr-only">{title}</legend>
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent to-transparent transition-opacity duration-320",
-          done ? "via-gold opacity-100" : "via-gold/40 opacity-60"
-        )}
-      />
-      <header className="flex items-center gap-3 border-b border-ink/[0.06] px-4 py-2.5">
-        <span className="relative flex size-8 shrink-0 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_8px_18px_-10px_rgba(6,42,34,0.7)]">
-          {icon}
-          <span className="g-metric absolute -right-1.5 -top-1.5 flex size-[18px] items-center justify-center rounded-full bg-paper text-[9px] text-ink shadow-[0_0_0_1px_rgba(16,32,27,0.12)]">
-            {n}
-          </span>
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate font-sans text-[13.5px] font-semibold tracking-normal text-ink">{title}</h2>
-          <p className="truncate text-[11px] text-ink-4">{description}</p>
-        </div>
-        {done ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-b from-gold-light to-gold px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
-            <CheckIcon size={11} />
-            Done
-          </span>
-        ) : (
-          <span className="shrink-0 rounded-full bg-bone px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-4 ring-1 ring-ink/[0.06]">
-            {required ? "Required" : "Optional"}
-          </span>
-        )}
-      </header>
-      <div className="px-4 py-4">{children}</div>
-    </fieldset>
-  );
-}
 
 function SelectField({
   control,
@@ -222,28 +117,6 @@ function SelectField({
         />
       )}
     />
-  );
-}
-
-function UnitInput({
-  unit,
-  className,
-  ...rest
-}: React.ComponentProps<"input"> & { unit: string }) {
-  return (
-    <span className="group relative block">
-      <input
-        type="number"
-        step="any"
-        inputMode="decimal"
-        placeholder="0.00"
-        {...rest}
-        className={cn(inputCls, "g-metric pr-14 text-[14px]", className)}
-      />
-      <span className="pointer-events-none absolute inset-y-1 right-1 flex items-center rounded-md bg-bone px-2 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-ink-4 ring-1 ring-ink/[0.05] transition-colors group-focus-within:bg-void group-focus-within:text-gold-light">
-        {unit}
-      </span>
-    </span>
   );
 }
 
@@ -498,6 +371,8 @@ export default function NewProductPage() {
     control,
     handleSubmit,
     watch,
+    setValue,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(productSchema),
@@ -508,7 +383,20 @@ export default function NewProductPage() {
   const opt = <T,>(key: string, path: string) =>
     useQuery({ queryKey: [key], queryFn: () => api<{ rows: T[]; total: number }>(path) });
   const cats = opt<Option>("categories-all", "/api/v1/masters/categories?limit=100");
-  const subcats = opt<Option>("subcats-all", "/api/v1/masters/subcategories?limit=100");
+  // The category's code is fixed; it starts every barcode, and the next piece's barcode is previewed.
+  const catCode = cats.data?.rows.find((c) => c.id === vals.categoryId)?.code;
+  const nextBarcode = useQuery({
+    queryKey: ["next-barcode", vals.categoryId],
+    queryFn: () => api<{ barcode: string }>(`/api/v1/products/next-barcode?categoryId=${encodeURIComponent(vals.categoryId)}`),
+    enabled: Boolean(vals.categoryId),
+    staleTime: 0,
+  });
+  const subcats = useQuery({
+    queryKey: ["subcats-by-cat", vals.categoryId],
+    enabled: Boolean(vals.categoryId),
+    queryFn: () =>
+      api<{ rows: Option[]; total: number }>(`/api/v1/masters/subcategories?limit=100&categoryId=${vals.categoryId}`),
+  });
   const designs = opt<Option>("designs-all", "/api/v1/masters/designs?limit=100");
   const ptypes = opt<Option>("ptypes-all", "/api/v1/masters/product-types?limit=100");
   const metals = opt<Option>("metals-all", "/api/v1/masters/metal-types?limit=100");
@@ -521,13 +409,26 @@ export default function NewProductPage() {
   });
   const rates = Object.fromEntries((board.data ?? []).map((r) => [r.purity_id, r.rate_per_gram]));
 
+  // Gold · 22K are the shop's usual piece, so they start selected.
+  useEffect(() => {
+    if (!getValues("metalTypeId")) {
+      const gold = metals.data?.rows.find((m) => m.name?.trim().toLowerCase() === "gold");
+      if (gold) setValue("metalTypeId", gold.id);
+    }
+  }, [metals.data, getValues, setValue]);
+  useEffect(() => {
+    if (!getValues("purityId")) {
+      const k22 = purs.data?.rows.find((p) => p.karat?.trim().toLowerCase() === "22k");
+      if (k22) setValue("purityId", k22.id);
+    }
+  }, [purs.data, getValues, setValue]);
+
   const previews = useMemo(() => images.map((f) => URL.createObjectURL(f)), [images]);
   useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
 
   const create = useMutation({
     mutationFn: async (v: FormValues) => {
       const payload: Record<string, unknown> = {
-        name: v.name,
         categoryId: v.categoryId,
         branchId: v.branchId,
         metalTypeId: v.metalTypeId,
@@ -537,15 +438,20 @@ export default function NewProductPage() {
         makingLkr: v.makingLkr ? Number(v.makingLkr) : 0,
         wastageG: v.wastageG ? Number(v.wastageG) : 0,
       };
-      if (v.subcategoryId) payload.subcategoryId = v.subcategoryId;
+      if (v.subcategoryName?.trim()) payload.subcategoryName = v.subcategoryName.trim();
       if (v.designId) payload.designId = v.designId;
       if (v.productTypeId) payload.productTypeId = v.productTypeId;
       if (v.stoneTypeId) payload.stoneTypeId = v.stoneTypeId;
       if (v.costLkr !== undefined && v.costLkr !== null && !Number.isNaN(Number(v.costLkr))) {
         payload.costLkr = Number(v.costLkr);
       }
-      if (v.sellingPriceLkr !== undefined && v.sellingPriceLkr !== null && !Number.isNaN(Number(v.sellingPriceLkr))) {
-        payload.sellingPriceLkr = Number(v.sellingPriceLkr);
+      // A blank selling price reads as 0, so only a real amount counts; otherwise the rate prices it.
+      const typed = Number(v.sellingPriceLkr);
+      const fromRate = priceFromRate(v);
+      if (typed > 0) {
+        payload.sellingPriceLkr = typed;
+      } else if (fromRate !== null) {
+        payload.sellingPriceLkr = fromRate;
       }
       if (v.location?.trim()) payload.location = v.location.trim();
       if (v.notes?.trim()) payload.notes = v.notes.trim();
@@ -599,10 +505,14 @@ export default function NewProductPage() {
   const costN = Number(vals.costLkr);
   const cost = Number.isFinite(costN) && costN > 0 ? costN : null;
   const margin = price !== null && cost !== null ? ((price - cost) / price) * 100 : null;
-  // What the till would charge on the live board: net × rate + making.
-  const rate = vals.purityId ? rates[vals.purityId] : undefined;
+  // The rate per gram: the one typed here, otherwise today's board rate for the purity.
+  const typedRate = Number(vals.ratePerGLkr);
+  const boardRate = vals.purityId ? rates[vals.purityId] : undefined;
+  const rate = Number.isFinite(typedRate) && typedRate > 0 ? typedRate : boardRate;
   const makingN = Number(vals.makingLkr);
   const estimate = net !== null && rate ? net * rate + (Number.isFinite(makingN) ? makingN : 0) : null;
+  // Typed rate: the price it gives, used when no selling price is typed.
+  const typedPrice = priceFromRate(vals as FormValues);
   const liveMargin = estimate !== null && cost !== null ? ((estimate - cost) / estimate) * 100 : null;
   const stoneShare = net !== null && grossN > 0 ? Math.min(Math.max((grossN - net) / grossN, 0), 1) : 0;
 
@@ -610,18 +520,17 @@ export default function NewProductPage() {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   const steps = [
-    { id: "np-s1", n: "1", t: "Identity", d: "Name & classification", done: Boolean(vals.name?.trim() && vals.categoryId) },
-    { id: "np-s2", n: "2", t: "Material", d: "Metal, purity & stone", done: Boolean(vals.metalTypeId && vals.purityId) },
-    { id: "np-s3", n: "3", t: "Weights & pricing", d: "Grams and rupees", done: Number(vals.grossG) > 0 },
+    { id: "np-s1", n: "1", t: "Identity", d: "Category & classification", done: Boolean(vals.categoryId) },
+    { id: "np-s2", n: "2", t: "Weight & cost", d: "Grams and rupees", done: Number(vals.grossG) > 0 },
+    { id: "np-s3", n: "3", t: "Material", d: "Metal, purity & stone", done: Boolean(vals.metalTypeId && vals.purityId) },
     { id: "np-s4", n: "4", t: "Location & media", d: "Branch, tray & photos", done: Boolean(vals.branchId) },
   ];
   const doneCount = steps.filter((s) => s.done).length;
   const secOf: Partial<Record<keyof FormValues, string>> = {
-    name: "np-s1",
     categoryId: "np-s1",
-    metalTypeId: "np-s2",
-    purityId: "np-s2",
-    grossG: "np-s3",
+    grossG: "np-s2",
+    metalTypeId: "np-s3",
+    purityId: "np-s3",
     branchId: "np-s4",
   };
   const purityRows = purs.data?.rows ?? [];
@@ -637,6 +546,9 @@ export default function NewProductPage() {
         back={{ href: "/products", label: "Products" }}
         actions={
           <>
+            <Link href="/products/bulk" className={heroGhost}>
+              Many pieces?
+            </Link>
             <Link href="/products" className={heroGhost}>
               Cancel
             </Link>
@@ -718,7 +630,7 @@ export default function NewProductPage() {
               </div>
               <div className="px-1.5 pb-1 pt-3">
                 <p className="truncate text-[15px] font-semibold text-paper">
-                  {vals.name?.trim() || <span className="text-paper/45">Untitled piece</span>}
+                  {vals.subcategoryName?.trim() || catName || <span className="text-paper/45">Untitled piece</span>}
                 </p>
                 <div className="mt-1.5 flex flex-wrap gap-1">
                   {[catName ?? "Category", metalName, stoneName].filter(Boolean).map((t, i) => (
@@ -863,20 +775,6 @@ export default function NewProductPage() {
             required
           >
             <div className="grid gap-x-3 gap-y-3.5 sm:grid-cols-2">
-              <Field
-                label="Name"
-                required
-                error={errors.name ? "Give the piece a name" : undefined}
-                className="sm:col-span-2"
-              >
-                <input
-                  autoFocus
-                  aria-invalid={errors.name ? true : undefined}
-                  className={cn(inputCls, "h-12 text-[15px] font-medium")}
-                  placeholder="e.g. Kandyan bridal necklace"
-                  {...register("name")}
-                />
-              </Field>
               <Field label="Category" required error={errors.categoryId ? "Pick a category" : undefined}>
                 <SelectField
                   control={control}
@@ -888,15 +786,29 @@ export default function NewProductPage() {
                   loading={cats.isLoading}
                 />
               </Field>
-              <Field label="Subcategory" optional>
-                <SelectField
-                  control={control}
-                  name="subcategoryId"
-                  options={toOptions(subcats.data?.rows, "None")}
-                  placeholder="None"
-                  icon={<LayersIcon size={13} />}
-                  loading={subcats.isLoading}
+              <Field label="Category code" hint="Set by the category; it cannot be changed here">
+                <div className={cn(inputCls, "g-metric flex h-11 items-center text-[14px] text-ink-3")} aria-readonly="true">
+                  {vals.categoryId ? catCode ?? "—" : "Pick a category"}
+                </div>
+              </Field>
+              <Field label="Barcode" hint="The next piece in this category gets this barcode">
+                <div className={cn(inputCls, "g-metric flex h-11 items-center text-[14px] font-semibold text-ink")} aria-readonly="true">
+                  {!vals.categoryId ? "—" : nextBarcode.isError ? "Unavailable" : nextBarcode.data?.barcode ?? "…"}
+                </div>
+              </Field>
+              <Field label="Subcategory" optional hint="Type a new one and it is created on save">
+                <input
+                  list="np-subcats"
+                  autoComplete="off"
+                  className={inputCls}
+                  placeholder="e.g. Bangles"
+                  {...register("subcategoryName")}
                 />
+                <datalist id="np-subcats">
+                  {(subcats.data?.rows ?? []).map((r) => (
+                    <option key={r.id} value={r.name} />
+                  ))}
+                </datalist>
               </Field>
               <Field label="Design" optional>
                 <SelectField
@@ -924,84 +836,10 @@ export default function NewProductPage() {
           <FormSection
             id="np-s2"
             n="2"
-            title="Material"
-            description="Metal, karat and any set stones"
-            icon={<GemIcon size={17} />}
-            done={steps[1]!.done}
-            required
-          >
-            <div className="grid gap-x-3 gap-y-3.5 sm:grid-cols-2">
-              <Field label="Metal" required error={errors.metalTypeId ? "Pick a metal" : undefined}>
-                <SelectField
-                  control={control}
-                  name="metalTypeId"
-                  options={toOptions(metals.data?.rows)}
-                  placeholder="Choose metal"
-                  icon={<CoinsIcon size={13} />}
-                  invalid={Boolean(errors.metalTypeId)}
-                  loading={metals.isLoading}
-                />
-              </Field>
-              <Field label="Stone" optional>
-                <SelectField
-                  control={control}
-                  name="stoneTypeId"
-                  options={toOptions(stones.data?.rows, "None")}
-                  placeholder="None"
-                  icon={<GemIcon size={13} />}
-                  loading={stones.isLoading}
-                />
-              </Field>
-              <Field
-                label="Purity"
-                required
-                error={errors.purityId ? "Pick a karat" : undefined}
-                hint={permille ? `${permille}‰ fine — used for the fine-gold figure` : undefined}
-                className="sm:col-span-2"
-              >
-                {purs.isLoading ? (
-                  <div className="flex gap-2">
-                    {[0, 1, 2, 3].map((i) => (
-                      <span key={i} className="h-14 w-[5.25rem] animate-pulse rounded-xl bg-bone" />
-                    ))}
-                  </div>
-                ) : purityRows.length > 0 && purityRows.length <= 8 ? (
-                  <KaratPicker control={control} rows={purityRows} invalid={Boolean(errors.purityId)} rates={rates} />
-                ) : (
-                  <Controller
-                    control={control}
-                    name="purityId"
-                    render={({ field }) => (
-                      <Select
-                        buttonRef={field.ref}
-                        value={field.value ?? ""}
-                        onChange={field.onChange}
-                        onBlur={field.onBlur}
-                        options={purityRows.map((p) => ({
-                          value: p.id,
-                          label: p.karat ?? p.name ?? p.id,
-                          hint: p.permille ? `${p.permille}‰` : undefined,
-                        }))}
-                        placeholder="Choose karat"
-                        size="sm"
-                        icon={<SparklesIcon size={13} />}
-                        invalid={Boolean(errors.purityId)}
-                        hintInTrigger
-                      />
-                    )}
-                  />
-                )}
-              </Field>
-            </div>
-          </FormSection>
-
-          <FormSection
-            id="np-s3"
-            n="3"
-            title="Weights & pricing"
+            title="Weight & cost"
             description="Grams on the scale, rupees on the tag"
             icon={<ScaleIcon size={17} />}
-            done={steps[2]!.done}
+            done={steps[1]!.done}
             required
           >
             <div className="space-y-6">
@@ -1078,18 +916,105 @@ export default function NewProductPage() {
                     </span>
                   ) : null}
                 </div>
-                <div className="grid gap-x-3 gap-y-3.5 sm:grid-cols-3">
+                <div className="grid gap-x-3 gap-y-3.5 sm:grid-cols-2 xl:grid-cols-4">
+                  <Field label="Gold rate / g" optional hint={typedPrice !== null ? "Typed rate — price is net × rate + making" : undefined}>
+                    <UnitInput unit="LKR/g" placeholder={boardRate ? String(Math.round(boardRate)) : undefined} {...register("ratePerGLkr")} />
+                  </Field>
                   <Field label="Making charge" optional>
                     <UnitInput unit="LKR" {...register("makingLkr")} />
                   </Field>
                   <Field label="Cost" optional>
                     <UnitInput unit="LKR" {...register("costLkr")} />
                   </Field>
-                  <Field label="Selling price" optional hint={price === null ? "Blank = priced at the live rate" : undefined}>
-                    <UnitInput unit="LKR" {...register("sellingPriceLkr")} />
+                  <Field
+                    label="Selling price"
+                    optional
+                    hint={
+                      price !== null
+                        ? undefined
+                        : typedPrice !== null
+                          ? `Calculated: ${typedPrice.toLocaleString("en-US")} LKR`
+                          : "Type a gold rate or a price"
+                    }
+                  >
+                    <UnitInput unit="LKR" placeholder={typedPrice !== null ? String(typedPrice) : undefined} {...register("sellingPriceLkr")} />
                   </Field>
                 </div>
               </div>
+            </div>
+          </FormSection>
+
+          <FormSection
+            id="np-s3"
+            n="3"
+            title="Material"
+            description="Metal, karat and any set stones"
+            icon={<GemIcon size={17} />}
+            done={steps[2]!.done}
+            required
+          >
+            <div className="grid gap-x-3 gap-y-3.5 sm:grid-cols-2">
+              <Field label="Metal" required error={errors.metalTypeId ? "Pick a metal" : undefined}>
+                <SelectField
+                  control={control}
+                  name="metalTypeId"
+                  options={toOptions(metals.data?.rows)}
+                  placeholder="Choose metal"
+                  icon={<CoinsIcon size={13} />}
+                  invalid={Boolean(errors.metalTypeId)}
+                  loading={metals.isLoading}
+                />
+              </Field>
+              <Field label="Stone" optional>
+                <SelectField
+                  control={control}
+                  name="stoneTypeId"
+                  options={toOptions(stones.data?.rows, "None")}
+                  placeholder="None"
+                  icon={<GemIcon size={13} />}
+                  loading={stones.isLoading}
+                />
+              </Field>
+              <Field
+                label="Purity"
+                required
+                error={errors.purityId ? "Pick a karat" : undefined}
+                hint={permille ? `${permille}‰ fine — used for the fine-gold figure` : undefined}
+                className="sm:col-span-2"
+              >
+                {purs.isLoading ? (
+                  <div className="flex gap-2">
+                    {[0, 1, 2, 3].map((i) => (
+                      <span key={i} className="h-14 w-[5.25rem] animate-pulse rounded-xl bg-bone" />
+                    ))}
+                  </div>
+                ) : purityRows.length > 0 && purityRows.length <= 8 ? (
+                  <KaratPicker control={control} rows={purityRows} invalid={Boolean(errors.purityId)} rates={rates} />
+                ) : (
+                  <Controller
+                    control={control}
+                    name="purityId"
+                    render={({ field }) => (
+                      <Select
+                        buttonRef={field.ref}
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        options={purityRows.map((p) => ({
+                          value: p.id,
+                          label: p.karat ?? p.name ?? p.id,
+                          hint: p.permille ? `${p.permille}‰` : undefined,
+                        }))}
+                        placeholder="Choose karat"
+                        size="sm"
+                        icon={<SparklesIcon size={13} />}
+                        invalid={Boolean(errors.purityId)}
+                        hintInTrigger
+                      />
+                    )}
+                  />
+                )}
+              </Field>
             </div>
           </FormSection>
 

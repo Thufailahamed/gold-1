@@ -502,20 +502,28 @@ function ConvertDialog({ pending, onSubmit, onClose }: { pending: boolean; onSub
       onSubmit={() => onSubmit({ categoryId, metalTypeId, name: name.trim(), ...(location.trim() ? { location: location.trim() } : {}) })}
       submitLabel="Convert"
     >
-      <label className="block text-sm text-ink-2">Category
-        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={controlClass}>
+      <label className="block text-sm text-ink-2">
+        <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Category</span>
+        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={`${controlClass} w-full`}>
           <option value="">Select…</option>
           {(cats.data?.rows ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </label>
-      <label className="block text-sm text-ink-2">Metal
-        <select value={metalTypeId} onChange={(e) => setMetalTypeId(e.target.value)} className={controlClass}>
+      <label className="block text-sm text-ink-2">
+        <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Metal</span>
+        <select value={metalTypeId} onChange={(e) => setMetalTypeId(e.target.value)} className={`${controlClass} w-full`}>
           <option value="">Select…</option>
           {(metals.data?.rows ?? []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
         </select>
       </label>
-      <label className="block text-sm text-ink-2">Product name<input value={name} onChange={(e) => setName(e.target.value)} className={controlClass} /></label>
-      <label className="block text-sm text-ink-2">Location (optional)<input value={location} onChange={(e) => setLocation(e.target.value)} className={controlClass} /></label>
+      <label className="block text-sm text-ink-2">
+        <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Product name</span>
+        <input value={name} onChange={(e) => setName(e.target.value)} className={`${controlClass} w-full`} />
+      </label>
+      <label className="block text-sm text-ink-2">
+        <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Location <span className="normal-case tracking-normal text-ink-4">(optional)</span></span>
+        <input value={location} onChange={(e) => setLocation(e.target.value)} className={`${controlClass} w-full`} />
+      </label>
       <p className="text-xs text-ink-4">The product takes the item&apos;s net weight and tested purity, at the purchase value as cost.</p>
     </Modal>
   );

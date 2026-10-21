@@ -24,7 +24,13 @@ export function lookupPath(raw: string): string | null {
 export function looksLikeCode(raw: string): boolean {
   const s = raw.trim();
   if (/^(https?:\/\/|\{)/i.test(s)) return true;
-  return /^(JW|PRD|SKU|SINV|OG)-[A-Z0-9]+$/i.test(s.replace(/\s+/g, ""));
+  const code = s.replace(/\s+/g, "");
+  // Piece barcodes are the category code, two letters and a number (BBR-AA-0001); older tags are BBRAA0001 and JW-/PRD-.
+  return (
+    /^(JW|PRD|SKU|SINV|OG)-[A-Z0-9]+$/i.test(code) ||
+    /^[A-Z0-9]{1,12}-[A-Z]{2}-\d{4,}$/i.test(code) ||
+    /^[A-Z0-9]{1,12}[A-Z]{2}\d{4,}$/i.test(code)
+  );
 }
 
 const ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];

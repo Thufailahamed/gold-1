@@ -18,7 +18,7 @@ describe.skipIf(!sqliteAvailable)("old-for-new exchange over real SQLite", () =>
   /** Intake → test → value one old-gold item; 22K board 28,500 LKR/g, 92% buy. */
   const valued = async (grossG = 5, stoneG = 0) => {
     const og = await import("./oldgold");
-    const { id } = await og.intakeItem(db, { customerId: "c1", branchId: "b1", itemType: "chain", description: "Old chain", grossG, stoneG }, "u1");
+    const { id } = await og.intakeItem(db, { needsTesting: true, customerId: "c1", branchId: "b1", itemType: "chain", description: "Old chain", grossG, stoneG }, "u1");
     await og.recordTest(db, id, { method: "xrf", permille: 916, result: "pass" }, "u1");
     const v = await og.valuateItem(db, id, { stoneDeductionLkr: 0, processingDeductionLkr: 0 }, "u1");
     return { id, ...v };
@@ -39,6 +39,7 @@ describe.skipIf(!sqliteAvailable)("old-for-new exchange over real SQLite", () =>
 
   beforeAll(async () => {
     ({ db, raw } = migratedDb());
+    raw.exec("INSERT INTO categories (id, name, code, created_at) VALUES ('cat-og', 'OLD GOLD OG', 'OG', 0)");
     raw.exec(`
       INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES ('u1','o@x','Owner','x',0,0);
       INSERT INTO user_roles (user_id, role_id) VALUES ('u1','owner');
@@ -198,7 +199,7 @@ describe.skipIf(!sqliteAvailable)("old-for-new exchange over real SQLite", () =>
 
     // Another customer's item.
     const og = await import("./oldgold");
-    const other = await og.intakeItem(db, { customerId: "c2", branchId: "b1", itemType: "chain", description: "Other chain", grossG: 3, stoneG: 0 }, "u1");
+    const other = await og.intakeItem(db, { needsTesting: true, customerId: "c2", branchId: "b1", itemType: "chain", description: "Other chain", grossG: 3, stoneG: 0 }, "u1");
     await expect(exchangeSale(db, { ...base, customerId: "c1", oldGoldItemIds: [other.id] }, "u1")).rejects.toMatchObject({ code: "VALIDATION" });
 
     // Another branch.
@@ -207,7 +208,7 @@ describe.skipIf(!sqliteAvailable)("old-for-new exchange over real SQLite", () =>
     await expect(atB2).rejects.toMatchObject({ code: "VALIDATION" });
 
     // Untouched intake (RECEIVED, not VALUED).
-    const fresh = await og.intakeItem(db, { customerId: "c1", branchId: "b1", itemType: "chain", description: "Fresh chain", grossG: 3, stoneG: 0 }, "u1");
+    const fresh = await og.intakeItem(db, { needsTesting: true, customerId: "c1", branchId: "b1", itemType: "chain", description: "Fresh chain", grossG: 3, stoneG: 0 }, "u1");
     await expect(exchangeSale(db, { ...base, customerId: "c1", oldGoldItemIds: [fresh.id] }, "u1")).rejects.toMatchObject({ code: "CONFLICT" });
 
     // Same item twice in one exchange.
@@ -238,5 +239,199 @@ describe.skipIf(!sqliteAvailable)("old-for-new exchange over real SQLite", () =>
     // a 50,000 bill, the surplus paid out of the drawer.
     expect(detail.oldGoldExchange!.items[0]).toMatchObject({ paid_cents: 8_110_000 });
     expect(detail.oldGoldExchange!.valueCents).toBe(13_110_000);
+  });
+
+  it("leaves the old-gold credit leg out of the invoice's payments, so it reads as old gold, not credit", async () => {
+    const { exchangeSale } = await import("./exchange");
+    const { getSale } = await import("./sales");
+    const v = await valued(5);
+    const ring = await product("Ring Y");
+    const x = await exchangeSale(
+      db,
+      { customerId: "c1", branchId: "b1", oldGoldItemIds: [v.id], items: [{ productId: ring, discountLkr: 0 }], payments: [], payout: "cash" },
+      "u1"
+    );
+    // The stored bill still carries the offset as a credit leg, so the ledger and
+    // the paid total stay right; the invoice view just does not list it as credit.
+    const stored = one<{ n: number }>("SELECT COUNT(*) AS n FROM sales_payments WHERE invoice_id = ? AND method = 'credit' AND account_code = '1200'", x.invoiceId);
+    expect(stored.n).toBe(1);
+    const detail = await getSale(db, x.invoiceId);
+    expect(detail.payments).toEqual([]);
+    expect(detail.oldGoldExchange).toMatchObject({ valueCents: x.oldGoldValueCents, paidOutCents: x.shopPaysCents });
+  });
+
+  it("records old gold taken in with the sale, in the same batch as the sale", async () => {
+    const { exchangeSale } = await import("./exchange");
+    const before = one<{ n: number }>("SELECT COUNT(*) AS n FROM old_gold_items").n;
+    const ring = await product("Ring X");
+    const x = await exchangeSale(
+      db,
+      {
+        customerId: "c1",
+        branchId: "b1",
+        oldGoldItemIds: [],
+        newOldGold: [{ grossG: 4, valueLkr: 20_000 }],
+        items: [{ productId: ring, discountLkr: 0 }],
+        // 50,000 bill less 20,000 old gold: the customer pays the 30,000 balance.
+        payments: [{ method: "cash", amountLkr: 30_000 }],
+        payout: "cash",
+      },
+      "u1"
+    );
+    expect(x).toMatchObject({ oldGoldValueCents: 2_000_000, customerPaysCents: 3_000_000, shopPaysCents: 0 });
+    expect(one<{ n: number }>("SELECT COUNT(*) AS n FROM old_gold_items").n).toBe(before + 1);
+    // The new piece is bought on this invoice, at the amount typed, with a passing test on record.
+    const item = one<{ number: string; status: string; purchase_value_cents: number; tested_permille: number }>(
+      "SELECT oi.number, oi.status, oi.purchase_value_cents, oi.tested_permille FROM old_gold_items oi JOIN old_gold_purchases og ON og.item_id = oi.id WHERE og.sales_invoice_id = ?",
+      x.invoiceId
+    );
+    expect(item).toMatchObject({ status: "PURCHASED", purchase_value_cents: 2_000_000, tested_permille: 916 });
+    expect(one<{ n: number }>("SELECT COUNT(*) AS n FROM gold_tests WHERE item_id = (SELECT id FROM old_gold_items WHERE number = ?) AND result = 'pass'", item.number).n).toBe(1);
+  });
+
+  it("files a piece taken in at the till under the category chosen", async () => {
+    const { exchangeSale } = await import("./exchange");
+    raw.exec("INSERT INTO categories (id, name, code, created_at) VALUES ('cat-up', 'OLD GOLD UP', 'UP', 0)");
+    const ring = await product("Ring Z");
+    const x = await exchangeSale(
+      db,
+      {
+        customerId: "c1",
+        branchId: "b1",
+        oldGoldItemIds: [],
+        newOldGold: [{ grossG: 2, valueLkr: 10_000, categoryId: "cat-up" }],
+        items: [{ productId: ring, discountLkr: 0 }],
+        payments: [{ method: "cash", amountLkr: 40_000 }],
+        payout: "cash",
+      },
+      "u1"
+    );
+    const cat = one<{ code: string }>(
+      "SELECT cat.code FROM old_gold_purchases og JOIN old_gold_item_categories ogc ON ogc.item_id = og.item_id JOIN categories cat ON cat.id = ogc.category_id WHERE og.sales_invoice_id = ?",
+      x.invoiceId
+    );
+    expect(cat?.code).toBe("UP");
+  });
+
+  it("the old gold goes to the bill first, and the credit left over settles the customer's open bills", async () => {
+    const { exchangeSale } = await import("./exchange");
+    const { receiveSale } = await import("./sales");
+    raw.exec("INSERT INTO customers (id, name, phone, branch_id, created_at) VALUES ('c9','Open Bills','0779999999','b1',0)");
+    // An open credit bill of 50,000 for c9.
+    const old = await product("Old bill item");
+    const bill = await receiveSale(
+      db,
+      { customerId: "c9", branchId: "b1", items: [{ productId: old, discountLkr: 0 }], payments: [{ method: "credit", amountLkr: 50_000 }] },
+      "u1",
+      { enforceShelfPrice: true }
+    );
+    // 60,000 of old gold: 50,000 pays the new bill, and the 10,000 left over is credit that settles the open bill.
+    const fresh = await product("New bill item");
+    const x = await exchangeSale(
+      db,
+      {
+        customerId: "c9",
+        branchId: "b1",
+        oldGoldItemIds: [],
+        newOldGold: [{ grossG: 3, valueLkr: 60_000 }],
+        items: [{ productId: fresh, discountLkr: 0 }],
+        payments: [],
+        payout: "store_credit",
+      },
+      "u1"
+    );
+    expect(x).toMatchObject({ oldGoldValueCents: 6_000_000, creditedOpenCents: 1_000_000, shopPaysCents: 0, customerPaysCents: 0 });
+    expect(one<{ status: string; paid_cents: number }>("SELECT status, paid_cents FROM sales_invoices WHERE id = ?", bill.invoiceId)).toEqual({
+      status: "PARTIAL",
+      paid_cents: 1_000_000,
+    });
+  });
+
+  it("records a piece taken in at the till the way the intake desk does, with its description", async () => {
+    const { exchangeSale } = await import("./exchange");
+    const ring = await product("Ring Y");
+    const x = await exchangeSale(
+      db,
+      {
+        customerId: "c1",
+        branchId: "b1",
+        oldGoldItemIds: [],
+        newOldGold: [{ grossG: 2, valueLkr: 10_000, description: "Rope chain, broken clasp" }],
+        items: [{ productId: ring, discountLkr: 0 }],
+        payments: [{ method: "cash", amountLkr: 40_000 }],
+        payout: "cash",
+      },
+      "u1"
+    );
+    const item = one<{ id: string; description: string; item_type: string; status: string }>(
+      "SELECT oi.id, oi.description, oi.item_type, oi.status FROM old_gold_items oi JOIN old_gold_purchases og ON og.item_id = oi.id WHERE og.sales_invoice_id = ?",
+      x.invoiceId
+    );
+    expect(item).toMatchObject({ description: "Rope chain, broken clasp", item_type: "Old gold", status: "PURCHASED" });
+    expect(one<{ n: number }>("SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'oldgold.intake' AND entity_id = ?", item.id).n).toBe(1);
+  });
+
+  it("leaves no old-gold piece behind when the sale it belongs to is refused", async () => {
+    const { exchangeSale } = await import("./exchange");
+    const before = one<{ n: number }>("SELECT COUNT(*) AS n FROM old_gold_items").n;
+    await expect(
+      exchangeSale(
+        db,
+        {
+          customerId: "c1",
+          branchId: "b1",
+          oldGoldItemIds: [],
+          newOldGold: [{ grossG: 3, valueLkr: 15_000 }],
+          items: [{ productId: "no-such-piece", discountLkr: 0 }],
+          payments: [{ method: "cash", amountLkr: 35_000 }],
+          payout: "cash",
+        },
+        "u1"
+      )
+    ).rejects.toThrow();
+    expect(one<{ n: number }>("SELECT COUNT(*) AS n FROM old_gold_items").n).toBe(before);
+  });
+
+  it("refuses an exchange with neither old gold ticked nor taken in", async () => {
+    const { exchangeSale } = await import("./exchange");
+    const ring = await product("Ring Empty");
+    await expect(
+      exchangeSale(db, { customerId: "c1", branchId: "b1", oldGoldItemIds: [], newOldGold: [], items: [{ productId: ring, discountLkr: 0 }], payments: [], payout: "cash" }, "u1")
+    ).rejects.toMatchObject({ code: "VALIDATION" });
+  });
+
+  it("puts the part of the balance not paid now on the customer's credit, and the invoice stays open", async () => {
+    const { exchangeSale } = await import("./exchange");
+    const before = balanceC1();
+    const ring = await product("Ring Credit");
+    const x = await exchangeSale(
+      db,
+      {
+        customerId: "c1",
+        branchId: "b1",
+        oldGoldItemIds: [],
+        newOldGold: [{ grossG: 4, valueLkr: 20_000 }],
+        items: [{ productId: ring, discountLkr: 0 }],
+        // 50,000 bill less 20,000 old gold: 10,000 paid now, 20,000 on credit.
+        payments: [
+          { method: "cash", amountLkr: 10_000 },
+          { method: "credit", amountLkr: 20_000 },
+        ],
+        payout: "cash",
+      },
+      "u1"
+    );
+    expect(x).toMatchObject({ customerPaysCents: 3_000_000 });
+    // The customer now owes the credit part on their account.
+    expect(balanceC1() - before).toBe(2_000_000);
+    const inv = one<{ status: string; paid_cents: number; total_cents: number }>(
+      "SELECT status, paid_cents, total_cents FROM sales_invoices WHERE id = ?",
+      x.invoiceId
+    );
+    expect(inv.status).toBe("PARTIAL");
+    // Cash plus the old gold are what has settled the bill; the credit part is still owed.
+    expect(inv.paid_cents).toBe(3_000_000);
+    expect(inv.total_cents).toBe(5_000_000);
+    expect(Object.values(await checks()).every(Boolean)).toBe(true);
   });
 });

@@ -114,6 +114,13 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
           { success: false, error: { code: "VALIDATION", message: "Invalid exchange data" } },
           400
         );
+      // Taking old gold in records a new piece, which needs the create permission too.
+      const perms = (c.get("permissions") ?? []) as string[];
+      if (parsed.data.newOldGold.length > 0 && !perms.includes(PERMISSIONS.OLDGOLD_CREATE))
+        return c.json(
+          { success: false, error: { code: "FORBIDDEN", message: "Taking in old gold needs the old-gold create permission" } },
+          403
+        );
       try {
         await access(c, parsed.data.branchId);
         const data = await exchangeSaleService(getShopDb(c), parsed.data, c.get("userId"));

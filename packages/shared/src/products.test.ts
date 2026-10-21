@@ -21,6 +21,11 @@ describe("product schema", () => {
   it("rejects negative stone weight", () => {
     expect(() => createProductSchema.parse({ ...valid, stoneG: -0.1 })).toThrow();
   });
+  it("matches the dashed piece barcode BBR-AA-0001", () => {
+    expect(BARCODE_RE.test("BBR-AA-0001")).toBe(true);
+    expect(BARCODE_RE.test("RING-AB-9999")).toBe(true);
+    expect(BARCODE_RE.test("BBR-AA-1")).toBe(false);
+  });
   it("matches PRD- and JW- barcodes", () => {
     expect(BARCODE_RE.test("PRD-A3F9K2")).toBe(true);
     expect(BARCODE_RE.test("JW-A3F9K2")).toBe(true);

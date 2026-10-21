@@ -64,7 +64,11 @@ export type CreatePurityInput = z.infer<typeof createPuritySchema>;
 export type CreateGoldRateInput = z.infer<typeof createGoldRateSchema>;
 export type CreatePartyInput = z.infer<typeof createPartySchema>;
 
-export const BARCODE_RE = /^(PRD|JW)-[A-Z0-9]{6}$/;
+/**
+ * A piece's barcode: its category code, a dash, two letters, a dash, then a
+ * four-digit number (BBR-AA-0001). Older tags were BBRAA0001, and PRD-/JW-.
+ */
+export const BARCODE_RE = /^([A-Z0-9]{1,12}-[A-Z]{2}-\d{4,}|[A-Z0-9]{1,12}[A-Z]{2}\d{4,}|(PRD|JW)-[A-Z0-9]{6})$/;
 
 /**
  * Scanner input → the canonical stored form. Codes are minted uppercase, so
@@ -106,10 +110,13 @@ export function extractScanCode(raw: string): string {
 const optRef = z.string().min(1).optional().or(z.literal("")).transform((v) => v || undefined);
 
 export const createProductSchema = z.object({
-  name: z.string().min(1).max(100),
+  /** Optional code name; blank falls back to the subcategory / category name. */
+  name: z.string().trim().max(100).optional().or(z.literal("")).transform((v) => v || undefined),
   categoryId: z.string().min(1),
   branchId: z.string().min(1),
   subcategoryId: optRef,
+  /** Free-text subcategory; matched by name within the category, created if new. */
+  subcategoryName: z.string().trim().max(100).optional().or(z.literal("")).transform((v) => v || undefined),
   designId: optRef,
   productTypeId: optRef,
   metalTypeId: z.string().min(1),
@@ -156,7 +163,37 @@ export const createProductTypeSchema = refSchema;
 export const createMetalTypeSchema = refSchema;
 export const createStoneTypeSchema = refSchema;
 
+/** Most pieces one bulk intake may carry — one tray, saved in one batch. */
+export const BULK_PRODUCTS_MAX = 100;
+
+/**
+ * Many like pieces at once (a tray of 25 rings): everything they share is
+ * sent once in `common`; each item carries what differs — always its weight,
+ * optionally its own name, stone, making, wastage, cost, price, tray or note.
+ * An item field overrides the common one.
+ */
+const bulkItemSchema = createProductSchema
+  .pick({
+    name: true,
+    grossG: true,
+    location: true,
+    notes: true,
+  })
+  .extend({
+    stoneG: z.number().min(0).max(100000).optional(),
+    makingLkr: z.number().min(0).optional(),
+    wastageG: z.number().min(0).optional(),
+    costLkr: z.number().min(0).optional(),
+    sellingPriceLkr: z.number().min(0).optional(),
+  });
+
+export const bulkCreateProductsSchema = z.object({
+  common: createProductSchema.omit({ grossG: true }),
+  items: z.array(bulkItemSchema).min(1).max(BULK_PRODUCTS_MAX),
+});
+
 export type CreateProductInput = z.infer<typeof createProductSchema>;
+export type BulkCreateProductsInput = z.infer<typeof bulkCreateProductsSchema>;
 export type EditProductInput = z.infer<typeof editProductSchema>;
 
 export const changePasswordSchema = z.object({
@@ -246,8 +283,12 @@ const saleItemSchema = z.object({
 });
 
 const splitPaySchema = z.object({
-  method: z.enum(["cash", "card", "bank", "credit", "other"]),
+  /** A cheque is taken as cash: it posts to the drawer, with its details kept on the bill. */
+  method: z.enum(["cash", "cheque", "card", "bank", "credit", "other"]),
   amountLkr: z.number().gt(0),
+  chequeNo: z.string().trim().max(40).optional(),
+  chequeBank: z.string().trim().max(80).optional(),
+  chequeDate: z.string().trim().max(20).optional(),
   /** The bank account a "bank" payment went into; without it, 1010. */
   bankAccountId: z.string().min(1).optional(),
 });
@@ -292,7 +333,25 @@ export type CreateReturnInput = z.infer<typeof createReturnSchema>;
 export const exchangeSaleSchema = z.object({
   customerId: z.string().min(1),
   branchId: z.string().min(1),
-  oldGoldItemIds: z.array(z.string().min(1)).min(1),
+  /** Old gold already valued for this customer, ticked on the till. */
+  oldGoldItemIds: z.array(z.string().min(1)).default([]),
+  /**
+   * Old gold brought in with this sale and not yet on record: weighed and
+   * priced at the counter. It is written only if the sale itself is.
+   */
+  newOldGold: z
+    .array(
+      z.object({
+        grossG: z.number().gt(0).max(100000),
+        valueLkr: z.number().gt(0),
+        /** What the piece is, as the desk would record it. Defaults to its weight. */
+        description: z.string().min(1).max(200).optional(),
+        /** The old gold category it is filed under. Blank files it under OG. */
+        categoryId: z.string().min(1).optional(),
+      })
+    )
+    .max(20)
+    .default([]),
   items: z.array(saleItemSchema).min(1),
   /** Real-money legs toward the difference the customer owes. */
   payments: z.array(splitPaySchema).optional().default([]),
@@ -310,10 +369,22 @@ export const OLDGOLD_STATUSES = ["RECEIVED", "TESTED", "VALUED", "PURCHASED", "A
 export const createOldGoldSchema = z.object({
   customerId: z.string().min(1),
   branchId: z.string().min(1),
-  itemType: z.string().min(1).max(50),
-  description: z.string().min(1).max(500),
+  /** Optional; the piece is recorded as "Old gold" when it is blank. */
+  itemType: z.string().min(1).max(50).optional(),
+  /** Optional; blank records the piece as "Old gold, X g", the same as a till take-in. */
+  description: z.string().min(1).max(500).optional(),
+  /** One of the old gold categories. Blank files it under OG, the default. */
+  categoryId: z.string().min(1).optional(),
+  /**
+   * Off by default: the karat is known, so the piece goes straight to Tested
+   * with the karat chosen. On: it waits in the testing queue (karat not needed yet).
+   */
+  needsTesting: z.boolean().optional(),
+  purityId: z.string().min(1).optional(),
   grossG: z.number().gt(0).max(100000),
   stoneG: z.number().min(0).max(100000).optional().default(0),
+  /** Price per gram of net weight, typed at intake. The price is net × this rate. */
+  quotedRateLkr: z.number().gt(0).max(10_000_000).optional(),
   notes: z.string().max(2000).optional(),
 });
 
@@ -554,7 +625,9 @@ export const customerReceiptSchema = z.object({
   customerId: z.string().min(1),
   branchId: z.string().min(1),
   amountCents: CENTS.positive(),
-  method: z.enum(["cash", "bank", "card"]),
+  method: z.enum(["cash", "cheque", "bank", "card"]),
+  chequeNo: z.string().trim().max(40).optional(),
+  chequeBank: z.string().trim().max(80).optional(),
   bankAccountId: z.string().min(1).optional(),
   receiptDate: BUSINESS_DATE.optional(),
   note: z.string().max(500).optional(),
@@ -566,7 +639,7 @@ export const voidReceiptSchema = z.object({
 
 export const cashEntrySchema = z.object({
   branchId: z.string().min(1),
-  kind: z.enum(["OWNER_CAPITAL", "OWNER_DRAWING", "STAFF_TAKE", "OTHER_INCOME", "CASH_OVER", "CASH_SHORT"]),
+  kind: z.enum(["OWNER_CAPITAL", "OWNER_DRAWING", "STAFF_TAKE", "OTHER_INCOME", "OTHER_EXPENSE", "CASH_OVER", "CASH_SHORT"]),
   amountCents: CENTS.positive(),
   method: z.enum(["cash", "bank"]),
   /** Who took the money (owner or employee). Required for STAFF_TAKE. */

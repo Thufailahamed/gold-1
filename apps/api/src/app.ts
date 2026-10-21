@@ -36,6 +36,8 @@ import { oldgold } from "./routes/oldgold";
 import { products } from "./routes/products";
 import { purchases } from "./routes/purchases";
 import { sales } from "./routes/sales";
+import { sms } from "./routes/sms";
+import { runAutoRemindersAll } from "./services/sms";
 import { rates } from "./routes/rates";
 import { receipts } from "./routes/receipts";
 import { billingReceipts } from "./routes/billing-receipts";
@@ -69,6 +71,13 @@ app.post("/api/v1/users", enforcePlanLimit("users"));
 app.patch("/api/v1/users/:id/activate", enforcePlanLimit("users"));
 app.post("/api/v1/branches", enforcePlanLimit("branches"));
 app.post("/api/v1/products", enforcePlanLimit("products"));
+app.post(
+  "/api/v1/products/bulk",
+  enforcePlanLimit("products", (b) => {
+    const items = (b as { items?: unknown } | null)?.items;
+    return Array.isArray(items) ? items.length : 1;
+  })
+);
 app.post("/api/v1/products/:id/images", enforceStorageLimit);
 app.post("/api/v1/oldgold/items/:id/files", enforceStorageLimit);
 app.post("/api/v1/expenses/:id/receipt", enforceStorageLimit);
@@ -102,6 +111,7 @@ app.route("/api/v1/receipts", receipts);
 app.route("/api/v1/billing", billingReceipts);
 app.route("/api/v1/purchases", purchases);
 app.route("/api/v1/sales", sales);
+app.route("/api/v1/sms", sms);
 app.route("/api/v1/reports", monthly);
 app.route("/api/v1/counts", counts);
 app.route("/api/v1/transfers", stockTransferRoutes);
@@ -119,6 +129,8 @@ export default {
   scheduled: (event: ScheduledController, env: Env, ctx: ExecutionContext) => {
     ctx.waitUntil(platformScheduled(event, env));
     ctx.waitUntil(purgeIdempotencyKeys(env.DB));
+    // Hourly: automatic credit reminder SMS for every shop that turned them on.
+    ctx.waitUntil(runAutoRemindersAll(env).catch((e) => console.error("sms reminders failed", e)));
     // Hourly tick: writes the day's brief once the shop-local hour is reached.
     ctx.waitUntil(maybeRunBrief(env).catch((e) => console.error("daily brief failed", e)));
     // Market reference prices: the free feed keeps no history, so we do.

@@ -13,7 +13,6 @@ import { LineageChain, type LineageNode, type LineageEdge } from "@/components/l
 import { Page, Callout, Modal, Skeleton, controlClass } from "@/components/ui";
 import { Card, CardHead, Empty, GoldHero, HeroBadge, RowsSkeleton, ago, heroGhost, heroGold, stamp } from "@/components/console-kit";
 import {
-  AlertCircleIcon,
   BanknoteIcon,
   CameraIcon,
   EditIcon,
@@ -211,22 +210,20 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         </Callout>
       </Page>
     );
-  const { product, livePrice, noRate } = detail.data;
+  const { product } = detail.data;
   const holdExpired = product.reserved_until !== null && product.reserved_until < Date.now();
   const branchName = branches.data?.rows.find((b) => b.id === product.branch_id)?.name;
-  const price = product.selling_price_cents ?? livePrice?.amount_cents ?? null;
+  // The price set when the piece was created (from its gram rate, or typed). Live board prices are not shown here.
+  const price = product.selling_price_cents !== null && product.selling_price_cents > 0 ? product.selling_price_cents : null;
   // cost_cents is absent (undefined) when the viewer may not see book cost;
   // null means the piece genuinely has no cost recorded yet.
   const costHidden = product.cost_cents === undefined;
   const margin = price !== null && product.cost_cents != null ? price - product.cost_cents : null;
   const marginPct = margin !== null && price ? (margin / price) * 100 : null;
-  const metalValue = livePrice ? livePrice.amount_cents - product.making_cents : null;
   const imgs = product.image_keys.map((k) => k.split("/").pop()!);
   const current = imgs[Math.min(shot, imgs.length - 1)];
   const editable = product.status !== "VOID";
   const pct = (part: number) => (product.gross_mg > 0 ? (part / product.gross_mg) * 100 : 0);
-  const fixedVsLive =
-    product.selling_price_cents !== null && livePrice ? ((product.selling_price_cents - livePrice.amount_cents) / livePrice.amount_cents) * 100 : null;
   const moveRows = moves.data?.rows ?? [];
 
   return (
@@ -297,19 +294,12 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         }
         stats={[
           {
-            label: product.selling_price_cents !== null ? "Fixed price" : "Live price",
+            label: "Selling price",
             value: price !== null ? centsToLkr(price) : null,
             format: (n) => Math.round(n).toLocaleString("en-US"),
             unit: "LKR",
             accent: true,
-            sub: product.selling_price_cents !== null ? "manual override" : livePrice ? "net × board + making" : "no board rate",
-          },
-          {
-            label: `Board · ${product.karat}`,
-            value: livePrice ? centsToLkr(livePrice.rate_cents_per_g) : null,
-            format: (n) => Math.round(n).toLocaleString("en-US"),
-            unit: "LKR/g",
-            sub: livePrice ? `set ${ago(livePrice.rate_effective_from)}` : undefined,
+            sub: price !== null ? "set at creation" : "not set",
           },
           { label: "Gross", value: product.gross_mg, format: g, unit: "g" },
           { label: "Net", value: product.net_mg, format: g, unit: "g", sub: product.stone_mg ? `${g(product.stone_mg)} g stones` : "no stones" },
@@ -356,15 +346,6 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             {product.reserved_at !== null ? ` · since ${new Date(product.reserved_at).toLocaleDateString()}` : ""}
           </span>
           <span className="ml-auto text-[11px] opacity-75">Only this customer can buy it at the POS</span>
-        </div>
-      ) : null}
-      {noRate || !livePrice ? (
-        <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 px-4 py-2.5 text-[12px] text-amber-900 ring-1 ring-inset ring-amber-500/25">
-          <AlertCircleIcon size={14} />
-          No board rate published for {product.karat}, so live pricing is off.
-          <Link href="/gold-rates" className="ml-auto rounded-md bg-void px-2.5 py-1 text-[11px] font-semibold text-gold-light">
-            Publish rate
-          </Link>
         </div>
       ) : null}
 
@@ -466,27 +447,11 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         {/* ---------------- right: the numbers */}
         <div className="grid content-start gap-4 lg:grid-cols-2 xl:col-span-8">
           <Card>
-            <CardHead icon={BanknoteIcon} title="Price build-up" sub={product.selling_price_cents !== null ? "Fixed price, with the live figure for comparison" : "How the till prices this piece"} />
+            <CardHead icon={BanknoteIcon} title="Price build-up" sub="Net × gold rate + making, as set when the piece was created" />
             <div className="py-1.5">
-              {livePrice ? (
-                <>
-                  <Line k="Net weight" v={`${g(product.net_mg)} g`} />
-                  <Line k={`× ${product.karat} board rate`} v={`${whole(livePrice.rate_cents_per_g)} /g`} />
-                  <Line k="= Metal value" v={metalValue !== null ? whole(metalValue) : "—"} />
-                  <Line k="+ Making charge" v={whole(product.making_cents)} />
-                  <Line k="Live price" v={`LKR ${whole(livePrice.amount_cents)}`} total tone="text-gold-deep" />
-                </>
-              ) : (
-                <Line k="Live price" v="No board rate" />
-              )}
-              {product.selling_price_cents !== null ? (
-                <Line
-                  k="Fixed price"
-                  sub={fixedVsLive !== null ? `${fixedVsLive > 0 ? "+" : ""}${fixedVsLive.toFixed(1)}% vs live` : undefined}
-                  v={`LKR ${whole(product.selling_price_cents)}`}
-                  total
-                />
-              ) : null}
+              <Line k="Net weight" v={`${g(product.net_mg)} g`} />
+              <Line k="+ Making charge" v={whole(product.making_cents)} />
+              <Line k="Selling price" v={price !== null ? `LKR ${whole(price)}` : "Not set"} total={price !== null} tone={price !== null ? "text-gold-deep" : undefined} />
             </div>
             {costHidden ? null : (
             <div className="mt-auto border-t border-ink/[0.06] px-4 py-2.5">
@@ -726,7 +691,7 @@ function EditDialog({
         </div>
         <div>
           <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Selling price (LKR, optional)</label>
-          <input type="number" step="any" value={sellingPriceLkr} onChange={(e) => setSellingPriceLkr(e.target.value)} placeholder="Live board rate" className={cls} />
+          <input type="number" step="any" value={sellingPriceLkr} onChange={(e) => setSellingPriceLkr(e.target.value)} placeholder="Not set" className={cls} />
         </div>
         <div>
           <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Subcategory</label>

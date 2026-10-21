@@ -66,9 +66,16 @@ describe("cashEntryLines", () => {
   });
 
   it("every kind produces a balanced entry", () => {
-    for (const kind of ["OWNER_CAPITAL", "OWNER_DRAWING", "OTHER_INCOME", "CASH_OVER", "CASH_SHORT"] as const) {
+    for (const kind of ["OWNER_CAPITAL", "OWNER_DRAWING", "OTHER_INCOME", "OTHER_EXPENSE", "CASH_OVER", "CASH_SHORT"] as const) {
       expect(() => checkBalanced(cashEntryLines(kind, "1000", 777))).not.toThrow();
     }
+  });
+
+  it("other expenses debit 6080 Other Expenses and credit the money account", () => {
+    expect(cashEntryLines("OTHER_EXPENSE", "1000", 4500)).toEqual([
+      { account: "6080", debitCents: 4500, creditCents: 0 },
+      { account: "1000", debitCents: 0, creditCents: 4500 },
+    ]);
   });
 
   it("cash short and over hit the same correction account in opposite directions", () => {

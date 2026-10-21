@@ -4,12 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { toast } from "sonner";
-import { salesTaxCents } from "@goldos/shared";
-import { api, errorCode } from "@/lib/api";
+import { PERMISSIONS, hasPermission, salesTaxCents } from "@goldos/shared";
+import { api, errorCode, type MeData } from "@/lib/api";
 import { extractScanCode, looksLikeCode } from "@/lib/barcode";
 import { cn } from "@/lib/cn";
 import { CameraScanButton } from "@/components/camera-scan";
 import { Select } from "@/components/select";
+import { OldGoldExchange, type ExchangePayout, type NewOldGold, type ValuedOldGold } from "./old-gold-exchange";
 import {
   Page,
   Hero,
@@ -83,7 +84,7 @@ type CartLine = {
   reservedFor?: { id: string; name: string };
 };
 
-type PayRow = { method: string; amountLkr: string; bankAccountId?: string };
+type PayRow = { method: string; amountLkr: string; bankAccountId?: string; chequeNo?: string; chequeBank?: string };
 
 type Customer = { id: string; name: string; code: string; phone?: string | null };
 
@@ -101,9 +102,32 @@ type BankAccount = { id: string; name: string; bank_name: string | null; account
 type Exchange = { returnId: string; number: string };
 
 
-type Draft = { cart: CartLine[]; customer: Customer | null; exchange: Exchange | null; notes?: string };
+/** Old gold ticked for a customer. Kept against the customer id so it cannot follow a different customer. */
+type OldSel = { customerId: string; ids: string[] };
 
-type Done = { invoiceId: string; number: string; totalCents: number; changeCents: number | null; customer: string | null };
+/** A piece taken in at the counter that is not on record yet: it is saved only when the sale completes. */
+type PendingOld = { key: string; grossG: number; valueCents: number; description?: string; categoryId?: string; categoryCode?: string };
+type PendingState = { customerId: string; items: PendingOld[] };
+
+type Draft = {
+  cart: CartLine[];
+  customer: Customer | null;
+  exchange: Exchange | null;
+  notes?: string;
+  oldSel?: OldSel;
+  pendingOld?: PendingState;
+  payout?: ExchangePayout;
+};
+
+type Done = {
+  invoiceId: string;
+  number: string;
+  totalCents: number;
+  changeCents: number | null;
+  customer: string | null;
+  /** Set for an old-gold exchange: the old gold taken in, and the balance the counter settled. */
+  exchange?: { oldGoldCents: number; balanceCents: number; payout: ExchangePayout };
+};
 
 function branchDefault(): string {
   if (typeof document === "undefined") return "";
@@ -112,7 +136,7 @@ function branchDefault(): string {
   );
 }
 
-const METHODS = ["cash", "card", "bank", "credit", "other"];
+const METHODS = ["cash", "cheque", "card", "bank", "credit", "other"];
 const DRAFT_KEY = "goldos-pos-draft";
 const fmt = (c: number) => (c / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const cents = (lkr: string) => Math.round(Number(lkr || 0) * 100);
@@ -131,7 +155,8 @@ function saleable(d: Lookup, branchId: string, customer: Customer | null): { pri
     return { error: `${p.barcode} is ${p.status.replace(/_/g, " ").toLowerCase()}, not for sale` };
   if (branchId && p.branch_id !== branchId) return { error: `${p.barcode} belongs to another branch` };
   if (p.cost_cents === null) return { error: `${p.barcode} has no book cost — set its cost before selling` };
-  const price = p.selling_price_cents ?? d.livePrice?.amount_cents;
+  // The price set when the piece was created; a piece without one falls back to the live rate.
+  const price = p.selling_price_cents !== null && p.selling_price_cents > 0 ? p.selling_price_cents : d.livePrice?.amount_cents;
   if (price === undefined) return { error: `No gold rate for ${p.karat} — set today's rate first` };
   return { price };
 }
@@ -153,7 +178,12 @@ export default function PosPage() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [customerSearch, setCustomerSearch] = useState("");
+  const [newCust, setNewCust] = useState<{ name: string; phone: string } | null>(null);
   const [exchange, setExchange] = useState<Exchange | null>(null);
+  const [oldSel, setOldSel] = useState<OldSel>({ customerId: "", ids: [] });
+  const [pendingOld, setPendingOld] = useState<PendingState>({ customerId: "", items: [] });
+  // What is left after the bill: clears the customer's open bills (default), or is paid out in cash.
+  const [payout, setPayout] = useState<ExchangePayout>("store_credit");
   const [pays, setPays] = useState<PayRow[]>([{ method: "cash", amountLkr: "" }]);
   const [tendered, setTendered] = useState("");
   const [notes, setNotes] = useState("");
@@ -231,6 +261,43 @@ export default function PosPage() {
     retry: false,
   });
 
+  // An exchange buys old gold and sells new pieces in one batch, so the till
+  // needs both the old-gold view and edit permissions to offer it.
+  const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
+  const canExchange =
+    hasPermission(me.data?.permissions ?? [], PERMISSIONS.OLDGOLD_VIEW) && hasPermission(me.data?.permissions ?? [], PERMISSIONS.OLDGOLD_EDIT);
+  // Taking a new piece in at the till also creates it, so it needs the create permission too.
+  const canCreate = canExchange && hasPermission(me.data?.permissions ?? [], PERMISSIONS.OLDGOLD_CREATE);
+  // The customer's valued old gold at this branch: the only pieces that can be taken in.
+  const valued = useQuery({
+    queryKey: ["pos-oldgold-valued", branchId, customer?.id ?? ""],
+    queryFn: () =>
+      api<{ rows: ValuedOldGold[]; total: number }>(
+        `/api/v1/oldgold/items?customerId=${encodeURIComponent(customer!.id)}&status=VALUED&branchId=${encodeURIComponent(branchId)}&limit=50`
+      ),
+    enabled: canExchange && Boolean(customer?.id) && Boolean(branchId),
+    retry: false,
+  });
+
+  // A piece taken in at the counter is only held here until the sale completes:
+  // the server records it in the same batch as the sale, so a sale that is not
+  // completed leaves nothing on the old-gold record.
+  function addPending(v: NewOldGold) {
+    if (!customer) return;
+    const item: PendingOld = {
+      key: crypto.randomUUID(),
+      grossG: v.grossG,
+      valueCents: Math.round(v.valueLkr * 100),
+      description: v.description,
+      categoryId: v.categoryId,
+      categoryCode: v.categoryCode,
+    };
+    setPendingOld((s) => ({ customerId: customer.id, items: [...(s.customerId === customer.id ? s.items : []), item] }));
+  }
+
+  function removePending(key: string) {
+    setPendingOld((s) => ({ ...s, items: s.items.filter((p) => p.key !== key) }));
+  }
 
   function refocus() {
     setScan("");
@@ -322,6 +389,9 @@ export default function PosPage() {
         setCustomer(d.customer ?? null);
         setExchange(d.exchange ?? null);
         setNotes(d.notes ?? "");
+        if (d.oldSel) setOldSel(d.oldSel);
+        if (d.pendingOld) setPendingOld(d.pendingOld);
+        if (d.payout) setPayout(d.payout);
       }
     } catch {
       // Storage blocked or draft corrupt: start clean.
@@ -343,12 +413,13 @@ export default function PosPage() {
   useEffect(() => {
     if (!loaded) return;
     try {
-      if (cart.length === 0 && !customer && !exchange && !notes) window.sessionStorage.removeItem(DRAFT_KEY);
-      else window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ cart, customer, exchange, notes } satisfies Draft));
+      const holdsOld = oldSel.ids.length > 0 || pendingOld.items.length > 0;
+      if (cart.length === 0 && !customer && !exchange && !notes && !holdsOld) window.sessionStorage.removeItem(DRAFT_KEY);
+      else window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ cart, customer, exchange, notes, oldSel, pendingOld, payout } satisfies Draft));
     } catch {
       // A draft is a convenience; the sale itself does not depend on it.
     }
-  }, [cart, customer, exchange, notes, loaded]);
+  }, [cart, customer, exchange, notes, oldSel, pendingOld, payout, loaded]);
 
   // Same per-line rounding as the server, so the total the cashier asks for
   // is exactly the total the API will accept.
@@ -364,21 +435,53 @@ export default function PosPage() {
   const discount = cart.reduce((s, l) => s + l.discountCents, 0);
   const tax = cart.reduce((s, l) => s + lineTax(l), 0);
   const total = subtotal - discount + tax;
+
+  // Old gold ticked against this bill. Only ids the customer still has valued
+  // count; the selection is for this customer alone.
+  const oldIds = customer && oldSel.customerId === customer.id ? oldSel.ids : [];
+  // Pieces taken in here, not on record yet: they count in full and are saved with the sale.
+  const pending = customer && pendingOld.customerId === customer.id ? pendingOld.items : [];
+  const hasExchange = oldIds.length > 0 || pending.length > 0;
+  const takenIn = (valued.data?.rows ?? []).filter((r) => oldIds.includes(r.id));
+  const oldTotal = takenIn.reduce((s, r) => s + (r.purchase_value_cents ?? 0), 0) + pending.reduce((s, p) => s + p.valueCents, 0);
+  // With old gold in, the payment settles the balance, not the bill: a positive
+  // balance the customer pays, a negative one the shop pays out.
+  const balance = total - oldTotal;
+  const due = hasExchange ? Math.max(balance, 0) : total;
+  const shopOwes = hasExchange && balance < 0 ? -balance : 0;
+  // Nothing is keyed when the shop is the one paying. Any part of a customer's
+  // balance left unpaid goes on their credit, as on any part-paid sale.
+  const activePays = shopOwes > 0 ? [] : pays;
+  const exchangeBlocked = hasExchange && (!valued.data || takenIn.length !== oldIds.length || Boolean(exchange));
+  // The bill as the customer settles it: the total less the old gold taken in.
+  const dueLabel = hasExchange
+    ? shopOwes > 0
+      ? `${fmt(shopOwes)} LKR ${payout === "cash" ? "cash to customer" : "to clear open bills"}`
+      : `${fmt(due)} LKR due`
+    : `${fmt(total)} LKR due`;
+
   const netMg = cart.reduce((s, l) => s + l.netMg, 0);
-  const paidSum = pays.reduce((s, p) => s + cents(p.amountLkr), 0);
+  const paidSum = activePays.reduce((s, p) => s + cents(p.amountLkr), 0);
   // Charging under the shelf price is a discount too; it counts against the same limits.
   const markdown = cart.reduce((s, l) => s + Math.max(0, l.listPriceCents - l.priceCents), 0);
   const listSubtotal = cart.reduce((s, l) => s + l.listPriceCents, 0);
   const pct = listSubtotal > 0 ? ((discount + markdown) / listSubtotal) * 100 : 0;
-  const cashDue = pays.filter((p) => p.method === "cash").reduce((s, p) => s + cents(p.amountLkr), 0);
-  const creditDue = pays.filter((p) => p.method === "credit").reduce((s, p) => s + cents(p.amountLkr), 0);
+  const cashDue = activePays.filter((p) => p.method === "cash").reduce((s, p) => s + cents(p.amountLkr), 0);
+  // Part-paid bills for a known customer: whatever is not paid now goes on their account.
+  const autoCredit = customer && paidSum > 0 && paidSum < due ? due - paidSum : 0;
+  const creditDue = activePays.filter((p) => p.method === "credit").reduce((s, p) => s + cents(p.amountLkr), 0) + autoCredit;
   const change = tendered ? cents(tendered) - cashDue : null;
   const needsCustomer = creditDue > 0 && !customer;
   const heldMismatch = cart.filter((l) => l.reservedFor && l.reservedFor.id !== customer?.id);
   const bankRows = banks.data ?? [];
-  const needsBank = bankRows.length > 1 && pays.some((p) => p.method === "bank" && !p.bankAccountId);
+  const needsBank = bankRows.length > 1 && activePays.some((p) => p.method === "bank" && !p.bankAccountId);
   // Store credit the customer holds at this branch is spent before new debt.
   const storeCredit = credit.data && credit.data.branchBalanceCents < 0 ? -credit.data.branchBalanceCents : 0;
+  // The customer's balance once this sale is complete: what it owes now, plus any part of this bill
+  // left on their account, less the shop's payout when that is kept as store credit (signed: < 0 is credit).
+  const balanceAfterSale = credit.data
+    ? credit.data.balanceCents + creditDue - (shopOwes > 0 && payout === "store_credit" ? shopOwes : 0)
+    : null;
   const overLimit =
     creditDue > 0 &&
     credit.data &&
@@ -387,8 +490,9 @@ export default function PosPage() {
 
   const canComplete =
     cart.length > 0 &&
-    paidSum === total &&
+    paidSum + autoCredit === due &&
     total > 0 &&
+    !exchangeBlocked &&
     !needsCustomer &&
     !needsBank &&
     !overLimit &&
@@ -403,37 +507,85 @@ export default function PosPage() {
     setCustomer(null);
     setCustomerSearch("");
     setExchange(null);
+    setOldSel({ customerId: "", ids: [] });
+    setPendingOld({ customerId: "", items: [] });
+    setPayout("store_credit");
     setPays([{ method: "cash", amountLkr: "" }]);
     setTendered("");
     setNotes("");
     setStale(false);
   }
 
+  const addCustomer = useMutation({
+    mutationFn: (v: { name: string; phone: string }) =>
+      api<Customer>("/api/v1/customers", {
+        method: "POST",
+        body: JSON.stringify({ name: v.name.trim(), phone: v.phone.trim() || undefined, branchId }),
+      }),
+    onSuccess: (c) => {
+      setCustomer(c);
+      setCustomerSearch("");
+      setNewCust(null);
+      toast.success(`${c.name} added`);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not add the customer"),
+  });
+
   const complete = useMutation({
-    mutationFn: () =>
-      api<{ invoiceId: string; number: string }>("/api/v1/sales/invoices", {
+    mutationFn: () => {
+      const items = cart.map((l) => ({
+        productId: l.productId,
+        priceLkr: l.priceCents / 100,
+        listPriceLkr: l.listPriceCents / 100,
+        discountLkr: l.discountCents / 100,
+      }));
+      const payments = [
+        ...activePays,
+        ...(autoCredit > 0 ? [{ method: "credit", amountLkr: String(autoCredit / 100) } as PayRow] : []),
+      ].map((p) => ({
+        method: p.method,
+        amountLkr: Number(p.amountLkr),
+        chequeNo: p.method === "cheque" ? p.chequeNo?.trim() || undefined : undefined,
+        chequeBank: p.method === "cheque" ? p.chequeBank?.trim() || undefined : undefined,
+        // One bank account needs no choosing; several do (needsBank).
+        bankAccountId:
+          p.method === "bank" ? p.bankAccountId || (bankRows.length === 1 ? bankRows[0]!.id : undefined) : undefined,
+      }));
+      if (hasExchange) {
+        // The old gold is bought in and the new pieces sold in one batch; the
+        // payments carry only the balance the customer settles.
+        return api<{ invoiceId: string; number: string }>("/api/v1/sales/exchanges", {
+          method: "POST",
+          body: JSON.stringify({
+            customerId: customer?.id,
+            branchId,
+            oldGoldItemIds: takenIn.map((r) => r.id),
+            newOldGold: pending.map((p) => ({
+              grossG: p.grossG,
+              valueLkr: p.valueCents / 100,
+              description: p.description,
+              categoryId: p.categoryId,
+            })),
+            items,
+            payments,
+            payout: shopOwes > 0 ? payout : "store_credit",
+            notes: notes.trim() || undefined,
+          }),
+        });
+      }
+      return api<{ invoiceId: string; number: string }>("/api/v1/sales/invoices", {
         method: "POST",
         body: JSON.stringify({
           customerId: customer?.id,
           branchId,
-          items: cart.map((l) => ({
-            productId: l.productId,
-            priceLkr: l.priceCents / 100,
-            listPriceLkr: l.listPriceCents / 100,
-            discountLkr: l.discountCents / 100,
-          })),
-          payments: pays.map((p) => ({
-            method: p.method,
-            amountLkr: Number(p.amountLkr),
-            // One bank account needs no choosing; several do (needsBank).
-            bankAccountId:
-              p.method === "bank" ? p.bankAccountId || (bankRows.length === 1 ? bankRows[0]!.id : undefined) : undefined,
-          })),
+          items,
+          payments,
           tenderedLkr: cashDue > 0 && tendered ? Number(tendered) : undefined,
           notes: notes.trim() || undefined,
           exchangeReturnId: exchange?.returnId,
         }),
-      }),
+      });
+    },
     onSuccess: (d) => {
       setDone({
         invoiceId: d.invoiceId,
@@ -441,6 +593,7 @@ export default function PosPage() {
         totalCents: total,
         changeCents: change !== null && change > 0 ? change : null,
         customer: customer?.name ?? null,
+        exchange: hasExchange ? { oldGoldCents: oldTotal, balanceCents: balance, payout } : undefined,
       });
       resetSale();
       toast.success(`Sale ${d.number} complete`);
@@ -499,10 +652,20 @@ export default function PosPage() {
     setPays((ps) => {
       const only = ps[0];
       if (ps.length !== 1 || !only) return ps;
-      const next = total > 0 ? String(total / 100) : "";
+      const next = due > 0 ? String(due / 100) : "";
       return only.amountLkr === next ? ps : [{ ...only, amountLkr: next }];
     });
-  }, [total]);
+  }, [due]);
+
+  // Ticked old gold the customer no longer has valued (sold, re-valued or moved
+  // since it was ticked) is dropped, so the balance is never worked out on a
+  // piece the server would refuse.
+  useEffect(() => {
+    if (!valued.data || !customer || oldSel.customerId !== customer.id) return;
+    const valid = new Set(valued.data.rows.map((r) => r.id));
+    const kept = oldSel.ids.filter((id) => valid.has(id));
+    if (kept.length !== oldSel.ids.length) setOldSel({ customerId: customer.id, ids: kept });
+  }, [valued.data, oldSel, customer]);
 
   function setLine(i: number, patch: Partial<CartLine>) {
     setCart((c) => c.map((l, j) => (j === i ? { ...l, ...patch } : l)));
@@ -513,15 +676,21 @@ export default function PosPage() {
   }
 
   function autoBalance() {
-    const rest = total - pays.slice(0, -1).reduce((s, p) => s + cents(p.amountLkr), 0);
+    const rest = due - pays.slice(0, -1).reduce((s, p) => s + cents(p.amountLkr), 0);
     setPays((ps) => ps.map((p, i) => (i === ps.length - 1 ? { ...p, amountLkr: String(Math.max(0, rest) / 100) } : p)));
   }
 
-  /** One tap: the whole bill on a single method. */
+  /** One tap: the whole amount due on a single method. */
   function payAll(method: string) {
     autoAmount.current = true;
-    setPays([{ method, amountLkr: total > 0 ? String(total / 100) : "" }]);
+    setPays([{ method, amountLkr: due > 0 ? String(due / 100) : "" }]);
     if (method !== "cash") setTendered("");
+  }
+
+  function toggleOld(id: string) {
+    if (!customer) return;
+    const ids = oldIds.includes(id) ? oldIds.filter((x) => x !== id) : [...oldIds, id];
+    setOldSel({ customerId: customer.id, ids });
   }
 
   return (
@@ -535,7 +704,7 @@ export default function PosPage() {
           <>
             <Pill tone="ghost" className="!text-paper">{cart.length} item{cart.length === 1 ? "" : "s"}</Pill>
             <Pill tone="ghost" className="!text-paper">{(netMg / 1000).toLocaleString("en-US")} g net</Pill>
-            <Pill tone="ghost" className="!text-paper">{fmt(total)} LKR due</Pill>
+            <Pill tone="ghost" className="!text-paper">{dueLabel}</Pill>
           </>
         }
       >
@@ -696,7 +865,7 @@ export default function PosPage() {
                 </button>
               </>
             ) : null}
-            <span className="g-metric text-[11px] font-medium uppercase tracking-[0.14em] text-ink-4">{fmt(total)} LKR due</span>
+            <span className="g-metric text-[11px] font-medium uppercase tracking-[0.14em] text-ink-4">{dueLabel}</span>
           </span>
         }
       >
@@ -790,6 +959,24 @@ export default function PosPage() {
         )}
       </TableCard>
 
+      {customer && canExchange ? (
+        <OldGoldExchange
+          customerName={customer.name}
+          pieces={valued.data?.rows ?? []}
+          loading={valued.isLoading}
+          selectedIds={oldIds}
+          onToggle={toggleOld}
+          saleTotalCents={total}
+          oldTotalCents={oldTotal}
+          payout={payout}
+          onPayout={setPayout}
+          canAdd={canCreate}
+          pending={pending}
+          onRemovePending={removePending}
+          onAdd={addPending}
+        />
+      ) : null}
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Panel title="Customer" icon={<UserCheckIcon size={17} />} description="Optional — required for credit">
           {customer ? (
@@ -822,6 +1009,29 @@ export default function PosPage() {
                   ) : null}
                   <dt className="text-ink-4">Credit limit</dt>
                   <dd className="text-right text-ink">{credit.data.creditLimitCents > 0 ? fmt(credit.data.creditLimitCents) : "No limit"}</dd>
+                  {shopOwes > 0 ? (
+                    <>
+                      <dt className="text-ink-4">{payout === "cash" ? "Cash to customer" : "Clears open bills"}</dt>
+                      <dd className="text-right font-medium text-emerald-700">
+                        {fmt(shopOwes)} LKR
+                      </dd>
+                    </>
+                  ) : null}
+                  {balanceAfterSale !== null ? (
+                    <>
+                      <dt className="mt-1 border-t border-ink/10 pt-1 text-ink-3">
+                        {balanceAfterSale < 0 ? "Store credit after sale" : "Owes after sale"}
+                      </dt>
+                      <dd
+                        className={cn(
+                          "mt-1 border-t border-ink/10 pt-1 text-right font-semibold",
+                          balanceAfterSale > 0 ? "text-amber-700" : balanceAfterSale < 0 ? "text-emerald-700" : "text-ink"
+                        )}
+                      >
+                        {balanceAfterSale === 0 ? "Settled" : `${fmt(Math.abs(balanceAfterSale))} LKR`}
+                      </dd>
+                    </>
+                  ) : null}
                 </dl>
               ) : null}
             </>
@@ -833,7 +1043,37 @@ export default function PosPage() {
                 onChange={(e) => setCustomerSearch(e.target.value)}
                 className={`w-full !h-11 !rounded-xl !px-3.5 ${controlClass}`}
               />
-              {customerSearch.trim() ? (
+              {newCust ? (
+                <div className="mt-2 space-y-2 rounded-xl bg-bone/70 p-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
+                  <input
+                    autoFocus
+                    placeholder="Customer name"
+                    value={newCust.name}
+                    onChange={(e) => setNewCust({ ...newCust, name: e.target.value })}
+                    className={`w-full ${controlClass}`}
+                  />
+                  <input
+                    placeholder="Phone (optional)"
+                    value={newCust.phone}
+                    onChange={(e) => setNewCust({ ...newCust, phone: e.target.value })}
+                    className={`w-full ${controlClass}`}
+                  />
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setNewCust(null)} className="g-btn g-btn-secondary h-9 flex-1 text-xs">
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!newCust.name.trim() || addCustomer.isPending}
+                      onClick={() => addCustomer.mutate(newCust)}
+                      className="g-btn g-btn-primary h-9 flex-1 text-xs"
+                    >
+                      {addCustomer.isPending ? "Adding…" : "Add & select"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {customerSearch.trim() && !newCust ? (
                 <ul className="mt-2 max-h-48 space-y-0.5 overflow-y-auto scrollbar-thin">
                   {(customers.data?.rows ?? []).map((c) => (
                     <li key={c.id}>
@@ -852,11 +1092,21 @@ export default function PosPage() {
                       </button>
                     </li>
                   ))}
-                  {customers.data && customers.data.rows.length === 0 ? (
-                    <li className="px-2 py-1.5 text-sm text-ink-4">
-                      No match. <Link href="/customers" className="underline">Add a customer</Link>
+                  {newCust ? null : (
+                    <li>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const t = customerSearch.trim();
+                          const isPhone = /^[\d+\s-]{6,}$/.test(t);
+                          setNewCust({ name: isPhone ? "" : t, phone: isPhone ? t : "" });
+                        }}
+                        className="mt-1 w-full rounded-md px-2 py-1.5 text-left text-sm font-medium text-gold-deep transition-colors hover:bg-gold-pale/60"
+                      >
+                        + New customer{customers.data && customers.data.rows.length === 0 ? " — no match" : ""}
+                      </button>
                     </li>
-                  ) : null}
+                  )}
                 </ul>
               ) : (
                 <p className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-bone px-2.5 py-1 text-xs font-medium text-ink-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
@@ -901,7 +1151,12 @@ export default function PosPage() {
             Edit a price or discount in the cart. What you enter is what is charged and booked.
           </p>
         </Panel>
-        <Panel title="Payment" icon={<CreditCardIcon size={17} />} description={`Total ${fmt(total)} LKR`} className="!overflow-visible">
+        <Panel
+          title="Payment"
+          icon={<CreditCardIcon size={17} />}
+          description={hasExchange ? (shopOwes > 0 ? `${fmt(shopOwes)} LKR ${payout === "cash" ? "cash to customer" : "to clear open bills"}` : `Customer pays ${fmt(due)} LKR`) : `Total ${fmt(total)} LKR`}
+          className="!overflow-visible"
+        >
           <dl className="mb-3 grid grid-cols-2 gap-y-1.5 rounded-xl bg-bone/70 px-4 py-3 text-sm num-tabular shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
             <dt className="text-ink-3">Subtotal</dt>
             <dd className="text-right text-ink">{fmt(subtotal)}</dd>
@@ -917,12 +1172,22 @@ export default function PosPage() {
                 <dd className="text-right text-ink">{fmt(tax)}</dd>
               </>
             ) : null}
-            <dt className="mt-1 border-t border-ink/[0.08] pt-2 font-semibold text-ink">Total due</dt>
-            <dd className="mt-1 border-t border-ink/[0.08] pt-2 text-right text-base font-semibold text-ink">{fmt(total)}</dd>
+            {hasExchange ? (
+              <>
+                <dt className="text-ink-3">Old gold in</dt>
+                <dd className="text-right text-ink">−{fmt(oldTotal)}</dd>
+              </>
+            ) : null}
+            <dt className="mt-1 border-t border-ink/[0.08] pt-2 font-semibold text-ink">
+              {shopOwes > 0 ? (payout === "cash" ? "Cash to customer" : "Clears open bills") : hasExchange ? "Customer pays" : "Total due"}
+            </dt>
+            <dd className="mt-1 border-t border-ink/[0.08] pt-2 text-right text-base font-semibold text-ink">
+              {fmt(shopOwes > 0 ? shopOwes : due)}
+            </dd>
           </dl>
-          {total > 0 ? (
+          {due > 0 ? (
             <div className="mb-1 flex flex-wrap gap-1.5">
-              {["cash", "card", "bank", ...(customer ? ["credit"] : [])].map((m) => (
+              {["cash", "cheque", "card", "bank", ...(customer ? ["credit"] : [])].map((m) => (
                 <button
                   key={m}
                   type="button"
@@ -940,7 +1205,13 @@ export default function PosPage() {
               if (canComplete && !complete.isPending) complete.mutate();
             }}
           >
-            {pays.map((p, i) => (
+            {shopOwes > 0 ? (
+              <p className="rounded-lg bg-emerald-50 px-3 py-2.5 text-xs leading-relaxed text-emerald-800">
+                {payout === "cash"
+                  ? `${fmt(shopOwes)} LKR is paid out to ${customer?.name} in cash on completion.`
+                  : `${fmt(shopOwes)} LKR clears ${customer?.name}'s open bills on completion.`}
+              </p>
+            ) : pays.map((p, i) => (
               <div key={i} className="mt-2">
                 <div className="flex gap-2">
                   <Select
@@ -964,9 +1235,9 @@ export default function PosPage() {
                     }}
                     onFocus={() => {
                       // A single payment row is almost always the whole bill.
-                      if (pays.length === 1 && !p.amountLkr && total > 0) {
+                      if (pays.length === 1 && !p.amountLkr && due > 0) {
                         autoAmount.current = true;
-                        setPay(0, { amountLkr: String(total / 100) });
+                        setPay(0, { amountLkr: String(due / 100) });
                       }
                     }}
                     className={`num-tabular min-w-0 flex-1 ${controlClass} !h-11 !rounded-xl !px-3.5`}
@@ -982,6 +1253,22 @@ export default function PosPage() {
                     </button>
                   ) : null}
                 </div>
+                {p.method === "cheque" ? (
+                  <div className="mt-1.5 flex gap-2">
+                    <input
+                      value={p.chequeNo ?? ""}
+                      onChange={(e) => setPay(i, { chequeNo: e.target.value })}
+                      placeholder="Cheque no."
+                      className={`min-w-0 flex-1 ${controlClass}`}
+                    />
+                    <input
+                      value={p.chequeBank ?? ""}
+                      onChange={(e) => setPay(i, { chequeBank: e.target.value })}
+                      placeholder="Bank"
+                      className={`min-w-0 flex-1 ${controlClass}`}
+                    />
+                  </div>
+                ) : null}
                 {p.method === "bank" && bankRows.length > 1 ? (
                   <Select
                     value={p.bankAccountId ?? ""}
@@ -1001,18 +1288,20 @@ export default function PosPage() {
                 ) : null}
               </div>
             ))}
-            <div className="mt-3 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setPays((ps) => [...ps, { method: "card", amountLkr: "" }])}
-                className="g-btn g-btn-secondary h-9 flex-1 rounded-xl px-3 text-xs"
-              >
-                <PlusIcon size={12} /> Split
-              </button>
-              <button type="button" onClick={autoBalance} className="g-btn g-btn-secondary h-9 flex-1 rounded-xl px-3 text-xs">
-                Auto-balance last
-              </button>
-            </div>
+            {shopOwes > 0 ? null : (
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPays((ps) => [...ps, { method: "card", amountLkr: "" }])}
+                  className="g-btn g-btn-secondary h-9 flex-1 rounded-xl px-3 text-xs"
+                >
+                  <PlusIcon size={12} /> Split
+                </button>
+                <button type="button" onClick={autoBalance} className="g-btn g-btn-secondary h-9 flex-1 rounded-xl px-3 text-xs">
+                  Auto-balance last
+                </button>
+              </div>
+            )}
             {cashDue > 0 ? (
               <label className="mt-3 block text-sm text-ink-2">Cash tendered
                 <input
@@ -1031,18 +1320,34 @@ export default function PosPage() {
                 ) : null}
               </label>
             ) : null}
-            <p className={`mt-3 num-tabular text-sm ${paidSum === total && total > 0 ? "font-semibold text-emerald-700" : "text-ink-3"}`}>
-              Paid {fmt(paidSum)} / {fmt(total)}
-              {paidSum !== total && total > 0 ? ` · ${paidSum > total ? "over" : "short"} ${fmt(Math.abs(total - paidSum))}` : ""}
-            </p>
-            {creditDue > 0 && customer ? (
+            {shopOwes > 0 ? null : (
+              <p className={`mt-3 num-tabular text-sm ${paidSum === due && due > 0 ? "font-semibold text-emerald-700" : "text-ink-3"}`}>
+                Paid {fmt(paidSum)} / {fmt(due)}
+                {paidSum !== due && due > 0 && autoCredit === 0 ? ` · ${paidSum > due ? "over" : "short"} ${fmt(Math.abs(due - paidSum))}` : ""}
+              </p>
+            )}
+            {autoCredit > 0 && customer ? (
+              <p className="mt-1 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                {fmt(autoCredit)} LKR balance goes on {customer.name}&apos;s credit.
+              </p>
+            ) : paidSum > 0 && paidSum < due ? (
               <p className="mt-1 text-xs text-ink-3">
-                {fmt(creditDue)} LKR on {customer.name}&apos;s account
+                {hasExchange
+                  ? `Key ${fmt(due - paidSum)} LKR more to settle the balance of ${fmt(due)} LKR.`
+                  : "Choose a customer to put the balance on credit."}
+              </p>
+            ) : null}
+            {creditDue > autoCredit && customer ? (
+              <p className="mt-1 text-xs text-ink-3">
+                {fmt(creditDue - autoCredit)} LKR on {customer.name}&apos;s account
                 {storeCredit > 0 ? ` — ${fmt(Math.min(storeCredit, creditDue))} from store credit` : ""}.
               </p>
             ) : null}
             {needsCustomer ? <p className="mt-1 text-xs text-rose-600">Credit needs a customer.</p> : null}
             {needsBank ? <p className="mt-1 text-xs text-rose-600">Choose the bank account the payment went into.</p> : null}
+            {hasExchange && exchange ? (
+              <p className="mt-1 text-xs text-rose-600">An old-gold exchange cannot go on a return-exchange bill — clear one of them.</p>
+            ) : null}
             {overLimit ? (
               <p className="mt-1 text-xs text-rose-600">
                 Over {customer?.name}&apos;s credit limit of {fmt(credit.data!.creditLimitCents)} LKR — take more now or collect the balance first.
@@ -1082,6 +1387,24 @@ export default function PosPage() {
               <>
                 <dt className="text-ink-3">Change to give</dt>
                 <dd className="text-right text-lg font-semibold text-emerald-700">{fmt(done.changeCents)} LKR</dd>
+              </>
+            ) : null}
+            {done.exchange ? (
+              <>
+                <dt className="text-ink-3">Old gold in</dt>
+                <dd className="text-right text-ink">{fmt(done.exchange.oldGoldCents)} LKR</dd>
+                <dt className="text-ink-3">
+                  {done.exchange.balanceCents < 0
+                    ? done.exchange.payout === "cash"
+                      ? "Paid out · cash"
+                      : "Store credit"
+                    : done.exchange.balanceCents > 0
+                      ? "Customer paid"
+                      : "Balance"}
+                </dt>
+                <dd className="text-right font-semibold text-ink">
+                  {done.exchange.balanceCents === 0 ? "Settled" : `${fmt(Math.abs(done.exchange.balanceCents))} LKR`}
+                </dd>
               </>
             ) : null}
           </dl>

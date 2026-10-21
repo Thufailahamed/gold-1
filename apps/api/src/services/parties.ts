@@ -135,17 +135,17 @@ export async function listParties(
   const scope = canManageAll
     ? ""
     : "AND branch_id IN (SELECT branch_id FROM branch_members WHERE user_id = ?)";
-  const countBind = canManageAll ? [like, like] : [like, like, userId];
+  const countBind = canManageAll ? [like, like, like] : [like, like, like, userId];
   const count = await db
-    .prepare(`SELECT COUNT(*) AS total FROM ${table} WHERE (name LIKE ? OR phone LIKE ?) ${scope}`)
+    .prepare(`SELECT COUNT(*) AS total FROM ${table} WHERE (name LIKE ? OR phone LIKE ? OR address LIKE ?) ${scope}`)
     .bind(...countBind)
     .first<{ total: number }>();
   const rowBind = canManageAll
-    ? [like, like, opts.limit, offset]
-    : [like, like, userId, opts.limit, offset];
+    ? [like, like, like, opts.limit, offset]
+    : [like, like, like, userId, opts.limit, offset];
   const { results } = await db
     .prepare(
-      `SELECT ${PARTY_COLS} FROM ${table} WHERE (name LIKE ? OR phone LIKE ?) ${scope} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+      `SELECT ${PARTY_COLS} FROM ${table} WHERE (name LIKE ? OR phone LIKE ? OR address LIKE ?) ${scope} ORDER BY created_at DESC LIMIT ? OFFSET ?`
     )
     .bind(...rowBind)
     .all<RawPartyRow>();

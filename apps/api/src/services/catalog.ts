@@ -27,7 +27,8 @@ async function paginate(
   table: "categories" | "purities",
   cols: string,
   match: string,
-  opts: PageOpts
+  opts: PageOpts,
+  orderBy = "created_at DESC"
 ): Promise<{ rows: never[]; total: number }> {
   const like = `%${opts.search ?? ""}%`;
   const offset = (opts.page - 1) * opts.limit;
@@ -36,7 +37,7 @@ async function paginate(
     .bind(like, like)
     .first<{ total: number }>();
   const { results } = await db
-    .prepare(`SELECT ${cols} FROM ${table} WHERE ${match} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+    .prepare(`SELECT ${cols} FROM ${table} WHERE ${match} ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
     .bind(like, like, opts.limit, offset)
     .all();
   return { rows: (results ?? []) as never[], total: count?.total ?? 0 };
@@ -88,7 +89,9 @@ export async function listCategories(
     "categories",
     "id, name, code, description, is_active, created_at",
     "name LIKE ? OR code LIKE ?",
-    opts
+    opts,
+    // Alphabetical by name, ignoring case, so the list reads in order across pages.
+    "name COLLATE NOCASE ASC"
   ) as Promise<{ rows: CategoryRow[]; total: number }>;
 }
 
@@ -113,6 +116,97 @@ export async function deactivateCategory(
       prev: { is_active: prev.is_active },
       next: { is_active: 0 },
       reason,
+    }),
+  ]);
+}
+
+/**
+ * Renames a category and changes its code, keeping the same record, so the
+ * products and history that point at it stay as they are. A name or code that
+ * another category already uses is refused.
+ */
+export async function updateCategory(db: D1Database, id: string, input: CreateCategoryInput, actorId: string): Promise<void> {
+  const prev = await db
+    .prepare("SELECT id, name, code, description FROM categories WHERE id = ?")
+    .bind(id)
+    .first<{ id: string; name: string; code: string; description: string | null }>();
+  if (!prev) throw Object.assign(new Error("Category not found"), { code: "NOT_FOUND" });
+  const clash = await db
+    .prepare("SELECT id FROM categories WHERE (name = ? OR code = ?) AND id <> ?")
+    .bind(input.name, input.code, id)
+    .first();
+  if (clash) throw Object.assign(new Error("Category name or code already in use"), { code: "CONFLICT" });
+  await db.batch([
+    db
+      .prepare("UPDATE categories SET name = ?, code = ?, description = ? WHERE id = ?")
+      .bind(input.name, input.code, input.description ?? null, id),
+    buildAuditStmt(db, {
+      userId: actorId,
+      action: "category.update",
+      entity: "category",
+      entityId: id,
+      prev: { name: prev.name, code: prev.code, description: prev.description },
+      next: input,
+    }),
+  ]);
+}
+
+/** Turns a deactivated category back on, so products can be filed under it again. */
+export async function reactivateCategory(db: D1Database, id: string, actorId: string): Promise<void> {
+  const prev = await db
+    .prepare("SELECT id, is_active FROM categories WHERE id = ?")
+    .bind(id)
+    .first<{ id: string; is_active: number }>();
+  if (!prev) throw Object.assign(new Error("Category not found"), { code: "NOT_FOUND" });
+  await db.batch([
+    db.prepare("UPDATE categories SET is_active = 1 WHERE id = ?").bind(id),
+    buildAuditStmt(db, {
+      userId: actorId,
+      action: "category.reactivate",
+      entity: "category",
+      entityId: id,
+      prev: { is_active: prev.is_active },
+      next: { is_active: 1 },
+    }),
+  ]);
+}
+
+/**
+ * Permanently removes a category, but only when nothing points at it: a
+ * category that products, subcategories, purchase orders or manufacturing
+ * outputs use stays, and the caller is told to deactivate it instead.
+ */
+export async function deleteCategory(db: D1Database, id: string, actorId: string): Promise<void> {
+  const prev = await db
+    .prepare("SELECT id, name, code FROM categories WHERE id = ?")
+    .bind(id)
+    .first<{ id: string; name: string; code: string }>();
+  if (!prev) throw Object.assign(new Error("Category not found"), { code: "NOT_FOUND" });
+  const uses = await db
+    .prepare(
+      `SELECT (SELECT COUNT(*) FROM products WHERE category_id = ?1) AS products,
+              (SELECT COUNT(*) FROM subcategories WHERE category_id = ?1) AS subcategories,
+              (SELECT COUNT(*) FROM purchase_order_items WHERE category_id = ?1) AS purchase_items,
+              (SELECT COUNT(*) FROM manufacturing_outputs WHERE category_id = ?1) AS manufacturing_outputs`
+    )
+    .bind(id)
+    .first<{ products: number; subcategories: number; purchase_items: number; manufacturing_outputs: number }>();
+  const inUse = uses ? uses.products + uses.subcategories + uses.purchase_items + uses.manufacturing_outputs : 0;
+  if (inUse > 0)
+    throw Object.assign(
+      new Error(
+        `${prev.name} is used by ${uses!.products} piece${uses!.products === 1 ? "" : "s"} and ${inUse - uses!.products} other record${inUse - uses!.products === 1 ? "" : "s"}. Deactivate it instead.`
+      ),
+      { code: "CONFLICT" }
+    );
+  await db.batch([
+    db.prepare("DELETE FROM categories WHERE id = ?").bind(id),
+    buildAuditStmt(db, {
+      userId: actorId,
+      action: "category.delete",
+      entity: "category",
+      entityId: id,
+      prev: { name: prev.name, code: prev.code },
     }),
   ]);
 }

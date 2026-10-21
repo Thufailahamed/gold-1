@@ -23,6 +23,9 @@ export type StockRow = {
   barcode?: string | null;
 };
 
+/** A category and how many of its pieces are on hand. */
+export type CategoryCount = { id: string; name: string; pieces: number };
+
 export type Movement = {
   id: string;
   product_id: string;

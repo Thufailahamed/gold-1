@@ -1,11 +1,11 @@
 import {
-  BARCODE_RE,
   fineGoldMg,
   gToMg,
   lkrToCents,
   extractScanCode,
   normalizeCode,
   priceCents,
+  type BulkCreateProductsInput,
   type CreateProductInput,
   type EditProductInput,
 } from "@goldos/shared";
@@ -71,38 +71,184 @@ function parseRow(r: RawRow): ProductRow {
   return { ...r, image_keys: JSON.parse(r.image_keys) as string[] };
 }
 
+/** What a product points at — everything but its weights and money. */
+type ProductRefs = Pick<
+  CreateProductInput,
+  "categoryId" | "subcategoryId" | "subcategoryName" | "designId" | "productTypeId" | "metalTypeId" | "stoneTypeId" | "purityId"
+>;
+
 const BARCODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-function randomCode(prefix: "JW-" | "SKU-"): string {
+function randomCode(prefix: "SKU-"): string {
   const bytes = crypto.getRandomValues(new Uint8Array(6));
   let s = prefix;
   for (const b of bytes) s += BARCODE_ALPHABET[b % BARCODE_ALPHABET.length];
   return s;
 }
 
+/** Four-digit numbers per letter pair: 0001 to 9999, then the next pair. */
+const NUMBERS_PER_SERIES = 9999;
+
 /**
- * A fresh barcode and SKU, checked together in ONE query (the unique indexes
- * remain the backstop). Retries only on the rare collision.
+ * A barcode is the category's code, a dash, two letters, a dash, then a
+ * four-digit number: BBR-AA-0001 … BBR-AA-9999, then BBR-AB-0001, and on through
+ * the alphabet (AA, AB, …, AZ, BA, …). `no` is the category's running count of
+ * pieces, starting at 1. The code is capitals, letters and digits, with dashes
+ * between the parts, so it scans like a typed one.
  */
-async function uniqueCodes(db: D1Database): Promise<{ barcode: string; sku: string }> {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const barcode = randomCode("JW-");
-    if (!BARCODE_RE.test(barcode)) continue;
-    const sku = randomCode("SKU-");
-    const dup = await db
-      .prepare("SELECT 1 AS x FROM products WHERE barcode = ? OR sku = ? LIMIT 1")
-      .bind(barcode, sku)
-      .first();
-    if (!dup) return { barcode, sku };
+export function categoryBarcode(code: string, no: number): string {
+  const prefix = code.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  const series = Math.floor((no - 1) / NUMBERS_PER_SERIES);
+  if (series >= 26 * 26)
+    throw Object.assign(new Error("This category has used all its barcodes"), { code: "CONFLICT" });
+  const letters = String.fromCharCode(65 + Math.floor(series / 26), 65 + (series % 26));
+  const number = ((no - 1) % NUMBERS_PER_SERIES) + 1;
+  return `${prefix}-${letters}-${String(number).padStart(4, "0")}`;
+}
+
+/** The counter that numbers a category's pieces, one per category. */
+const barcodeCounter = (categoryId: string) => `BARCODE:${categoryId}`;
+
+async function categoryCode(db: D1Database, categoryId: string): Promise<string> {
+  const row = await db.prepare("SELECT code FROM categories WHERE id = ?").bind(categoryId).first<{ code: string }>();
+  if (!row) throw Object.assign(new Error("Category not found"), { code: "NOT_FOUND" });
+  if (!row.code.replace(/[^A-Za-z0-9]/g, ""))
+    throw Object.assign(new Error("This category has no code to make barcodes from"), { code: "VALIDATION" });
+  return row.code;
+}
+
+/**
+ * The barcode the category's next piece will get, without taking it. Shown on
+ * the product form before the piece is saved.
+ */
+export async function nextCategoryBarcode(db: D1Database, categoryId: string): Promise<string> {
+  const code = await categoryCode(db, categoryId);
+  const row = await db
+    .prepare("SELECT next FROM counters WHERE name = ?")
+    .bind(barcodeCounter(categoryId))
+    .first<{ next: number }>();
+  return categoryBarcode(code, row?.next ?? 1);
+}
+
+/**
+ * `n` barcodes for a category, each one taken from its counter. A number that
+ * already belongs to a product is skipped, so a counter that has fallen behind
+ * never produces a duplicate.
+ */
+async function categoryBarcodes(db: D1Database, categoryId: string, n: number): Promise<string[]> {
+  const code = await categoryCode(db, categoryId);
+  const name = barcodeCounter(categoryId);
+  await db.prepare("INSERT INTO counters (name, next) VALUES (?, 1) ON CONFLICT(name) DO NOTHING").bind(name).run();
+  const out: string[] = [];
+  for (let tries = 0; out.length < n; tries++) {
+    if (tries > n * 50 + 200) throw Object.assign(new Error("Could not allocate barcodes"), { code: "INTERNAL" });
+    const row = await db
+      .prepare("UPDATE counters SET next = next + 1 WHERE name = ? RETURNING next - 1 AS allocated")
+      .bind(name)
+      .first<{ allocated: number }>();
+    if (!row) throw Object.assign(new Error(`Counter ${name} missing`), { code: "INTERNAL" });
+    const barcode = categoryBarcode(code, row.allocated);
+    const taken = await db.prepare("SELECT 1 AS x FROM products WHERE barcode = ?").bind(barcode).first();
+    if (!taken) out.push(barcode);
   }
-  throw Object.assign(new Error("Could not generate unique code"), { code: "INTERNAL" });
+  return out;
+}
+
+/** Barcode and SKU lookups per query, kept well inside the bind-parameter cap. */
+const CODE_CHECK_CHUNK = 40;
+
+/**
+ * `n` fresh barcode/SKU pairs for pieces of one category: the barcodes come in
+ * order from the category's counter, the SKUs are random, and none of them is
+ * already on file (the unique indexes remain the backstop).
+ */
+async function uniqueCodeBatch(db: D1Database, categoryId: string, n: number): Promise<{ barcode: string; sku: string }[]> {
+  const barcodes = await categoryBarcodes(db, categoryId, n);
+  const out: { barcode: string; sku: string }[] = [];
+  const seen = new Set<string>();
+  for (let attempt = 0; attempt < 5 && out.length < n; attempt++) {
+    const cand: string[] = [];
+    while (cand.length < n - out.length) {
+      const sku = randomCode("SKU-");
+      if (seen.has(sku)) continue;
+      seen.add(sku);
+      cand.push(sku);
+    }
+    const taken = new Set<string>();
+    for (let i = 0; i < cand.length; i += CODE_CHECK_CHUNK) {
+      const chunk = cand.slice(i, i + CODE_CHECK_CHUNK);
+      const marks = chunk.map(() => "?").join(", ");
+      const { results } = await db
+        .prepare(`SELECT sku FROM products WHERE sku IN (${marks})`)
+        .bind(...chunk)
+        .all<{ sku: string }>();
+      for (const r of results ?? []) taken.add(r.sku);
+    }
+    for (const sku of cand) if (!taken.has(sku)) out.push({ barcode: barcodes[out.length]!, sku });
+  }
+  if (out.length < n) throw Object.assign(new Error("Could not generate unique code"), { code: "INTERNAL" });
+  return out;
+}
+
+async function uniqueCodes(db: D1Database, categoryId: string): Promise<{ barcode: string; sku: string }> {
+  return (await uniqueCodeBatch(db, categoryId, 1))[0]!;
+}
+
+async function categoryName(db: D1Database, id: string): Promise<string> {
+  const row = await db.prepare("SELECT name FROM categories WHERE id = ?").bind(id).first<{ name: string }>();
+  return row?.name ?? "Item";
+}
+
+/**
+ * A typed subcategory is matched (case-insensitively, within the category) to
+ * an existing one, or created in the same batch as the product.
+ */
+async function resolveSubcategory(
+  db: D1Database,
+  input: ProductRefs,
+  actorId: string,
+  now: number
+): Promise<{ id: string | undefined; name: string | undefined; stmts: D1PreparedStatement[] }> {
+  if (input.subcategoryId || !input.subcategoryName) return { id: input.subcategoryId, name: undefined, stmts: [] };
+  const typed = input.subcategoryName;
+  const found = await db
+    .prepare("SELECT id, name FROM subcategories WHERE category_id = ? AND lower(name) = lower(?) AND is_active = 1")
+    .bind(input.categoryId, typed)
+    .first<{ id: string; name: string }>();
+  if (found) return { id: found.id, name: found.name, stmts: [] };
+  let code = "";
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const c = "SC-" + randomCode("SKU-").slice(4);
+    if (!(await db.prepare("SELECT 1 AS x FROM subcategories WHERE code = ?").bind(c).first())) {
+      code = c;
+      break;
+    }
+  }
+  if (!code) throw Object.assign(new Error("Could not generate subcategory code"), { code: "INTERNAL" });
+  const id = crypto.randomUUID();
+  return {
+    id,
+    name: typed,
+    stmts: [
+      db
+        .prepare("INSERT INTO subcategories (id, category_id, name, code, is_active, created_at, created_by) VALUES (?, ?, ?, ?, 1, ?, ?)")
+        .bind(id, input.categoryId, typed, code, now, actorId),
+      buildAuditStmt(db, {
+        userId: actorId,
+        action: "subcategory.create",
+        entity: "subcategory",
+        entityId: id,
+        next: { categoryId: input.categoryId, name: typed, code },
+      }),
+    ],
+  };
 }
 
 /**
  * Every reference a new product names, validated in a single round trip.
  * Returns the purity's permille (needed for the fine weight).
  */
-async function validateRefs(db: D1Database, input: CreateProductInput, branchId: string): Promise<number> {
+async function validateRefs(db: D1Database, input: ProductRefs, branchId: string): Promise<number> {
   const checks: { sql: string; id: string; label: string }[] = [];
   const active = (table: string, id: string, label: string) =>
     checks.push({ sql: `(SELECT 1 FROM ${table} WHERE id = ? AND is_active = 1)`, id, label });
@@ -164,6 +310,89 @@ export type BuiltProduct = {
   permille: number;
 };
 
+/** Gross, stone and net in mg; a stone as heavy as the piece is refused. */
+function pieceWeights(grossG: number, stoneG: number, label = ""): { grossMg: number; stoneMg: number; netMg: number } {
+  const grossMg = gToMg(grossG);
+  const stoneMg = gToMg(stoneG);
+  const netMg = grossMg - stoneMg;
+  if (netMg <= 0)
+    throw Object.assign(new Error(`${label}Stone weight must be less than gross weight`), {
+      code: "VALIDATION",
+    });
+  return { grossMg, stoneMg, netMg };
+}
+
+/**
+ * The rows one new piece writes: the product itself (IN_STOCK), its INTAKE
+ * movement and its create audit. References are already validated and the
+ * codes already minted by the caller.
+ */
+function pieceStmts(
+  db: D1Database,
+  p: {
+    id: string;
+    barcode: string;
+    sku: string;
+    input: CreateProductInput;
+    subcategoryId: string | undefined;
+    name: string;
+    weights: { grossMg: number; stoneMg: number; netMg: number };
+    permille: number;
+    branchId: string;
+    now: number;
+    actorId: string;
+    batchId?: string;
+  }
+): D1PreparedStatement[] {
+  const { input, weights } = p;
+  return [
+    db
+      .prepare(
+        "INSERT INTO products (id, barcode, sku, category_id, subcategory_id, design_id, product_type_id, metal_type_id, stone_type_id, purity_id, name, gross_mg, stone_mg, net_mg, fine_gold_mg, making_cents, wastage_mg, cost_cents, selling_price_cents, location, notes, image_keys, status, branch_id, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'IN_STOCK', ?, ?, ?)"
+      )
+      .bind(
+        p.id,
+        p.barcode,
+        p.sku,
+        input.categoryId,
+        p.subcategoryId ?? null,
+        input.designId ?? null,
+        input.productTypeId ?? null,
+        input.metalTypeId,
+        input.stoneTypeId ?? null,
+        input.purityId,
+        p.name,
+        weights.grossMg,
+        weights.stoneMg,
+        weights.netMg,
+        fineGoldMg(weights.netMg, p.permille),
+        lkrToCents(input.makingLkr),
+        gToMg(input.wastageG),
+        input.costLkr !== undefined ? lkrToCents(input.costLkr) : null,
+        input.sellingPriceLkr !== undefined && input.sellingPriceLkr > 0 ? lkrToCents(input.sellingPriceLkr) : null,
+        input.location ?? null,
+        input.notes ?? null,
+        "[]",
+        p.branchId,
+        p.now,
+        p.actorId
+      ),
+    db
+      .prepare(
+        "INSERT INTO stock_movements (id, product_id, type, from_status, to_status, from_branch, to_branch, weight_mg, reason, created_at, created_by) VALUES (?, ?, 'INTAKE', NULL, 'IN_STOCK', NULL, ?, ?, 'intake', ?, ?)"
+      )
+      .bind(crypto.randomUUID(), p.id, p.branchId, weights.netMg, p.now, p.actorId),
+    buildAuditStmt(db, {
+      userId: p.actorId,
+      action: "product.create",
+      entity: "product",
+      entityId: p.id,
+      next: { ...input, barcode: p.barcode, sku: p.sku, ...(p.batchId ? { batchId: p.batchId } : {}) },
+      branchId: p.branchId,
+    }),
+  ];
+}
+
 export async function buildCreateProductStmts(
   db: D1Database,
   input: CreateProductInput,
@@ -171,66 +400,18 @@ export async function buildCreateProductStmts(
   branchId: string,
   now: number
 ): Promise<BuiltProduct> {
-  const grossMg = gToMg(input.grossG);
-  const stoneMg = gToMg(input.stoneG);
-  const netMg = grossMg - stoneMg;
-  if (netMg <= 0)
-    throw Object.assign(new Error("Stone weight must be less than gross weight"), {
-      code: "VALIDATION",
-    });
+  const weights = pieceWeights(input.grossG, input.stoneG);
   // Independent reads, run together instead of one after another.
-  const [permilleValue, codes] = await Promise.all([validateRefs(db, input, branchId), uniqueCodes(db)]);
-  const purity = { permille: permilleValue };
+  const [permille, codes] = await Promise.all([validateRefs(db, input, branchId), uniqueCodes(db, input.categoryId)]);
   const { barcode, sku } = codes;
-  const makingCents = lkrToCents(input.makingLkr);
+  const sub = await resolveSubcategory(db, input, actorId, now);
+  const name = input.name ?? sub.name ?? (await categoryName(db, input.categoryId));
   const id = crypto.randomUUID();
   const stmts = [
-    db
-      .prepare(
-        "INSERT INTO products (id, barcode, sku, category_id, subcategory_id, design_id, product_type_id, metal_type_id, stone_type_id, purity_id, name, gross_mg, stone_mg, net_mg, fine_gold_mg, making_cents, wastage_mg, cost_cents, selling_price_cents, location, notes, image_keys, status, branch_id, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'IN_STOCK', ?, ?, ?)"
-      )
-      .bind(
-        id,
-        barcode,
-        sku,
-        input.categoryId,
-        input.subcategoryId ?? null,
-        input.designId ?? null,
-        input.productTypeId ?? null,
-        input.metalTypeId,
-        input.stoneTypeId ?? null,
-        input.purityId,
-        input.name,
-        grossMg,
-        stoneMg,
-        netMg,
-        fineGoldMg(netMg, purity.permille),
-        makingCents,
-        gToMg(input.wastageG),
-        input.costLkr !== undefined ? lkrToCents(input.costLkr) : null,
-        input.sellingPriceLkr !== undefined ? lkrToCents(input.sellingPriceLkr) : null,
-        input.location ?? null,
-        input.notes ?? null,
-        "[]",
-        branchId,
-        now,
-        actorId
-      ),
-    db
-      .prepare(
-        "INSERT INTO stock_movements (id, product_id, type, from_status, to_status, from_branch, to_branch, weight_mg, reason, created_at, created_by) VALUES (?, ?, 'INTAKE', NULL, 'IN_STOCK', NULL, ?, ?, 'intake', ?, ?)"
-      )
-      .bind(crypto.randomUUID(), id, branchId, netMg, now, actorId),
-    buildAuditStmt(db, {
-      userId: actorId,
-      action: "product.create",
-      entity: "product",
-      entityId: id,
-      next: { ...input, barcode, sku },
-      branchId,
-    }),
+    ...sub.stmts,
+    ...pieceStmts(db, { id, barcode, sku, input, subcategoryId: sub.id, name, weights, permille, branchId, now, actorId }),
   ];
-  return { stmts, id, barcode, sku, netMg, permille: purity.permille };
+  return { stmts, id, barcode, sku, netMg: weights.netMg, permille };
 }
 
 export async function createProduct(
@@ -278,6 +459,161 @@ export async function createProduct(
   const created = await db.prepare(`${WITH_NAMES} WHERE p.id = ?`).bind(built.id).first<RawRow>();
   if (!created) throw new Error("Product insert failed");
   return parseRow(created);
+}
+
+export type BulkCreatedProduct = {
+  id: string;
+  barcode: string;
+  sku: string;
+  name: string;
+  gross_mg: number;
+  stone_mg: number;
+  net_mg: number;
+  fine_gold_mg: number;
+};
+
+export type BulkCreateResult = {
+  batchId: string;
+  products: BulkCreatedProduct[];
+  totals: { count: number; gross_mg: number; net_mg: number; fine_gold_mg: number; cost_cents: number };
+};
+
+/**
+ * A tray of like pieces taken in at once — 25 rings that share everything but
+ * their weight (and perhaps a name, stone, price or tray). Each piece is a
+ * full product, exactly as createProduct would make it: its own barcode and
+ * SKU, INTAKE movement, OPENING gold row and, when costed, opening-stock
+ * entry. The shared references are validated once and a typed subcategory is
+ * created once, not per piece.
+ *
+ * All or nothing: every piece lands in one batch, so a bad row, a closed day
+ * or a lost connection never leaves half a tray on the shelf. A bad row is
+ * reported by its 1-based number so the counter can find it on screen.
+ */
+export async function createProductsBulk(
+  db: D1Database,
+  input: BulkCreateProductsInput,
+  actorId: string
+): Promise<BulkCreateResult> {
+  const { common, items } = input;
+  const branchId = common.branchId;
+  const pieces = items.map((it, i) => {
+    const merged: CreateProductInput = {
+      ...common,
+      name: it.name ?? common.name,
+      grossG: it.grossG,
+      stoneG: it.stoneG ?? common.stoneG,
+      makingLkr: it.makingLkr ?? common.makingLkr,
+      wastageG: it.wastageG ?? common.wastageG,
+      costLkr: it.costLkr ?? common.costLkr,
+      sellingPriceLkr: it.sellingPriceLkr ?? common.sellingPriceLkr,
+      location: it.location ?? common.location,
+      notes: it.notes ?? common.notes,
+    };
+    return { input: merged, weights: pieceWeights(merged.grossG, merged.stoneG, `Row ${i + 1}: `) };
+  });
+
+  const now = Date.now();
+  const [permille, codes] = await Promise.all([validateRefs(db, common, branchId), uniqueCodeBatch(db, common.categoryId, pieces.length)]);
+  const sub = await resolveSubcategory(db, common, actorId, now);
+  const fallbackName = common.name ?? sub.name ?? (await categoryName(db, common.categoryId));
+  const batchId = crypto.randomUUID();
+
+  const built = pieces.map((p, i) => ({
+    ...p,
+    id: crypto.randomUUID(),
+    barcode: codes[i]!.barcode,
+    sku: codes[i]!.sku,
+    name: p.input.name ?? fallbackName,
+  }));
+
+  const stmts: D1PreparedStatement[] = [...sub.stmts];
+  for (const b of built)
+    stmts.push(
+      ...pieceStmts(db, {
+        id: b.id,
+        barcode: b.barcode,
+        sku: b.sku,
+        input: b.input,
+        subcategoryId: sub.id,
+        name: b.name,
+        weights: b.weights,
+        permille,
+        branchId,
+        now,
+        actorId,
+        batchId,
+      })
+    );
+
+  // One OPENING gold row per piece (the day lock is checked once for all of
+  // them), so each piece's metal is traceable and a later void reverses
+  // exactly its own row — see createProduct for why direct intake needs it.
+  stmts.push(
+    ...(await postGoldStmts(
+      db,
+      built.map((b) => ({
+        branchId,
+        source: "opening",
+        destination: `branch:${branchId}`,
+        type: "OPENING",
+        weightMg: b.weights.netMg,
+        permille,
+        refEntity: "product_intake",
+        refId: b.id,
+        productId: b.id,
+        notes: `Direct intake ${b.barcode}`,
+      })),
+      { actorId, auditAction: "product.intake.gold", auditEntity: "product_batch", auditEntityId: batchId, branchId }
+    ))
+  );
+
+  // Opening-stock value is carried per product (cost corrections and voids
+  // net against the product's own entries), so each costed piece gets its
+  // own entry. Sequential, so entry numbers follow the tray's order.
+  for (const b of built) {
+    if (b.input.costLkr === undefined) continue;
+    const opening = await buildOpeningStockStmts(db, {
+      productId: b.id,
+      barcode: b.barcode,
+      branchId,
+      deltaCents: lkrToCents(b.input.costLkr),
+      actorId,
+      reason: "direct intake",
+    });
+    if (opening) stmts.push(...opening.stmts);
+  }
+
+  const products: BulkCreatedProduct[] = built.map((b) => ({
+    id: b.id,
+    barcode: b.barcode,
+    sku: b.sku,
+    name: b.name,
+    gross_mg: b.weights.grossMg,
+    stone_mg: b.weights.stoneMg,
+    net_mg: b.weights.netMg,
+    fine_gold_mg: fineGoldMg(b.weights.netMg, permille),
+  }));
+  const totals = {
+    count: products.length,
+    gross_mg: products.reduce((n, p) => n + p.gross_mg, 0),
+    net_mg: products.reduce((n, p) => n + p.net_mg, 0),
+    fine_gold_mg: products.reduce((n, p) => n + p.fine_gold_mg, 0),
+    cost_cents: built.reduce((n, b) => n + (b.input.costLkr !== undefined ? lkrToCents(b.input.costLkr) : 0), 0),
+  };
+  stmts.push(
+    buildAuditStmt(db, {
+      userId: actorId,
+      action: "product.bulk_create",
+      entity: "product_batch",
+      entityId: batchId,
+      next: { common, ...totals, barcodes: products.map((p) => p.barcode) },
+      branchId,
+    })
+  );
+
+  await db.batch(stmts);
+  return { batchId, products, totals };
 }
 
 export async function editProduct(

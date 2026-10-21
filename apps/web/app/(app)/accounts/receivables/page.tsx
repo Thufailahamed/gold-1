@@ -21,6 +21,7 @@ import {
 } from "@/components/ui";
 import { BanknoteIcon, HistoryIcon, UsersIcon } from "@/components/icons";
 import { api } from "@/lib/api";
+import { Select } from "@/components/select";
 import { businessToday } from "@/lib/monthly";
 import { lkr, longDate, toCents, useAccountsScope, type BankAccount } from "@/lib/accounts";
 
@@ -48,7 +49,7 @@ type Receipt = {
   void_reason: string | null;
 };
 
-const METHOD_LABEL: Record<string, string> = { cash: "Cash", bank: "Bank transfer", card: "Card" };
+const METHOD_LABEL: Record<string, string> = { cash: "Cash", cheque: "Cheque", bank: "Bank transfer", card: "Card" };
 
 function ReceivablesView() {
   const qc = useQueryClient();
@@ -297,6 +298,15 @@ function ReceivablesView() {
   );
 }
 
+function Lbl({ text, children }: { text: string; children: React.ReactNode }) {
+  return (
+    <div className="block min-w-0">
+      <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-4">{text}</span>
+      {children}
+    </div>
+  );
+}
+
 function CollectModal({
   customer,
   defaultBranchId,
@@ -312,9 +322,11 @@ function CollectModal({
 }) {
   const [branchId, setBranchId] = useState(defaultBranchId);
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState<"cash" | "bank" | "card">("cash");
+  const [method, setMethod] = useState<"cash" | "cheque" | "bank" | "card">("cash");
   const [bankAccountId, setBankAccountId] = useState("");
   const [note, setNote] = useState("");
+  const [chequeNo, setChequeNo] = useState("");
+  const [chequeBank, setChequeBank] = useState("");
 
   const open = useQuery({
     enabled: branchId !== "",
@@ -352,6 +364,8 @@ function CollectModal({
           amountCents: cents,
           method,
           bankAccountId: method === "bank" ? bankAccountId : undefined,
+          chequeNo: method === "cheque" ? chequeNo.trim() || undefined : undefined,
+          chequeBank: method === "cheque" ? chequeBank.trim() || undefined : undefined,
           note: note || undefined,
         }),
       }),
@@ -373,17 +387,15 @@ function CollectModal({
       pending={create.isPending}
       submitDisabled={!valid || !branchId}
     >
-      <label className="block text-sm text-ink-2">
-        Branch collecting the money
-        <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={`${controlClass} w-full`}>
-          <option value="">Choose a branch…</option>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <Lbl text="Branch collecting the money">
+        <Select
+          value={branchId}
+          onChange={setBranchId}
+          ariaLabel="Branch"
+          placeholder="Choose a branch…"
+          options={branches.map((b) => ({ value: b.id, label: b.name }))}
+        />
+      </Lbl>
 
       {branchId && open.data ? (
         owed <= 0 ? (
@@ -420,19 +432,31 @@ function CollectModal({
             ) : (
               <p className="mt-2 text-xs text-ink-4">No open bills — this balance is an opening balance.</p>
             )}
+            {Number.isFinite(cents) && cents > 0 && cents <= owed ? (
+              <div className="mt-3 flex items-baseline justify-between border-t border-ink/10 pt-3">
+                <span className="text-xs font-medium uppercase tracking-[0.12em] text-ink-4">Remaining after this payment</span>
+                <span className="g-metric text-xl text-emerald-700">{lkr(owed - cents)}</span>
+              </div>
+            ) : null}
           </div>
         )
       ) : branchId ? (
         <TableSkeleton rows={2} cols={3} />
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm text-ink-2">
-          Amount received (LKR)
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Lbl text="Amount received (LKR)">
           <div className="flex gap-2">
-            <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className={`num-tabular ${controlClass} w-full`} />
+            <input
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0.00"
+              aria-invalid={amount && Number.isFinite(cents) && cents > owed ? true : undefined}
+              className={`num-tabular ${controlClass} !h-11 min-w-0 flex-1`}
+            />
             {owed > 0 ? (
-              <button type="button" onClick={() => setAmount((owed / 100).toFixed(2))} className="g-btn g-btn-secondary h-10 shrink-0 px-3 text-xs">
+              <button type="button" onClick={() => setAmount((owed / 100).toFixed(2))} className="g-btn g-btn-secondary h-11 shrink-0 px-3.5 text-xs">
                 Full
               </button>
             ) : null}
@@ -440,33 +464,47 @@ function CollectModal({
           {amount && Number.isFinite(cents) && cents > owed ? (
             <span className="mt-1 block text-xs text-rose-700">More than the customer owes here</span>
           ) : null}
-        </label>
-        <label className="block text-sm text-ink-2">
-          Paid by
-          <select value={method} onChange={(e) => setMethod(e.target.value as typeof method)} className={`${controlClass} w-full`}>
-            <option value="cash">Cash (into the drawer)</option>
-            <option value="bank">Bank transfer</option>
-            <option value="card">Card</option>
-          </select>
-        </label>
+        </Lbl>
+        <Lbl text="Paid by">
+          <Select
+            value={method}
+            onChange={(v) => setMethod(v as typeof method)}
+            ariaLabel="Paid by"
+            size="lg"
+            options={[
+              { value: "cash", label: "Cash", hint: "into the drawer" },
+              { value: "cheque", label: "Cheque", hint: "counted as cash" },
+              { value: "bank", label: "Bank transfer" },
+              { value: "card", label: "Card" },
+            ]}
+          />
+        </Lbl>
       </div>
-      {method === "bank" ? (
-        <label className="block text-sm text-ink-2">
-          Bank account
-          <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} className={`${controlClass} w-full`}>
-            <option value="">Choose an account…</option>
-            {activeBanks.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name} ({b.account_code})
-              </option>
-            ))}
-          </select>
-        </label>
+      {method === "cheque" ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Lbl text="Cheque no.">
+            <input value={chequeNo} onChange={(e) => setChequeNo(e.target.value)} placeholder="e.g. 004512" className={`${controlClass} !h-11 w-full`} />
+          </Lbl>
+          <Lbl text="Cheque bank">
+            <input value={chequeBank} onChange={(e) => setChequeBank(e.target.value)} placeholder="e.g. Commercial Bank" className={`${controlClass} !h-11 w-full`} />
+          </Lbl>
+        </div>
       ) : null}
-      <label className="block text-sm text-ink-2">
-        Note (optional)
-        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. cheque no., who paid" className={`${controlClass} w-full`} />
-      </label>
+      {method === "bank" ? (
+        <Lbl text="Bank account">
+          <Select
+            value={bankAccountId}
+            onChange={setBankAccountId}
+            ariaLabel="Bank account"
+            size="lg"
+            placeholder="Choose an account…"
+            options={activeBanks.map((b) => ({ value: b.id, label: b.name, hint: b.account_code }))}
+          />
+        </Lbl>
+      ) : null}
+      <Lbl text="Note (optional)">
+        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Who paid, reference…" className={`${controlClass} !h-11 w-full`} />
+      </Lbl>
     </Modal>
   );
 }

@@ -56,7 +56,7 @@ type Detail = {
     notes: string | null;
   };
   items: { id: string; product_id: string; barcode: string; sku: string; name: string; gross_mg: number; net_mg: number; karat: string; price_cents: number; discount_cents: number }[];
-  payments: { id: string; amount_cents: number; method: string; created_at: number; account_code: string | null; bank_account_name: string | null }[];
+  payments: { id: string; amount_cents: number; method: string; created_at: number; account_code: string | null; bank_account_name: string | null; cheque_no?: string | null; cheque_bank?: string | null }[];
   receipts: { id: string; number: string; receipt_date: string; method: string; status: string; amount_cents: number }[];
   journal: { id: string; account_code: string; account_name: string | null; debit_cents: number; credit_cents: number; memo: string | null; entry_no: string | null }[];
   returns: { id: string; number: string; type: string; refund_cents: number; credit_cents: number; exchange_sale_id: string | null; status: string }[];
@@ -512,6 +512,7 @@ export default function SaleDetailPage({ params }: { params: Promise<{ id: strin
                       <span className="block truncate font-medium capitalize text-ink">{p.method === "credit" ? "On account" : p.method}</span>
                       <span className="block truncate text-[10.5px] text-ink-4">
                         {p.bank_account_name ? `${p.bank_account_name} · ` : ""}
+                        {p.method === "cheque" ? `${[p.cheque_no ? `#${p.cheque_no}` : null, p.cheque_bank].filter(Boolean).join(" ")}${p.cheque_no || p.cheque_bank ? " · " : ""}` : ""}
                         {p.account_code ? `${p.account_code} · ` : ""}
                         {stamp(p.created_at)}
                       </span>

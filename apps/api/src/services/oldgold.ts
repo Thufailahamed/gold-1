@@ -14,6 +14,7 @@ import { currentGoldRatesCents } from "./rates";
 import { getSetting } from "./settings";
 import { consumeApproval, pendingApproval, requestApproval } from "./approvals";
 import { postGoldStmts } from "./gold";
+import { creditToOpenBills } from "./receipts";
 import { allocateNumber } from "./counters";
 import { batchOrConflict, staleGuard } from "./guard";
 
@@ -96,7 +97,7 @@ async function loadItem(db: D1Database, id: string): Promise<ItemRow> {
   return row;
 }
 
-async function nextOG(db: D1Database): Promise<string> {
+export async function nextOG(db: D1Database): Promise<string> {
   return allocateNumber(db, "OG", "OG", 6, "old_gold_items");
 }
 
@@ -117,11 +118,24 @@ function moveStmts(db: D1Database, itemId: string, from: string[], set: string, 
 const RACED = "Item changed while saving; reload and try again";
 
 
-export async function intakeItem(
+/**
+ * The rows that take a piece of old gold in: the item (received, not yet
+ * tested) and its intake audit. Shared by the intake desk and the till, so a
+ * piece taken in at the POS is recorded exactly like one taken in at the desk.
+ */
+/** The old gold categories (named OLD GOLD …), and the default one, code OG. */
+export async function oldGoldCategories(db: D1Database): Promise<{ id: string; name: string; code: string; isDefault: boolean }[]> {
+  const { results } = await db
+    .prepare("SELECT id, name, code FROM categories WHERE is_active = 1 AND name LIKE 'OLD GOLD%' ORDER BY name COLLATE NOCASE")
+    .all<{ id: string; name: string; code: string }>();
+  return (results ?? []).map((c) => ({ ...c, isDefault: c.code.toUpperCase() === "OG" }));
+}
+
+export async function intakeStatements(
   db: D1Database,
   input: CreateOldGoldInput,
   actorId: string
-): Promise<{ id: string; number: string }> {
+): Promise<{ id: string; number: string; stmts: D1PreparedStatement[] }> {
   const customer = await db
     .prepare("SELECT id FROM customers WHERE id = ? AND is_active = 1")
     .bind(input.customerId)
@@ -139,27 +153,82 @@ export async function intakeItem(
     throw Object.assign(new Error("Stone weight must be less than gross weight"), {
       code: "VALIDATION",
     });
-  const stmts: D1PreparedStatement[] = [];
+  // The category: the one chosen, else the OG category. It must be an old gold category.
+  const categories = await oldGoldCategories(db);
+  const category = input.categoryId
+    ? categories.find((c) => c.id === input.categoryId)
+    : categories.find((c) => c.isDefault);
+  if (!category)
+    throw Object.assign(new Error(input.categoryId ? "Pick one of the old gold categories" : "No OG old gold category is set up"), {
+      code: "VALIDATION",
+    });
+  // Without testing, the karat is known and the piece is Tested at once; with it, the piece waits to be tested.
+  let purity: { id: string; permille: number; karat: string } | null = null;
+  if (!input.needsTesting) {
+    if (!input.purityId) throw Object.assign(new Error("Choose the karat, or tick Needs testing"), { code: "VALIDATION" });
+    purity = await db
+      .prepare("SELECT id, permille, karat FROM purities WHERE id = ? AND is_active = 1")
+      .bind(input.purityId)
+      .first<{ id: string; permille: number; karat: string }>();
+    if (!purity) throw Object.assign(new Error("Karat not found"), { code: "NOT_FOUND" });
+  }
   const number = await nextOG(db);
   const id = crypto.randomUUID();
   const now = Date.now();
-  stmts.push(
+  const stmts: D1PreparedStatement[] = [
     db
       .prepare(
-        "INSERT INTO old_gold_items (id, number, customer_id, branch_id, item_type, description, gross_mg, stone_mg, net_mg, status, staff_id, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED', ?, ?, ?, ?)"
+        "INSERT INTO old_gold_items (id, number, customer_id, branch_id, item_type, description, gross_mg, stone_mg, net_mg, status, staff_id, notes, created_at, created_by, purity_id, tested_permille, karat) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       )
-      .bind(id, number, input.customerId, input.branchId, input.itemType, input.description, grossMg, stoneMg, netMg, actorId, input.notes ?? null, now, actorId),
+      .bind(
+        id,
+        number,
+        input.customerId,
+        input.branchId,
+        input.itemType?.trim() || "Old gold",
+        input.description?.trim() || `Old gold, ${input.grossG} g`,
+        grossMg,
+        stoneMg,
+        netMg,
+        purity ? "TESTED" : "RECEIVED",
+        actorId,
+        input.notes ?? null,
+        now,
+        actorId,
+        purity?.id ?? null,
+        purity?.permille ?? null,
+        purity?.karat ?? null
+      ),
+    db
+      .prepare("INSERT INTO old_gold_item_categories (item_id, category_id) VALUES (?, ?)")
+      .bind(id, category.id),
     buildAuditStmt(db, {
       userId: actorId,
       action: "oldgold.intake",
       entity: "old_gold",
       entityId: id,
-      next: { number, ...input },
+      next: { number, ...input, categoryId: category.id },
       branchId: input.branchId,
-    })
-  );
+    }),
+  ];
+  return { id, number, stmts };
+}
+
+export async function intakeItem(
+  db: D1Database,
+  input: CreateOldGoldInput,
+  actorId: string
+): Promise<{ id: string; number: string }> {
+  const built = await intakeStatements(db, input, actorId);
+  const stmts = [...built.stmts];
+  if (input.quotedRateLkr !== undefined)
+    stmts.push(
+      db
+        .prepare("INSERT INTO old_gold_quotes (item_id, rate_cents_per_g, created_at) VALUES (?, ?, ?)")
+        .bind(built.id, lkrToCents(input.quotedRateLkr), Date.now())
+    );
   await db.batch(stmts);
-  return { id, number };
+  return { id: built.id, number: built.number };
 }
 
 export async function recordTest(
@@ -294,6 +363,20 @@ export async function valuateItem(
 
   const stoneDed = lkrToCents(input.stoneDeductionLkr);
   const procDed = lkrToCents(input.processingDeductionLkr);
+  // A price typed at intake (net × price per gram) is the value, unless the
+  // valuation overrides the buy % or the negotiated total. Deductions still come off it.
+  const quote = await db
+    .prepare("SELECT rate_cents_per_g FROM old_gold_quotes WHERE item_id = ?")
+    .bind(itemId)
+    .first<{ rate_cents_per_g: number }>();
+  const quotedCents = quote ? Math.round((item.net_mg / 1000) * quote.rate_cents_per_g) : null;
+  const noOverride = input.buyPct === undefined && input.negotiatedLkr === undefined;
+  const negotiated =
+    input.negotiatedLkr !== undefined
+      ? lkrToCents(input.negotiatedLkr)
+      : noOverride && quotedCents !== null
+        ? quotedCents - stoneDed - procDed
+        : undefined;
   const v = valuateOldGold({
     netMg: item.net_mg,
     permille: item.tested_permille,
@@ -302,7 +385,7 @@ export async function valuateItem(
     buyPct,
     stoneDeductionCents: stoneDed,
     processingDeductionCents: procDed,
-    negotiatedCents: input.negotiatedLkr !== undefined ? lkrToCents(input.negotiatedLkr) : undefined,
+    negotiatedCents: negotiated,
   });
   // Price actually paid per gram of fine gold.
   const purchaseRate = Math.round((v.valueCents / v.fineMg) * 1000);
@@ -318,7 +401,7 @@ export async function valuateItem(
         purchaseRate,
         stoneDed,
         procDed,
-        input.negotiatedLkr !== undefined ? lkrToCents(input.negotiatedLkr) : null,
+        negotiated ?? null,
         v.valueCents,
         v.fineMg,
       ]
@@ -388,6 +471,8 @@ export async function purchaseItem(
     },
     { entryDate: await businessDateFor(db, now) }
   );
+  // Whatever is not paid in cash is credit for the customer: it settles their open bills, oldest first.
+  const credit = await creditToOpenBills(db, item.customer_id, remainder);
   await batchOrConflict(db, [
     // Guarded on VALUED and on the value the customer was quoted, so a racing
     // second purchase (or a re-valuation that landed in between) rolls back.
@@ -426,6 +511,7 @@ export async function purchaseItem(
     db
       .prepare("UPDATE old_gold_purchases SET journal_entry_id = ? WHERE id = ?")
       .bind(journal.entryId, purchaseId),
+    ...credit.stmts,
   ], "Item was already purchased or re-valued; reload and try again");
   return { purchaseId };
 }
@@ -616,8 +702,13 @@ export async function getItem(db: D1Database, id: string) {
   const converted = item.converted_product_id
     ? await db.prepare("SELECT id, barcode, sku, name, status FROM products WHERE id = ?").bind(item.converted_product_id).first()
     : null;
+  const category = await db
+    .prepare("SELECT cat.id, cat.name, cat.code FROM old_gold_item_categories ogc JOIN categories cat ON cat.id = ogc.category_id WHERE ogc.item_id = ?")
+    .bind(id)
+    .first();
   return {
     item: { ...item, image_keys: JSON.parse(item.image_keys), doc_keys: JSON.parse(item.doc_keys) },
+    category,
     customer,
     tests: tests ?? [],
     purchase,
@@ -669,7 +760,12 @@ export async function listItems(
     .first<{ total: number }>();
   const { results } = await db
     .prepare(
-      `SELECT o.*, c.name AS customer_name FROM old_gold_items o LEFT JOIN customers c ON c.id = o.customer_id ${where} ORDER BY o.created_at DESC LIMIT ? OFFSET ?`
+      `SELECT o.*, c.name AS customer_name, cat.name AS category_name, cat.code AS category_code
+       FROM old_gold_items o
+       LEFT JOIN customers c ON c.id = o.customer_id
+       LEFT JOIN old_gold_item_categories ogc ON ogc.item_id = o.id
+       LEFT JOIN categories cat ON cat.id = ogc.category_id
+       ${where} ORDER BY o.created_at DESC LIMIT ? OFFSET ?`
     )
     .bind(...vals, opts.limit, offset)
     .all();

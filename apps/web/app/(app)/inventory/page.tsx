@@ -17,11 +17,12 @@ import {
   PackageIcon,
   RefreshCwIcon,
   ScanBarcodeIcon,
+  TagsIcon,
   TruckIcon,
 } from "@/components/icons";
 import { AttentionCard, MovementFilters, PieceDetail, StockByBranch, StockByKarat } from "./panels";
 import { MovementComposer } from "./movement-composer";
-import { MovementTypeIcon, humanize, type Insights, type Movement, type Piece, type StockRow } from "./columns";
+import { MovementTypeIcon, humanize, type CategoryCount, type Insights, type Movement, type Piece, type StockRow } from "./columns";
 import {
   Card,
   CardHead,
@@ -40,11 +41,12 @@ import {
   tr,
 } from "./kit";
 
-type GroupBy = "branch" | "purity" | "product";
+type GroupBy = "branch" | "purity" | "product" | "category";
 const GROUP_NOUN: Record<GroupBy, [string, string]> = {
   branch: ["branch", "branches"],
   purity: ["purity", "purities"],
   product: ["piece", "pieces"],
+  category: ["category", "categories"],
 };
 
 const g = (mg: number) => mgToG(mg).toLocaleString("en-US", { maximumFractionDigits: 3 });
@@ -61,6 +63,7 @@ function useDebounced<T>(value: T, ms = 350): T {
 
 export default function InventoryPage() {
   const [groupBy, setGroupBy] = useState<GroupBy>("branch");
+  const [category, setCategory] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | undefined>(undefined);
 
   const [barcode, setBarcode] = useState("");
@@ -88,10 +91,20 @@ export default function InventoryPage() {
   });
 
   const stock = useQuery({
-    queryKey: ["stock", groupBy],
-    queryFn: () => api<StockRow[]>(`/api/v1/inventory/stock?groupBy=${groupBy}`),
+    queryKey: ["stock", groupBy, category],
+    queryFn: () => api<StockRow[]>(`/api/v1/inventory/stock?groupBy=${groupBy}${category ? `&categoryId=${encodeURIComponent(category)}` : ""}`),
     enabled: canView,
   });
+
+  // Pieces on hand per category. Shared by every grouping, so it is fetched once
+  // and only the table below narrows to the chosen category.
+  const categories = useQuery({
+    queryKey: ["stock", "categories"],
+    queryFn: () => api<CategoryCount[]>("/api/v1/inventory/stock/categories"),
+    enabled: canView,
+  });
+  const categoryTotal = (categories.data ?? []).reduce((s, c) => s + c.pieces, 0);
+  const categoryName = categories.data?.find((c) => c.id === category)?.name ?? "this category";
 
   const branches = useQuery({
     queryKey: ["branches"],
@@ -295,7 +308,9 @@ export default function InventoryPage() {
           title="Stock on hand"
           sub={
             stock.data
-              ? `${rows.length.toLocaleString("en-US")} ${GROUP_NOUN[groupBy][rows.length === 1 ? 0 : 1]}${groupBy === "product" ? " · click a row for details" : ""}`
+              ? category
+                ? `${totals.pieces.toLocaleString("en-US")} ${totals.pieces === 1 ? "piece" : "pieces"} in ${categoryName}`
+                : `${rows.length.toLocaleString("en-US")} ${GROUP_NOUN[groupBy][rows.length === 1 ? 0 : 1]}${groupBy === "product" ? " · click a row for details" : ""}`
               : `Grouped by ${groupBy}`
           }
           action={
@@ -303,6 +318,7 @@ export default function InventoryPage() {
               items={[
                 { key: "branch" as const, label: "By branch" },
                 { key: "purity" as const, label: "By purity" },
+                { key: "category" as const, label: "By category" },
                 { key: "product" as const, label: "By product" },
               ]}
               value={groupBy}
@@ -313,6 +329,9 @@ export default function InventoryPage() {
             />
           }
         />
+        {categories.data && categories.data.length > 0 ? (
+          <CategoryPills items={categories.data} total={categoryTotal} value={category} onChange={setCategory} />
+        ) : null}
         <StockTable
           rows={rows}
           groupBy={groupBy}
@@ -373,6 +392,37 @@ export default function InventoryPage() {
 
       {detail ? <PieceDetail piece={detail} onClose={() => setDetail(null)} onMove={focusMovement} branchName={(id) => branchName(id)} /> : null}
     </Page>
+  );
+}
+
+/* ---------------------------------------------------------------- filters */
+
+/** Category filter: "All" plus one pill per category with pieces on hand. Click again to clear. */
+function CategoryPills({ items, total, value, onChange }: { items: CategoryCount[]; total: number; value: string; onChange: (id: string) => void }) {
+  const options: CategoryCount[] = [{ id: "", name: "All", pieces: total }, ...items];
+  return (
+    <div role="group" aria-label="Filter by category" className="flex gap-1.5 overflow-x-auto border-b border-ink/[0.06] px-4 py-2.5 scrollbar-thin">
+      {options.map((c) => {
+        const on = value === c.id;
+        return (
+          <button
+            key={c.id || "all"}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onChange(on ? "" : c.id)}
+            className={cn(
+              "g-metric inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[11.5px] font-semibold transition-all duration-200",
+              on
+                ? "bg-gradient-to-b from-gold-light to-gold text-void shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_8px_18px_-10px_rgba(205,168,83,0.8)]"
+                : "bg-gold-pale text-gold-deep ring-1 ring-gold-dark/15 hover:-translate-y-px hover:ring-gold-dark/40"
+            )}
+          >
+            {c.name}
+            <span className={cn("text-[10.5px] font-medium tabular-nums", on ? "text-void/70" : "text-gold-dark/70")}>{c.pieces.toLocaleString("en-US")}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -439,7 +489,7 @@ function StockTable({
         }
       />
     );
-  const first = groupBy === "branch" ? "Branch" : groupBy === "purity" ? "Purity" : "Product";
+  const first = groupBy === "branch" ? "Branch" : groupBy === "purity" ? "Purity" : groupBy === "category" ? "Category" : "Product";
   return (
     <div className="max-h-[30rem] overflow-auto scrollbar-thin">
       <table className="w-full text-[12.5px]">
@@ -466,6 +516,11 @@ function StockTable({
                   ) : groupBy === "branch" ? (
                     <span className="flex items-center gap-2">
                       <Building2Icon size={12} className="shrink-0 text-ink-5" />
+                      <span className="font-medium text-ink">{nameFor(r)}</span>
+                    </span>
+                  ) : groupBy === "category" ? (
+                    <span className="flex items-center gap-2">
+                      <TagsIcon size={12} className="shrink-0 text-ink-5" />
                       <span className="font-medium text-ink">{nameFor(r)}</span>
                     </span>
                   ) : (

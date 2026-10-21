@@ -49,9 +49,28 @@ type Detail = {
     tax_cents: number;
     making_cents: number;
   }[];
-  payments: { method: string; amount_cents: number; bank_account_name: string | null }[];
+  payments: { method: string; amount_cents: number; bank_account_name: string | null; cheque_no?: string | null; cheque_bank?: string | null }[];
   receipts: { number: string; receipt_date: string; method: string; status: string; amount_cents: number }[];
   returns: { number: string; type: string; refund_cents: number; credit_cents: number }[];
+  /** Old gold taken in against this bill (an exchange), with what the shop paid out for it. */
+  oldGoldExchange?: {
+    items: { number: string; description: string; fine_mg: number; value_cents: number; paid_cents: number }[];
+    valueCents: number;
+    paidOutCents: number;
+  } | null;
+};
+
+/** The old-gold part of a bill, worked out for printing: how much of the bill it settles and any surplus paid out. */
+type OldGoldBill = {
+  items: NonNullable<Detail["oldGoldExchange"]>["items"];
+  /** Old gold value applied against the bill's total. */
+  appliedCents: number;
+  /** Old gold value above the bill, which the shop pays the customer. */
+  surplusCents: number;
+  /** Part of the surplus paid out in cash. */
+  paidOutCents: number;
+  /** Part of the surplus left on the customer's account as store credit. */
+  storeCreditCents: number;
 };
 
 type Profile = {
@@ -77,8 +96,12 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   VOID: { label: "Void", cls: "bg-ink/[0.05] text-ink-3 ring-ink/15" },
 };
 
-function methodLabel(p: { method: string; bank_account_name?: string | null }) {
-  const m = p.method === "credit" ? "On account" : p.method.charAt(0).toUpperCase() + p.method.slice(1);
+function methodLabel(p: { method: string; bank_account_name?: string | null; cheque_no?: string | null; cheque_bank?: string | null }) {
+  const m = p.method === "credit" ? "On credit (pay later)" : p.method.charAt(0).toUpperCase() + p.method.slice(1);
+  if (p.method === "cheque") {
+    const d = [p.cheque_no ? `#${p.cheque_no}` : null, p.cheque_bank].filter(Boolean).join(" ");
+    return d ? `${m} · ${d}` : m;
+  }
   return p.bank_account_name ? `${m} · ${p.bank_account_name}` : m;
 }
 
@@ -160,6 +183,21 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
     { gross: 0, net: 0, making: 0 }
   );
   const balance = Math.max(0, invoice.balance_cents ?? invoice.total_cents - invoice.paid_cents);
+  const oldGoldRaw = detail.data.oldGoldExchange ?? null;
+  const oldGold: OldGoldBill | null = oldGoldRaw
+    ? (() => {
+        const applied = Math.min(oldGoldRaw.valueCents, invoice.total_cents);
+        const surplus = Math.max(0, oldGoldRaw.valueCents - invoice.total_cents);
+        const paidOut = Math.min(surplus, oldGoldRaw.paidOutCents);
+        return {
+          items: oldGoldRaw.items,
+          appliedCents: applied,
+          surplusCents: surplus,
+          paidOutCents: paidOut,
+          storeCreditCents: surplus - paidOut,
+        };
+      })()
+    : null;
   const shareText = `${shop.shopName} — Invoice ${invoice.number}\nTotal: LKR ${fmt(invoice.total_cents)}${balance > 0 ? `\nBalance due: LKR ${fmt(balance)}` : "\nPaid in full"}\nThank you!`;
 
   return (
@@ -274,6 +312,7 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
           change={change}
           balance={balance}
           status={status.label}
+          oldGold={oldGold}
         />
       ) : (
         <article className="print-area invoice-sheet mx-auto w-full max-w-[210mm] animate-fade-in overflow-hidden rounded-[18px] bg-paper text-ink shadow-[0_1px_2px_rgba(16,32,27,0.06),0_40px_80px_-36px_rgba(16,32,27,0.45)] ring-1 ring-ink/[0.08] print:max-w-none print:rounded-none print:shadow-none print:ring-0">
@@ -413,6 +452,28 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
                 <p className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-gold-deep">Amount in words</p>
                 <p className="mt-1 font-medium text-ink">{amountInWords(invoice.total_cents)}</p>
               </div>
+              {oldGold ? (
+                <div>
+                  <p className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-ink-4">Old gold taken in</p>
+                  <table className="mt-1 w-full">
+                    <tbody>
+                      {oldGold.items.map((o) => (
+                        <tr key={o.number}>
+                          <td className="py-0.5 text-ink-2">
+                            <span className="font-mono text-[11.5px]">{o.number}</span> · {o.description}
+                          </td>
+                          <td className="py-0.5 text-right num-tabular text-ink-3">{grams(o.fine_mg)} g fine</td>
+                          <td className="py-0.5 pl-4 text-right num-tabular text-ink">{fmt(o.value_cents)}</td>
+                        </tr>
+                      ))}
+                      <tr className="border-t border-ink/15 font-semibold">
+                        <td className="py-0.5" colSpan={2}>Total old gold</td>
+                        <td className="py-0.5 pl-4 text-right num-tabular">{fmt(oldGold.items.reduce((s, o) => s + o.value_cents, 0))}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
               <div>
                 <p className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-ink-4">Payment received</p>
                 <table className="mt-1 w-full">
@@ -435,7 +496,7 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
                         </tr>
                       </>
                     ) : null}
-                    {(invoice.store_credit_cents ?? 0) > 0 ? (
+                    {(invoice.store_credit_cents ?? 0) > 0 && !oldGold ? (
                       <tr className="text-ink-4">
                         <td className="py-0.5">Settled from store credit</td>
                         <td className="py-0.5 text-right num-tabular">{fmt(invoice.store_credit_cents!)}</td>
@@ -492,13 +553,33 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
                 <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gold-light">Total LKR</span>
                 <span className="font-display text-2xl font-bold text-gold-light num-tabular">{fmt(invoice.total_cents)}</span>
               </div>
+              {oldGold ? (
+                <dl className="mt-3 space-y-1.5 text-[13px] num-tabular">
+                  <div className="flex justify-between text-emerald-800">
+                    <dt>Less old gold taken in</dt>
+                    <dd>− {fmt(oldGold.appliedCents)}</dd>
+                  </div>
+                  {oldGold.paidOutCents > 0 ? (
+                    <div className="flex justify-between text-ink-2">
+                      <dt>Paid out to customer · cash</dt>
+                      <dd>{fmt(oldGold.paidOutCents)}</dd>
+                    </div>
+                  ) : null}
+                  {oldGold.storeCreditCents > 0 ? (
+                    <div className="flex justify-between text-ink-2">
+                      <dt>Store credit to customer</dt>
+                      <dd>{fmt(oldGold.storeCreditCents)}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              ) : null}
               <dl className="mt-3 space-y-1.5 text-[13px] num-tabular">
                 <div className="flex justify-between text-ink-2">
-                  <dt>Amount paid</dt>
-                  <dd className="font-medium">{fmt(invoice.paid_cents)}</dd>
+                  <dt>{oldGold ? "Customer paid" : "Amount paid"}</dt>
+                  <dd className="font-medium">{fmt(oldGold ? Math.max(0, invoice.paid_cents - oldGold.appliedCents) : invoice.paid_cents)}</dd>
                 </div>
                 <div className={cn("flex justify-between rounded-lg px-2 py-1 -mx-2", balance > 0 ? "bg-rose-50 font-semibold text-rose-800" : "text-emerald-800")}>
-                  <dt>{balance > 0 ? "Balance due" : "Balance"}</dt>
+                  <dt>{balance > 0 ? "Balance due (on credit)" : "Balance"}</dt>
                   <dd>{fmt(balance)}</dd>
                 </div>
               </dl>
@@ -550,6 +631,7 @@ function ThermalReceipt({
   change,
   balance,
   status,
+  oldGold,
 }: {
   id: string;
   shop: Profile;
@@ -560,6 +642,7 @@ function ThermalReceipt({
   change: number;
   balance: number;
   status: string;
+  oldGold: OldGoldBill | null;
 }) {
   const taxed = (invoice.tax_cents ?? 0) > 0;
   const Row = ({ l, r, b }: { l: React.ReactNode; r: React.ReactNode; b?: boolean }) => (
@@ -600,6 +683,18 @@ function ThermalReceipt({
         <span>TOTAL LKR</span>
         <span className="num-tabular">{fmt(invoice.total_cents)}</span>
       </p>
+      {oldGold ? (
+        <>
+          <div className="my-1 border-t border-dashed border-ink/50" />
+          <p className="font-sans text-[10.5px] font-semibold uppercase tracking-widest">Old gold taken in</p>
+          {oldGold.items.map((o) => (
+            <Row key={o.number} l={`${o.number} · ${grams(o.fine_mg)}g fine`} r={fmt(o.value_cents)} />
+          ))}
+          <Row l="Less old gold" r={`-${fmt(oldGold.appliedCents)}`} b />
+          {oldGold.paidOutCents > 0 ? <Row l="Paid out to customer · cash" r={fmt(oldGold.paidOutCents)} /> : null}
+          {oldGold.storeCreditCents > 0 ? <Row l="Store credit to customer" r={fmt(oldGold.storeCreditCents)} /> : null}
+        </>
+      ) : null}
       <div className="my-1 border-t border-ink" />
       {payments.map((p, i) => (
         <Row key={i} l={methodLabel(p)} r={fmt(p.amount_cents)} />
@@ -613,7 +708,7 @@ function ThermalReceipt({
       {receipts.map((r) => (
         <Row key={r.number} l={`Rcpt ${r.number}`} r={fmt(r.amount_cents)} />
       ))}
-      {balance > 0 ? <Row l="BALANCE DUE" r={fmt(balance)} b /> : null}
+      {balance > 0 ? <Row l="BALANCE DUE (CREDIT)" r={fmt(balance)} b /> : null}
       <p className="mt-1 text-center text-[10.5px] uppercase">{status}</p>
       {invoice.notes ? <p className="mt-1.5 whitespace-pre-line text-[10.5px]">Note: {invoice.notes}</p> : null}
       <div className="my-2 border-t border-dashed border-ink/50" />

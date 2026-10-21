@@ -103,18 +103,29 @@ async function currentPlan(c: { env: Env; get: (key: string) => unknown }): Prom
   return plan ? { sub, plan } : null;
 }
 
-/** Refuses a create that would take the shop past its plan's limit. */
-export const enforcePlanLimit = (what: Metered) =>
+/**
+ * Refuses a create that would take the shop past its plan's limit. `adding`
+ * counts what one request creates (a bulk intake adds many products at once);
+ * a malformed body counts as one and is left for the route to reject.
+ */
+export const enforcePlanLimit = (what: Metered, adding?: (body: unknown) => number) =>
   createMiddleware<{ Bindings: Env; Variables: AppVariables }>(async (c, next) => {
     const cur = await currentPlan(c);
     const max = cur?.plan[LIMIT_COL[what]];
     if (max === null || max === undefined) return next();
     const used = (await getShopDb(c).prepare(COUNT_SQL[what]).first<{ n: number }>())?.n ?? 0;
-    if (used >= max)
+    const n = adding ? Math.max(1, adding(await c.req.json().catch(() => null))) : 1;
+    if (used + n > max)
       return c.json(
         {
           success: false,
-          error: { code: "PLAN_LIMIT", message: `Your ${cur!.plan.name} plan allows ${max} ${what}. Upgrade to add more.` },
+          error: {
+            code: "PLAN_LIMIT",
+            message:
+              n > 1 && used < max
+                ? `Your ${cur!.plan.name} plan allows ${max} ${what}; only ${max - used} more can be added, not ${n}. Upgrade to add more.`
+                : `Your ${cur!.plan.name} plan allows ${max} ${what}. Upgrade to add more.`,
+          },
         },
         403
       );

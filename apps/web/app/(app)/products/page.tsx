@@ -30,6 +30,7 @@ import {
   StoreIcon,
   TagsIcon,
   XIcon,
+  PackagePlusIcon,
 } from "@/components/icons";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
@@ -516,6 +517,10 @@ export default function ProductsPage() {
               <PrinterIcon size={13} />
               Labels
             </Link>
+            <Link href="/products/bulk" className={heroGhost}>
+              <PackagePlusIcon size={13} />
+              Bulk add
+            </Link>
             <Link href="/products/new" className={heroGold}>
               <PlusIcon size={13} />
               New product
@@ -857,11 +862,11 @@ export default function ProductsPage() {
                 ))}
               </div>
             ) : (
-              <table className="w-full min-w-[880px] text-[12.5px]">
+              <table className="w-full min-w-[960px] text-[12.5px]">
                 <thead className={thead}>
                   <tr>
-                    <th className={cn(th, "pl-4")}>Piece</th>
-                    <th className={th}>Barcode · SKU</th>
+                    <th className={cn(th, "pl-4")}>Barcode</th>
+                    <th className={th}>Category</th>
                     <th className={th}>Karat</th>
                     <th className={cn(th, "text-right")}>Net g</th>
                     <th className={cn(th, "text-right")}>Fine g</th>
@@ -880,18 +885,14 @@ export default function ProductsPage() {
                             <ProductMedia p={r} className="[&_svg]:size-5" />
                           </span>
                           <span className="min-w-0 leading-tight">
-                            <span className="block max-w-[16rem] truncate font-semibold text-ink transition-colors group-hover:text-gold-deep">{r.name}</span>
-                            <span className="block truncate text-[10.5px] text-ink-4">
-                              {r.category_name}
-                              {r.metal_name ? ` · ${r.metal_name}` : ""}
-                              {r.location ? ` · @ ${r.location}` : ""}
-                            </span>
+                            <span className="g-metric block text-[12px] font-semibold text-gold-deep transition-colors group-hover:text-gold-dark">{r.barcode}</span>
+                            <span className="g-metric block text-[10.5px] text-ink-5">{r.sku}</span>
                           </span>
                         </Link>
                       </td>
                       <td className="px-2 leading-tight">
-                        <span className="g-metric block text-[11.5px] font-semibold text-gold-deep">{r.barcode}</span>
-                        <span className="g-metric block text-[10.5px] text-ink-5">{r.sku}</span>
+                        <span className="block max-w-[12rem] truncate font-medium text-ink">{r.category_name}</span>
+                        {r.location ? <span className="block truncate text-[10.5px] text-ink-4">@ {r.location}</span> : null}
                       </td>
                       <td className="px-2">
                         <span className="g-metric rounded bg-gradient-to-b from-gold-light to-gold px-1.5 py-px text-[10px] font-bold text-void">{r.karat}</span>
@@ -914,7 +915,7 @@ export default function ProductsPage() {
                       <td className="py-1.5 pl-2 pr-4 text-right">
                         <Link
                           href={`/products/${r.id}`}
-                          aria-label={`Open ${r.name}`}
+                          aria-label={`Open ${r.barcode}`}
                           className="inline-flex size-7 items-center justify-center rounded-full text-ink-5 ring-1 ring-inset ring-ink/10 transition-all group-hover:bg-void group-hover:text-gold-light group-hover:ring-0"
                         >
                           <ArrowRightIcon size={12} />

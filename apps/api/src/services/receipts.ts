@@ -3,6 +3,7 @@ import { buildAuditStmt } from "../middleware/audit";
 import { businessDateFor, LOCAL_DAY } from "./busdate";
 import { fail } from "./cashbank";
 import { buildEntryStmts, reverseEntry } from "./journal";
+import { staleGuard } from "./guard";
 
 const RECEIVABLES = "1200";
 const CASH = "1000";
@@ -61,6 +62,40 @@ export function settlementStmt(db: D1Database, invoiceId: string): D1PreparedSta
        WHERE si.id = ?`
     )
     .bind(invoiceId);
+}
+
+/**
+ * Credit given to a customer (old gold left over after the bill, or paid in at
+ * intake) is applied to their open bills, oldest first, so those bills show as
+ * settled. Returns the statements and how much of the credit reached a bill.
+ * Each bill is guarded on the paid amount read here: one that moved meanwhile
+ * changes nothing and the batch rolls back.
+ */
+export async function creditToOpenBills(
+  db: D1Database,
+  customerId: string,
+  cents: number
+): Promise<{ stmts: D1PreparedStatement[]; appliedCents: number }> {
+  const stmts: D1PreparedStatement[] = [];
+  if (cents <= 0) return { stmts, appliedCents: 0 };
+  const { results } = await db
+    .prepare("SELECT id, total_cents, paid_cents FROM sales_invoices WHERE customer_id = ? AND status IN ('UNPAID','PARTIAL') ORDER BY created_at, id")
+    .bind(customerId)
+    .all<{ id: string; total_cents: number; paid_cents: number }>();
+  let left = cents;
+  for (const bill of results ?? []) {
+    const applied = Math.min(bill.total_cents - bill.paid_cents, left);
+    if (applied <= 0) continue;
+    left -= applied;
+    stmts.push(
+      db
+        .prepare("UPDATE sales_invoices SET store_credit_cents = store_credit_cents + ? WHERE id = ? AND paid_cents = ?")
+        .bind(applied, bill.id, bill.paid_cents),
+      staleGuard(db),
+      settlementStmt(db, bill.id)
+    );
+  }
+  return { stmts, appliedCents: cents - left };
 }
 
 export type ReceivableRow = {
@@ -253,7 +288,14 @@ export async function createReceipt(
     .bind(input.branchId)
     .first();
   if (!branch) fail("NOT_FOUND", "Branch not found");
-  const money = await moneyAccount(db, input.method, input.bankAccountId);
+  // A cheque is cash in the drawer; its number rides in the note.
+  if (input.method === "cheque") {
+    const detail = ["Cheque", input.chequeNo ? `no. ${input.chequeNo}` : null, input.chequeBank ? `(${input.chequeBank})` : null]
+      .filter(Boolean)
+      .join(" ");
+    input = { ...input, method: "cash", note: [detail, input.note].filter(Boolean).join(" · ") };
+  }
+  const money = await moneyAccount(db, input.method as "cash" | "bank" | "card", input.bankAccountId);
   const cap = await customerBalance(db, input.customerId, input.branchId);
   const open = await openInvoices(db, { customerId: input.customerId, branchId: input.branchId });
   const allocations = allocateReceipt(input.amountCents, open, cap);

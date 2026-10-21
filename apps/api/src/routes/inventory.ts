@@ -4,7 +4,7 @@ import { PERMISSIONS } from "@goldos/shared";
 import type { Env } from "../db/client";
 import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
-import { inventoryInsights, listMovements, recordMovement, stockSummary } from "../services/inventory";
+import { categoryCounts, inventoryInsights, listMovements, recordMovement, stockSummary } from "../services/inventory";
 import { branchScope, inScope } from "../services/branchAccess";
 import { pagination, serviceError } from "./http";
 import { getShopDb } from "../platform/resolve";
@@ -19,7 +19,7 @@ const moveSchema = z.object({
 });
 
 const stockQuery = z.object({
-  groupBy: z.enum(["branch", "purity", "product"]).optional().default("branch"),
+  groupBy: z.enum(["branch", "purity", "product", "category"]).optional().default("branch"),
 });
 
 export const inventory = new Hono<{ Bindings: Env; Variables: AppVariables }>()
@@ -71,6 +71,14 @@ export const inventory = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     const scope = await branchScope(getShopDb(c), c.get("userId"), c.get("permissions") as string[]);
     const branchId = c.req.query("branchId") || undefined;
     if (branchId && !inScope(scope, branchId)) return c.json(forbiddenBranch, 403);
-    const data = await stockSummary(getShopDb(c), parsed.data.groupBy, scope, branchId);
+    const categoryId = c.req.query("categoryId") || undefined;
+    const data = await stockSummary(getShopDb(c), parsed.data.groupBy, scope, branchId, categoryId);
+    return c.json({ success: true, data }, 200);
+  })
+  .get("/stock/categories", requirePerm(PERMISSIONS.PRODUCTS_VIEW), async (c) => {
+    const scope = await branchScope(getShopDb(c), c.get("userId"), c.get("permissions") as string[]);
+    const branchId = c.req.query("branchId") || undefined;
+    if (branchId && !inScope(scope, branchId)) return c.json(forbiddenBranch, 403);
+    const data = await categoryCounts(getShopDb(c), scope, branchId);
     return c.json({ success: true, data }, 200);
   });

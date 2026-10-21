@@ -39,6 +39,7 @@ const CASH_LABELS: Record<string, string> = {
   owner_drawing: "Owner took money out",
   staff_advance: "Staff took money",
   other_income: "Other income",
+  other_expense: "Other expenses",
   cash_correction: "Cash corrections",
   tax_payment: "Tax paid",
 };

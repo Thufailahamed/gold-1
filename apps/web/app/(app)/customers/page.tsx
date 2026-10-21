@@ -9,6 +9,7 @@ const PARTY_COLUMNS: CrudColumn[] = [
   { key: "code", label: "Code" },
   { key: "name", label: "Name" },
   { key: "phone", label: "Phone" },
+  { key: "address", label: "Address" },
   { key: "nic", label: "NIC" },
   { key: "credit_limit", label: "Credit limit" },
 ];

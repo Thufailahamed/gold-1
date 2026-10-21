@@ -14,7 +14,7 @@ import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
 import { businessDateFor, tzOffsetMinutes } from "../services/busdate";
 import { assertBranchAccess, branchScope, inScope } from "../services/branchAccess";
-import { addFiles, assertCanAddFiles, convertItem, customerOldgold, findByBarcode, getItem, intakeItem, listItems, oldgoldBreakdown, oldgoldSummary, pendingList, purchaseItem, recordTest, releaseItem, valuateItem, voidItem } from "../services/oldgold";
+import { addFiles, assertCanAddFiles, convertItem, customerOldgold, findByBarcode, getItem, intakeItem, listItems, oldGoldCategories, oldgoldBreakdown, oldgoldSummary, pendingList, purchaseItem, recordTest, releaseItem, valuateItem, voidItem } from "../services/oldgold";
 import { pagination, serviceError } from "./http";
 import { getShopDb } from "../platform/resolve";
 
@@ -76,6 +76,13 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       await assertBranchAccess(getShopDb(c), c.get("userId"), c.get("permissions"), parsed.data.branchId);
       const data = await intakeItem(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 201);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  .get("/categories", requirePerm(PERMISSIONS.OLDGOLD_VIEW), async (c) => {
+    try {
+      return c.json({ success: true, data: { rows: await oldGoldCategories(getShopDb(c)) } }, 200);
     } catch (err) {
       return serviceError(c, err);
     }

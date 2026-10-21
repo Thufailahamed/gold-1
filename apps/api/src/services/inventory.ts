@@ -385,11 +385,13 @@ export async function listMovements(
 
 export async function stockSummary(
   db: D1Database,
-  groupBy: "branch" | "purity" | "product",
+  groupBy: "branch" | "purity" | "product" | "category",
   scope: string[] | null = null,
-  branchId?: string
+  branchId?: string,
+  categoryId?: string
 ): Promise<Record<string, unknown>[]> {
-  const col = groupBy === "branch" ? "p.branch_id" : groupBy === "purity" ? "p.purity_id" : "p.id";
+  const col =
+    groupBy === "branch" ? "p.branch_id" : groupBy === "purity" ? "p.purity_id" : groupBy === "category" ? "p.category_id" : "p.id";
   // Grouping by product is one row per piece, so its name and barcode are
   // well-defined and let the table show something a person can recognise.
   // Branch and purity groups carry their display name so the table never has
@@ -399,10 +401,12 @@ export async function stockSummary(
       ? ", p.name AS name, p.barcode AS barcode"
       : groupBy === "branch"
         ? ", (SELECT b.name FROM branches b WHERE b.id = p.branch_id) AS name"
-        : ", (SELECT pu.karat FROM purities pu WHERE pu.id = p.purity_id) AS name";
+        : groupBy === "category"
+          ? ", (SELECT c.name FROM categories c WHERE c.id = p.category_id) AS name"
+          : ", (SELECT pu.karat FROM purities pu WHERE pu.id = p.purity_id) AS name";
   const sc = scopeCond("p.branch_id", scope);
-  const bf = branchId ? " AND p.branch_id = ?" : "";
-  const binds = [...sc.vals, ...(branchId ? [branchId] : [])];
+  const { sql: bf, vals: fv } = onHandFilter(branchId, categoryId);
+  const binds = [...sc.vals, ...fv];
   const { results } = await db
     .prepare(
       `SELECT ${col} AS key${extra}, COUNT(*) AS pieces, SUM(p.net_mg) AS net_mg, SUM(p.fine_gold_mg) AS fine_mg FROM products p WHERE p.status IN (${ON_HAND_SQL})${sc.sql}${bf} GROUP BY ${col} ORDER BY net_mg DESC`
@@ -411,20 +415,151 @@ export async function stockSummary(
     .all();
   const rates = await currentGoldRatesCents(db);
   const byPurity = new Map(rates.map((r) => [r.purity_id, r.rate_cents_per_g]));
+  const oldGold = await oldGoldOnHand(db, scope, branchId, categoryId);
   const { results: all } = await db
-    .prepare(`SELECT id, branch_id, purity_id, net_mg FROM products p WHERE status IN (${ON_HAND_SQL})${sc.sql}${bf}`)
+    .prepare(`SELECT id, branch_id, purity_id, category_id, net_mg FROM products p WHERE status IN (${ON_HAND_SQL})${sc.sql}${bf}`)
     .bind(...binds)
-    .all<{ id: string; branch_id: string; purity_id: string; net_mg: number }>();
+    .all<{ id: string; branch_id: string; purity_id: string; category_id: string; net_mg: number }>();
   const valByKey = new Map<string, number>();
   for (const row of all ?? []) {
-    const k = groupBy === "branch" ? row.branch_id : groupBy === "purity" ? row.purity_id : row.id;
+    const k =
+      groupBy === "branch"
+        ? row.branch_id
+        : groupBy === "purity"
+          ? row.purity_id
+          : groupBy === "category"
+            ? row.category_id
+            : row.id;
     const rate = byPurity.get(row.purity_id) ?? 0;
     valByKey.set(k, (valByKey.get(k) ?? 0) + Math.round((row.net_mg * rate) / 1000));
   }
-  return (results ?? []).map((r) => ({
-    ...(r as object),
-    value_cents: valByKey.get((r as { key: string }).key) ?? 0,
-  }));
+  const merged = new Map<string, Record<string, unknown>>();
+  for (const r of results ?? []) {
+    const row = r as { key: string };
+    merged.set(row.key, { ...(r as object), value_cents: valByKey.get(row.key) ?? 0 });
+  }
+  // Old gold on hand joins the same groups, under its own branch, purity, category or piece.
+  for (const o of oldGold) {
+    const key =
+      groupBy === "branch"
+        ? o.branch_id
+        : groupBy === "purity"
+          ? (o.purity_id ?? OLD_GOLD_KEY)
+          : groupBy === "category"
+            ? (o.category_id ?? OLD_GOLD_KEY)
+            : o.id;
+    const name =
+      groupBy === "branch"
+        ? o.branch_name
+        : groupBy === "purity"
+          ? o.karat
+          : groupBy === "category"
+            ? (o.category_name ?? "Old gold")
+            : o.description;
+    const row = merged.get(key) ?? {
+      key,
+      name,
+      ...(groupBy === "product" ? { barcode: o.number } : {}),
+      pieces: 0,
+      net_mg: 0,
+      fine_mg: 0,
+      value_cents: 0,
+    };
+    row.pieces = Number(row.pieces) + 1;
+    row.net_mg = Number(row.net_mg) + o.net_mg;
+    row.fine_mg = Number(row.fine_mg) + o.fine_mg;
+    row.value_cents = Number(row.value_cents) + oldGoldValue(o, byPurity);
+    merged.set(key, row);
+  }
+  return [...merged.values()].sort((a, b) => Number(b.net_mg) - Number(a.net_mg));
+}
+
+/** Old gold counts as stock once bought in: until it is melted, resold or moved. */
+const OLD_GOLD_ON_HAND_SQL = "'PURCHASED','AVAILABLE','RESERVED_FOR_MELTING'";
+/** Group key for old gold with no category or purity on file. */
+const OLD_GOLD_KEY = "old-gold";
+
+type OldGoldStock = {
+  id: string;
+  number: string;
+  description: string;
+  branch_id: string;
+  branch_name: string | null;
+  purity_id: string | null;
+  karat: string | null;
+  net_mg: number;
+  fine_mg: number;
+  purchase_value_cents: number | null;
+  category_id: string | null;
+  category_name: string | null;
+};
+
+/** Old gold on hand, in scope, optionally narrowed to a branch or category. */
+async function oldGoldOnHand(
+  db: D1Database,
+  scope: string[] | null,
+  branchId?: string,
+  categoryId?: string
+): Promise<OldGoldStock[]> {
+  const sc = scopeCond("o.branch_id", scope);
+  let sql = `SELECT o.id, o.number, o.description, o.branch_id, b.name AS branch_name, o.purity_id, o.karat, o.net_mg, o.fine_mg, o.purchase_value_cents, ogc.category_id, cat.name AS category_name
+    FROM old_gold_items o
+    LEFT JOIN old_gold_item_categories ogc ON ogc.item_id = o.id
+    LEFT JOIN categories cat ON cat.id = ogc.category_id
+    LEFT JOIN branches b ON b.id = o.branch_id
+    WHERE o.status IN (${OLD_GOLD_ON_HAND_SQL})${sc.sql}`;
+  const vals: string[] = [...sc.vals];
+  if (branchId) {
+    sql += " AND o.branch_id = ?";
+    vals.push(branchId);
+  }
+  if (categoryId) {
+    sql += " AND ogc.category_id = ?";
+    vals.push(categoryId);
+  }
+  const { results } = await db.prepare(sql).bind(...vals).all<OldGoldStock>();
+  return results ?? [];
+}
+
+/** Value of an old gold piece at today's rate for its karat, or what was paid when no rate is set. */
+function oldGoldValue(item: OldGoldStock, rateOf: Map<string, number>): number {
+  const rate = item.purity_id ? rateOf.get(item.purity_id) : undefined;
+  return rate ? priceStock(item.net_mg, rate) : (item.purchase_value_cents ?? 0);
+}
+
+/** Optional branch and category narrowing for on-hand queries, with its binds in order. */
+function onHandFilter(branchId?: string, categoryId?: string): { sql: string; vals: string[] } {
+  return {
+    sql: `${branchId ? " AND p.branch_id = ?" : ""}${categoryId ? " AND p.category_id = ?" : ""}`,
+    vals: [...(branchId ? [branchId] : []), ...(categoryId ? [categoryId] : [])],
+  };
+}
+
+/**
+ * Pieces on hand per category, largest first. Categories with no stock in
+ * scope are left out, so the filter only offers choices that show something.
+ */
+export async function categoryCounts(
+  db: D1Database,
+  scope: string[] | null = null,
+  branchId?: string
+): Promise<{ id: string; name: string; pieces: number }[]> {
+  const sc = scopeCond("p.branch_id", scope);
+  const f = onHandFilter(branchId);
+  const { results } = await db
+    .prepare(
+      `SELECT c.id AS id, c.name AS name, COUNT(p.id) AS pieces FROM categories c JOIN products p ON p.category_id = c.id AND p.status IN (${ON_HAND_SQL})${sc.sql}${f.sql} GROUP BY c.id, c.name ORDER BY pieces DESC, c.name ASC`
+    )
+    .bind(...sc.vals, ...f.vals)
+    .all<{ id: string; name: string; pieces: number }>();
+  const counts = new Map((results ?? []).map((r) => [r.id, { ...r }]));
+  for (const o of await oldGoldOnHand(db, scope, branchId)) {
+    const id = o.category_id ?? OLD_GOLD_KEY;
+    const row = counts.get(id) ?? { id, name: o.category_name ?? "Old gold", pieces: 0 };
+    row.pieces += 1;
+    counts.set(id, row);
+  }
+  return [...counts.values()].sort((a, b) => b.pieces - a.pieces || a.name.localeCompare(b.name));
 }
 
 export type KaratLine = {
@@ -489,6 +624,8 @@ export async function inventoryInsights(db: D1Database, scope: string[] | null =
   const sc = scopeCond("p.branch_id", scope);
   const scP = scopeCond("branch_id", scope);
   const scM = scope === null ? { sql: "", vals: [] as string[] } : scope.length === 0 ? { sql: " AND 1 = 0", vals: [] as string[] } : { sql: ` AND (from_branch IN (${scope.map(() => "?").join(",")}) OR to_branch IN (${scope.map(() => "?").join(",")}))`, vals: [...scope, ...scope] };
+  const rateOf = new Map((await currentGoldRatesCents(db)).map((r) => [r.purity_id, r.rate_cents_per_g]));
+  const oldGold = await oldGoldOnHand(db, scope);
   const [{ results: rows }, counts, last, c24] = await Promise.all([
     // Value is rounded per product inside SQL, exactly as stockSummary does
     // in JS. Rounding after the GROUP BY would sum the aggregate weight first
@@ -519,7 +656,19 @@ export async function inventoryInsights(db: D1Database, scope: string[] | null =
   const branch = new Map<string, BranchLine>();
   const totals = { pieces: 0, net_mg: 0, fine_mg: 0, value_cents: 0 };
 
-  for (const r of rows ?? []) {
+  // Old gold on hand counts beside the pieces, by its own purity and branch.
+  const oldGoldLines: InsightRow[] = oldGold.map((o) => ({
+    group_key: o.purity_id ?? OLD_GOLD_KEY,
+    branch_id: o.branch_id,
+    branch_name: o.branch_name,
+    karat: o.karat ?? "Old gold",
+    permille: 0,
+    pieces: 1,
+    net_mg: o.net_mg,
+    fine_mg: o.fine_mg,
+    value_cents: oldGoldValue(o, rateOf),
+  }));
+  for (const r of [...(rows ?? []), ...oldGoldLines]) {
     const pieces = Number(r.pieces ?? 0);
     const netMg = Number(r.net_mg ?? 0);
     const fineMg = Number(r.fine_mg ?? 0);

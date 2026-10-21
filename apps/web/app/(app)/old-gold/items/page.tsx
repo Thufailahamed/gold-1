@@ -28,7 +28,7 @@ import {
   tr,
 } from "../kit";
 
-type Item = { id: string; number: string; description: string; status: string; net_mg: number; customer_name: string | null };
+type Item = { id: string; number: string; description: string; status: string; net_mg: number; customer_name: string | null; category_name: string | null };
 type Paged = { rows: Item[]; total: number };
 
 const STATUSES = ["RECEIVED", "TESTED", "VALUED", "PURCHASED", "AVAILABLE", "RESERVED_FOR_MELTING", "MELTED", "RESOLD", "TRANSFERRED", "VOID"];
@@ -244,7 +244,10 @@ export default function OldGoldItemsPage() {
                           {r.number}
                         </Link>
                       </td>
-                      <td className="max-w-[18rem] truncate px-2 py-1.5 text-ink-3">{r.description || "—"}</td>
+                      <td className="max-w-[18rem] truncate px-2 py-1.5 text-ink-3">
+                        {r.description || "—"}
+                        {r.category_name ? <span className="ml-2 rounded bg-gold-pale/70 px-1.5 py-px text-[10px] font-semibold text-gold-deep">{r.category_name}</span> : null}
+                      </td>
                       <td className="max-w-[12rem] truncate px-2 py-1.5">{r.customer_name ? <span className="font-medium text-ink">{r.customer_name}</span> : <span className="text-ink-5">—</span>}</td>
                       <td className="g-metric px-2 py-1.5 text-right font-medium text-ink">{grams(r.net_mg)}</td>
                       <td className="px-2 py-1.5">
