@@ -413,9 +413,9 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
                   <tr key={i} className="border-b border-ink/10 align-top">
                     <td className="py-2.5 pl-2 pr-2 text-ink-4 num-tabular">{i + 1}</td>
                     <td className="py-2.5 pr-2">
-                      <p className="font-medium text-ink">{it.name}</p>
+                      <p className="font-medium text-ink">{it.category_name ?? it.name}</p>
                       <p className="font-mono text-[10.5px] text-ink-4">
-                        {it.barcode}{it.category_name ? ` · ${it.category_name}` : ""}
+                        {it.barcode}
                         {it.stone_mg > 0 ? ` · stone ${grams(it.stone_mg)} g` : ""}
                       </p>
                     </td>
@@ -669,7 +669,7 @@ function ThermalReceipt({
       <div className="my-2 border-t border-dashed border-ink/50" />
       {items.map((it, i) => (
         <div key={i} className="mb-1.5">
-          <p className="font-sans font-semibold">{it.name}</p>
+          <p className="font-sans font-semibold">{it.category_name ?? it.name}</p>
           <Row l={`${it.karat} ${grams(it.net_mg)}g · ${it.barcode}`} r={fmt(it.price_cents)} />
           {it.discount_cents ? <Row l="  discount" r={`-${fmt(it.discount_cents)}`} /> : null}
         </div>

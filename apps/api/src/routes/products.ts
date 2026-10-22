@@ -211,7 +211,7 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       const svg = buildLabelSvg(
         {
           barcode: product.barcode,
-          name: product.name,
+          name: product.category_name,
           gross_weight: mgToG(product.gross_mg),
           net_weight: mgToG(product.net_mg),
           karat: product.karat,

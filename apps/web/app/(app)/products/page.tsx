@@ -41,6 +41,7 @@ type Product = {
   sku: string;
   name: string;
   category_name: string;
+  subcategory_name?: string | null;
   metal_name?: string;
   karat: string;
   net_mg: number;
@@ -862,11 +863,12 @@ export default function ProductsPage() {
                 ))}
               </div>
             ) : (
-              <table className="w-full min-w-[960px] text-[12.5px]">
+              <table className="w-full min-w-[1040px] text-[12.5px]">
                 <thead className={thead}>
                   <tr>
                     <th className={cn(th, "pl-4")}>Barcode</th>
                     <th className={th}>Category</th>
+                    <th className={th}>Sub-category</th>
                     <th className={th}>Karat</th>
                     <th className={cn(th, "text-right")}>Net g</th>
                     <th className={cn(th, "text-right")}>Fine g</th>
@@ -893,6 +895,9 @@ export default function ProductsPage() {
                       <td className="px-2 leading-tight">
                         <span className="block max-w-[12rem] truncate font-medium text-ink">{r.category_name}</span>
                         {r.location ? <span className="block truncate text-[10.5px] text-ink-4">@ {r.location}</span> : null}
+                      </td>
+                      <td className="px-2">
+                        <span className="block max-w-[10rem] truncate text-ink-3">{r.subcategory_name ?? "—"}</span>
                       </td>
                       <td className="px-2">
                         <span className="g-metric rounded bg-gradient-to-b from-gold-light to-gold px-1.5 py-px text-[10px] font-bold text-void">{r.karat}</span>

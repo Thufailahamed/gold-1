@@ -55,7 +55,7 @@ type Detail = {
     store_credit_cents: number;
     notes: string | null;
   };
-  items: { id: string; product_id: string; barcode: string; sku: string; name: string; gross_mg: number; net_mg: number; karat: string; price_cents: number; discount_cents: number }[];
+  items: { id: string; product_id: string; barcode: string; sku: string; name: string; category_name: string | null; gross_mg: number; net_mg: number; karat: string; price_cents: number; discount_cents: number }[];
   payments: { id: string; amount_cents: number; method: string; created_at: number; account_code: string | null; bank_account_name: string | null; cheque_no?: string | null; cheque_bank?: string | null }[];
   receipts: { id: string; number: string; receipt_date: string; method: string; status: string; amount_cents: number }[];
   journal: { id: string; account_code: string; account_name: string | null; debit_cents: number; credit_cents: number; memo: string | null; entry_no: string | null }[];
@@ -311,7 +311,7 @@ export default function SaleDetailPage({ params }: { params: Promise<{ id: strin
                           <td className="py-1.5 pl-4 pr-2">
                             <span className="flex items-center gap-1.5">
                               <Link href={`/products/${it.product_id}`} className={cn("max-w-[14rem] truncate font-medium text-ink hover:text-gold-deep", isReturned && "line-through")}>
-                                {it.name}
+                                {it.category_name ?? it.name}
                               </Link>
                               {isReturned ? (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-ink/[0.05] px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-[0.1em] text-ink-4">

@@ -24,6 +24,7 @@ export type ProductRow = {
   category_id: string;
   category_name: string;
   subcategory_id: string | null;
+  subcategory_name: string | null;
   design_id: string | null;
   product_type_id: string | null;
   metal_type_id: string;
@@ -65,7 +66,7 @@ export type ProductDetail = { product: ProductRow; livePrice: LivePrice; noRate:
 type RawRow = Omit<ProductRow, "image_keys"> & { image_keys: string };
 
 const WITH_NAMES =
-  "SELECT p.id, p.barcode, p.sku, p.category_id, c.name AS category_name, p.subcategory_id, p.design_id, p.product_type_id, p.metal_type_id, m.name AS metal_name, p.stone_type_id, p.purity_id, pu.karat, pu.permille, p.name, p.gross_mg, p.stone_mg, p.net_mg, p.fine_gold_mg, p.making_cents, p.wastage_mg, p.cost_cents, p.selling_price_cents, p.location, p.notes, p.image_keys, p.status, p.branch_id, p.reserved_customer_id, rc.name AS reserved_customer_name, p.reserved_note, p.reserved_until, p.reserved_at, p.created_at FROM products p JOIN categories c ON c.id = p.category_id JOIN metal_types m ON m.id = p.metal_type_id JOIN purities pu ON pu.id = p.purity_id LEFT JOIN customers rc ON rc.id = p.reserved_customer_id";
+  "SELECT p.id, p.barcode, p.sku, p.category_id, c.name AS category_name, p.subcategory_id, sc.name AS subcategory_name, p.design_id, p.product_type_id, p.metal_type_id, m.name AS metal_name, p.stone_type_id, p.purity_id, pu.karat, pu.permille, p.name, p.gross_mg, p.stone_mg, p.net_mg, p.fine_gold_mg, p.making_cents, p.wastage_mg, p.cost_cents, p.selling_price_cents, p.location, p.notes, p.image_keys, p.status, p.branch_id, p.reserved_customer_id, rc.name AS reserved_customer_name, p.reserved_note, p.reserved_until, p.reserved_at, p.created_at FROM products p JOIN categories c ON c.id = p.category_id JOIN metal_types m ON m.id = p.metal_type_id JOIN purities pu ON pu.id = p.purity_id LEFT JOIN subcategories sc ON sc.id = p.subcategory_id LEFT JOIN customers rc ON rc.id = p.reserved_customer_id";
 
 function parseRow(r: RawRow): ProductRow {
   return { ...r, image_keys: JSON.parse(r.image_keys) as string[] };

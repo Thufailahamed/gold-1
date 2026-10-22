@@ -230,7 +230,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     <Page className="space-y-4">
       <GoldHero
         icon={GemIcon}
-        title={product.name}
+        title={product.category_name}
         badge={<HeroBadge tone={STATUS_TONE[product.status] ?? "muted"}>{humanize(product.status)}</HeroBadge>}
         sub={
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
