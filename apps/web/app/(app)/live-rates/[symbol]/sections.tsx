@@ -76,12 +76,12 @@ export function Panel({ id, title, sub, action, children, className }: { id?: st
     <section
       id={id}
       className={cn(
-        "relative min-w-0 scroll-mt-24 overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-30px_rgba(16,32,27,0.28)]",
+        "relative min-w-0 scroll-mt-24 overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_18px_40px_-30px_rgba(16,32,27,0.28)]",
         className
       )}
     >
       <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-ink/[0.06] px-4 py-2.5">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-ink/20 px-4 py-2.5">
         <div className="min-w-0">
           <h2 className="truncate font-sans text-[13.5px] font-semibold tracking-normal text-ink">{title}</h2>
           {sub ? <p className="truncate text-[11px] text-ink-4">{sub}</p> : null}
@@ -177,7 +177,7 @@ export function PerformancePanel({ a }: { a: Asset }) {
         </div>
       </div>
       {/* seasonality */}
-      <div className="border-t border-ink/[0.06] px-4 py-3">
+      <div className="border-t border-ink/20 px-4 py-3">
         <div className="flex items-baseline justify-between">
           <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">Seasonality · average month</span>
           <span className="text-[10.5px] text-ink-5">from {a.seasonality[0]?.years ?? 0} years of monthly closes</span>
@@ -242,7 +242,7 @@ export function TechnicalsPanel({ a }: { a: Asset }) {
       <div className="grid gap-px bg-ink/[0.06] lg:grid-cols-2">
         <div className="bg-paper">
           {sig.list.map((x) => (
-            <div key={x.k} className="flex items-center justify-between gap-3 border-b border-ink/[0.05] px-4 py-2 last:border-0">
+            <div key={x.k} className="flex items-center justify-between gap-3 border-b border-ink/20 px-4 py-2 last:border-0">
               <div className="min-w-0">
                 <div className="text-[12px] font-medium text-ink-2">{x.k}</div>
                 <div className="truncate text-[10.5px] text-ink-5">{x.note}</div>
@@ -286,7 +286,7 @@ export function TechnicalsPanel({ a }: { a: Asset }) {
               { k: "Best day 1y", v: signedPct(s.bestDay?.pct), tone: "text-emerald-700", hint: s.bestDay ? dateShort(s.bestDay.at) : "" },
               { k: "Worst day 1y", v: signedPct(s.worstDay?.pct), tone: "text-rose-700", hint: s.worstDay ? dateShort(s.worstDay.at) : "" },
             ].map((m) => (
-              <div key={m.k} className="rounded-xl bg-bone/60 px-3 py-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.05)]">
+              <div key={m.k} className="rounded-xl bg-bone/60 px-3 py-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
                 <div className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-ink-5">{m.k}</div>
                 <div className={cn("g-metric mt-0.5 text-[14px] font-semibold", m.tone ?? "text-ink")}>{m.v}</div>
                 <div className="truncate text-[10px] text-ink-5">{m.hint}</div>
@@ -339,7 +339,7 @@ export function KaratsPanel({ a, lens, onLens }: { a: Asset; lens: string; onLen
               const t = karatTone(k.purity);
               const on = lens === k.karat;
               return (
-                <tr key={k.karat} onClick={() => onLens(k.karat)} className={cn("cursor-pointer border-t border-ink/[0.05] transition-colors hover:bg-gold-pale/30", on && "bg-gold-pale/50")}>
+                <tr key={k.karat} onClick={() => onLens(k.karat)} className={cn("cursor-pointer border-t border-ink/20 transition-colors hover:bg-gold-pale/30", on && "bg-gold-pale/50")}>
                   <td className="py-1.5 pl-4 pr-2">
                     <span className={cn("inline-flex h-6 min-w-[38px] items-center justify-center rounded-md px-1.5 text-[11px] font-bold", t.badge)}>{k.karat}</span>
                   </td>
@@ -374,7 +374,7 @@ export function KaratsPanel({ a, lens, onLens }: { a: Asset; lens: string; onLen
           </tbody>
         </table>
       </div>
-      <p className="border-t border-ink/[0.06] px-4 py-2 text-[10.5px] text-ink-5">Click a karat to view the whole page — chart, converter and figures — at that purity.</p>
+      <p className="border-t border-ink/20 px-4 py-2 text-[10.5px] text-ink-5">Click a karat to view the whole page — chart, converter and figures — at that purity.</p>
     </Panel>
   );
 }
@@ -428,7 +428,7 @@ export function AboutPanel({ a }: { a: Asset }) {
           <div className="flex gap-3">
             {a.about?.image ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={a.about.image} alt="" className="size-20 shrink-0 rounded-xl object-cover shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)]" />
+              <img src={a.about.image} alt="" className="size-20 shrink-0 rounded-xl object-cover shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]" />
             ) : (
               <MetalCoin symbol={a.symbol} size={64} />
             )}
@@ -444,7 +444,7 @@ export function AboutPanel({ a }: { a: Asset }) {
             </p>
           ) : null}
         </div>
-        <dl className="divide-y divide-ink/[0.05] overflow-hidden rounded-xl bg-bone/60 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.05)]">
+        <dl className="divide-y divide-ink/[0.05] overflow-hidden rounded-xl bg-bone/60 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
           {a.facts.map((f) => (
             <div key={f.k} className="px-3 py-1.5">
               <dt className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-ink-5">{f.k}</dt>

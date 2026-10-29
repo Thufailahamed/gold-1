@@ -26,7 +26,7 @@ function Chip({ m, className }: { m: Meta; className?: string }) {
   );
 }
 
-const muted: Meta = { label: "", dot: "bg-ink/30", chip: "bg-ink/[0.04] text-ink-5 ring-ink/10" };
+const muted: Meta = { label: "", dot: "bg-ink/30", chip: "bg-ink/[0.04] text-ink-5 ring-ink/20" };
 
 /** Transfers: requested, approved, dispatched, then received in part or full. */
 export const TRANSFER_META: Record<string, Meta> = {

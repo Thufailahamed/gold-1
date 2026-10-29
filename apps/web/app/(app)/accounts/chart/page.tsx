@@ -145,7 +145,7 @@ export default function AccountsPage() {
               {shown.map((a) => (
                 <tr key={a.code}>
                   <td>
-                    <span className="g-metric inline-flex rounded-md bg-bone px-1.5 py-0.5 text-xs text-ink-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">{a.code}</span>
+                    <span className="g-metric inline-flex rounded-md bg-bone px-1.5 py-0.5 text-xs text-ink-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">{a.code}</span>
                   </td>
                   <td className="font-medium text-ink">{a.name}</td>
                   <td><StatusPill status={a.type} /></td>

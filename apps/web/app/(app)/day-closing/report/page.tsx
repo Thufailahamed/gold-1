@@ -48,7 +48,7 @@ const MONEY_LABELS: [string, string][] = [
 
 function Row({ label, cents, strong }: { label: string; cents: number | null; strong?: boolean }) {
   return (
-    <div className={`flex justify-between py-0.5 ${strong ? "border-t border-ink/15 pt-1.5 font-semibold text-ink" : "text-ink-2"}`}>
+    <div className={`flex justify-between py-0.5 ${strong ? "border-t border-ink/20 pt-1.5 font-semibold text-ink" : "text-ink-2"}`}>
       <span>{label}</span>
       <span className="num-tabular">{cents === null ? "—" : fmt(cents)}</span>
     </div>

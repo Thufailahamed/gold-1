@@ -198,7 +198,6 @@ function saleable(d: Lookup, branchId: string, customer: Customer | null): { pri
   } else if (p.status !== "IN_STOCK")
     return { error: `${p.barcode} is ${p.status.replace(/_/g, " ").toLowerCase()}, not for sale` };
   if (branchId && p.branch_id !== branchId) return { error: `${p.barcode} belongs to another branch` };
-  if (p.cost_cents === null) return { error: `${p.barcode} has no book cost — set its cost before selling` };
   // The price set when the piece was created; a piece without one falls back to the live rate.
   const price = p.selling_price_cents !== null && p.selling_price_cents > 0 ? p.selling_price_cents : d.livePrice?.amount_cents;
   if (price === undefined) return { error: `No gold rate for ${p.karat} — set today's rate first` };
@@ -222,7 +221,7 @@ export default function PosPage() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [customerSearch, setCustomerSearch] = useState("");
-  const [newCust, setNewCust] = useState<{ name: string; phone: string } | null>(null);
+  const [newCust, setNewCust] = useState<{ name: string; phone: string; address: string } | null>(null);
   const [exchange, setExchange] = useState<Exchange | null>(null);
   const [oldSel, setOldSel] = useState<OldSel>({ customerId: "", ids: [] });
   const [pendingOld, setPendingOld] = useState<PendingState>({ customerId: "", items: [] });
@@ -531,7 +530,8 @@ export default function PosPage() {
   const autoCredit = customer && paidSum > 0 && paidSum < due ? due - paidSum : 0;
   const creditDue = activePays.filter((p) => p.method === "credit").reduce((s, p) => s + cents(p.amountLkr), 0) + autoCredit;
   const change = tendered ? cents(tendered) - cashDue : null;
-  const needsCustomer = creditDue > 0 && !customer;
+  // Every bill is saved to a customer, cash or credit alike.
+  const needsCustomer = !customer;
   const heldMismatch = cart.filter((l) => l.reservedFor && l.reservedFor.id !== customer?.id);
   const bankRows = banks.data ?? [];
   const needsBank = bankRows.length > 1 && activePays.some((p) => p.method === "bank" && !p.bankAccountId);
@@ -577,10 +577,15 @@ export default function PosPage() {
   }
 
   const addCustomer = useMutation({
-    mutationFn: (v: { name: string; phone: string }) =>
+    mutationFn: (v: { name: string; phone: string; address: string }) =>
       api<Customer>("/api/v1/customers", {
         method: "POST",
-        body: JSON.stringify({ name: v.name.trim(), phone: v.phone.trim() || undefined, branchId }),
+        body: JSON.stringify({
+          name: v.name.trim(),
+          phone: v.phone.trim(),
+          address: v.address.trim(),
+          branchId,
+        }),
       }),
     onSuccess: (c) => {
       setCustomer(c);
@@ -750,7 +755,7 @@ export default function PosPage() {
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col overflow-y-auto bg-bone text-ink animate-fade-in lg:overflow-hidden">
-      <header className="sticky top-0 z-30 shrink-0 border-b border-ink/[0.08] bg-paper/95 backdrop-blur-md">
+      <header className="sticky top-0 z-30 shrink-0 border-b border-ink/20 bg-paper/95 backdrop-blur-md">
         <div className="flex h-14 items-center gap-3 px-4 lg:px-5">
           <Link href="/sales" className="flex shrink-0 items-center gap-2.5" title="Back to the console">
             <BrandMark size={32} className="shrink-0" />
@@ -805,7 +810,7 @@ export default function PosPage() {
               onClick={toggleFullscreen}
               aria-label={fullscreen ? "Exit full screen" : "Full screen"}
               title={fullscreen ? "Exit full screen" : "Full screen"}
-              className="flex size-9 items-center justify-center rounded-lg text-ink-3 ring-1 ring-ink/10 transition-colors hover:bg-ink/[0.05] hover:text-ink"
+              className="flex size-9 items-center justify-center rounded-lg text-ink-3 ring-1 ring-ink/20 transition-colors hover:bg-ink/[0.05] hover:text-ink"
             >
               {fullscreen ? <MinimizeIcon size={16} /> : <MaximizeIcon size={16} />}
             </button>
@@ -903,7 +908,7 @@ export default function PosPage() {
                 id="pos-results"
                 role="listbox"
                 // Floats over the cart so the terminal layout never jumps while searching.
-                className="absolute inset-x-0 top-[calc(100%+8px)] z-30 max-h-[min(24rem,60vh)] overflow-y-auto rounded-xl bg-paper p-1.5 text-ink shadow-5 ring-1 ring-ink/10 scrollbar-thin animate-pop-in"
+                className="absolute inset-x-0 top-[calc(100%+8px)] z-30 max-h-[min(24rem,60vh)] overflow-y-auto rounded-xl bg-paper p-1.5 text-ink shadow-5 ring-1 ring-ink/20 scrollbar-thin animate-pop-in"
               >
                 {catalog.isFetching && results.length === 0 ? (
                   <li className="px-3 py-3 text-sm text-ink-4">Searching…</li>
@@ -1171,11 +1176,11 @@ export default function PosPage() {
                 {fmt(discount + markdown)} <span className="text-xs font-medium text-gold-light">LKR</span>
               </p>
             </div>
-            <div className="rounded-xl bg-bone/70 px-4 py-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
+            <div className="rounded-xl bg-bone/70 px-4 py-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Of shelf price</p>
               <p className="num-tabular mt-1 text-xl font-semibold text-ink">{pct.toFixed(1)}%</p>
             </div>
-            <div className="rounded-xl bg-bone/70 px-4 py-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
+            <div className="rounded-xl bg-bone/70 px-4 py-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Sale total</p>
               <p className="num-tabular mt-1 text-xl font-semibold text-ink">{fmt(total)}</p>
             </div>
@@ -1187,9 +1192,9 @@ export default function PosPage() {
         </Panel>
       </div>
 
-      <aside className="flex min-w-0 flex-col border-t border-ink/[0.08] bg-paper/55 lg:min-h-0 lg:border-l lg:border-t-0">
+      <aside className="flex min-w-0 flex-col border-t border-ink/20 bg-paper/55 lg:min-h-0 lg:border-l lg:border-t-0">
       <div className="space-y-4 p-4 scrollbar-thin lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:p-5">
-        <Panel title="Customer" icon={<UserCheckIcon size={17} />} description="Optional — required for credit">
+        <Panel title="Customer" icon={<UserCheckIcon size={17} />} description="Required — every bill is saved to a customer">
           {customer ? (
             <>
               <div className="flex items-center justify-between gap-2 rounded-lg bg-ink/[0.04] px-3 py-2.5">
@@ -1230,12 +1235,12 @@ export default function PosPage() {
                   ) : null}
                   {balanceAfterSale !== null ? (
                     <>
-                      <dt className="mt-1 border-t border-ink/10 pt-1 text-ink-3">
+                      <dt className="mt-1 border-t border-ink/20 pt-1 text-ink-3">
                         {balanceAfterSale < 0 ? "Store credit after sale" : "Owes after sale"}
                       </dt>
                       <dd
                         className={cn(
-                          "mt-1 border-t border-ink/10 pt-1 text-right font-semibold",
+                          "mt-1 border-t border-ink/20 pt-1 text-right font-semibold",
                           balanceAfterSale > 0 ? "text-amber-700" : balanceAfterSale < 0 ? "text-emerald-700" : "text-ink"
                         )}
                       >
@@ -1255,7 +1260,7 @@ export default function PosPage() {
                 className={`w-full !h-11 !rounded-xl !px-3.5 ${controlClass}`}
               />
               {newCust ? (
-                <div className="mt-2 space-y-2 rounded-xl bg-bone/70 p-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
+                <div className="mt-2 space-y-2 rounded-xl bg-bone/70 p-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
                   <input
                     autoFocus
                     placeholder="Customer name"
@@ -1264,10 +1269,18 @@ export default function PosPage() {
                     className={`w-full ${controlClass}`}
                   />
                   <input
-                    placeholder="Phone (optional)"
+                    placeholder="Phone number"
+                    inputMode="tel"
                     value={newCust.phone}
                     onChange={(e) => setNewCust({ ...newCust, phone: e.target.value })}
                     className={`w-full ${controlClass}`}
+                  />
+                  <textarea
+                    placeholder="Address"
+                    rows={2}
+                    value={newCust.address}
+                    onChange={(e) => setNewCust({ ...newCust, address: e.target.value })}
+                    className={`w-full resize-none py-2 ${controlClass}`}
                   />
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setNewCust(null)} className="g-btn g-btn-secondary h-9 flex-1 text-xs">
@@ -1275,7 +1288,7 @@ export default function PosPage() {
                     </button>
                     <button
                       type="button"
-                      disabled={!newCust.name.trim() || addCustomer.isPending}
+                      disabled={!newCust.name.trim() || !newCust.phone.trim() || !newCust.address.trim() || addCustomer.isPending}
                       onClick={() => addCustomer.mutate(newCust)}
                       className="g-btn g-btn-primary h-9 flex-1 text-xs"
                     >
@@ -1310,7 +1323,7 @@ export default function PosPage() {
                         onClick={() => {
                           const t = customerSearch.trim();
                           const isPhone = /^[\d+\s-]{6,}$/.test(t);
-                          setNewCust({ name: isPhone ? "" : t, phone: isPhone ? t : "" });
+                          setNewCust({ name: isPhone ? "" : t, phone: isPhone ? t : "", address: "" });
                         }}
                         className="mt-1 w-full rounded-md px-2 py-1.5 text-left text-sm font-medium text-gold-deep transition-colors hover:bg-gold-pale/60"
                       >
@@ -1320,8 +1333,8 @@ export default function PosPage() {
                   )}
                 </ul>
               ) : (
-                <p className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-bone px-2.5 py-1 text-xs font-medium text-ink-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
-                  <span className="size-1.5 rounded-full bg-gold" /> Walk-in sale
+                <p className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-bone px-2.5 py-1 text-xs font-medium text-ink-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
+                  <span className="size-1.5 rounded-full bg-gold" /> Select a customer to save the bill
                 </p>
               )}
             </>
@@ -1347,7 +1360,7 @@ export default function PosPage() {
           description={hasExchange ? (shopOwes > 0 ? `${fmt(shopOwes)} LKR ${payout === "cash" ? "cash to customer" : "to clear open bills"}` : `Customer pays ${fmt(due)} LKR`) : `Total ${fmt(total)} LKR`}
           className="!overflow-visible"
         >
-          <div className="mb-4 overflow-hidden rounded-xl bg-bone/70 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
+          <div className="mb-4 overflow-hidden rounded-xl bg-bone/70 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
             <dl className="grid grid-cols-2 gap-y-1.5 px-4 pb-3 pt-3.5 text-sm num-tabular">
               <dt className="text-ink-3">Subtotal</dt>
               <dd className="text-right text-ink">{fmt(subtotal)}</dd>
@@ -1390,7 +1403,7 @@ export default function PosPage() {
                         "flex h-14 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium capitalize ring-1 transition-colors",
                         on
                           ? "bg-gold-pale text-gold-deep ring-gold-dark/40"
-                          : "bg-paper text-ink-2 ring-ink/10 hover:bg-bone hover:ring-ink/20"
+                          : "bg-paper text-ink-2 ring-ink/20 hover:bg-bone hover:ring-ink/20"
                       )}
                     >
                       <Icon size={16} />
@@ -1546,7 +1559,7 @@ export default function PosPage() {
                 {storeCredit > 0 ? ` — ${fmt(Math.min(storeCredit, creditDue))} from store credit` : ""}.
               </p>
             ) : null}
-            {needsCustomer ? <p className="mt-1 text-xs text-rose-600">Credit needs a customer.</p> : null}
+            {needsCustomer && cart.length > 0 ? <p className="mt-1 text-xs text-rose-600">Select a customer to save this bill.</p> : null}
             {needsBank ? <p className="mt-1 text-xs text-rose-600">Choose the bank account the payment went into.</p> : null}
             {hasExchange && exchange ? (
               <p className="mt-1 text-xs text-rose-600">An old-gold exchange cannot go on a return-exchange bill — clear one of them.</p>
@@ -1561,7 +1574,7 @@ export default function PosPage() {
       </div>
 
         {/* Pinned checkout: the total and the one button that matters are always on screen. */}
-        <div className="sticky bottom-0 z-20 shrink-0 border-t border-ink/[0.08] bg-paper px-4 pb-4 pt-3.5 shadow-[0_-18px_40px_-28px_rgba(16,32,27,0.35)] lg:static lg:px-5 lg:pb-5">
+        <div className="sticky bottom-0 z-20 shrink-0 border-t border-ink/20 bg-paper px-4 pb-4 pt-3.5 shadow-[0_-18px_40px_-28px_rgba(16,32,27,0.35)] lg:static lg:px-5 lg:pb-5">
           <div className="flex items-end justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-4">
@@ -1612,7 +1625,7 @@ export default function PosPage() {
           }}
           footer={false}
         >
-          <dl className="grid grid-cols-2 gap-y-1.5 rounded-xl bg-bone p-4 text-sm num-tabular ring-1 ring-ink/[0.06]">
+          <dl className="grid grid-cols-2 gap-y-1.5 rounded-xl bg-bone p-4 text-sm num-tabular ring-1 ring-ink/20">
             <dt className="text-ink-3">Customer</dt>
             <dd className="text-right text-ink">{done.customer ?? "Walk-in"}</dd>
             <dt className="text-ink-3">Total</dt>

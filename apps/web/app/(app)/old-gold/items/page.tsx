@@ -166,7 +166,7 @@ export default function OldGoldItemsPage() {
             </label>
           }
         />
-        <div className="overflow-x-auto border-b border-ink/[0.06] px-4 py-2 scrollbar-thin">
+        <div className="overflow-x-auto border-b border-ink/20 px-4 py-2 scrollbar-thin">
           <FilterPills
             value={fStatus}
             onChange={setFilter}
@@ -261,7 +261,7 @@ export default function OldGoldItemsPage() {
                 })}
               </tbody>
               <tfoot className="bg-bone/70">
-                <tr className="border-t border-ink/10 text-[12px] font-semibold">
+                <tr className="border-t border-ink/20 text-[12px] font-semibold">
                   <td colSpan={3} className="py-1.5 pl-4 text-[9.5px] uppercase tracking-[0.14em] text-gold-dark">
                     Page total · {rows.length} items
                   </td>
@@ -274,7 +274,7 @@ export default function OldGoldItemsPage() {
         )}
 
         {rows.length > 0 ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink/[0.06] bg-bone/40 px-4 py-2 text-[11.5px] text-ink-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink/20 bg-bone/40 px-4 py-2 text-[11.5px] text-ink-4">
             <span>
               Showing{" "}
               <span className="g-metric font-medium text-ink">
@@ -302,4 +302,4 @@ export default function OldGoldItemsPage() {
 }
 
 const pagerBtn =
-  "inline-flex h-7 items-center gap-1 rounded-lg px-2.5 font-medium text-ink ring-1 ring-inset ring-ink/10 hover:bg-void hover:text-paper disabled:pointer-events-none disabled:opacity-40";
+  "inline-flex h-7 items-center gap-1 rounded-lg px-2.5 font-medium text-ink ring-1 ring-inset ring-ink/20 hover:bg-void hover:text-paper disabled:pointer-events-none disabled:opacity-40";

@@ -56,7 +56,8 @@ describe.skipIf(!sqliteAvailable)("fleet migrations", () => {
       name: slug, slug, ownerName: "O", ownerEmail: `o@${slug}.lk`, country: "LK", currency: "LKR",
       timezone: "Asia/Colombo", region: "apac", planId: "plan-starter", interval: "MONTH", tags: [],
     }, admin);
-    const m = migratedDb();
+    // A shop as it was before fleet tracking: the schema up to the baseline.
+    const m = migratedDb("drizzle", FLEET_BASELINE);
     setup?.(m.raw);
     handles[d1Id] = m.db;
     raws[d1Id] = m.raw;

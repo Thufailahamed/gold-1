@@ -211,7 +211,7 @@ export function Card({ children, className }: { children: ReactNode; className?:
   return (
     <section
       className={cn(
-        "relative flex min-w-0 flex-col overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-30px_rgba(16,32,27,0.28)]",
+        "relative flex min-w-0 flex-col overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_18px_40px_-30px_rgba(16,32,27,0.28)]",
         className
       )}
     >
@@ -223,7 +223,7 @@ export function Card({ children, className }: { children: ReactNode; className?:
 
 export function CardHead({ icon: Icon, title, sub, action }: { icon: IconCmp; title: string; sub?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-ink/[0.06] px-4 py-2.5">
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-ink/20 px-4 py-2.5">
       <div className="flex min-w-0 items-center gap-2.5">
         <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25)]">
           <Icon size={14} />
@@ -249,7 +249,7 @@ export function HeadLink({ href, children }: { href: string; children: ReactNode
 
 export function Empty({ icon: Icon, title, desc, action }: { icon: IconCmp; title: string; desc: string; action?: ReactNode }) {
   return (
-    <div className="m-3 flex items-center gap-3 rounded-xl border border-dashed border-ink/[0.12] bg-bone/60 px-4 py-4">
+    <div className="m-3 flex items-center gap-3 rounded-xl border border-dashed border-ink/20 bg-bone/60 px-4 py-4">
       <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-void text-gold-light">
         <Icon size={15} />
       </span>
@@ -275,9 +275,9 @@ export function RowsSkeleton({ rows = 4 }: { rows?: number }) {
 /** Small strip of figures under a panel header. */
 export function MiniStats({ items }: { items: { k: string; v: ReactNode; tone?: string }[] }) {
   return (
-    <div className={cn("grid grid-cols-2 border-b border-ink/[0.06]", items.length >= 4 ? "sm:grid-cols-4" : "sm:grid-cols-3")}>
+    <div className={cn("grid grid-cols-2 border-b border-ink/20", items.length >= 4 ? "sm:grid-cols-4" : "sm:grid-cols-3")}>
       {items.map((it, i) => (
-        <div key={it.k} className={cn("min-w-0 px-4 py-2", i % 2 === 1 && "border-l border-ink/[0.06]", i >= 2 && "border-t border-ink/[0.06] sm:border-t-0", i > 0 && "sm:border-l")}>
+        <div key={it.k} className={cn("min-w-0 px-4 py-2", i % 2 === 1 && "border-l border-ink/20", i >= 2 && "border-t border-ink/20 sm:border-t-0", i > 0 && "sm:border-l")}>
           <div className="truncate text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">{it.k}</div>
           <div className={cn("g-metric mt-0.5 truncate text-[13px]", it.tone ?? "text-ink")}>{it.v}</div>
         </div>
@@ -297,9 +297,9 @@ export function ShareBar({ value, className, color = "bg-gradient-to-r from-gold
 
 export const th = "py-1.5 px-2 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5";
 export const thead = "bg-bone/60 text-left";
-export const tr = "border-t border-ink/[0.05] transition-colors hover:bg-gold-pale/30";
+export const tr = "border-t border-ink/20 transition-colors hover:bg-gold-pale/30";
 export const inputCls =
-  "h-8 rounded-lg bg-paper px-2.5 text-[12.5px] text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] transition-shadow placeholder:text-ink-5 focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.24)]";
+  "h-8 rounded-lg bg-paper px-2.5 text-[12.5px] text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] transition-shadow placeholder:text-ink-5 focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.24)]";
 
 /** A row of pill filters with counts. */
 export function FilterPills<K extends string>({
@@ -324,7 +324,7 @@ export function FilterPills<K extends string>({
             onClick={() => onChange(it.key)}
             className={cn(
               "inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11.5px] font-medium transition-all duration-200",
-              on ? "bg-void text-gold-light shadow-[0_6px_16px_-8px_rgba(6,42,34,0.8)]" : "text-ink-3 ring-1 ring-inset ring-ink/10 hover:bg-bone hover:text-ink"
+              on ? "bg-void text-gold-light shadow-[0_6px_16px_-8px_rgba(6,42,34,0.8)]" : "text-ink-3 ring-1 ring-inset ring-ink/20 hover:bg-bone hover:text-ink"
             )}
           >
             {it.dot ? <span className={cn("size-1.5 rounded-full", it.dot)} /> : null}

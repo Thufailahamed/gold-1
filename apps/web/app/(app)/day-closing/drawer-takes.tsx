@@ -56,7 +56,7 @@ export function DrawerTakes({ branchId, date, canRecord, locked }: { branchId: s
       <CardHead icon={BanknoteIcon} title="Cash taken from the drawer" sub="By the owner or an employee — record it now or while closing" />
       <div className="space-y-3 p-4">
         {rows.length ? (
-          <div className="divide-y divide-ink/[0.06] rounded-xl ring-1 ring-inset ring-ink/[0.06]">
+          <div className="divide-y divide-ink/[0.06] rounded-xl ring-1 ring-inset ring-ink/20">
             {rows.map((r) => (
               <div key={r.id} className="flex items-center justify-between gap-3 px-3 py-2 text-[12px]">
                 <span className="min-w-0 truncate">

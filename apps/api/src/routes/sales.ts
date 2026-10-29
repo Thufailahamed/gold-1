@@ -88,6 +88,12 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         { success: false, error: { code: "VALIDATION", message: "Invalid sale data" } },
         400
       );
+    // Every bill is saved to a customer; a walk-in bill cannot be posted.
+    if (!parsed.data.customerId)
+      return c.json(
+        { success: false, error: { code: "VALIDATION", message: "Select a customer before saving the bill" } },
+        400
+      );
     try {
       await access(c, parsed.data.branchId);
       const data = await receiveSale(getShopDb(c), parsed.data, c.get("userId"), {

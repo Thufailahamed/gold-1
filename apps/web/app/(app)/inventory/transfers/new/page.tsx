@@ -287,7 +287,7 @@ export default function NewTransferPage() {
                 </li>
               ))}
             </ul>
-            <p className="border-t border-ink/[0.06] bg-bone/40 px-4 py-2 text-[11px] leading-snug text-ink-4">
+            <p className="border-t border-ink/20 bg-bone/40 px-4 py-2 text-[11px] leading-snug text-ink-4">
               Pieces stay on the sending branch&rsquo;s shelf until the transfer is dispatched.
             </p>
           </Card>
@@ -306,7 +306,7 @@ export default function NewTransferPage() {
                     setLines([]);
                     scanRef.current?.focus();
                   }}
-                  className="inline-flex h-7 items-center rounded-lg px-2.5 text-[11.5px] font-medium text-ink-3 ring-1 ring-inset ring-ink/10 hover:bg-bone hover:text-ink"
+                  className="inline-flex h-7 items-center rounded-lg px-2.5 text-[11.5px] font-medium text-ink-3 ring-1 ring-inset ring-ink/20 hover:bg-bone hover:text-ink"
                 >
                   Clear list
                 </button>
@@ -357,7 +357,7 @@ export default function NewTransferPage() {
                   ))}
                 </tbody>
                 <tfoot className="sticky bottom-0 bg-bone/90 backdrop-blur">
-                  <tr className="border-t border-ink/10 text-[12px] font-semibold">
+                  <tr className="border-t border-ink/20 text-[12px] font-semibold">
                     <td colSpan={4} className="py-1.5 pl-4 text-[9.5px] uppercase tracking-[0.14em] text-gold-dark">
                       Total · {lines.length} pieces
                     </td>
@@ -368,7 +368,7 @@ export default function NewTransferPage() {
               </table>
             </div>
           )}
-          <div className="flex items-center justify-between gap-3 border-t border-ink/[0.06] bg-bone/40 px-4 py-2">
+          <div className="flex items-center justify-between gap-3 border-t border-ink/20 bg-bone/40 px-4 py-2">
             <span className="g-metric text-[11.5px] text-ink-4">
               {lines.length} piece{lines.length === 1 ? "" : "s"} · {grams(totalMg)} g net
             </span>

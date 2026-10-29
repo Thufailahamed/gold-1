@@ -87,6 +87,32 @@ describe.skipIf(!sqliteAvailable)("products made from old gold over real SQLite"
     await expectGoldAgrees();
   });
 
+  it("draws from old gold bought at the till, and a void puts it back as bought", async () => {
+    const og = await import("./oldgold");
+    const { createProduct, voidProduct } = await import("./products");
+    raw.exec(`
+      INSERT OR IGNORE INTO customers (id, name, phone, branch_id, created_at) VALUES ('c1','Nimal','0771111111','b1',0);
+      INSERT OR IGNORE INTO gold_rates (id, purity_id, rate_cents_per_g, effective_from, created_at) VALUES ('r22','purity-22k',2850000,0,0);
+    `);
+    // Bought the way a till sale leaves it: taken in, tested, valued, paid.
+    const { id } = await og.intakeItem(db, { needsTesting: true, customerId: "c1", branchId: "b1", itemType: "chain", description: "Chain", grossG: 3, stoneG: 0 }, "u1");
+    await og.recordTest(db, id, { method: "touchstone", permille: 916, result: "pass" }, "u1");
+    const v = await og.valuateItem(db, id, { stoneDeductionLkr: 0, processingDeductionLkr: 0 }, "u1");
+    await og.purchaseItem(db, id, { paidLkr: v.valueCents / 100, method: "cash" }, "u1");
+    expect(one("SELECT status FROM old_gold_items WHERE id = ?", id)).toEqual({ status: "PURCHASED" });
+
+    const product = await createProduct(db, createProductSchema.parse({ ...base, grossG: 3 }), "u1", { fromOldGold: true });
+
+    expect(one("SELECT net_mg, status FROM old_gold_items WHERE id = ?", id)).toEqual({ net_mg: 0, status: "DRAWN" });
+    expect(one("SELECT from_status FROM old_gold_draws WHERE product_id = ?", product.id)).toEqual({ from_status: "PURCHASED" });
+    await expectGoldAgrees();
+
+    await voidProduct(db, product.id, "u1", "entered wrongly");
+
+    expect(one("SELECT net_mg, status FROM old_gold_items WHERE id = ?", id)).toEqual({ net_mg: 3000, status: "PURCHASED" });
+    await expectGoldAgrees();
+  });
+
   it("refuses a tray that needs more old gold than is on hand, and writes none of its pieces", async () => {
     const { createProductsBulk } = await import("./products");
     const tray = (grossG: number) =>
@@ -98,12 +124,12 @@ describe.skipIf(!sqliteAvailable)("products made from old gold over real SQLite"
     await expect(createProductsBulk(db, tray(5), "u1", { fromOldGold: true })).rejects.toThrow("Not enough old gold on hand");
     expect(one<{ n: number }>("SELECT COUNT(*) AS n FROM products")?.n).toBe(before);
 
-    // 3 × 1 g fits the 8 g on hand: every piece is made, and the batch takes 3 g out of old gold.
+    // 3 × 1 g fits the old gold on hand: every piece is made, and the batch takes 3 g out of it.
+    const { oldGoldOnHand } = await import("./oldgolddraw");
+    const onHand = (await oldGoldOnHand(db, "b1")).totalMg;
     const made = await createProductsBulk(db, tray(1), "u1", { fromOldGold: true });
     expect(made.products).toHaveLength(3);
-    expect(one("SELECT net_mg FROM old_gold_items WHERE customer_id = 'shop-stock' AND status = 'AVAILABLE' AND net_mg > 0 AND karat IS NULL")).toEqual({
-      net_mg: 5000,
-    });
+    expect((await oldGoldOnHand(db, "b1")).totalMg).toBe(onHand - 3000);
     await expectGoldAgrees();
   });
 });

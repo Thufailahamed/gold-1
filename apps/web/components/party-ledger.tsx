@@ -134,7 +134,7 @@ export function LedgerDrawer({ endpoint, id, onClose }: { endpoint: string; id: 
                 { k: "Payments", v: L.creditPayments + L.debitPayments, tone: "#059669" },
                 { k: "Returns", v: L.creditReturns + L.debitReturns, tone: "#E11D48" },
               ].map((m) => (
-                <div key={m.k} className="relative overflow-hidden rounded-xl bg-paper px-3 py-2.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
+                <div key={m.k} className="relative overflow-hidden rounded-xl bg-paper px-3 py-2.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
                   <span className="absolute inset-x-0 top-0 h-[2px]" style={{ background: m.tone }} aria-hidden />
                   <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">{m.k}</div>
                   <div className="g-metric mt-0.5 text-[14px] font-semibold text-ink">{fmt(m.v)}</div>
@@ -143,8 +143,8 @@ export function LedgerDrawer({ endpoint, id, onClose }: { endpoint: string; id: 
             </div>
           ) : null}
 
-          <div className="overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
-            <div className="flex items-center justify-between border-b border-ink/[0.06] px-4 py-2.5">
+          <div className="overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
+            <div className="flex items-center justify-between border-b border-ink/20 px-4 py-2.5">
               <span className="text-[13px] font-semibold text-ink">Entries</span>
               <span className="text-[11px] text-ink-4">Running balance in LKR</span>
             </div>
@@ -155,7 +155,7 @@ export function LedgerDrawer({ endpoint, id, onClose }: { endpoint: string; id: 
                 ))}
               </div>
             ) : lines.length === 0 ? (
-              <div className="m-3 rounded-xl border border-dashed border-ink/15 bg-bone/60 px-4 py-5 text-center">
+              <div className="m-3 rounded-xl border border-dashed border-ink/20 bg-bone/60 px-4 py-5 text-center">
                 <p className="text-[13px] font-semibold text-ink">No transactions yet</p>
                 <p className="mt-0.5 text-[11px] text-ink-4">The ledger starts with the first {party === "Supplier" ? "purchase" : "sale"} or payment.</p>
               </div>
@@ -172,7 +172,7 @@ export function LedgerDrawer({ endpoint, id, onClose }: { endpoint: string; id: 
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="border-t border-ink/[0.05] bg-bone/30 text-ink-4">
+                    <tr className="border-t border-ink/20 bg-bone/30 text-ink-4">
                       <td className="py-1.5 pl-4 pr-2 text-[11px]" colSpan={4}>
                         Opening balance
                       </td>
@@ -181,7 +181,7 @@ export function LedgerDrawer({ endpoint, id, onClose }: { endpoint: string; id: 
                       </td>
                     </tr>
                     {lines.map((l) => (
-                      <tr key={l.entryId} className="border-t border-ink/[0.05] transition-colors hover:bg-gold-pale/30">
+                      <tr key={l.entryId} className="border-t border-ink/20 transition-colors hover:bg-gold-pale/30">
                         <td className="whitespace-nowrap py-1.5 pl-4 pr-2 text-[11px] text-ink-3">{l.entryDate}</td>
                         <td className="px-2">
                           <div className="g-metric text-[11.5px] text-ink">{l.entryNo}</div>
@@ -196,7 +196,7 @@ export function LedgerDrawer({ endpoint, id, onClose }: { endpoint: string; id: 
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t-2 border-ink/10 bg-bone/50 font-semibold">
+                    <tr className="border-t-2 border-ink/20 bg-bone/50 font-semibold">
                       <td className="py-2 pl-4 pr-2 text-[11px] text-ink-3" colSpan={2}>
                         Totals · {lines.length} entries
                       </td>

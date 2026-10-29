@@ -235,7 +235,7 @@ export default function GoldDashboardPage() {
                 : null}
             </div>
           </div>
-          <ol className="mt-3 grid flex-1 grid-cols-2 gap-px border-t border-ink/[0.06] bg-ink/[0.06] lg:grid-cols-4">
+          <ol className="mt-3 grid flex-1 grid-cols-2 gap-px border-t border-ink/20 bg-ink/[0.06] lg:grid-cols-4">
             {FLOW.map((f, i) => {
               const share = st && totalFine ? (st[f.key] / totalFine) * 100 : 0;
               return (
@@ -300,13 +300,13 @@ export default function GoldDashboardPage() {
               );
             })}
           </ul>
-          <div className="grid grid-cols-3 border-t border-ink/[0.06] bg-bone/50 text-center">
+          <div className="grid grid-cols-3 border-t border-ink/20 bg-bone/50 text-center">
             {[
               ["Fine in", fineIn ? `${grams(fineIn)} g` : "—"],
               ["Fine out", fineOut ? `${grams(fineOut)} g` : "—"],
               ["Loss", lossMg ? `${grams(lossMg)} g` : "—"],
             ].map(([k, v], i) => (
-              <div key={k} className={cn("px-2 py-2", i > 0 && "border-l border-ink/[0.06]")}>
+              <div key={k} className={cn("px-2 py-2", i > 0 && "border-l border-ink/20")}>
                 <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-ink-5">{k}</div>
                 <div className={cn("g-metric text-[12px]", k === "Loss" && lossMg ? "text-rose-700" : "text-ink")}>{v}</div>
               </div>

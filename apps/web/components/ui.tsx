@@ -253,8 +253,8 @@ export function Panel({
       <div className="px-5 pt-5 pb-4 sm:px-6">
         <CardHeader title={title} description={description} actions={actions} icon={icon} />
       </div>
-      <div className={cn("border-t border-ink/[0.07] px-5 py-5 sm:px-6", bodyClassName)}>{children}</div>
-      {footer && <div className="border-t border-ink/[0.07] bg-bone/60 px-5 py-3 sm:px-6">{footer}</div>}
+      <div className={cn("border-t border-ink/20 px-5 py-5 sm:px-6", bodyClassName)}>{children}</div>
+      {footer && <div className="border-t border-ink/20 bg-bone/60 px-5 py-3 sm:px-6">{footer}</div>}
     </section>
   );
 }
@@ -537,7 +537,7 @@ export function Toolbar({
 
 /** Class string for native <input>/<select> controls placed in toolbars and forms. */
 export const controlClass =
-  "h-10 rounded-lg bg-paper px-3 text-sm text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.14)] transition-shadow duration-200 focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.3)] disabled:cursor-not-allowed disabled:opacity-60";
+  "h-10 rounded-lg bg-paper px-3 text-sm text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] transition-shadow duration-200 focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.3)] disabled:cursor-not-allowed disabled:opacity-60";
 
 /** Search box with a leading icon, for list toolbars. */
 export function SearchField({
@@ -574,7 +574,7 @@ export function SearchField({
 
 /** Smaller variant for dense toolbars. */
 export const controlSmClass =
-  "h-9 rounded-lg bg-paper px-3 text-sm text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.14)] transition-shadow duration-200 focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.3)] disabled:cursor-not-allowed disabled:opacity-60";
+  "h-9 rounded-lg bg-paper px-3 text-sm text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] transition-shadow duration-200 focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.3)] disabled:cursor-not-allowed disabled:opacity-60";
 
 /* ---------------------------------------------------------------- Buttons */
 
@@ -638,7 +638,7 @@ export function TableCard({
       {toolbar && <div className={cn("px-5 pb-4 sm:px-6", !hasHeader && "pt-4")}>{toolbar}</div>}
       <div className="overflow-x-auto scrollbar-thin">{children}</div>
       {footer && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink/[0.07] px-5 py-3 text-xs text-ink-4 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink/20 px-5 py-3 text-xs text-ink-4 sm:px-6">
           {footer}
         </div>
       )}
@@ -765,7 +765,7 @@ export function EmptyBlock({
   return (
     <div
       className={cn(
-        "m-4 flex flex-col items-center justify-center rounded-xl border border-dashed border-ink/15 bg-bone/40 px-6 py-14 text-center sm:m-5",
+        "m-4 flex flex-col items-center justify-center rounded-xl border border-dashed border-ink/20 bg-bone/40 px-6 py-14 text-center sm:m-5",
         className
       )}
     >
@@ -1003,7 +1003,7 @@ export function BarList({
           "group block rounded-xl p-3 ring-1 transition-colors",
           dark
             ? "bg-paper/[0.03] ring-paper/[0.06] hover:bg-paper/[0.06]"
-            : "bg-bone/70 ring-ink/[0.06] hover:bg-gold-pale/60 hover:ring-gold-dark/20"
+            : "bg-bone/70 ring-ink/20 hover:bg-gold-pale/60 hover:ring-gold-dark/20"
         );
         return (
           <li key={it.key}>
@@ -1269,7 +1269,7 @@ export function DataTable<R>({
         </table>
       </div>
       {totals ? (
-        <div className="border-t border-ink/[0.07] bg-bone/60 px-5 py-3 text-sm sm:px-6">
+        <div className="border-t border-ink/20 bg-bone/60 px-5 py-3 text-sm sm:px-6">
           {totals}
         </div>
       ) : null}

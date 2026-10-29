@@ -183,9 +183,11 @@ describe.skipIf(!sqliteAvailable)("billing â†” accounts sync over real SQLi
     const { createProduct } = await import("./products");
     const fresh = await createProduct(
       db,
-      { categoryId: "cat-ring", metalTypeId: "metal-gold", purityId: "purity-22k", branchId: "b1", stoneG: 0, makingLkr: 0, wastageG: 0, costLkr: 10000, name: "Diamond Solitaire", grossG: 3, sellingPriceLkr: 75000 },
+      { categoryId: "cat-ring", metalTypeId: "metal-gold", purityId: "purity-22k", branchId: "b1", stoneG: 0, makingLkr: 0, wastageG: 0, costLkr: 10000, name: "Diamond Solitaire", grossG: 3 },
       "u1"
     );
+    // Pieces are created unpriced; this one carries a shelf price set at the till.
+    raw.prepare("UPDATE products SET selling_price_cents = ? WHERE id = ?").run(7500000, fresh.id);
     const hits = await posCatalog(db, { q: "solit", branchId: "b1" });
     expect(hits).toHaveLength(1);
     expect(hits[0]).toMatchObject({ id: fresh.id, price_cents: 7_500_000, status: "IN_STOCK" });

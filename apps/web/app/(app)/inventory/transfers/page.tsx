@@ -212,7 +212,7 @@ export default function TransfersPage() {
             </>
           }
         />
-        <div className="-mx-px overflow-x-auto border-b border-ink/[0.06] px-4 py-2 scrollbar-thin">
+        <div className="-mx-px overflow-x-auto border-b border-ink/20 px-4 py-2 scrollbar-thin">
           <FilterPills
             value={statusKey}
             onChange={setStatusKey}
@@ -298,9 +298,9 @@ export default function TransfersPage() {
                       </td>
                       <td className="px-2 py-1.5">
                         <span className="flex items-center gap-1.5 whitespace-nowrap text-[11.5px]">
-                          <span className={cn("rounded-md px-1.5 py-px font-medium ring-1 ring-inset", out ? "bg-void text-paper ring-gold/25" : "bg-bone text-ink ring-ink/[0.06]")}>{r.from_branch_name}</span>
+                          <span className={cn("rounded-md px-1.5 py-px font-medium ring-1 ring-inset", out ? "bg-void text-paper ring-gold/25" : "bg-bone text-ink ring-ink/20")}>{r.from_branch_name}</span>
                           <ArrowRightIcon size={10} className="text-gold-dark" />
-                          <span className={cn("rounded-md px-1.5 py-px font-medium ring-1 ring-inset", inc ? "bg-void text-paper ring-gold/25" : "bg-bone text-ink ring-ink/[0.06]")}>{r.to_branch_name}</span>
+                          <span className={cn("rounded-md px-1.5 py-px font-medium ring-1 ring-inset", inc ? "bg-void text-paper ring-gold/25" : "bg-bone text-ink ring-ink/20")}>{r.to_branch_name}</span>
                         </span>
                       </td>
                       <td className="px-2 py-1.5">
@@ -351,7 +351,7 @@ export default function TransfersPage() {
         )}
 
         {!loading && rows.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-ink/[0.06] bg-bone/40 px-4 py-1.5 text-[10.5px] text-ink-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-ink/20 bg-bone/40 px-4 py-1.5 text-[10.5px] text-ink-4">
             <span className="inline-flex items-center gap-1.5">
               <span className="size-2.5 rounded bg-void ring-1 ring-gold/25" />
               Your branch

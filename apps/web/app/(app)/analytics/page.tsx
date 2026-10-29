@@ -173,7 +173,7 @@ function Card({ children, className, dark }: { children: ReactNode; className?: 
     <section
       className={cn(
         "relative flex min-w-0 flex-col overflow-hidden rounded-2xl",
-        dark ? "bg-void text-paper shadow-4" : "bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-30px_rgba(16,32,27,0.28)]",
+        dark ? "bg-void text-paper shadow-4" : "bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_18px_40px_-30px_rgba(16,32,27,0.28)]",
         className
       )}
     >
@@ -185,7 +185,7 @@ function Card({ children, className, dark }: { children: ReactNode; className?: 
 
 function CardHead({ icon: Icon, title, sub, action }: { icon: IconCmp; title: string; sub?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-ink/[0.06] px-4 py-2.5">
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-ink/20 px-4 py-2.5">
       <div className="flex min-w-0 items-center gap-2.5">
         <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25)]">
           <Icon size={14} />
@@ -202,7 +202,7 @@ function CardHead({ icon: Icon, title, sub, action }: { icon: IconCmp; title: st
 
 function Empty({ icon: Icon, title, desc }: { icon: IconCmp; title: string; desc: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-dashed border-ink/[0.12] bg-bone/60 px-4 py-4">
+    <div className="flex items-center gap-3 rounded-xl border border-dashed border-ink/20 bg-bone/60 px-4 py-4">
       <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-void text-gold-light">
         <Icon size={15} />
       </span>
@@ -527,14 +527,14 @@ export default function AnalyticsPage() {
                   />
                 }
               />
-              <div className="grid grid-cols-2 border-b border-ink/[0.06] sm:grid-cols-4">
+              <div className="grid grid-cols-2 border-b border-ink/20 sm:grid-cols-4">
                 {[
                   ["12-month revenue", `${compact.format(revenue12)} LKR`],
                   ["12-month net", `${compact.format(net12)} LKR`],
                   ["Avg monthly revenue", withData ? `${compact.format(revenue12 / withData)} LKR` : "—"],
                   ["12-month margin", revenue12 ? `${((net12 / revenue12) * 100).toFixed(1)}%` : "—"],
                 ].map(([k, v], i) => (
-                  <div key={k} className={cn("px-4 py-2", i % 2 === 1 && "border-l border-ink/[0.06]", i >= 2 && "border-t border-ink/[0.06] sm:border-t-0", i === 2 && "sm:border-l")}>
+                  <div key={k} className={cn("px-4 py-2", i % 2 === 1 && "border-l border-ink/20", i >= 2 && "border-t border-ink/20 sm:border-t-0", i === 2 && "sm:border-l")}>
                     <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">{k}</div>
                     <div className="g-metric mt-0.5 truncate text-[13px] text-ink">{v}</div>
                   </div>
@@ -601,7 +601,7 @@ export default function AnalyticsPage() {
                   </thead>
                   <tbody>
                     {compare.map((r) => (
-                      <tr key={r.k} className={cn("border-t border-ink/[0.05]", r.strong && "bg-gold-pale/30")}>
+                      <tr key={r.k} className={cn("border-t border-ink/20", r.strong && "bg-gold-pale/30")}>
                         <td className={cn("py-1.5 pl-4 pr-2", r.strong ? "font-semibold text-ink" : "text-ink-3")}>{r.k}</td>
                         <td className="g-metric px-2 text-right text-ink-4">{loading ? "…" : r.prev === null ? "—" : r.fmt(r.prev)}</td>
                         <td className={cn("g-metric px-2 text-right", r.strong ? "font-semibold text-ink" : "text-ink-2")}>
@@ -727,7 +727,7 @@ export default function AnalyticsPage() {
                   </div>
                 )}
                 {cur && stockTotal > 0 ? (
-                  <div className="mt-3 border-t border-ink/[0.06] pt-2.5">
+                  <div className="mt-3 border-t border-ink/20 pt-2.5">
                     <div className="flex justify-between text-[10.5px] font-medium text-ink-4">
                       <span>Jewellery · {lkr(cur.inventory.jewelleryCents)}</span>
                       <span>Gold · {lkr(cur.inventory.goldCents)}</span>
@@ -834,7 +834,7 @@ export default function AnalyticsPage() {
                     const d = s.d;
                     const current = i === 0;
                     return (
-                      <tr key={s.month} className={cn("border-t border-ink/[0.05] transition-colors hover:bg-bone/60", current && "bg-gold-pale/30")}>
+                      <tr key={s.month} className={cn("border-t border-ink/20 transition-colors hover:bg-bone/60", current && "bg-gold-pale/30")}>
                         <td className="py-1.5 pl-4 pr-2">
                           <span className={cn("font-medium", current ? "text-ink" : "text-ink-2")}>{monthYear(s.month)}</span>
                           {current ? <span className="ml-1.5 rounded bg-void px-1 py-px text-[9px] font-semibold uppercase tracking-wider text-gold-light">Now</span> : null}
@@ -863,7 +863,7 @@ export default function AnalyticsPage() {
                   })}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-ink/[0.1] bg-bone text-[12px] font-semibold text-ink">
+                  <tr className="border-t border-ink/20 bg-bone text-[12px] font-semibold text-ink">
                     <td className="py-2 pl-4 pr-2">12 months</td>
                     <td className="g-metric px-2 text-right">{lkr(revenue12 * 100)}</td>
                     <td className="g-metric px-2 text-right">{lkrSigned(series.reduce((a, s) => a + (s.d?.profit.grossProfitCents ?? 0), 0))}</td>

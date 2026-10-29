@@ -157,7 +157,7 @@ function LoginForm() {
                     key={s.slug}
                     className={cn(
                       "flex cursor-pointer items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm ring-1 transition-colors",
-                      slug === s.slug ? "bg-gold/[0.08] ring-gold-dark/40" : "bg-paper ring-ink/10 hover:ring-ink/25"
+                      slug === s.slug ? "bg-gold/[0.08] ring-gold-dark/40" : "bg-paper ring-ink/20 hover:ring-ink/25"
                     )}
                   >
                     <input

@@ -245,7 +245,7 @@ export default function MfgOrderDetailPage({ params }: { params: Promise<{ id: s
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t border-ink/[0.1] bg-bone text-[12px] font-semibold text-ink">
+                <tr className="border-t border-ink/20 bg-bone text-[12px] font-semibold text-ink">
                   <td className="py-1.5 pl-4" colSpan={2}>
                     Total allocated
                   </td>
@@ -295,7 +295,7 @@ export default function MfgOrderDetailPage({ params }: { params: Promise<{ id: s
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-ink/[0.1] bg-bone text-[12px] font-semibold text-ink">
+                  <tr className="border-t border-ink/20 bg-bone text-[12px] font-semibold text-ink">
                     <td className="py-1.5 pl-4">Total</td>
                     <td className="g-metric px-2 text-right">{grams(grossMg)}</td>
                     <td className="g-metric px-2 text-right">{grams(producedMg)}</td>
@@ -317,7 +317,7 @@ export default function MfgOrderDetailPage({ params }: { params: Promise<{ id: s
               ["Making", order.making_cents],
               ["Stones", order.stone_cost_cents],
             ].map(([k, v]) => (
-              <div key={k as string} className="flex items-baseline justify-between border-b border-dashed border-ink/[0.08] py-1.5">
+              <div key={k as string} className="flex items-baseline justify-between border-b border-dashed border-ink/20 py-1.5">
                 <dt className="text-ink-3">{k}</dt>
                 <dd className="g-metric text-ink">{lkrFromCents(v as number)} LKR</dd>
               </div>
@@ -337,7 +337,7 @@ export default function MfgOrderDetailPage({ params }: { params: Promise<{ id: s
               { k: "Produced", v: producedMg, sign: "−" },
               { k: "Loss", v: order.loss_mg, sign: "−", tone: order.loss_mg > 0 ? "text-rose-700" : undefined },
             ].map((r) => (
-              <div key={r.k} className="flex items-baseline justify-between border-b border-dashed border-ink/[0.08] py-1.5">
+              <div key={r.k} className="flex items-baseline justify-between border-b border-dashed border-ink/20 py-1.5">
                 <dt className="text-ink-3">{r.k}</dt>
                 <dd className={cn("g-metric", r.tone ?? "text-ink")}>
                   {r.sign}

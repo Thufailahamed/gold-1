@@ -314,7 +314,7 @@ export function Segmented<K extends string>({
   ariaLabel: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={ariaLabel} className="inline-flex rounded-lg bg-ink/[0.05] p-0.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.05)]">
+    <div role="radiogroup" aria-label={ariaLabel} className="inline-flex rounded-lg bg-ink/[0.05] p-0.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
       {items.map((it) => {
         const on = it.key === value;
         return (
@@ -453,7 +453,7 @@ export function PanelHead({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-ink/[0.06] px-4 py-3", className)}>
+    <div className={cn("flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-ink/20 px-4 py-3", className)}>
       <div className="min-w-0">
         <div className="g-kicker !text-[9.5px]">{kicker}</div>
         <h3 className="mt-0.5 truncate font-display text-[15px] font-bold tracking-tight text-ink">{title}</h3>

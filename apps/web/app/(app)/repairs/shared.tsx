@@ -26,7 +26,7 @@ export const META: Record<RepairStatus, { dot: string; chip: string; hint: strin
   IN_PROGRESS: { dot: "bg-violet-500", chip: "bg-violet-500/10 text-violet-800 ring-violet-500/25", hint: "On the bench", icon: HammerIcon },
   QC: { dot: "bg-amber-400", chip: "bg-amber-500/10 text-amber-800 ring-amber-500/25", hint: "Awaiting sign-off", icon: ClipboardCheckIcon },
   READY: { dot: "bg-emerald-500", chip: "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25", hint: "To collect & pay", icon: CheckCircleIcon },
-  COLLECTED: { dot: "bg-ink/30", chip: "bg-ink/[0.04] text-ink-4 ring-ink/10", hint: "Handed back", icon: PackageIcon },
+  COLLECTED: { dot: "bg-ink/30", chip: "bg-ink/[0.04] text-ink-4 ring-ink/20", hint: "Handed back", icon: PackageIcon },
   CANCELLED: { dot: "bg-rose-400", chip: "bg-rose-500/10 text-rose-800 ring-rose-500/25", hint: "Withdrawn", icon: XIcon },
 };
 

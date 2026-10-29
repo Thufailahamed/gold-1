@@ -127,7 +127,6 @@ export const createProductSchema = z.object({
   makingLkr: z.number().min(0).optional().default(0),
   wastageG: z.number().min(0).optional().default(0),
   costLkr: z.number().min(0).optional(),
-  sellingPriceLkr: z.number().min(0).optional(),
   location: z.string().max(100).optional().or(z.literal("")).transform((v) => v || undefined),
   notes: z.string().max(2000).optional().or(z.literal("")).transform((v) => v || undefined),
 });
@@ -186,7 +185,6 @@ const bulkItemSchema = createProductSchema
     makingLkr: z.number().min(0).optional(),
     wastageG: z.number().min(0).optional(),
     costLkr: z.number().min(0).optional(),
-    sellingPriceLkr: z.number().min(0).optional(),
   });
 
 export const bulkCreateProductsSchema = z.object({
@@ -429,6 +427,21 @@ export const purchaseOldGoldSchema = z.object({
 
 export const voidOldGoldSchema = z.object({ reason: z.string().min(1).max(500) });
 
+/**
+ * A piece bought from a customer and put straight into stock: taken in at its
+ * karat and price per gram, paid for, and released to stock in one request.
+ * There is no testing step.
+ */
+export const buyInOldGoldSchema = createOldGoldSchema.extend({
+  customerId: z.string().min(1),
+  purityId: z.string().min(1),
+  quotedRateLkr: z.number().gt(0).max(10_000_000),
+  /** What is paid now. Blank pays the full value; less leaves the rest owed to the customer. */
+  paidLkr: z.number().min(0).optional(),
+  method: z.enum(["cash", "bank"]).default("cash"),
+});
+
+export type BuyInOldGoldInput = z.infer<typeof buyInOldGoldSchema>;
 export type CreateOldGoldInput = z.infer<typeof createOldGoldSchema>;
 export type TestOldGoldInput = z.infer<typeof testOldGoldSchema>;
 export type ValueOldGoldInput = z.infer<typeof valueOldGoldSchema>;

@@ -124,7 +124,7 @@ export function AutoCloseModal({ result, query, onClose }: { result: AutoCloseRe
         );
       })()}
 
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-ink/[0.06] ring-1 ring-ink/[0.06] sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-ink/[0.06] ring-1 ring-ink/20 sm:grid-cols-3">
         <Stat label="Expected cash" value={fmt(s.cash.expectedCents)} />
         <Stat label="Counted cash" value={s.cash.countedCents === null ? "Not counted" : fmt(s.cash.countedCents)} tone={s.cash.countedCents === null ? "text-rose-700" : undefined} />
         <Stat label="Difference" value={diff === null ? "—" : signed(diff)} tone={diffTone(diff)} />
@@ -149,7 +149,7 @@ export function AutoCloseModal({ result, query, onClose }: { result: AutoCloseRe
         ))}
       </div>
 
-      <ul className="max-h-[45vh] divide-y divide-ink/[0.06] overflow-y-auto rounded-xl ring-1 ring-ink/[0.08] scrollbar-thin">
+      <ul className="max-h-[45vh] divide-y divide-ink/[0.06] overflow-y-auto rounded-xl ring-1 ring-ink/20 scrollbar-thin">
         {shown.length === 0 ? (
           <li className="px-4 py-3 text-[12px] text-ink-3">No blockers or warnings. {quiet.length} item{quiet.length === 1 ? "" : "s"} passed or noted.</li>
         ) : (
@@ -192,7 +192,7 @@ export function AutoCloseModal({ result, query, onClose }: { result: AutoCloseRe
         </button>
       ) : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink/10 pt-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink/20 pt-3">
         <p className="text-xs text-ink-4">The downloaded report has every check, drawer movement, pending item and earlier unclosed day.</p>
         <div className="flex flex-wrap gap-2">
           <Link href={`/day-closing/report?branchId=${encodeURIComponent(s.branchId)}&date=${s.date}`} className="g-btn g-btn-secondary h-9 px-3 text-xs">

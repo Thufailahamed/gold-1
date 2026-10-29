@@ -412,7 +412,7 @@ export default function ExchangePage() {
               <div className="text-[11.5px] text-ink-4">Old gold bought in and new pieces sold in one batch</div>
             </div>
           </div>
-          <dl className="relative grid grid-cols-3 gap-px overflow-hidden rounded-xl bg-ink/[0.06] ring-1 ring-ink/[0.06]">
+          <dl className="relative grid grid-cols-3 gap-px overflow-hidden rounded-xl bg-ink/[0.06] ring-1 ring-ink/20">
             {[
               { k: "Old gold in", v: done.oldGoldValueCents },
               { k: "New pieces", v: done.saleTotalCents },
@@ -428,7 +428,7 @@ export default function ExchangePage() {
             ))}
           </dl>
           <div className="relative flex items-center gap-2">
-            <Link href={`/sales/invoices/${done.invoiceId}`} className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-paper px-3.5 text-[12.5px] font-medium text-ink ring-1 ring-inset ring-ink/10 transition-colors hover:bg-bone">
+            <Link href={`/sales/invoices/${done.invoiceId}`} className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-paper px-3.5 text-[12.5px] font-medium text-ink ring-1 ring-inset ring-ink/20 transition-colors hover:bg-bone">
               <FileTextIcon size={14} /> Invoice
             </Link>
             <button onClick={() => setDone(null)} className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-void px-4 text-[12.5px] font-semibold text-paper transition-transform hover:-translate-y-px">
@@ -460,7 +460,7 @@ export default function ExchangePage() {
                     setCustomer(null);
                     setOldIds([]);
                   }}
-                  className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-ink-4 ring-1 ring-inset ring-ink/10 transition-colors hover:bg-ink/[0.04] hover:text-ink"
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-ink-4 ring-1 ring-inset ring-ink/20 transition-colors hover:bg-ink/[0.04] hover:text-ink"
                 >
                   <XIcon size={13} /> Change
                 </button>
@@ -546,7 +546,7 @@ export default function ExchangePage() {
                         "group relative flex items-start gap-3 rounded-xl p-3 text-left ring-1 ring-inset transition-all duration-200 ease-brand",
                         on
                           ? "bg-gradient-to-br from-gold-pale/80 to-paper shadow-[0_12px_28px_-18px_rgba(205,168,83,0.9)] ring-gold/60"
-                          : "bg-paper ring-ink/[0.09] hover:-translate-y-px hover:ring-gold/40 hover:shadow-2"
+                          : "bg-paper ring-ink/20 hover:-translate-y-px hover:ring-gold/40 hover:shadow-2"
                       )}
                     >
                       <span
@@ -758,7 +758,7 @@ export default function ExchangePage() {
               <Line k={taxConfig.data?.label ? `${taxConfig.data.label} (${taxRateBp / 100}%)` : "Tax"} v={`LKR ${fmt(tax)}`} />
               <Line k="New pieces total" v={`LKR ${fmt(total)}`} strong />
               <Line k={`Old gold · ${selected.length} ${selected.length === 1 ? "piece" : "pieces"}`} v={`− LKR ${fmt(oldTotal)}`} gold />
-              <div className="!mt-3 border-t border-dashed border-ink/15 pt-3">
+              <div className="!mt-3 border-t border-dashed border-ink/20 pt-3">
                 <div className="flex items-center justify-between">
                   <dt className="font-semibold text-ink">{diff > 0 ? "Customer pays" : diff < 0 ? "Shop pays" : "Settled exactly"}</dt>
                   <dd className="g-metric text-[16px] font-semibold text-ink">LKR {fmt(Math.abs(diff))}</dd>
@@ -767,7 +767,7 @@ export default function ExchangePage() {
             </dl>
 
             {diff > 0 ? (
-              <div className="space-y-2 border-t border-ink/[0.06] px-5 py-4">
+              <div className="space-y-2 border-t border-ink/20 px-5 py-4">
                 <div className="flex items-center justify-between">
                   <span className="text-[9.5px] font-semibold uppercase tracking-[0.16em] text-ink-5">Payment</span>
                   <span className={cn("g-metric text-[11px]", paySum === diff ? "text-emerald-700" : "text-ink-4")}>
@@ -836,7 +836,7 @@ export default function ExchangePage() {
             ) : null}
 
             {diff < 0 ? (
-              <div className="space-y-2 border-t border-ink/[0.06] px-5 py-4">
+              <div className="space-y-2 border-t border-ink/20 px-5 py-4">
                 <span className="text-[9.5px] font-semibold uppercase tracking-[0.16em] text-ink-5">Pay the customer</span>
                 <div className="grid grid-cols-2 gap-1 rounded-xl bg-bone/70 p-1">
                   {(
@@ -866,7 +866,7 @@ export default function ExchangePage() {
               </div>
             ) : null}
 
-            <div className="space-y-3 border-t border-ink/[0.06] bg-bone/40 px-5 py-4">
+            <div className="space-y-3 border-t border-ink/20 bg-bone/40 px-5 py-4">
               <textarea
                 className={cn(controlClass, "h-auto min-h-[60px] w-full resize-none py-2")}
                 placeholder="Notes (printed on the invoice)"
@@ -902,7 +902,7 @@ function StepTag({ n, done, dark }: { n: number; done: boolean; dark?: boolean }
     <span
       className={cn(
         "flex size-6 items-center justify-center rounded-full text-[10.5px] font-semibold transition-all duration-200",
-        done ? "bg-gradient-to-b from-gold-light to-gold text-void shadow-[0_6px_14px_-8px_rgba(205,168,83,0.9)]" : dark ? "text-paper/50 ring-1 ring-inset ring-paper/20" : "text-ink-5 ring-1 ring-inset ring-ink/15"
+        done ? "bg-gradient-to-b from-gold-light to-gold text-void shadow-[0_6px_14px_-8px_rgba(205,168,83,0.9)]" : dark ? "text-paper/50 ring-1 ring-inset ring-paper/20" : "text-ink-5 ring-1 ring-inset ring-ink/20"
       )}
       aria-label={done ? `Step ${n} done` : `Step ${n}`}
     >

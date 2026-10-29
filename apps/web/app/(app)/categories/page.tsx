@@ -148,10 +148,10 @@ function EditDialog({
 }) {
   const [draft, setDraft] = useState(value);
   const field =
-    "mt-1.5 h-10 w-full rounded-xl bg-paper px-3 text-sm text-ink ring-1 ring-ink/10 focus:outline-none focus:ring-gold-dark/50";
+    "mt-1.5 h-10 w-full rounded-xl bg-paper px-3 text-sm text-ink ring-1 ring-ink/20 focus:outline-none focus:ring-gold-dark/50";
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" role="dialog" aria-modal="true" aria-label="Edit category">
-      <div className="w-full max-w-md rounded-2xl bg-paper p-5 shadow-4 ring-1 ring-ink/10">
+      <div className="w-full max-w-md rounded-2xl bg-paper p-5 shadow-4 ring-1 ring-ink/20">
         <p className="text-sm font-semibold text-ink">Edit category</p>
         <label className="mt-4 block text-[11px] font-semibold uppercase tracking-[0.14em] text-gold-dark">
           Name

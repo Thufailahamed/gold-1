@@ -26,7 +26,7 @@ export const STAGES: readonly Stage[] = [
   { status: "PURCHASED", label: "Purchased", hint: "Bought in", dot: "bg-gold-dark", chip: "bg-gold/20 text-gold-deep ring-gold-dark/35", icon: BanknoteIcon },
   { status: "AVAILABLE", label: "In stock", hint: "Ready to melt / resell", dot: "bg-emerald-500", chip: "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25", icon: ArchiveIcon },
   { status: "RESERVED_FOR_MELTING", label: "For melting", hint: "Reserved in a batch", dot: "bg-gold-deep", chip: "bg-gold-deep/15 text-gold-deep ring-gold-deep/30", icon: ScaleIcon },
-  { status: "MELTED", label: "Melted", hint: "Recovered as fine", dot: "bg-ink-3", chip: "bg-ink/[0.07] text-ink-2 ring-ink/15", icon: CheckCircleIcon },
+  { status: "MELTED", label: "Melted", hint: "Recovered as fine", dot: "bg-ink-3", chip: "bg-ink/[0.07] text-ink-2 ring-ink/20", icon: CheckCircleIcon },
 ];
 
 const OTHER: Record<string, Omit<Stage, "icon" | "status">> = {
@@ -40,7 +40,7 @@ export const stageOf = (s: string) => STAGES.find((x) => x.status === s) ?? OTHE
 export const statusText = (s: string) => stageOf(s)?.label ?? s.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 
 export function OgChip({ status, className }: { status: string; className?: string }) {
-  const m = stageOf(status) ?? { dot: "bg-ink/30", chip: "bg-ink/[0.05] text-ink-3 ring-ink/10" };
+  const m = stageOf(status) ?? { dot: "bg-ink/30", chip: "bg-ink/[0.05] text-ink-3 ring-ink/20" };
   return (
     <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-px text-[10.5px] font-semibold ring-1 ring-inset", m.chip, className)}>
       <span className={cn("size-1.5 rounded-full", m.dot)} />

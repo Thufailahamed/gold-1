@@ -174,7 +174,7 @@ export default function DriversPage() {
             })}
           </div>
         )}
-        <p className="border-t border-ink/[0.06] px-4 py-2 text-[10.5px] text-ink-5">
+        <p className="border-t border-ink/20 px-4 py-2 text-[10.5px] text-ink-5">
           Relationships shift over time; these are context for pricing, not forecasts.
         </p>
       </Card>

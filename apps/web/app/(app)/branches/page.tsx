@@ -170,13 +170,13 @@ export default function BranchesPage() {
         />
         {pages > 1 ? (
           <span className="ml-auto flex items-center gap-1 text-[11px] text-ink-4">
-            <button disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page" className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/10 hover:bg-paper disabled:opacity-40">
+            <button disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page" className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/20 hover:bg-paper disabled:opacity-40">
               <ChevronRightIcon size={13} className="rotate-180" />
             </button>
             <span className="g-metric px-1">
               {page} / {pages}
             </span>
-            <button disabled={page >= pages} onClick={() => setPage(page + 1)} aria-label="Next page" className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/10 hover:bg-paper disabled:opacity-40">
+            <button disabled={page >= pages} onClick={() => setPage(page + 1)} aria-label="Next page" className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/20 hover:bg-paper disabled:opacity-40">
               <ChevronRightIcon size={13} />
             </button>
           </span>
@@ -188,7 +188,7 @@ export default function BranchesPage() {
           <RowsSkeleton rows={4} />
         </div>
       ) : rows.length === 0 ? (
-        <div className="rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
+        <div className="rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
           <Empty icon={Building2Icon} title="No branches" desc={search ? `Nothing matches “${search}”.` : "Create the first branch to get started."} />
         </div>
       ) : (
@@ -200,7 +200,7 @@ export default function BranchesPage() {
               <article
                 key={b.id}
                 className={cn(
-                  "relative flex flex-col overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-30px_rgba(16,32,27,0.3)]",
+                  "relative flex flex-col overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_18px_40px_-30px_rgba(16,32,27,0.3)]",
                   !b.is_active && "opacity-70"
                 )}
               >
@@ -219,7 +219,7 @@ export default function BranchesPage() {
                   <span
                     className={cn(
                       "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-px text-[10.5px] font-semibold ring-1 ring-inset",
-                      b.is_active ? "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25" : "bg-ink/[0.04] text-ink-5 ring-ink/10"
+                      b.is_active ? "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25" : "bg-ink/[0.04] text-ink-5 ring-ink/20"
                     )}
                   >
                     <span className={cn("size-1.5 rounded-full", b.is_active ? "bg-emerald-500" : "bg-ink/30")} />
@@ -228,7 +228,7 @@ export default function BranchesPage() {
                 </div>
 
                 {canShop ? (
-                  <div className="grid grid-cols-4 gap-px border-y border-ink/[0.06] bg-ink/[0.05]">
+                  <div className="grid grid-cols-4 gap-px border-y border-ink/20 bg-ink/[0.05]">
                     {[
                       { k: "Pieces", v: sn ? count(sn.jewellery.pieces) : null, icon: PackageIcon },
                       { k: "Gold", v: sn ? `${grams(sn.gold.fineMg)} g` : null, icon: CoinsIcon },
@@ -269,7 +269,7 @@ export default function BranchesPage() {
                   {canSettings ? (
                     <button
                       onClick={() => setSettingsId(b.id)}
-                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/10 transition-colors hover:bg-bone hover:text-ink"
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/20 transition-colors hover:bg-bone hover:text-ink"
                     >
                       <SettingsIcon size={11} />
                       Settings

@@ -149,7 +149,7 @@ export default function GoldRatesPage() {
       {/* the board */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         {current.isLoading
-          ? [0, 1, 2, 3, 4].map((i) => <div key={i} className="h-[118px] animate-pulse rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]" />)
+          ? [0, 1, 2, 3, 4].map((i) => <div key={i} className="h-[118px] animate-pulse rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]" />)
           : rates.map((r, i) => {
               const prev = prevForCurrent(r);
               const d = prev ? ((r.rate_per_gram - prev.rate_per_gram) / prev.rate_per_gram) * 100 : null;
@@ -158,7 +158,7 @@ export default function GoldRatesPage() {
                 <div
                   key={r.purity_id}
                   className={cn(
-                    "relative overflow-hidden rounded-2xl p-3.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-30px_rgba(16,32,27,0.3)]",
+                    "relative overflow-hidden rounded-2xl p-3.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_18px_40px_-30px_rgba(16,32,27,0.3)]",
                     i === 0 ? "bg-void text-paper" : "bg-paper"
                   )}
                 >

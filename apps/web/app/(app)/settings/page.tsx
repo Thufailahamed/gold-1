@@ -127,7 +127,7 @@ function InvoiceProfilePanel({ canEdit }: { canEdit: boolean }) {
           })}
         </div>
         {canEdit ? (
-          <div className="flex items-center justify-end gap-2 border-t border-ink/[0.06] bg-bone/40 px-4 py-2.5">
+          <div className="flex items-center justify-end gap-2 border-t border-ink/20 bg-bone/40 px-4 py-2.5">
             {dirty ? (
               <button onClick={() => setDraft(null)} className="g-btn g-btn-secondary h-9 px-4 text-sm">
                 Discard
@@ -256,7 +256,7 @@ export default function SettingsPage() {
                   Save
                 </button>
               </div>
-              <div className="mt-3 rounded-xl bg-bone/60 px-3 py-2.5 ring-1 ring-inset ring-ink/[0.06]">
+              <div className="mt-3 rounded-xl bg-bone/60 px-3 py-2.5 ring-1 ring-inset ring-ink/20">
                 <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">Current value</div>
                 <div className="g-metric mt-1 break-all text-[12px] text-ink">
                   {!key ? (

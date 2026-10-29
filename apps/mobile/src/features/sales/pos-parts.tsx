@@ -89,7 +89,6 @@ export function saleable(d: Lookup, branchId: string, customer: Customer | null)
     if (customer && customer.id !== p.reserved_customer_id) return { error: `${p.barcode} is held for ${p.reserved_customer_name ?? "another customer"}` };
   } else if (p.status !== "IN_STOCK") return { error: `${p.barcode} is ${p.status.replace(/_/g, " ").toLowerCase()}, not for sale` };
   if (branchId && p.branch_id !== branchId) return { error: `${p.barcode} belongs to another branch` };
-  if (p.cost_cents === null) return { error: `${p.barcode} has no book cost — set its cost before selling` };
   const price = p.selling_price_cents ?? d.livePrice?.amount_cents;
   if (price === undefined) return { error: `No gold rate for ${p.karat} — set today's rate first` };
   return { price };

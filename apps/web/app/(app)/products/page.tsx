@@ -95,7 +95,7 @@ function StatusChip({ status, solid }: { status: string; solid?: boolean }) {
     <span
       className={cn(
         "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-px text-[10.5px] font-semibold ring-1 ring-inset",
-        solid ? "bg-paper/95 text-ink-2 shadow-2 ring-black/5 backdrop-blur" : (STATUS_CHIP[status] ?? "bg-ink/[0.05] text-ink-3 ring-ink/10")
+        solid ? "bg-paper/95 text-ink-2 shadow-2 ring-black/5 backdrop-blur" : (STATUS_CHIP[status] ?? "bg-ink/[0.05] text-ink-3 ring-ink/20")
       )}
     >
       <span className={cn("size-1.5 rounded-full", STATUS_DOT[status] ?? "bg-ink/30")} />
@@ -156,7 +156,7 @@ function ProductCard({ p, index }: { p: Product; index: number }) {
       href={`/products/${p.id}`}
       className={cn(
         "group relative flex animate-fade-in flex-col overflow-hidden rounded-2xl bg-paper transition-all duration-320 ease-brand",
-        "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-30px_rgba(16,32,27,0.35)]",
+        "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_18px_40px_-30px_rgba(16,32,27,0.35)]",
         "hover:-translate-y-0.5 hover:shadow-[inset_0_0_0_1px_rgba(168,138,62,0.4),0_28px_56px_-30px_rgba(126,98,35,0.5)]"
       )}
       style={{ animationDelay: `${Math.min(index, 12) * 30}ms` }}
@@ -189,7 +189,7 @@ function ProductCard({ p, index }: { p: Product; index: number }) {
         <div className="mt-0.5 truncate text-[11px] text-ink-4">
           {[p.category_name, p.metal_name, p.location ? `@ ${p.location}` : null].filter(Boolean).join(" · ")}
         </div>
-        <div className="mt-2 flex items-end justify-between gap-2 border-t border-ink/[0.06] pt-2">
+        <div className="mt-2 flex items-end justify-between gap-2 border-t border-ink/20 pt-2">
           <div className="flex gap-3 leading-none">
             <span>
               <span className="block text-[8.5px] font-semibold uppercase tracking-[0.16em] text-ink-5">Net</span>
@@ -214,7 +214,7 @@ function ProductCard({ p, index }: { p: Product; index: number }) {
 
 function CardSkeleton() {
   return (
-    <div className="overflow-hidden rounded-2xl bg-paper p-1 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
+    <div className="overflow-hidden rounded-2xl bg-paper p-1 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
       <Skeleton className="aspect-[4/3] rounded-xl" />
       <div className="space-y-2 p-2 pt-2.5">
         <Skeleton className="h-3.5 w-3/4" />
@@ -269,7 +269,7 @@ function RangeField({
   return (
     <div className="min-w-0">
       <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-4">{label}</span>
-      <div className="flex h-9 items-center rounded-lg bg-paper pl-1.5 pr-1 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow duration-200 focus-within:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)] hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)]">
+      <div className="flex h-9 items-center rounded-lg bg-paper pl-1.5 pr-1 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow duration-200 focus-within:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)] hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)]">
         <span
           className={cn(
             "flex size-6 shrink-0 items-center justify-center rounded-md transition-colors",
@@ -337,9 +337,9 @@ function PageNav({
   const to = (page - 1) * PAGE_SIZE + count;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const btn =
-    "flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-ink transition-all shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] hover:-translate-y-px hover:bg-void hover:text-paper hover:shadow-none disabled:pointer-events-none disabled:opacity-40";
+    "flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-ink transition-all shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] hover:-translate-y-px hover:bg-void hover:text-paper hover:shadow-none disabled:pointer-events-none disabled:opacity-40";
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-paper px-4 py-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_16px_36px_-30px_rgba(16,32,27,0.3)] sm:px-5">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-paper px-4 py-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_16px_36px_-30px_rgba(16,32,27,0.3)] sm:px-5">
       <span className="text-xs text-ink-4">
         Showing <span className="g-metric font-medium text-ink">{from}–{to}</span> of{" "}
         <span className="g-metric font-medium text-ink">{total.toLocaleString("en-US")}</span> pieces
@@ -568,7 +568,7 @@ export default function ProductsPage() {
 
       {/* Toolbar */}
       <section className="sticky top-14 z-20 -mx-1 rounded-[20px] bg-bone/80 px-1 py-1 backdrop-blur-xl">
-        <div className="relative rounded-2xl bg-paper p-2.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-30px_rgba(16,32,27,0.35)]">
+        <div className="relative rounded-2xl bg-paper p-2.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_18px_40px_-30px_rgba(16,32,27,0.35)]">
           <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/40 to-transparent" />
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
             <div className="group relative flex-1">
@@ -577,7 +577,7 @@ export default function ProductsPage() {
                 placeholder="Search name, barcode, SKU…"
                 value={search}
                 onChange={(e) => set(setSearch)(e.target.value)}
-                className="h-9 w-full rounded-lg bg-bone/60 pl-9 pr-10 text-[13px] text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)] transition-all duration-200 placeholder:text-ink-5 hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] focus:bg-paper focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]"
+                className="h-9 w-full rounded-lg bg-bone/60 pl-9 pr-10 text-[13px] text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] transition-all duration-200 placeholder:text-ink-5 hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] focus:bg-paper focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]"
               />
               {search ? (
                 <button
@@ -599,7 +599,7 @@ export default function ProductsPage() {
                   "inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg px-3 text-[12.5px] font-medium transition-all duration-200 md:flex-none",
                   moreFilters
                     ? "bg-void text-paper shadow-[inset_0_0_0_1px_rgba(205,168,83,0.35),0_10px_22px_-12px_rgba(6,42,34,0.8)]"
-                    : "bg-paper text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] hover:-translate-y-px hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)]"
+                    : "bg-paper text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] hover:-translate-y-px hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)]"
                 )}
               >
                 <LayersIcon size={15} className={moreFilters ? "text-gold-light" : "text-ink-4"} />
@@ -611,7 +611,7 @@ export default function ProductsPage() {
                 ) : null}
                 <ChevronDownIcon size={14} className={cn("transition-transform duration-200", moreFilters && "rotate-180")} />
               </button>
-              <div className="relative flex h-9 items-center rounded-lg bg-bone p-0.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)]" role="group" aria-label="View">
+              <div className="relative flex h-9 items-center rounded-lg bg-bone p-0.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]" role="group" aria-label="View">
                 <span
                   aria-hidden
                   className={cn(
@@ -673,7 +673,7 @@ export default function ProductsPage() {
           </div>
 
           {moreFilters ? (
-            <div className="mt-3 animate-fade-in border-t border-ink/[0.06] pt-3">
+            <div className="mt-3 animate-fade-in border-t border-ink/20 pt-3">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="min-w-0">
                   <FilterLabel>Category</FilterLabel>
@@ -763,7 +763,7 @@ export default function ProductsPage() {
             </>
           ) : (
             <>
-              <span className="g-metric rounded-lg bg-paper px-2 py-0.5 font-medium text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)]">
+              <span className="g-metric rounded-lg bg-paper px-2 py-0.5 font-medium text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
                 {(list.data?.total ?? 0).toLocaleString("en-US")}
               </span>
               <span>
@@ -821,11 +821,11 @@ export default function ProductsPage() {
 
       {/* Results */}
       {list.isError ? (
-        <div className="rounded-[22px] bg-paper p-6 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
+        <div className="rounded-[22px] bg-paper p-6 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
           <EmptyBlock title="Failed to load products" description="Check the API connection and retry." />
         </div>
       ) : !list.isLoading && rows.length === 0 ? (
-        <div className="relative flex flex-col items-center overflow-hidden rounded-[28px] border border-dashed border-ink/15 bg-paper/70 px-6 py-16 text-center">
+        <div className="relative flex flex-col items-center overflow-hidden rounded-[28px] border border-dashed border-ink/20 bg-paper/70 px-6 py-16 text-center">
           <div className="pointer-events-none absolute -top-24 left-1/2 size-72 -translate-x-1/2 rounded-full bg-gold/10 blur-[80px]" />
           <span className="relative mb-5 flex size-16 items-center justify-center rounded-2xl bg-void text-gold-light shadow-4">
             <span className="absolute inset-0 animate-pulse-soft rounded-2xl ring-4 ring-gold/20" />
@@ -854,7 +854,7 @@ export default function ProductsPage() {
             : rows.map((p, i) => <ProductCard key={p.id} p={p} index={i} />)}
         </div>
       ) : (
-        <section className="overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-30px_rgba(16,32,27,0.35)]">
+        <section className="overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_18px_40px_-30px_rgba(16,32,27,0.35)]">
           <div className="scrollbar-thin overflow-x-auto">
             {list.isLoading ? (
               <div className="space-y-2 p-3">
@@ -883,7 +883,7 @@ export default function ProductsPage() {
                       <td className="relative py-1.5 pl-4 pr-2">
                         <span className={cn("absolute inset-y-1.5 left-0 w-[3px] rounded-r-full", STATUS_DOT[r.status] ?? "bg-ink/20")} aria-hidden />
                         <Link href={`/products/${r.id}`} className="flex items-center gap-2.5">
-                          <span className="size-9 shrink-0 overflow-hidden rounded-lg ring-1 ring-ink/[0.08]">
+                          <span className="size-9 shrink-0 overflow-hidden rounded-lg ring-1 ring-ink/20">
                             <ProductMedia p={r} className="[&_svg]:size-5" />
                           </span>
                           <span className="min-w-0 leading-tight">
@@ -921,7 +921,7 @@ export default function ProductsPage() {
                         <Link
                           href={`/products/${r.id}`}
                           aria-label={`Open ${r.barcode}`}
-                          className="inline-flex size-7 items-center justify-center rounded-full text-ink-5 ring-1 ring-inset ring-ink/10 transition-all group-hover:bg-void group-hover:text-gold-light group-hover:ring-0"
+                          className="inline-flex size-7 items-center justify-center rounded-full text-ink-5 ring-1 ring-inset ring-ink/20 transition-all group-hover:bg-void group-hover:text-gold-light group-hover:ring-0"
                         >
                           <ArrowRightIcon size={12} />
                         </Link>
@@ -930,7 +930,7 @@ export default function ProductsPage() {
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t-2 border-ink/10 bg-bone/50 text-[12px] font-semibold">
+                  <tr className="border-t-2 border-ink/20 bg-bone/50 text-[12px] font-semibold">
                     <td className="py-2 pl-4 pr-2 text-ink-3" colSpan={3}>
                       Page total · {rows.length} pieces
                     </td>

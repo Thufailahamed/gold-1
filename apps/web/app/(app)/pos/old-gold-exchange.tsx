@@ -42,7 +42,7 @@ const money = (c: number) => (c / 100).toLocaleString("en-US", { maximumFraction
 const grams = (mg: number) => (mg / 1000).toLocaleString("en-US", { maximumFractionDigits: 3 });
 
 const fieldCls =
-  "num-tabular mt-1.5 h-10 w-full rounded-xl bg-paper px-3 text-sm font-normal text-ink ring-1 ring-ink/10 focus:outline-none focus:ring-gold-dark/50";
+  "num-tabular mt-1.5 h-10 w-full rounded-xl bg-paper px-3 text-sm font-normal text-ink ring-1 ring-ink/20 focus:outline-none focus:ring-gold-dark/50";
 
 export function OldGoldExchange({
   customerName,
@@ -121,7 +121,7 @@ export function OldGoldExchange({
       ) : null}
 
       {open ? (
-        <div className="mb-4 rounded-xl bg-bone/70 p-4 ring-1 ring-ink/[0.06]">
+        <div className="mb-4 rounded-xl bg-bone/70 p-4 ring-1 ring-ink/20">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-medium text-ink">New pieces from {customerName}</p>
             <button
@@ -196,7 +196,7 @@ export function OldGoldExchange({
           )}
         </p>
       ) : (
-        <ul className="grid gap-2 md:grid-cols-2">
+        <ul className="grid gap-2">
           {pending.map((p) => (
             <li key={p.key}>
               <div className="flex items-center gap-3 rounded-xl bg-gold-pale/70 px-3.5 py-2.5 ring-1 ring-gold-dark/40">
@@ -224,7 +224,7 @@ export function OldGoldExchange({
                 <label
                   className={cn(
                     "flex cursor-pointer items-center gap-3 rounded-xl px-3.5 py-2.5 ring-1 transition-colors",
-                    on ? "bg-gold-pale/70 ring-gold-dark/40" : "bg-bone/70 ring-ink/[0.06] hover:ring-gold-dark/30"
+                    on ? "bg-gold-pale/70 ring-gold-dark/40" : "bg-bone/70 ring-ink/20 hover:ring-gold-dark/30"
                   )}
                 >
                   <input
@@ -256,11 +256,11 @@ export function OldGoldExchange({
       {ticked > 0 ? (
         <>
           <div className="mt-4 grid grid-cols-3 gap-3">
-            <div className="rounded-xl bg-bone/70 px-3.5 py-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
+            <div className="rounded-xl bg-bone/70 px-3.5 py-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">New pieces</p>
               <p className="num-tabular mt-1 text-lg font-semibold text-ink">{money(saleTotalCents)}</p>
             </div>
-            <div className="rounded-xl bg-bone/70 px-3.5 py-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
+            <div className="rounded-xl bg-bone/70 px-3.5 py-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Old gold in</p>
               <p className="num-tabular mt-1 text-lg font-semibold text-ink">{money(oldTotalCents)}</p>
             </div>
@@ -269,7 +269,7 @@ export function OldGoldExchange({
                 "rounded-xl px-3.5 py-3 ring-1 ring-inset",
                 balance > 0 && "bg-amber-50 ring-amber-600/20",
                 balance < 0 && "bg-emerald-50 ring-emerald-600/20",
-                balance === 0 && "bg-bone/70 ring-ink/[0.06]"
+                balance === 0 && "bg-bone/70 ring-ink/20"
               )}
             >
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">

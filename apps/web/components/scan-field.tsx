@@ -56,9 +56,9 @@ export function ScanField({ compact = false }: { compact?: boolean }) {
           value={code}
           onChange={(e) => setCode(e.target.value)}
           autoComplete="off"
-          className="h-9 w-full rounded-lg bg-paper pl-9 pr-10 font-mono text-[13px] text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] transition-shadow placeholder:font-sans placeholder:text-ink-5 focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.3)]"
+          className="h-9 w-full rounded-lg bg-paper pl-9 pr-10 font-mono text-[13px] text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] transition-shadow placeholder:font-sans placeholder:text-ink-5 focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.3)]"
         />
-        <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-ink/15 bg-bone px-1.5 font-mono text-[10px] leading-4 text-ink-4">
+        <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-ink/20 bg-bone px-1.5 font-mono text-[10px] leading-4 text-ink-4">
           /
         </kbd>
       </form>
@@ -75,7 +75,7 @@ export function ScanField({ compact = false }: { compact?: boolean }) {
           value={code}
           onChange={(e) => setCode(e.target.value)}
           autoComplete="off"
-          className="h-10 w-full rounded-lg bg-paper pl-9 pr-3 font-mono text-sm text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.14)] transition-shadow placeholder:font-sans placeholder:text-ink-5 focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.3)]"
+          className="h-10 w-full rounded-lg bg-paper pl-9 pr-3 font-mono text-sm text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] transition-shadow placeholder:font-sans placeholder:text-ink-5 focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.3)]"
         />
       </div>
       <CameraScanButton onDetected={go} className="h-10" />

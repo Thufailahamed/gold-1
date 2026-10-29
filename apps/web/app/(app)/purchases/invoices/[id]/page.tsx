@@ -209,7 +209,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t border-ink/[0.1] bg-bone text-[12px] font-semibold text-ink">
+                <tr className="border-t border-ink/20 bg-bone text-[12px] font-semibold text-ink">
                   <td className="py-1.5 pl-4" colSpan={3}>
                     Total
                   </td>
@@ -233,7 +233,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               ["Total", invoice.total_cents],
               ["Paid", -invoice.paid_cents],
             ].map(([k, v]) => (
-              <div key={k as string} className="flex items-baseline justify-between border-b border-dashed border-ink/[0.08] py-1.5">
+              <div key={k as string} className="flex items-baseline justify-between border-b border-dashed border-ink/20 py-1.5">
                 <dt className="text-ink-3">{k}</dt>
                 <dd className={cn("g-metric", (v as number) < 0 ? "text-emerald-700" : "text-ink")}>
                   {(v as number) < 0 ? "−" : ""}
@@ -267,7 +267,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                   <tr key={p.id} className={tr}>
                     <td className="whitespace-nowrap py-1.5 pl-4 text-ink-3">{new Date(p.created_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
                     <td className="px-2">
-                      <span className="rounded bg-bone px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-ink-3 ring-1 ring-inset ring-ink/[0.07]">{p.method}</span>
+                      <span className="rounded bg-bone px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-ink-3 ring-1 ring-inset ring-ink/20">{p.method}</span>
                     </td>
                     <td className="g-metric py-1.5 pr-4 text-right font-semibold text-ink">{fmt(p.amount_cents)}</td>
                   </tr>
@@ -307,7 +307,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t border-ink/[0.1] bg-bone text-[12px] font-semibold text-ink">
+                <tr className="border-t border-ink/20 bg-bone text-[12px] font-semibold text-ink">
                   <td className="py-1.5 pl-4">Total</td>
                   <td className="g-metric px-2 text-right">{fmt(dr)}</td>
                   <td className="g-metric py-1.5 pr-4 text-right">{fmt(cr)}</td>

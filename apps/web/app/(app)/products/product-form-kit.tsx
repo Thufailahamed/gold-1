@@ -14,7 +14,7 @@ export type Option = { id: string; name?: string; code?: string; karat?: string;
 /** Matches the trigger of the themed <Select> so every control reads as one family. */
 export const inputCls = cn(
   "h-9 w-full rounded-lg bg-paper px-3 text-[13px] text-ink placeholder:text-ink-5",
-  "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-[box-shadow,background-color] duration-200",
+  "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_2px_rgba(16,32,27,0.04)] transition-[box-shadow,background-color] duration-200",
   "hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26),0_1px_2px_rgba(16,32,27,0.04)]",
   "focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]",
   "aria-[invalid=true]:shadow-[inset_0_0_0_1px_#e11d48,0_0_0_4px_rgba(225,29,72,0.12)]"
@@ -89,7 +89,7 @@ export function FormSection({
       id={id}
       className={cn(
         "relative scroll-mt-24 rounded-2xl bg-paper transition-shadow duration-320",
-        "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]",
+        "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]",
         "focus-within:shadow-[inset_0_0_0_1px_rgba(205,168,83,0.45),0_1px_2px_rgba(16,32,27,0.04),0_28px_56px_-34px_rgba(16,32,27,0.45)]"
       )}
     >
@@ -101,7 +101,7 @@ export function FormSection({
           done ? "via-gold opacity-100" : "via-gold/40 opacity-60"
         )}
       />
-      <header className="flex items-center gap-3 border-b border-ink/[0.06] px-4 py-2.5">
+      <header className="flex items-center gap-3 border-b border-ink/20 px-4 py-2.5">
         <span className="relative flex size-8 shrink-0 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25),0_8px_18px_-10px_rgba(6,42,34,0.7)]">
           {icon}
           <span className="g-metric absolute -right-1.5 -top-1.5 flex size-[18px] items-center justify-center rounded-full bg-paper text-[9px] text-ink shadow-[0_0_0_1px_rgba(16,32,27,0.12)]">
@@ -118,7 +118,7 @@ export function FormSection({
             Done
           </span>
         ) : (
-          <span className="shrink-0 rounded-full bg-bone px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-4 ring-1 ring-ink/[0.06]">
+          <span className="shrink-0 rounded-full bg-bone px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-4 ring-1 ring-ink/20">
             {required ? "Required" : "Optional"}
           </span>
         )}
@@ -143,7 +143,7 @@ export function UnitInput({
         {...rest}
         className={cn(inputCls, "g-metric pr-14 text-[14px]", className)}
       />
-      <span className="pointer-events-none absolute inset-y-1 right-1 flex items-center rounded-md bg-bone px-2 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-ink-4 ring-1 ring-ink/[0.05] transition-colors group-focus-within:bg-void group-focus-within:text-gold-light">
+      <span className="pointer-events-none absolute inset-y-1 right-1 flex items-center rounded-md bg-bone px-2 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-ink-4 ring-1 ring-ink/20 transition-colors group-focus-within:bg-void group-focus-within:text-gold-light">
         {unit}
       </span>
     </span>

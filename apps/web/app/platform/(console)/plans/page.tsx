@@ -117,7 +117,7 @@ export default function PlansPage() {
                     ["Storage", p.max_storage_mb === null ? "Unlimited" : `${(p.max_storage_mb / 1024).toFixed(p.max_storage_mb < 1024 ? 1 : 0)} GB`],
                   ] as const
                 ).map(([k, v]) => (
-                  <div key={k} className="rounded-lg bg-bone/70 px-3 py-2 ring-1 ring-ink/[0.06]">
+                  <div key={k} className="rounded-lg bg-bone/70 px-3 py-2 ring-1 ring-ink/20">
                     <dt className="text-ink-4">{k}</dt>
                     <dd className="g-metric mt-0.5 text-sm text-ink">{v}</dd>
                   </div>
@@ -219,7 +219,7 @@ function PlanDialog({ plan, flags, onClose }: { plan: Plan | null; flags: Flag[]
           <input type="number" min={0} max={365} value={f.trialDays} onChange={set("trialDays")} className={cn(controlClass, "w-full")} />
         </F>
       </div>
-      <div className="rounded-xl bg-bone/70 p-4 ring-1 ring-ink/[0.06]">
+      <div className="rounded-xl bg-bone/70 p-4 ring-1 ring-ink/20">
         <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-4">Limits · blank = unlimited</div>
         <div className="grid gap-4 sm:grid-cols-4">
           <F label="Users"><input type="number" min={0} value={f.maxUsers} onChange={set("maxUsers")} className={cn(controlClass, "w-full")} /></F>
@@ -234,7 +234,7 @@ function PlanDialog({ plan, flags, onClose }: { plan: Plan | null; flags: Flag[]
           {flags.map((fl) => {
             const on = f.features.has(fl.key);
             return (
-              <label key={fl.key} className={cn("flex cursor-pointer items-start gap-2.5 rounded-lg p-2.5 ring-1 transition-colors", on ? "bg-gold-pale ring-gold-dark/25" : "ring-ink/[0.08] hover:bg-bone")}>
+              <label key={fl.key} className={cn("flex cursor-pointer items-start gap-2.5 rounded-lg p-2.5 ring-1 transition-colors", on ? "bg-gold-pale ring-gold-dark/25" : "ring-ink/20 hover:bg-bone")}>
                 <input
                   type="checkbox"
                   checked={on}
@@ -257,7 +257,7 @@ function PlanDialog({ plan, flags, onClose }: { plan: Plan | null; flags: Flag[]
           })}
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-6 border-t border-ink/[0.07] pt-4 text-sm">
+      <div className="flex flex-wrap items-center gap-6 border-t border-ink/20 pt-4 text-sm">
         <label className="flex items-center gap-2.5">
           <Toggle checked={f.isPublic} onChange={(v) => setF((s) => ({ ...s, isPublic: v }))} label="Public" /> Shown on the pricing page
         </label>

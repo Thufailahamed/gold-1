@@ -54,10 +54,10 @@ describe.skipIf(!sqliteAvailable)("bulk product intake over real SQLite", () => 
     const r = await createProductsBulk(
       db,
       parse({
-        common: { ...common, costLkr: 1000, sellingPriceLkr: 50000 },
+        common: { ...common, costLkr: 1000 },
         items: [
           { grossG: 4 },
-          { grossG: 6, stoneG: 0.5, name: "Stone ring", costLkr: 2500, sellingPriceLkr: 90000, location: "Showcase 2" },
+          { grossG: 6, stoneG: 0.5, name: "Stone ring", costLkr: 2500, location: "Showcase 2" },
         ],
       }),
       "u1"
@@ -67,7 +67,8 @@ describe.skipIf(!sqliteAvailable)("bulk product intake over real SQLite", () => 
     expect(a!.name).toBe((raw.prepare("SELECT name FROM categories WHERE id = 'cat-ring'").get() as { name: string }).name);
     expect(b).toMatchObject({ name: "Stone ring", net_mg: 5500, stone_mg: 500 });
     const pb = raw.prepare("SELECT cost_cents, selling_price_cents, location FROM products WHERE id = ?").get(b!.id);
-    expect(pb).toEqual({ cost_cents: 250000, selling_price_cents: 9000000, location: "Showcase 2" });
+    // Cost is the typed figure; no selling price is set at intake.
+    expect(pb).toEqual({ cost_cents: 250000, selling_price_cents: null, location: "Showcase 2" });
     const { carriedOpeningValue } = await import("./openingstock");
     expect(await carriedOpeningValue(db, a!.id)).toBe(100000);
     expect(await carriedOpeningValue(db, b!.id)).toBe(250000);

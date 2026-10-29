@@ -21,6 +21,8 @@ export type DrawAllocation = {
   fineMg: number;
   costCents: number;
   expectedNetMg: number;
+  /** The item's status before this draw, which a void puts back. */
+  fromStatus: string;
   matched: boolean;
 };
 
@@ -38,13 +40,15 @@ export type PieceDraw = {
 
 type PoolItem = {
   id: string;
+  status: string;
   netLeft: number;
   fineLeft: number;
   costLeft: number;
   permille: number | null;
 };
 
-const POOL_FILTER = `o.status = 'AVAILABLE' AND o.net_mg > 0
+// On hand: bought (PURCHASED, as a till sale leaves it) or on the shelf (AVAILABLE). Both are held gold.
+const POOL_FILTER = `o.status IN ('PURCHASED', 'AVAILABLE') AND o.net_mg > 0
   AND NOT EXISTS (
     SELECT 1 FROM custom_order_gold g JOIN custom_orders co ON co.id = g.order_id
     WHERE g.kind = 'CUSTOMER_OLDGOLD' AND g.ref_id = o.id AND co.status NOT IN ('CANCELLED', 'DELIVERED')
@@ -57,15 +61,16 @@ export function mgLabel(mg: number): string {
 async function loadPool(db: D1Database, branchId: string): Promise<PoolItem[]> {
   const { results } = await db
     .prepare(
-      `SELECT o.id, o.net_mg, o.fine_mg, o.purchase_value_cents, o.tested_permille
+      `SELECT o.id, o.status, o.net_mg, o.fine_mg, o.purchase_value_cents, o.tested_permille
        FROM old_gold_items o
        WHERE o.branch_id = ? AND ${POOL_FILTER}
        ORDER BY o.created_at, o.id`
     )
     .bind(branchId)
-    .all<{ id: string; net_mg: number; fine_mg: number; purchase_value_cents: number | null; tested_permille: number | null }>();
+    .all<{ id: string; status: string; net_mg: number; fine_mg: number; purchase_value_cents: number | null; tested_permille: number | null }>();
   return (results ?? []).map((r) => ({
     id: r.id,
+    status: r.status,
     netLeft: r.net_mg,
     fineLeft: r.fine_mg,
     costLeft: r.purchase_value_cents ?? 0,
@@ -107,6 +112,7 @@ export async function planOldGoldDraws(db: D1Database, branchId: string, request
         fineMg: it.permille === null ? 0 : fineMg,
         costCents: it.permille === null ? 0 : costCents,
         expectedNetMg: it.netLeft,
+        fromStatus: it.status,
         matched: it.permille !== null,
       });
       it.netLeft -= netMg;
@@ -163,17 +169,17 @@ export function drawStmts(db: D1Database, draw: PieceDraw, productId: string, ac
            SET gross_mg = gross_mg - ?, net_mg = net_mg - ?, fine_mg = fine_mg - ?,
                purchase_value_cents = purchase_value_cents - ?,
                status = CASE WHEN net_mg - ? = 0 THEN 'DRAWN' ELSE status END
-           WHERE id = ? AND status = 'AVAILABLE' AND net_mg = ?`
+           WHERE id = ? AND status = ? AND net_mg = ?`
         )
-        .bind(a.netMg, a.netMg, a.fineMg, a.costCents, a.netMg, a.itemId, a.expectedNetMg),
+        .bind(a.netMg, a.netMg, a.fineMg, a.costCents, a.netMg, a.itemId, a.fromStatus, a.expectedNetMg),
       staleGuard(db)
     );
     stmts.push(
       db
         .prepare(
-          "INSERT INTO old_gold_draws (id, product_id, old_gold_id, net_mg, fine_mg, cost_cents, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+          "INSERT INTO old_gold_draws (id, product_id, old_gold_id, net_mg, fine_mg, cost_cents, from_status, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
-        .bind(crypto.randomUUID(), productId, a.itemId, a.netMg, a.fineMg, a.costCents, now, actorId)
+        .bind(crypto.randomUUID(), productId, a.itemId, a.netMg, a.fineMg, a.costCents, a.fromStatus, now, actorId)
     );
   }
   return stmts;
@@ -217,9 +223,9 @@ export function drawnFineMg(draw: PieceDraw): number {
 /** Puts back what a voided piece drew: the weight, fine and cost return to the items it came from. */
 export async function returnDrawStmts(db: D1Database, productId: string, actorId: string, now: number): Promise<D1PreparedStatement[]> {
   const { results } = await db
-    .prepare("SELECT id, old_gold_id, net_mg, fine_mg, cost_cents FROM old_gold_draws WHERE product_id = ? AND reversed_at IS NULL")
+    .prepare("SELECT id, old_gold_id, net_mg, fine_mg, cost_cents, from_status FROM old_gold_draws WHERE product_id = ? AND reversed_at IS NULL")
     .bind(productId)
-    .all<{ id: string; old_gold_id: string; net_mg: number; fine_mg: number; cost_cents: number }>();
+    .all<{ id: string; old_gold_id: string; net_mg: number; fine_mg: number; cost_cents: number; from_status: string }>();
   const stmts: D1PreparedStatement[] = [];
   for (const d of results ?? []) {
     stmts.push(
@@ -228,10 +234,10 @@ export async function returnDrawStmts(db: D1Database, productId: string, actorId
           `UPDATE old_gold_items
            SET gross_mg = gross_mg + ?, net_mg = net_mg + ?, fine_mg = fine_mg + ?,
                purchase_value_cents = purchase_value_cents + ?,
-               status = CASE WHEN status = 'DRAWN' THEN 'AVAILABLE' ELSE status END
+               status = CASE WHEN status = 'DRAWN' THEN ? ELSE status END
            WHERE id = ?`
         )
-        .bind(d.net_mg, d.net_mg, d.fine_mg, d.cost_cents, d.old_gold_id),
+        .bind(d.net_mg, d.net_mg, d.fine_mg, d.cost_cents, d.from_status, d.old_gold_id),
       db.prepare("UPDATE old_gold_draws SET reversed_at = ? WHERE id = ?").bind(now, d.id)
     );
   }

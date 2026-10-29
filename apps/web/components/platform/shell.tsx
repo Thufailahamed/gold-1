@@ -220,7 +220,7 @@ function StaffMenu({ me }: { me: PlatformMe }) {
       </button>
       {open ? (
         <div role="menu" className="g-floating absolute right-0 z-40 mt-2 w-72 animate-fade-in overflow-hidden">
-          <div className="border-b border-ink/[0.07] px-4 py-3.5">
+          <div className="border-b border-ink/20 px-4 py-3.5">
             <div className="truncate text-sm font-semibold text-ink">{me.admin.name}</div>
             <div className="mt-0.5 truncate font-mono text-[11px] text-ink-4">{me.admin.email}</div>
             <div className="mt-2 flex items-center gap-2 text-[11px] text-ink-4">
@@ -287,7 +287,7 @@ export function PlatformShell({ me, children }: { me: PlatformMe; children: Reac
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30">
-          <div className="flex h-14 items-center gap-2.5 border-b border-ink/[0.08] bg-bone/85 px-4 backdrop-blur-md lg:px-6">
+          <div className="flex h-14 items-center gap-2.5 border-b border-ink/20 bg-bone/85 px-4 backdrop-blur-md lg:px-6">
             <button
               type="button"
               aria-label="Open navigation"
@@ -296,7 +296,7 @@ export function PlatformShell({ me, children }: { me: PlatformMe; children: Reac
             >
               <MenuIcon size={19} />
             </button>
-            <span className="hidden items-center gap-2 rounded-full border border-ink/10 bg-paper px-2.5 py-1 sm:inline-flex">
+            <span className="hidden items-center gap-2 rounded-full border border-ink/20 bg-paper px-2.5 py-1 sm:inline-flex">
               <ShieldIcon size={12} className="text-gold-dark" />
               <span className="g-metric text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-4">Staff only · every action audited</span>
             </span>
@@ -304,9 +304,9 @@ export function PlatformShell({ me, children }: { me: PlatformMe; children: Reac
               type="button"
               onClick={() => setPalette(true)}
               title="Search everything (Ctrl/⌘ K)"
-              className="hidden items-center gap-2 rounded-lg border border-ink/10 bg-paper px-2.5 py-1.5 text-xs text-ink-4 hover:text-ink md:inline-flex"
+              className="hidden items-center gap-2 rounded-lg border border-ink/20 bg-paper px-2.5 py-1.5 text-xs text-ink-4 hover:text-ink md:inline-flex"
             >
-              Search… <kbd className="rounded border border-ink/10 bg-bone px-1 font-mono text-[10px]">⌘K</kbd>
+              Search… <kbd className="rounded border border-ink/20 bg-bone px-1 font-mono text-[10px]">⌘K</kbd>
             </button>
             <div className="flex-1" />
             <StaffMenu me={me} />

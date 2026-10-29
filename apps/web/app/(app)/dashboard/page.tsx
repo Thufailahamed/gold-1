@@ -158,7 +158,7 @@ const INV_CHIP: Record<string, string> = {
   PAID: "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25",
   PARTIAL: "bg-gold/15 text-gold-deep ring-gold/35",
   UNPAID: "bg-amber-500/10 text-amber-800 ring-amber-500/25",
-  VOID: "bg-ink/[0.04] text-ink-5 ring-ink/10",
+  VOID: "bg-ink/[0.04] text-ink-5 ring-ink/20",
 };
 
 function RevenuePanel({ d }: { d: ReturnType<typeof useDashboard> }) {
@@ -195,7 +195,7 @@ function RevenuePanel({ d }: { d: ReturnType<typeof useDashboard> }) {
         <Empty icon={TrendingUpIcon} title="No trend data yet" desc="Monthly figures appear once sales are posted." />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-px border-b border-ink/[0.06] bg-ink/[0.05] sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-px border-b border-ink/20 bg-ink/[0.05] sm:grid-cols-4">
             {[
               { k: "6-month revenue", v: `LKR ${fmt(total)}`, tone: "text-ink" },
               { k: "Net profit", v: `LKR ${fmt(netTotal)}`, tone: netTotal < 0 ? "text-rose-700" : "text-emerald-700", sub: total ? `${((netTotal / total) * 100).toFixed(1)}% margin` : undefined },
@@ -456,7 +456,7 @@ function RecentSales({ d }: { d: ReturnType<typeof useDashboard> }) {
                   </td>
                   <td className="g-metric px-2 text-[11.5px] text-ink-3">{inv.number}</td>
                   <td className="px-2">
-                    <span className={cn("inline-flex rounded-full px-2 py-px text-[10.5px] font-semibold capitalize ring-1 ring-inset", INV_CHIP[inv.status] ?? "bg-ink/[0.05] text-ink-3 ring-ink/10")}>
+                    <span className={cn("inline-flex rounded-full px-2 py-px text-[10.5px] font-semibold capitalize ring-1 ring-inset", INV_CHIP[inv.status] ?? "bg-ink/[0.05] text-ink-3 ring-ink/20")}>
                       {inv.status.toLowerCase()}
                     </span>
                   </td>
@@ -466,7 +466,7 @@ function RecentSales({ d }: { d: ReturnType<typeof useDashboard> }) {
               ))}
             </tbody>
             <tfoot>
-              <tr className="border-t-2 border-ink/10 bg-bone/50 text-[12px] font-semibold">
+              <tr className="border-t-2 border-ink/20 bg-bone/50 text-[12px] font-semibold">
                 <td className="py-1.5 pl-4 pr-2 text-ink-3" colSpan={3}>
                   Last {rows.length} invoices
                 </td>
@@ -534,7 +534,7 @@ function QuickActions({ d }: { d: ReturnType<typeof useDashboard> }) {
         <Link
           key={a.href}
           href={a.href}
-          className="group flex items-center gap-2.5 rounded-xl bg-paper px-3 py-2.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_14px_30px_-20px_rgba(16,32,27,0.5)]"
+          className="group flex items-center gap-2.5 rounded-xl bg-paper px-3 py-2.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_14px_30px_-20px_rgba(16,32,27,0.5)]"
         >
           <span
             className="flex size-8 shrink-0 items-center justify-center rounded-lg text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3)] transition-transform group-hover:scale-105"

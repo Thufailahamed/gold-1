@@ -190,14 +190,14 @@ export default function PlatformDashboard() {
                   ["Churn", mv.churn, "text-rose-700", "−"],
                 ] as const
               ).map(([label, v, tone, sign]) => (
-                <li key={label} className="flex items-center justify-between rounded-xl bg-bone/70 px-4 py-3 ring-1 ring-ink/[0.06]">
+                <li key={label} className="flex items-center justify-between rounded-xl bg-bone/70 px-4 py-3 ring-1 ring-ink/20">
                   <span className="text-sm text-ink-3">{label}</span>
                   <span className={`g-metric text-sm ${v === 0 ? "text-ink-4" : tone}`}>
                     {v === 0 ? "—" : `${sign}${money(v)}`}
                   </span>
                 </li>
               ))}
-              <li className="flex items-center justify-between border-t border-ink/[0.07] px-1 pt-3">
+              <li className="flex items-center justify-between border-t border-ink/20 px-1 pt-3">
                 <span className="text-sm font-semibold text-ink">Net</span>
                 <span className="g-metric text-base text-ink">{money(k?.net_new_mrr_30d ?? 0)}</span>
               </li>
@@ -283,7 +283,7 @@ export default function PlatformDashboard() {
                 ["No reply", k?.unanswered_tickets],
               ] as const
             ).map(([label, v]) => (
-              <div key={label} className="rounded-xl bg-bone/70 p-3 ring-1 ring-ink/[0.06]">
+              <div key={label} className="rounded-xl bg-bone/70 p-3 ring-1 ring-ink/20">
                 <dt className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-4">{label}</dt>
                 <dd className="g-metric mt-1 text-2xl text-ink">{v === undefined ? "—" : fmtInt(v)}</dd>
               </div>

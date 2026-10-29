@@ -165,7 +165,7 @@ export function MasterCrud({
       />
 
       <Card>
-        <div className="flex flex-wrap items-center gap-2 border-b border-ink/[0.06] px-4 py-2.5">
+        <div className="flex flex-wrap items-center gap-2 border-b border-ink/20 px-4 py-2.5">
           <div className="relative w-full max-w-xs">
             <SearchIcon size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-5" />
             <input
@@ -273,7 +273,7 @@ export function MasterCrud({
                         <span
                           className={cn(
                             "inline-flex items-center gap-1.5 rounded-full px-2 py-px text-[10.5px] font-semibold ring-1 ring-inset",
-                            on ? "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25" : "bg-ink/[0.04] text-ink-5 ring-ink/10"
+                            on ? "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25" : "bg-ink/[0.04] text-ink-5 ring-ink/20"
                           )}
                         >
                           <span className={cn("size-1.5 rounded-full", on ? "bg-emerald-500" : "bg-ink/30")} />
@@ -302,7 +302,7 @@ export function MasterCrud({
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-2 border-t border-ink/[0.06] bg-bone/40 px-4 py-2 text-[11px] text-ink-4">
+        <div className="flex items-center justify-between gap-2 border-t border-ink/20 bg-bone/40 px-4 py-2 text-[11px] text-ink-4">
           <span>
             {total ? (
               <>
@@ -319,7 +319,7 @@ export function MasterCrud({
               disabled={page <= 1}
               onClick={() => setPage(page - 1)}
               aria-label="Previous page"
-              className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/10 transition-colors hover:bg-paper disabled:opacity-40"
+              className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/20 transition-colors hover:bg-paper disabled:opacity-40"
             >
               <ChevronRightIcon size={13} className="rotate-180" />
             </button>
@@ -331,7 +331,7 @@ export function MasterCrud({
               disabled={page >= pages}
               onClick={() => setPage(page + 1)}
               aria-label="Next page"
-              className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/10 transition-colors hover:bg-paper disabled:opacity-40"
+              className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/20 transition-colors hover:bg-paper disabled:opacity-40"
             >
               <ChevronRightIcon size={13} />
             </button>
@@ -371,7 +371,7 @@ export function MasterCrud({
               ))}
             </div>
             {note ? <p className="rounded-lg bg-gold-pale/60 px-3 py-2 text-[11.5px] text-ink-3 ring-1 ring-inset ring-gold/20">{note}</p> : null}
-            <div className="flex justify-end gap-2 border-t border-ink/[0.06] pt-3">
+            <div className="flex justify-end gap-2 border-t border-ink/20 pt-3">
               <button type="button" onClick={() => setDialog(false)} className="g-btn g-btn-secondary h-9 px-4 text-sm">
                 Cancel
               </button>

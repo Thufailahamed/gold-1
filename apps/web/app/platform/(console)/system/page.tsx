@@ -129,7 +129,7 @@ export default function SystemPage() {
           {h ? (
             <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {Object.entries(h.counts).map(([k, v]) => (
-                <div key={k} className="rounded-xl bg-bone/70 p-3 ring-1 ring-ink/[0.06]">
+                <div key={k} className="rounded-xl bg-bone/70 p-3 ring-1 ring-ink/20">
                   <dt className="truncate font-mono text-[10px] text-ink-4">{k}</dt>
                   <dd className="g-metric mt-1 text-lg">{v.toLocaleString()}</dd>
                 </div>

@@ -96,7 +96,7 @@ function Card({ children, className, dark }: { children: ReactNode; className?: 
         "relative flex flex-col overflow-hidden rounded-2xl",
         dark
           ? "bg-void text-paper shadow-4"
-          : "bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-30px_rgba(16,32,27,0.28)]",
+          : "bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_18px_40px_-30px_rgba(16,32,27,0.28)]",
         className
       )}
     >
@@ -122,7 +122,7 @@ function CardHead({
     <div
       className={cn(
         "relative flex items-center justify-between gap-3 border-b px-4 py-2.5",
-        dark ? "border-paper/[0.08]" : "border-ink/[0.06]"
+        dark ? "border-paper/[0.08]" : "border-ink/20"
       )}
     >
       <div className="flex min-w-0 items-center gap-2.5">
@@ -166,13 +166,13 @@ function Empty({ icon: Icon, title, desc, dark }: { icon: IconCmp; title: string
     <div
       className={cn(
         "flex items-center gap-3 rounded-xl border border-dashed px-4 py-4",
-        dark ? "border-paper/15 bg-paper/[0.02]" : "border-ink/[0.12] bg-bone/60"
+        dark ? "border-paper/15 bg-paper/[0.02]" : "border-ink/20 bg-bone/60"
       )}
     >
       <span
         className={cn(
           "flex size-8 shrink-0 items-center justify-center rounded-lg",
-          dark ? "bg-paper/[0.06] text-gold-light" : "bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)]"
+          dark ? "bg-paper/[0.06] text-gold-light" : "bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]"
         )}
       >
         <Icon size={15} />
@@ -322,8 +322,8 @@ function StatementRow({
         "flex items-baseline justify-between gap-3",
         indent && "pl-3",
         strong
-          ? "mt-1 rounded-lg bg-bone px-3 py-2 text-[13.5px] font-semibold text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]"
-          : "border-b border-dashed border-ink/[0.07] py-1.5 text-[12.5px] text-ink-3"
+          ? "mt-1 rounded-lg bg-bone px-3 py-2 text-[13.5px] font-semibold text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]"
+          : "border-b border-dashed border-ink/20 py-1.5 text-[12.5px] text-ink-3"
       )}
     >
       <span className="min-w-0 truncate" title={hint}>
@@ -795,9 +795,9 @@ export default function AccountsDashboardPage() {
           <nav
             key={g.label}
             aria-label={g.label}
-            className={cn("grid lg:grid-cols-[132px_1fr]", gi > 0 && "border-t border-ink/[0.06]")}
+            className={cn("grid lg:grid-cols-[132px_1fr]", gi > 0 && "border-t border-ink/20")}
           >
-            <div className="flex items-center gap-2 border-b border-ink/[0.06] bg-bone/50 px-4 py-2 lg:border-b-0 lg:border-r">
+            <div className="flex items-center gap-2 border-b border-ink/20 bg-bone/50 px-4 py-2 lg:border-b-0 lg:border-r">
               <span className="g-metric text-[10px] font-semibold tracking-[0.2em] text-gold-dark">{gi === 0 ? "A-01" : "A-02"}</span>
               <span className="text-[11.5px] font-semibold text-ink-2">{g.label}</span>
             </div>
@@ -827,14 +827,14 @@ export default function AccountsDashboardPage() {
             sub={`${monthLabel} · posted spending per day`}
             action={<HeadLink href="/expenses?range=month">Register</HeadLink>}
           />
-          <div className="grid grid-cols-2 border-b border-ink/[0.06] sm:grid-cols-4">
+          <div className="grid grid-cols-2 border-b border-ink/20 sm:grid-cols-4">
             {[
               ["Month total", summary.data ? lkr(monthPosted) : "—"],
               ["Daily average", summary.data ? lkr(avgPerDay) : "—"],
               ["Busiest day", peak && peak.posted + peak.pending > 0 ? `${dayLabel(peak.date)} · ${compact(peak.posted + peak.pending)}` : "—"],
               ["Days with spend", `${activeDays} / ${chartData.length}`],
             ].map(([k, v], i) => (
-              <div key={k} className={cn("px-4 py-2", i % 2 === 1 && "border-l border-ink/[0.06]", i >= 2 && "border-t border-ink/[0.06] sm:border-t-0", i === 2 && "sm:border-l")}>
+              <div key={k} className={cn("px-4 py-2", i % 2 === 1 && "border-l border-ink/20", i >= 2 && "border-t border-ink/20 sm:border-t-0", i === 2 && "sm:border-l")}>
                 <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">{k}</div>
                 <div className="g-metric mt-0.5 truncate text-[13px] text-ink">{v}</div>
               </div>
@@ -998,10 +998,10 @@ export default function AccountsDashboardPage() {
               <Empty icon={ClipboardCheckIcon} title="Unavailable" desc="Could not load today's cash position." />
             )}
           </div>
-          <div className="border-t border-ink/[0.06] px-4 py-2">
+          <div className="border-t border-ink/20 px-4 py-2">
             <Link
               href="/day-closing"
-              className="group flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-[11.5px] font-medium text-ink-3 ring-1 ring-ink/[0.08] transition-colors hover:bg-void hover:text-gold-light hover:ring-void"
+              className="group flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-[11.5px] font-medium text-ink-3 ring-1 ring-ink/20 transition-colors hover:bg-void hover:text-gold-light hover:ring-void"
             >
               {closedToday ? "View closing" : "Count the drawer & close"}
               <ArrowRightIcon size={11} className="transition-transform group-hover:translate-x-0.5" />
@@ -1055,7 +1055,7 @@ export default function AccountsDashboardPage() {
                 </thead>
                 <tbody>
                   {todayRows.slice(0, 10).map((e) => (
-                    <tr key={e.id} className="group border-t border-ink/[0.05] transition-colors hover:bg-gold-pale/40">
+                    <tr key={e.id} className="group border-t border-ink/20 transition-colors hover:bg-gold-pale/40">
                       <td className="max-w-0 py-1.5 pl-4 pr-2">
                         <Link href={`/expenses/${e.id}`} className="block truncate font-medium text-ink group-hover:text-gold-dark">
                           {e.description}
@@ -1075,7 +1075,7 @@ export default function AccountsDashboardPage() {
                 </tbody>
               </table>
             )}
-            {todayRows.length > 10 ? <p className="border-t border-ink/[0.05] px-4 py-1.5 text-[11px] text-ink-4">+ {todayRows.length - 10} more today</p> : null}
+            {todayRows.length > 10 ? <p className="border-t border-ink/20 px-4 py-1.5 text-[11px] text-ink-4">+ {todayRows.length - 10} more today</p> : null}
           </div>
         </Card>
 
@@ -1169,7 +1169,7 @@ export default function AccountsDashboardPage() {
                   { k: "Customers owe you", v: r.receivables.totalCents, n: `${r.receivables.outstanding.length} open invoices`, href: "/accounts/receivables" },
                   { k: "You owe suppliers", v: r.payables.totalCents, n: `${r.payables.outstanding.length} open bills`, href: "/accounts/payables" },
                 ].map((x) => (
-                  <Link key={x.k} href={x.href} className="group block rounded-lg bg-bone/70 px-3 py-2 ring-1 ring-ink/[0.05] transition hover:bg-gold-pale/60 hover:ring-gold/30">
+                  <Link key={x.k} href={x.href} className="group block rounded-lg bg-bone/70 px-3 py-2 ring-1 ring-ink/20 transition hover:bg-gold-pale/60 hover:ring-gold/30">
                     <div className="flex items-baseline justify-between gap-3">
                       <span className="text-[12px] text-ink-3">{x.k}</span>
                       <Signed cents={x.v} className="text-[15px]" />

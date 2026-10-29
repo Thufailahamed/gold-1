@@ -234,7 +234,7 @@ export default function GoldLedgerPage() {
                         {grams(r.fine_mg)}
                       </td>
                       <td className="py-1.5 pl-2 pr-4">
-                        <span className="g-metric rounded bg-bone px-1.5 py-px text-[10.5px] text-ink-3 ring-1 ring-inset ring-ink/[0.06]" title={`${r.ref_entity}/${r.ref_id}`}>
+                        <span className="g-metric rounded bg-bone px-1.5 py-px text-[10.5px] text-ink-3 ring-1 ring-inset ring-ink/20" title={`${r.ref_entity}/${r.ref_id}`}>
                           {r.ref_entity}/{r.ref_id.slice(0, 8)}
                         </span>
                       </td>
@@ -245,7 +245,7 @@ export default function GoldLedgerPage() {
             </table>
           </div>
         )}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink/[0.06] px-4 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink/20 px-4 py-2">
           <span className="flex items-center gap-1.5 text-[10.5px] text-ink-5">
             <ShieldIcon size={11} className="text-gold-dark" /> Ledger lines are never edited · <span className="text-emerald-700">+ in</span> ·{" "}
             <span className="text-rose-700">− out</span> · ⇄ internal

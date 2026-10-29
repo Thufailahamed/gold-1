@@ -338,7 +338,7 @@ function DaySheetScreen() {
         </div>
       </GoldHero>
 
-      <div role="tablist" aria-label="Day sheet" className="flex gap-1 overflow-x-auto rounded-xl bg-paper p-1 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)] scrollbar-thin">
+      <div role="tablist" aria-label="Day sheet" className="flex gap-1 overflow-x-auto rounded-xl bg-paper p-1 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] scrollbar-thin">
         {tabs.map((t) => {
           const on = tab === t.key;
           return (
@@ -414,7 +414,7 @@ function DaySheetScreen() {
               </StepCard>
             </div>
             {v && v.system.length ? (
-              <p className="border-t border-ink/[0.06] px-4 py-3 text-[12px] text-ink-4">
+              <p className="border-t border-ink/20 px-4 py-3 text-[12px] text-ink-4">
                 The system has <b className="text-ink-2">{v.system.length}</b> transaction{v.system.length === 1 ? "" : "s"} for this day —{" "}
                 <button type="button" className="font-semibold text-gold-dark underline" onClick={() => setTab("system")}>
                   see the system sheet
@@ -469,7 +469,7 @@ function DaySheetScreen() {
                     />
                   </div>
                   {canEdit ? (
-                    <div className="border-t border-ink/[0.06] px-3 py-2">
+                    <div className="border-t border-ink/20 px-3 py-2">
                       <button type="button" onClick={() => startUpload(true)} className="text-[11.5px] font-semibold text-gold-dark underline">
                         Add another page (adds its lines below)
                       </button>
@@ -485,7 +485,7 @@ function DaySheetScreen() {
                   sub={dirty ? "Unsaved changes — Save & check to compare again" : sheet?.checked_at ? `Checked against the system ${new Date(sheet.checked_at).toLocaleTimeString()}` : "Not checked yet"}
                   action={
                     canEdit ? (
-                      <button type="button" onClick={() => setRows((rs) => [...rs, blankEdit()])} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11.5px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/12 hover:bg-bone">
+                      <button type="button" onClick={() => setRows((rs) => [...rs, blankEdit()])} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11.5px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/20 hover:bg-bone">
                         <PlusIcon size={12} /> Line
                       </button>
                     ) : undefined
@@ -494,7 +494,7 @@ function DaySheetScreen() {
                 <SheetGrid rows={rows} setRows={setRows} results={results} sysByRef={sysByRef} dirty={dirty} canEdit={canEdit} onAction={onAction} />
                 {errors.length ? <p className="px-4 pt-2 text-[11.5px] font-semibold text-rose-700">{errors.join(" · ")}</p> : null}
                 {canEdit ? (
-                  <div className="flex flex-wrap items-center gap-2 border-t border-ink/[0.06] px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2 border-t border-ink/20 px-4 py-3">
                     <button
                       type="button"
                       disabled={save.isPending || errors.length > 0 || (!dirty && sheet?.status !== "DRAFT" && !editingNew)}
@@ -507,7 +507,7 @@ function DaySheetScreen() {
                       type="button"
                       disabled={save.isPending || errors.length > 0 || !dirty}
                       onClick={() => save.mutate(true)}
-                      className="h-9 rounded-lg px-3 text-[12.5px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/12 hover:bg-bone disabled:opacity-50"
+                      className="h-9 rounded-lg px-3 text-[12.5px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/20 hover:bg-bone disabled:opacity-50"
                     >
                       Save draft
                     </button>
@@ -547,7 +547,7 @@ function DaySheetScreen() {
                       {rec.missingOnSheet.map((s) => {
                         const l = systemAsSheetLine(s);
                         return (
-                          <div key={s.ref} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-ink/[0.06] px-4 py-2 text-[12px]">
+                          <div key={s.ref} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-ink/20 px-4 py-2 text-[12px]">
                             <span className="min-w-0 flex-1">
                               <b className="text-ink">
                                 {s.href ? (
@@ -580,7 +580,7 @@ function DaySheetScreen() {
                     </div>
                   )}
                   {rec.ignored.length ? (
-                    <div className="border-t border-ink/[0.06] px-4 py-2 text-[11px] text-ink-4">
+                    <div className="border-t border-ink/20 px-4 py-2 text-[11px] text-ink-4">
                       Left off the sheet on purpose:{" "}
                       {rec.ignored.map((i, k) => (
                         <span key={i.ref}>
@@ -613,7 +613,7 @@ function DaySheetScreen() {
             title="System day sheet"
             sub="Every sale, payment, old-gold purchase and drawer movement in the books for this day, in the paper sheet's columns"
             action={
-              <Link href={`/day-sheet/print?branchId=${encodeURIComponent(branchId)}&date=${date}&mode=system`} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11.5px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/12 hover:bg-bone">
+              <Link href={`/day-sheet/print?branchId=${encodeURIComponent(branchId)}&date=${date}&mode=system`} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11.5px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/20 hover:bg-bone">
                 <PrinterIcon size={12} /> Print
               </Link>
             }
@@ -650,7 +650,7 @@ function DaySheetScreen() {
                       setDate(h.sheet_date);
                       setTab("check");
                     }}
-                    className="cursor-pointer border-t border-ink/[0.06] hover:bg-gold-pale/30"
+                    className="cursor-pointer border-t border-ink/20 hover:bg-gold-pale/30"
                   >
                     <td className="g-metric py-2 pl-2 font-semibold">{h.sheet_date}</td>
                     <td className="py-2">
@@ -728,7 +728,7 @@ function DaySheetScreen() {
 
 function StepCard({ n, title, body, children }: { n: number; title: string; body: string; children?: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-2 rounded-xl bg-bone/60 p-4 ring-1 ring-inset ring-ink/[0.06]">
+    <div className="flex flex-col gap-2 rounded-xl bg-bone/60 p-4 ring-1 ring-inset ring-ink/20">
       <span className="flex size-7 items-center justify-center rounded-full bg-void text-[12px] font-bold text-gold-light">{n}</span>
       <p className="text-[13px] font-semibold text-ink">{title}</p>
       <p className="flex-1 text-[11.5px] leading-snug text-ink-4">{body}</p>

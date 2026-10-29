@@ -68,7 +68,7 @@ type ReceiveResult = { received: string[]; skipped: string[] };
 type ScanLog = { key: number; code: string; outcome: "received" | "skipped" | "error"; message: string };
 
 const LINE_META: Record<LineStatus, { label: string; chip: string; dot: string }> = {
-  PENDING: { label: "Pending", chip: "bg-ink/[0.05] text-ink-3 ring-ink/10", dot: "bg-ink/30" },
+  PENDING: { label: "Pending", chip: "bg-ink/[0.05] text-ink-3 ring-ink/20", dot: "bg-ink/30" },
   IN_TRANSIT: { label: "In transit", chip: "bg-gold/15 text-gold-deep ring-gold/35", dot: "bg-gold" },
   RECEIVED: { label: "Received", chip: "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25", dot: "bg-emerald-500" },
   RECALLED: { label: "Recalled", chip: "bg-rose-500/10 text-rose-800 ring-rose-500/25", dot: "bg-rose-500" },
@@ -386,7 +386,7 @@ export default function TransferDetailPage({ params }: { params: Promise<{ id: s
               ].map((b, i) => (
                 <div key={b.k} className="flex min-w-0 flex-1 items-center gap-2">
                   {i === 1 ? <ArrowRightIcon size={12} className="shrink-0 text-gold-dark" /> : null}
-                  <div className={cn("min-w-0 flex-1 rounded-xl px-3 py-2 ring-1 ring-inset", b.mine ? "bg-void text-paper ring-gold/25" : "bg-bone/70 text-ink ring-ink/[0.06]")}>
+                  <div className={cn("min-w-0 flex-1 rounded-xl px-3 py-2 ring-1 ring-inset", b.mine ? "bg-void text-paper ring-gold/25" : "bg-bone/70 text-ink ring-ink/20")}>
                     <div className={cn("text-[9.5px] font-semibold uppercase tracking-[0.14em]", b.mine ? "text-gold-light/70" : "text-ink-5")}>
                       {b.k}
                       {b.mine ? " · yours" : ""}
@@ -396,7 +396,7 @@ export default function TransferDetailPage({ params }: { params: Promise<{ id: s
                 </div>
               ))}
             </div>
-            <dl className="divide-y divide-ink/[0.05] border-t border-ink/[0.06] text-[12px]">
+            <dl className="divide-y divide-ink/[0.05] border-t border-ink/20 text-[12px]">
               {[
                 ["Requested by", t.requestedByName ?? "-"],
                 ["Created", t.createdAt ? stamp(t.createdAt) : "-"],
@@ -442,7 +442,7 @@ export default function TransferDetailPage({ params }: { params: Promise<{ id: s
                     type="button"
                     onClick={() => reconcile.refetch()}
                     disabled={reconcile.isFetching}
-                    className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[11px] font-medium text-ink-3 ring-1 ring-inset ring-ink/10 hover:bg-bone hover:text-ink disabled:opacity-50"
+                    className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[11px] font-medium text-ink-3 ring-1 ring-inset ring-ink/20 hover:bg-bone hover:text-ink disabled:opacity-50"
                   >
                     <RefreshCwIcon size={11} className={reconcile.isFetching ? "animate-spin" : undefined} /> {reconcile.isFetching ? "Checking" : "Re-run"}
                   </button>

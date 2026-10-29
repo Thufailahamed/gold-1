@@ -392,7 +392,8 @@ function pieceStmts(
         lkrToCents(input.makingLkr),
         gToMg(input.wastageG),
         p.overrides ? p.overrides.costCents : input.costLkr !== undefined ? lkrToCents(input.costLkr) : null,
-        input.sellingPriceLkr !== undefined && input.sellingPriceLkr > 0 ? lkrToCents(input.sellingPriceLkr) : null,
+        // Selling prices are set at the POS, never at creation.
+        null,
         input.location ?? null,
         input.notes ?? null,
         "[]",
@@ -569,7 +570,6 @@ export async function createProductsBulk(
       makingLkr: it.makingLkr ?? common.makingLkr,
       wastageG: it.wastageG ?? common.wastageG,
       costLkr: it.costLkr ?? common.costLkr,
-      sellingPriceLkr: it.sellingPriceLkr ?? common.sellingPriceLkr,
       location: it.location ?? common.location,
       notes: it.notes ?? common.notes,
     };

@@ -106,7 +106,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-ink/60 p-4 pt-[12vh] backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-xl overflow-hidden rounded-2xl bg-paper shadow-5" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Search">
-        <div className="flex items-center gap-2 border-b border-ink/[0.07] px-4">
+        <div className="flex items-center gap-2 border-b border-ink/20 px-4">
           <span className="text-ink-4">⌘K</span>
           <input
             ref={inputRef}
@@ -133,7 +133,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             )
           )}
         </div>
-        <div className="border-t border-ink/[0.07] px-4 py-2 text-[11px] text-ink-4">
+        <div className="border-t border-ink/20 px-4 py-2 text-[11px] text-ink-4">
           <Link href="/platform/tenants" onClick={onClose} className="underline">Accounts</Link>
           {" · "}
           <Link href="/platform/billing" onClick={onClose} className="underline">Billing</Link>

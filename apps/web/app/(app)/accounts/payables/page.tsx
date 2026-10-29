@@ -152,7 +152,7 @@ function SupplierRows({ row, branchQuery, open, onToggle }: { row: Payable; bran
                 </thead>
                 <tbody>
                   {invoices.data!.invoices.map((i) => (
-                    <tr key={i.invoiceId} className="border-t border-ink/[0.06]">
+                    <tr key={i.invoiceId} className="border-t border-ink/20">
                       <td className="py-1.5 font-mono text-xs">{i.number}</td>
                       <td className="py-1.5 text-ink-3">{i.date}</td>
                       <td className="py-1.5 text-right num-tabular">{lkr(i.totalCents)}</td>

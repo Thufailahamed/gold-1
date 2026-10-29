@@ -307,7 +307,7 @@ function CreatedCredentials({ result, ownerEmail, onDone }: { result: CreateResu
       ) : result.tempPassword ? (
         <>
           <p className="text-sm text-ink-3">Send these to the owner. The password is shown only once and is not stored — copy it before closing.</p>
-          <div className="space-y-3 rounded-xl bg-bone/70 p-4 ring-1 ring-ink/[0.06]">
+          <div className="space-y-3 rounded-xl bg-bone/70 p-4 ring-1 ring-ink/20">
             <F label="Owner email">
               <div className="flex gap-2">
                 <input readOnly value={ownerEmail} className={cn(controlClass, "w-full font-mono")} />
@@ -430,7 +430,7 @@ function CreateTenantDialog({ plans, onClose, onCreated }: { plans: PlanOpt[]; o
           <input maxLength={3} value={f.currency} onChange={(e) => set("currency", e.target.value.toUpperCase())} className={cn(controlClass, "w-full font-mono")} />
         </F>
       </div>
-      <div className="rounded-xl bg-bone/70 p-4 ring-1 ring-ink/[0.06]">
+      <div className="rounded-xl bg-bone/70 p-4 ring-1 ring-ink/20">
         <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-4">Subscription</div>
         <div className="grid gap-4 sm:grid-cols-3">
           <F label="Plan">

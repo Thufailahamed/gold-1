@@ -63,7 +63,7 @@ const STATUS_DOT: Record<string, string> = {
 };
 
 const softBtn =
-  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[11.5px] font-medium text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] transition-all duration-200 hover:-translate-y-px hover:bg-void hover:text-paper hover:shadow-none disabled:pointer-events-none disabled:opacity-40";
+  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[11.5px] font-medium text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] transition-all duration-200 hover:-translate-y-px hover:bg-void hover:text-paper hover:shadow-none disabled:pointer-events-none disabled:opacity-40";
 
 const CODE_RE = /^[A-Z0-9]+(?:-[A-Z0-9]+)+$/i;
 
@@ -402,7 +402,7 @@ export default function BatchLabelsPage({
               </button>
             }
           />
-          <div className="border-b border-ink/[0.06] p-3">
+          <div className="border-b border-ink/20 p-3">
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -421,7 +421,7 @@ export default function BatchLabelsPage({
                   placeholder="Search name, barcode or SKU…"
                   autoComplete="off"
                   aria-label="Search pieces or scan a barcode"
-                  className="h-9 w-full rounded-lg bg-bone/60 pl-9 pr-10 text-[13px] text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)] transition-all duration-200 placeholder:text-ink-5 hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] focus:bg-paper focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]"
+                  className="h-9 w-full rounded-lg bg-bone/60 pl-9 pr-10 text-[13px] text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] transition-all duration-200 placeholder:text-ink-5 hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] focus:bg-paper focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]"
                 />
                 {search ? (
                   <button
@@ -507,7 +507,7 @@ export default function BatchLabelsPage({
                   <label
                     key={p.id}
                     className={cn(
-                      "flex cursor-pointer items-center gap-3 border-b border-ink/[0.06] px-3 py-2.5 text-[12px] transition-colors last:border-0",
+                      "flex cursor-pointer items-center gap-3 border-b border-ink/20 px-3 py-2.5 text-[12px] transition-colors last:border-0",
                       checked ? "bg-gold-pale/55" : "hover:bg-bone/70"
                     )}
                   >
@@ -544,7 +544,7 @@ export default function BatchLabelsPage({
           )}
 
           {rows.length < total ? (
-            <div className="border-t border-ink/[0.06] p-3">
+            <div className="border-t border-ink/20 p-3">
               <button
                 type="button"
                 onClick={() => setLimit((l) => Math.min(PICKER_MAX, l + PICKER_PAGE))}
@@ -624,7 +624,7 @@ export default function BatchLabelsPage({
                   })}
                 </div>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink/[0.06] px-3 py-2 text-[11px] text-ink-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink/20 px-3 py-2 text-[11px] text-ink-4">
                 <span>
                   {failed
                     ? `${failed} label${failed === 1 ? "" : "s"} failed`
@@ -685,7 +685,7 @@ export default function BatchLabelsPage({
         ) : pending > 0 && labels > 0 ? (
           <div
             aria-live="polite"
-            className="flex items-center gap-2 rounded-xl bg-ink/[0.04] px-4 py-2.5 text-[12px] text-ink-3 ring-1 ring-inset ring-ink/10 print:hidden"
+            className="flex items-center gap-2 rounded-xl bg-ink/[0.04] px-4 py-2.5 text-[12px] text-ink-3 ring-1 ring-inset ring-ink/20 print:hidden"
           >
             <span className="size-3 animate-spin rounded-full border-2 border-gold/30 border-t-gold" />
             Preparing {labels - pending} of {labels} label{labels === 1 ? "" : "s"}…

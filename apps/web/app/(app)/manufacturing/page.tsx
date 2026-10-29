@@ -185,7 +185,7 @@ export default function ManufacturingDashboardPage() {
                 : null}
             </div>
           </div>
-          <ol className="mt-3 grid flex-1 grid-cols-2 gap-px border-t border-ink/[0.06] bg-ink/[0.06] sm:grid-cols-3 lg:grid-cols-6">
+          <ol className="mt-3 grid flex-1 grid-cols-2 gap-px border-t border-ink/20 bg-ink/[0.06] sm:grid-cols-3 lg:grid-cols-6">
             {ORDER_FLOW.map((s, i) => {
               const c = counts[i] ?? 0;
               const meta = ORDER_META[s]!;
@@ -262,7 +262,7 @@ export default function ManufacturingDashboardPage() {
               </div>
             )}
           </div>
-          <div className="border-t border-ink/[0.06] px-4 py-2.5">
+          <div className="border-t border-ink/20 px-4 py-2.5">
             <div className="mb-1.5 flex items-center justify-between text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">
               <span>Order mix</span>
               <span className="g-metric normal-case tracking-normal">{typeTotal} total</span>
@@ -326,7 +326,7 @@ export default function ManufacturingDashboardPage() {
               </tbody>
             </table>
           )}
-          {wipRows.length > 8 ? <p className="border-t border-ink/[0.05] px-4 py-1.5 text-[11px] text-ink-4">+ {wipRows.length - 8} more on the bench</p> : null}
+          {wipRows.length > 8 ? <p className="border-t border-ink/20 px-4 py-1.5 text-[11px] text-ink-4">+ {wipRows.length - 8} more on the bench</p> : null}
         </Card>
 
         <Card>
@@ -382,7 +382,7 @@ export default function ManufacturingDashboardPage() {
               </tbody>
             </table>
           )}
-          <Link href="/manufacturing/orders" className="group mt-auto flex items-center justify-center gap-1 border-t border-ink/[0.06] py-2 text-[11px] font-medium text-ink-4 hover:bg-bone hover:text-ink">
+          <Link href="/manufacturing/orders" className="group mt-auto flex items-center justify-center gap-1 border-t border-ink/20 py-2 text-[11px] font-medium text-ink-4 hover:bg-bone hover:text-ink">
             Open the order book <ArrowRightIcon size={11} className="transition-transform group-hover:translate-x-0.5" />
           </Link>
         </Card>

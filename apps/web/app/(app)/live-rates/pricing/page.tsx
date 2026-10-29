@@ -280,7 +280,7 @@ export default function PricingPage() {
           }
         />
         {editing ? (
-          <div className="grid gap-3 border-b border-ink/[0.06] bg-gold-pale/30 px-4 py-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-3 border-b border-ink/20 bg-gold-pale/30 px-4 py-3 sm:grid-cols-2 lg:grid-cols-5">
             <Field label="Default margin" hint="Over market, all karats">
               <NumInput value={draft.defaultMarginPct ?? ""} onChange={(v) => setDraft({ ...draft, defaultMarginPct: v })} suffix="%" />
             </Field>
@@ -326,7 +326,7 @@ export default function PricingPage() {
                 {rows.map((r) => {
                   const t = karatTone(r.purity);
                   return (
-                    <tr key={r.purityId} className={cn("border-t border-ink/[0.05] transition-colors hover:bg-gold-pale/30", r.stale && "bg-amber-50/60")}>
+                    <tr key={r.purityId} className={cn("border-t border-ink/20 transition-colors hover:bg-gold-pale/30", r.stale && "bg-amber-50/60")}>
                       {canPublish && !editing ? (
                         <td className="py-1.5 pl-4">
                           <input
@@ -390,7 +390,7 @@ export default function PricingPage() {
             </table>
           </div>
         )}
-        <p className="border-t border-ink/[0.06] px-4 py-2 text-[10.5px] text-ink-5">
+        <p className="border-t border-ink/20 px-4 py-2 text-[10.5px] text-ink-5">
           {canPublish
             ? "Tick karats to publish at the suggested rate (you can edit it first). Each goes through the usual approval rules and takes effect now."
             : "You can view suggestions; publishing needs the masters:create permission."}
@@ -424,7 +424,7 @@ export default function PricingPage() {
             }
           />
           {costEdit ? (
-            <div className="grid gap-3 border-b border-ink/[0.06] bg-gold-pale/30 px-4 py-3 sm:grid-cols-3">
+            <div className="grid gap-3 border-b border-ink/20 bg-gold-pale/30 px-4 py-3 sm:grid-cols-3">
               {COST_FIELDS.map((f) => (
                 <Field key={f.key} label={f.label} hint={f.hint}>
                   <NumInput value={costDraft[f.key] ?? ""} onChange={(v) => setCostDraft({ ...costDraft, [f.key]: v })} suffix={f.suffix} />
@@ -460,7 +460,7 @@ export default function PricingPage() {
                   { k: "Landed / pawn", v: lkr(land.landed * 8) },
                   { k: "Landed $/oz", v: lkr((land.landed * TROY) / (par.data?.usdLkr || 1), 2) },
                 ].map((m) => (
-                  <div key={m.k} className={cn("rounded-xl px-3 py-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]", m.accent ? "bg-void text-gold-light" : "bg-bone/60")}>
+                  <div key={m.k} className={cn("rounded-xl px-3 py-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]", m.accent ? "bg-void text-gold-light" : "bg-bone/60")}>
                     <div className={cn("text-[9.5px] font-semibold uppercase tracking-[0.14em]", m.accent ? "text-paper/45" : "text-ink-5")}>{m.k}</div>
                     <div className={cn("g-metric mt-0.5 text-[15px] font-semibold", m.accent ? "" : "text-ink")}>{m.v}</div>
                   </div>
@@ -494,7 +494,7 @@ export default function PricingPage() {
                   const landed = land.landed * k.purity;
                   const m = k.boardPerG != null ? ((k.boardPerG - landed) / landed) * 100 : null;
                   return (
-                    <tr key={k.purityId} className="border-t border-ink/[0.05]">
+                    <tr key={k.purityId} className="border-t border-ink/20">
                       <td className="py-2 pl-4 pr-2">
                         <span className={cn("inline-flex h-6 min-w-[38px] items-center justify-center rounded-md px-1.5 text-[11px] font-bold", karatTone(k.purity).badge)}>{k.karat}</span>
                       </td>
@@ -515,7 +515,7 @@ export default function PricingPage() {
               </tbody>
             </table>
           )}
-          <p className="border-t border-ink/[0.06] px-4 py-2 text-[10.5px] text-ink-5">Red: board below landed cost. Amber: under 2% over it. Rates you enter here are estimates you control; check current duty and levy rates with your bank or customs agent.</p>
+          <p className="border-t border-ink/20 px-4 py-2 text-[10.5px] text-ink-5">Red: board below landed cost. Amber: under 2% over it. Rates you enter here are estimates you control; check current duty and levy rates with your bank or customs agent.</p>
         </Card>
       </div>
     </div>

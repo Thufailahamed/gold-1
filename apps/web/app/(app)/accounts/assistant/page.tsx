@@ -135,8 +135,8 @@ const SLIP_STATUS: Record<AssistantAction["status"], { label: string; cls: strin
   DONE: { label: "Posted to the books", cls: "bg-emerald-50 text-emerald-800 ring-emerald-200" },
   SENT_FOR_APPROVAL: { label: "Sent for approval", cls: "bg-sky-50 text-sky-800 ring-sky-200" },
   FAILED: { label: "Not posted", cls: "bg-rose-50 text-rose-800 ring-rose-200" },
-  CANCELLED: { label: "Discarded", cls: "bg-ink/5 text-ink-4 ring-ink/10" },
-  EXPIRED: { label: "Expired", cls: "bg-ink/5 text-ink-4 ring-ink/10" },
+  CANCELLED: { label: "Discarded", cls: "bg-ink/5 text-ink-4 ring-ink/20" },
+  EXPIRED: { label: "Expired", cls: "bg-ink/5 text-ink-4 ring-ink/20" },
 };
 
 function splitLine(line: string): { label: string; value: string } | null {
@@ -202,7 +202,7 @@ function SignOffSlip({
       </div>
 
       {(facts.length > 0 || !!amount) && (
-        <dl className="mx-4 grid divide-y sm:grid-cols-2 sm:gap-x-6 sm:divide-y-0 [&>div]:sm:border-b [&>div]:sm:border-dashed [&>div]:sm:border-ink/10 divide-dashed divide-ink/10 border-y border-dashed border-ink/10">
+        <dl className="mx-4 grid divide-y sm:grid-cols-2 sm:gap-x-6 sm:divide-y-0 [&>div]:sm:border-b [&>div]:sm:border-dashed [&>div]:sm:border-ink/20 divide-dashed divide-ink/10 border-y border-dashed border-ink/20">
           {amount && (
             <div className="flex items-baseline justify-between gap-4 py-2 sm:hidden">
               <dt className="text-xs text-ink-4">Amount</dt>
@@ -230,7 +230,7 @@ function SignOffSlip({
       )}
 
       {open ? (
-        <div className="mt-3 border-t border-ink/[0.06] bg-gold-pale/50 px-4 py-3">
+        <div className="mt-3 border-t border-ink/20 bg-gold-pale/50 px-4 py-3">
           <div className="flex flex-wrap items-center gap-2.5">
             <button type="button" onClick={onConfirm} disabled={busy} className="home-btn-gold h-9 px-4 text-[13px] disabled:cursor-not-allowed disabled:opacity-60">
               <CheckCircleIcon size={16} /> {busy ? "Posting…" : "Sign off & post"}
@@ -239,7 +239,7 @@ function SignOffSlip({
               type="button"
               onClick={onCancel}
               disabled={busy}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium text-ink-3 ring-1 ring-inset ring-ink/15 transition-colors hover:bg-ink/[0.04] hover:text-ink disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium text-ink-3 ring-1 ring-inset ring-ink/20 transition-colors hover:bg-ink/[0.04] hover:text-ink disabled:opacity-50"
             >
               <XIcon size={14} /> Discard
             </button>
@@ -262,7 +262,7 @@ function SignOffSlip({
           className={cn(
             "mt-3 flex items-start gap-2 border-t px-4 py-2.5 text-xs",
             status === "FAILED" ? "border-rose-100 bg-rose-50/60 text-rose-800" : "border-emerald-100 bg-emerald-50/50 text-emerald-800",
-            (status === "CANCELLED" || status === "EXPIRED") && "border-ink/[0.06] bg-ink/[0.02] text-ink-4"
+            (status === "CANCELLED" || status === "EXPIRED") && "border-ink/20 bg-ink/[0.02] text-ink-4"
           )}
         >
           {status === "FAILED" ? <AlertCircleIcon size={14} className="shrink-0" /> : <CheckCircleIcon size={14} className="shrink-0" />}
@@ -272,7 +272,7 @@ function SignOffSlip({
           </span>
         </div>
       ) : status === "EXPIRED" ? (
-        <p className="mt-3 border-t border-ink/[0.06] px-4 py-2.5 text-xs text-ink-4">Not posted. Ask again to prepare a fresh entry.</p>
+        <p className="mt-3 border-t border-ink/20 px-4 py-2.5 text-xs text-ink-4">Not posted. Ask again to prepare a fresh entry.</p>
       ) : (
         <div className="h-3" />
       )}
@@ -309,7 +309,7 @@ function Checked({ labels }: { labels: string[] }) {
         <LayersIcon size={11} /> Checked
       </span>
       {labels.map((l) => (
-        <span key={l} className="rounded-md bg-bone px-1.5 py-0.5 text-[11px] text-ink-3 ring-1 ring-inset ring-ink/[0.07]">
+        <span key={l} className="rounded-md bg-bone px-1.5 py-0.5 text-[11px] text-ink-3 ring-1 ring-inset ring-ink/20">
           {l}
         </span>
       ))}
@@ -350,7 +350,7 @@ function BriefCard({
   return (
     <article className={cn("ast-entry animate-fade-in", latest && "ast-entry-latest")} aria-label={question ? `Request: ${question.content}` : "Assistant note"}>
       {question && (
-        <header className="border-b border-ink/[0.06] px-4 pb-3 pt-3.5 sm:px-5">
+        <header className="border-b border-ink/20 px-4 pb-3 pt-3.5 sm:px-5">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-5">
             <span className="g-metric rounded bg-ink/[0.05] px-1.5 py-0.5 text-ink-4">#{String(index).padStart(2, "0")}</span>
             <span>{instruction ? "Instruction" : "Request"}</span>
@@ -389,7 +389,7 @@ function BriefCard({
                 )}
               </div>
             </div>
-            <footer className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-dashed border-ink/10 pt-2.5">
+            <footer className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-dashed border-ink/20 pt-2.5">
               <div className="min-w-0 flex-1">
                 <Checked labels={labels} />
               </div>
@@ -408,7 +408,7 @@ function BriefCard({
                     key={f}
                     type="button"
                     onClick={() => onAsk(f)}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-paper px-2.5 py-1 text-[11.5px] text-ink-3 ring-1 ring-inset ring-ink/10 transition hover:text-ink hover:ring-gold/60"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-paper px-2.5 py-1 text-[11.5px] text-ink-3 ring-1 ring-inset ring-ink/20 transition hover:text-ink hover:ring-gold/60"
                   >
                     <ArrowRightIcon size={11} className="text-gold-dark" /> {f}
                   </button>
@@ -438,7 +438,7 @@ function WorkingCard({ question, startedAt }: { question: string; startedAt: num
   const step = WORKING[Math.min(WORKING.length - 1, Math.floor(secs / 3))];
   return (
     <article className="ast-entry ast-entry-latest animate-fade-in" role="status" aria-live="polite">
-      <header className="border-b border-ink/[0.06] px-4 pb-3 pt-3.5 sm:px-5">
+      <header className="border-b border-ink/20 px-4 pb-3 pt-3.5 sm:px-5">
         <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-5">
           <span>New request</span>
           <span aria-hidden>·</span>
@@ -467,7 +467,7 @@ function WorkingCard({ question, startedAt }: { question: string; startedAt: num
 function FailedCard({ question, error, onRetry, onEdit, onDismiss }: { question: string; error: string; onRetry: () => void; onEdit: () => void; onDismiss: () => void }) {
   return (
     <article className="ast-entry animate-fade-in ring-1 ring-inset ring-rose-200" role="alert">
-      <header className="border-b border-ink/[0.06] px-4 pb-3 pt-3.5 sm:px-5">
+      <header className="border-b border-ink/20 px-4 pb-3 pt-3.5 sm:px-5">
         <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-rose-700">
           <AlertCircleIcon size={12} /> Not answered
           <button type="button" onClick={onDismiss} aria-label="Dismiss" className="ml-auto rounded-md p-1 text-ink-5 hover:bg-ink/[0.05] hover:text-ink">
@@ -478,7 +478,7 @@ function FailedCard({ question, error, onRetry, onEdit, onDismiss }: { question:
       </header>
       <div className="flex flex-wrap items-center gap-2.5 px-4 py-3 sm:px-5">
         <p className="min-w-0 flex-1 text-[13px] text-ink-3">{error}</p>
-        <button type="button" onClick={onEdit} className="h-9 rounded-full px-3.5 text-[13px] font-medium text-ink-3 ring-1 ring-inset ring-ink/15 hover:bg-ink/[0.04]">
+        <button type="button" onClick={onEdit} className="h-9 rounded-full px-3.5 text-[13px] font-medium text-ink-3 ring-1 ring-inset ring-ink/20 hover:bg-ink/[0.04]">
           Edit
         </button>
         <button type="button" onClick={onRetry} className="home-btn-gold h-9 px-4 text-[13px]">
@@ -558,7 +558,7 @@ function CommandBar({
           <SendIcon size={15} />
         </button>
       </div>
-      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-ink/[0.06] pt-1.5 text-[10.5px] text-ink-5">
+      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-ink/20 pt-1.5 text-[10.5px] text-ink-5">
         {branchSlot}
         {hasBlanks ? (
           <span className="inline-flex items-center gap-1.5 text-gold-deep">
@@ -566,10 +566,10 @@ function CommandBar({
           </span>
         ) : (
           <span className="hidden sm:inline">
-            <kbd className="rounded border border-ink/10 bg-paper px-1 font-sans text-[10px] text-ink-4">Enter</kbd> send ·{" "}
-            <kbd className="rounded border border-ink/10 bg-paper px-1 font-sans text-[10px] text-ink-4">Shift</kbd>+
-            <kbd className="rounded border border-ink/10 bg-paper px-1 font-sans text-[10px] text-ink-4">Enter</kbd> new line ·{" "}
-            <kbd className="rounded border border-ink/10 bg-paper px-1 font-sans text-[10px] text-ink-4">/</kbd> focus
+            <kbd className="rounded border border-ink/20 bg-paper px-1 font-sans text-[10px] text-ink-4">Enter</kbd> send ·{" "}
+            <kbd className="rounded border border-ink/20 bg-paper px-1 font-sans text-[10px] text-ink-4">Shift</kbd>+
+            <kbd className="rounded border border-ink/20 bg-paper px-1 font-sans text-[10px] text-ink-4">Enter</kbd> new line ·{" "}
+            <kbd className="rounded border border-ink/20 bg-paper px-1 font-sans text-[10px] text-ink-4">/</kbd> focus
           </span>
         )}
         <span className={cn("g-metric ml-auto", draft.length > MAX_CHARS * 0.9 && "text-rose-600")}>
@@ -612,7 +612,7 @@ const SEVERITY: Record<BriefFinding["severity"], { dot: string; label: string }>
 function PanelSection({ title, aside, children, className }: { title: string; aside?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <section className={cn("ast-panel !rounded-2xl", className)}>
-      <div className="flex items-center justify-between gap-2 border-b border-ink/[0.05] px-3.5 py-2.5">
+      <div className="flex items-center justify-between gap-2 border-b border-ink/20 px-3.5 py-2.5">
         <h3 className="font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">{title}</h3>
         {aside}
       </div>
@@ -776,7 +776,7 @@ function SidePanel({
         }
         className="flex min-h-[200px] flex-1 flex-col"
       >
-        <label className="mx-3 mt-2.5 flex h-8 items-center gap-2 rounded-lg bg-bone px-2.5 text-ink-5 ring-1 ring-inset ring-ink/[0.07] transition focus-within:ring-gold/60">
+        <label className="mx-3 mt-2.5 flex h-8 items-center gap-2 rounded-lg bg-bone px-2.5 text-ink-5 ring-1 ring-inset ring-ink/20 transition focus-within:ring-gold/60">
           <SearchIcon size={13} />
           <input
             value={q}
@@ -1078,7 +1078,7 @@ export default function AssistantPage() {
         <select
           value={scope.branchId}
           onChange={(e) => scope.setBranchId(e.target.value)}
-          className="rounded-md bg-bone px-1.5 py-0.5 text-[11px] font-medium text-ink-2 outline-none ring-1 ring-inset ring-ink/10 focus:ring-gold/60"
+          className="rounded-md bg-bone px-1.5 py-0.5 text-[11px] font-medium text-ink-2 outline-none ring-1 ring-inset ring-ink/20 focus:ring-gold/60"
         >
           {scope.visibleBranches.map((b) => (
             <option key={b.id} value={b.id}>
@@ -1225,7 +1225,7 @@ export default function AssistantPage() {
           </div>
         )}
 
-        {!empty && <div className="shrink-0 border-b border-ink/[0.05] bg-paper/60 px-4 py-2.5 sm:px-6">{commandBar(false)}</div>}
+        {!empty && <div className="shrink-0 border-b border-ink/20 bg-paper/60 px-4 py-2.5 sm:px-6">{commandBar(false)}</div>}
 
         <div ref={feedRef} className="flex-1 overflow-y-auto scrollbar-thin">
           {empty ? (
@@ -1271,7 +1271,7 @@ export default function AssistantPage() {
                           type="button"
                           onClick={() => ask(c.prompt)}
                           title={c.prompt}
-                          className="group flex w-full items-center gap-2.5 rounded-xl bg-paper px-2.5 py-2 text-left ring-1 ring-inset ring-ink/[0.07] transition hover:-translate-y-px hover:ring-gold/60 hover:shadow-[0_14px_28px_-20px_rgba(126,98,35,0.6)]"
+                          className="group flex w-full items-center gap-2.5 rounded-xl bg-paper px-2.5 py-2 text-left ring-1 ring-inset ring-ink/20 transition hover:-translate-y-px hover:ring-gold/60 hover:shadow-[0_14px_28px_-20px_rgba(126,98,35,0.6)]"
                         >
                           <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-void text-gold-light">
                             <c.icon size={13} />
@@ -1300,7 +1300,7 @@ export default function AssistantPage() {
                             type="button"
                             onClick={() => fillTemplate(d.template)}
                             title={d.template}
-                            className="group flex w-full items-center gap-2.5 rounded-xl border border-dashed border-ink/15 bg-paper/60 px-2.5 py-2 text-left transition hover:border-gold/70 hover:bg-paper"
+                            className="group flex w-full items-center gap-2.5 rounded-xl border border-dashed border-ink/20 bg-paper/60 px-2.5 py-2 text-left transition hover:border-gold/70 hover:bg-paper"
                           >
                             <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-gold-pale text-gold-deep ring-1 ring-inset ring-gold/30">
                               <d.icon size={13} />
@@ -1315,7 +1315,7 @@ export default function AssistantPage() {
                       ))}
                     </ul>
                   ) : (
-                    <p className="mt-2 rounded-xl border border-dashed border-ink/15 px-3 py-2.5 text-[12px] leading-relaxed text-ink-4">
+                    <p className="mt-2 rounded-xl border border-dashed border-ink/20 px-3 py-2.5 text-[12px] leading-relaxed text-ink-4">
                       Recording entries needs the accounts:manage permission. You can still ask anything about the books.
                     </p>
                   )}
@@ -1388,11 +1388,11 @@ export default function AssistantPage() {
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5 border-t border-ink/[0.06] bg-bone/50 px-4 py-1.5 text-[10.5px] text-ink-5 sm:px-6">
+        <div className="flex shrink-0 items-center gap-1.5 border-t border-ink/20 bg-bone/50 px-4 py-1.5 text-[10.5px] text-ink-5 sm:px-6">
           <ShieldIcon size={11} className="text-gold-dark" /> Figures come from the live ledger · entries post only after your sign-off
           <span className="ml-auto hidden items-center gap-1 md:inline-flex">
-            <kbd className="rounded border border-ink/10 bg-paper px-1 font-sans text-[9.5px] text-ink-4">/</kbd> or
-            <kbd className="rounded border border-ink/10 bg-paper px-1 font-sans text-[9.5px] text-ink-4">⌘K</kbd> to ask
+            <kbd className="rounded border border-ink/20 bg-paper px-1 font-sans text-[9.5px] text-ink-4">/</kbd> or
+            <kbd className="rounded border border-ink/20 bg-paper px-1 font-sans text-[9.5px] text-ink-4">⌘K</kbd> to ask
           </span>
         </div>
       </section>

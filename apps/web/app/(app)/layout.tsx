@@ -98,7 +98,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Main column */}
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-30">
-            <div className="flex h-14 items-center gap-2.5 border-b border-ink/[0.08] bg-bone/85 px-4 backdrop-blur-md lg:px-6">
+            <div className="flex h-14 items-center gap-2.5 border-b border-ink/20 bg-bone/85 px-4 backdrop-blur-md lg:px-6">
               <button
                 type="button"
                 aria-label="Open navigation"
@@ -121,7 +121,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <ScanBarcodeIcon size={17} />
               </Link>
 
-              <span className="hidden items-center gap-2 rounded-full border border-ink/10 bg-paper px-2.5 py-1 xl:inline-flex">
+              <span className="hidden items-center gap-2 rounded-full border border-ink/20 bg-paper px-2.5 py-1 xl:inline-flex">
                 <span className="size-1.5 animate-pulse-soft rounded-full bg-emerald-600" aria-hidden />
                 <span className="g-metric text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-4">
                   LK · Live

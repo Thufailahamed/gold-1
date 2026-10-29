@@ -196,11 +196,7 @@ export async function buildReceiveSaleStmts(
       throw Object.assign(new Error(`Product not available: ${it.productId}`), { code: "VALIDATION" });
     if (p.branch_id !== input.branchId)
       throw Object.assign(new Error(`Product not in branch: ${it.productId}`), { code: "VALIDATION" });
-    // Unknown book cost means COGS would post zero and silently overstate the
-    // margin. Cost the product first (PATCH /products/:id); an explicit zero
-    // cost is an assertion the shop stands behind, an unknown one is not.
-    if (p.cost_cents === null)
-      throw Object.assign(new Error(`Product has no book cost: ${it.productId}`), { code: "VALIDATION" });
+    // A piece with no book cost sells anyway; its COGS posts as zero.
     await assertCountLock(db, p.id);
     // Shelf price: the selling-price override when set, else the live rate —
     // the same price the tag and the scan lookup show.

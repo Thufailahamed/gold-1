@@ -420,7 +420,7 @@ function CollectModal({
                 </thead>
                 <tbody>
                   {preview.map((p) => (
-                    <tr key={p.invoiceId} className="border-t border-ink/[0.06]">
+                    <tr key={p.invoiceId} className="border-t border-ink/20">
                       <td className="py-1.5 font-mono text-xs">{p.number}</td>
                       <td className="py-1.5 text-ink-3">{p.date}</td>
                       <td className="py-1.5 text-right num-tabular">{lkr(p.outstandingCents)}</td>
@@ -433,7 +433,7 @@ function CollectModal({
               <p className="mt-2 text-xs text-ink-4">No open bills — this balance is an opening balance.</p>
             )}
             {Number.isFinite(cents) && cents > 0 && cents <= owed ? (
-              <div className="mt-3 flex items-baseline justify-between border-t border-ink/10 pt-3">
+              <div className="mt-3 flex items-baseline justify-between border-t border-ink/20 pt-3">
                 <span className="text-xs font-medium uppercase tracking-[0.12em] text-ink-4">Remaining after this payment</span>
                 <span className="g-metric text-xl text-emerald-700">{lkr(owed - cents)}</span>
               </div>

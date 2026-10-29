@@ -241,7 +241,7 @@ export default function MfgReportsPage() {
                   ))}
               </tbody>
               <tfoot>
-                <tr className="border-t border-ink/[0.1] bg-bone text-[12px] font-semibold text-ink">
+                <tr className="border-t border-ink/20 bg-bone text-[12px] font-semibold text-ink">
                   <td className="py-1.5 pl-4" colSpan={3}>
                     Total on the bench
                   </td>

@@ -56,13 +56,16 @@ function d1(raw: SqliteDb): D1Database {
   } as unknown as D1Database;
 }
 
-/** `migrations` is the folder under apps/api: "drizzle" (a shop) or "drizzle-platform" (the control plane). */
-export function migratedDb(migrations = "drizzle"): { db: D1Database; raw: SqliteDb } {
+/**
+ * `migrations` is the folder under apps/api: "drizzle" (a shop) or "drizzle-platform" (the control plane).
+ * `upTo` stops after that migration (by file name), for a database that sits at an earlier schema.
+ */
+export function migratedDb(migrations = "drizzle", upTo?: string): { db: D1Database; raw: SqliteDb } {
   if (!DatabaseSync) throw new Error("node:sqlite unavailable");
   const raw = new DatabaseSync(":memory:");
   raw.exec("PRAGMA foreign_keys = OFF");
   const dir = join(__dirname, "..", "..", migrations);
-  for (const f of readdirSync(dir).filter((x) => /^\d{4}_.*\.sql$/.test(x)).sort()) {
+  for (const f of readdirSync(dir).filter((x) => /^\d{4}_.*\.sql$/.test(x) && (!upTo || x <= upTo)).sort()) {
     try {
       raw.exec(readFileSync(join(dir, f), "utf8"));
     } catch (e) {

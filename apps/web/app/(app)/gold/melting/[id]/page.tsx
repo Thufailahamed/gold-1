@@ -283,7 +283,7 @@ export default function MeltDetailPage({ params }: { params: Promise<{ id: strin
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-ink/[0.1] bg-bone text-[12px] font-semibold text-ink">
+                  <tr className="border-t border-ink/20 bg-bone text-[12px] font-semibold text-ink">
                     <td className="py-1.5 pl-4" colSpan={3}>
                       Total input
                     </td>
@@ -314,7 +314,7 @@ export default function MeltDetailPage({ params }: { params: Promise<{ id: strin
                   <tr key={o.lot_number} className={tr}>
                     <td className="py-1.5 pl-4 pr-2">
                       <span className="g-metric font-semibold text-ink">{o.lot_number}</span>
-                      <span className="ml-1.5 rounded bg-bone px-1 text-[10px] text-ink-4 ring-1 ring-inset ring-ink/[0.06]">{o.output_type}</span>
+                      <span className="ml-1.5 rounded bg-bone px-1 text-[10px] text-ink-4 ring-1 ring-inset ring-ink/20">{o.output_type}</span>
                     </td>
                     <td className="g-metric px-2 text-right text-ink-3">{grams(o.weight_mg)}</td>
                     <td className="g-metric px-2 text-right text-ink-3">
@@ -325,7 +325,7 @@ export default function MeltDetailPage({ params }: { params: Promise<{ id: strin
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t border-ink/[0.1] bg-bone text-[12px] font-semibold text-ink">
+                <tr className="border-t border-ink/20 bg-bone text-[12px] font-semibold text-ink">
                   <td className="py-1.5 pl-4">Total</td>
                   <td className="g-metric px-2 text-right">{grams(outGross)}</td>
                   <td />
@@ -348,7 +348,7 @@ export default function MeltDetailPage({ params }: { params: Promise<{ id: strin
               { k: "Loss", v: -batch.loss_mg, sign: "−", tone: batch.loss_mg > 0 ? "text-rose-700" : undefined },
               { k: "Recovery", v: batch.recovery_mg, sign: "+", tone: batch.recovery_mg > 0 ? "text-emerald-700" : undefined },
             ].map((r) => (
-              <div key={r.k} className="flex items-baseline justify-between border-b border-dashed border-ink/[0.08] py-1.5">
+              <div key={r.k} className="flex items-baseline justify-between border-b border-dashed border-ink/20 py-1.5">
                 <dt className="text-ink-3">{r.k}</dt>
                 <dd className={cn("g-metric", r.tone ?? "text-ink")}>
                   {r.sign}

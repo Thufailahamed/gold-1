@@ -447,7 +447,7 @@ export default function CustomOrderDetailPage({ params }: { params: Promise<{ id
             ]}
           />
           {o.advance_cents > 0 && pre ? (
-            <p className="mt-4 border-t border-ink/10 pt-3 text-xs text-ink-4">
+            <p className="mt-4 border-t border-ink/20 pt-3 text-xs text-ink-4">
               Only cash advances refund automatically on cancel; card or bank advances need a manual reversal first.
             </p>
           ) : null}
@@ -572,7 +572,7 @@ export default function CustomOrderDetailPage({ params }: { params: Promise<{ id
           <LineageChain nodes={chain.nodes} edges={chain.edges} />
         )}
         {o.manufacturing_order_id ? (
-          <div className="mt-5 border-t border-ink/10 pt-4">
+          <div className="mt-5 border-t border-ink/20 pt-4">
             <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-4">Production trace</div>
             {moLineage.data ? (
               <LineageChain nodes={moLineage.data.nodes} edges={moLineage.data.edges} />
@@ -1097,8 +1097,8 @@ function DeliverDialog({
             ) : null}
             <dt className="text-ink-3">Advances applied</dt>
             <dd className="text-right num-tabular text-ink">−{lkr(applyCents)}</dd>
-            <dt className="border-t border-ink/10 pt-2 font-semibold text-ink">Balance due</dt>
-            <dd className="border-t border-ink/10 pt-2 text-right font-semibold num-tabular text-ink">{lkr(balanceCents)} LKR</dd>
+            <dt className="border-t border-ink/20 pt-2 font-semibold text-ink">Balance due</dt>
+            <dd className="border-t border-ink/20 pt-2 text-right font-semibold num-tabular text-ink">{lkr(balanceCents)} LKR</dd>
           </dl>
 
           {balanceCents > 0 ? (

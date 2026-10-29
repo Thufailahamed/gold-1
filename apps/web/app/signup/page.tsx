@@ -115,7 +115,7 @@ const STRENGTH = [
 /* ------------------------------------------------------------------ inputs */
 
 const inputCls =
-  "h-11 w-full rounded-xl bg-paper px-3.5 text-[14px] text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.13)] transition-shadow duration-200 hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.24)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.22)]";
+  "h-11 w-full rounded-xl bg-paper px-3.5 text-[14px] text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] transition-shadow duration-200 hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.24)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.22)]";
 const inputErr = "shadow-[inset_0_0_0_1px_#be123c] hover:shadow-[inset_0_0_0_1px_#be123c] focus:shadow-[inset_0_0_0_1px_#be123c,0_0_0_4px_rgba(190,18,60,0.15)]";
 
 function Field({
@@ -411,7 +411,7 @@ export default function SignupPage() {
                   : "This usually takes under a minute. Sign in with the name below once it's ready."}
               </p>
 
-              <div className="mx-auto mt-7 flex max-w-sm items-center gap-3 rounded-2xl bg-paper p-3 pl-4 text-left shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08),0_16px_36px_-24px_rgba(16,32,27,0.4)]">
+              <div className="mx-auto mt-7 flex max-w-sm items-center gap-3 rounded-2xl bg-paper p-3 pl-4 text-left shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_16px_36px_-24px_rgba(16,32,27,0.4)]">
                 <div className="min-w-0 flex-1">
                   <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">Your sign-in name</div>
                   <div className="mt-0.5 truncate font-mono text-[15px] font-semibold text-ink">{done.slug}</div>
@@ -645,7 +645,7 @@ export default function SignupPage() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="relative grid grid-cols-2 rounded-xl bg-ink/[0.05] p-1" role="radiogroup" aria-label="Billing period">
                           <span
-                            className="absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-lg bg-paper shadow-[0_1px_3px_rgba(16,32,27,0.12),inset_0_0_0_1px_rgba(16,32,27,0.05)] transition-transform duration-300 ease-out"
+                            className="absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-lg bg-paper shadow-[0_1px_3px_rgba(16,32,27,0.12),inset_0_0_0_1px_rgba(16,32,27,0.2)] transition-transform duration-300 ease-out"
                             style={{ transform: interval === "YEAR" ? "translateX(100%)" : "none" }}
                             aria-hidden
                           />
@@ -772,7 +772,7 @@ export default function SignupPage() {
                       type="button"
                       onClick={() => setStep((s) => s - 1)}
                       aria-label="Back"
-                      className="g-btn h-12 w-12 shrink-0 rounded-xl bg-paper text-ink-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.13)] hover:text-ink hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.3)]"
+                      className="g-btn h-12 w-12 shrink-0 rounded-xl bg-paper text-ink-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] hover:text-ink hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.3)]"
                     >
                       <ArrowLeftIcon size={16} />
                     </button>

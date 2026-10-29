@@ -10,7 +10,6 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { ratePriceLkr } from "@/lib/pricing";
 import { Page } from "@/components/ui";
 import { GoldHero, HeroBadge, heroGhost, heroGold } from "@/components/console-kit";
 import { Select, type SelectOption } from "@/components/select";
@@ -44,11 +43,10 @@ const productSchema = z.object({
   grossG: z.coerce.number().gt(0),
   stoneG: z.coerce.number().min(0).optional().default(0),
   makingLkr: z.coerce.number().min(0).optional().default(0),
-  /** Gold rate per gram typed at the counter; prices the piece when no selling price is given. Not saved itself. */
+  /** Gold rate per gram typed at the counter; costs the piece when no cost is typed. Not saved itself. */
   ratePerGLkr: z.coerce.number().min(0).optional(),
   wastageG: z.coerce.number().min(0).optional().default(0),
   costLkr: z.coerce.number().min(0).optional(),
-  sellingPriceLkr: z.coerce.number().min(0).optional(),
   location: z.string().max(100).optional(),
   notes: z.string().max(2000).optional(),
   branchId: z.string().min(1),
@@ -56,17 +54,16 @@ const productSchema = z.object({
 type FormValues = z.infer<typeof productSchema>;
 
 /**
- * The selling price a typed gold rate gives: net weight × rate per gram, plus
- * making charge, rounded to the nearest 100 LKR. Null when no rate has been
- * typed or there is no net weight.
+ * The cost a typed gold rate gives: net weight × rate per gram. Null when no
+ * rate has been typed or there is no net weight. Selling prices are set at the
+ * POS, not here.
  */
-function priceFromRate(v: Partial<FormValues>): number | null {
+function costFromRate(v: Partial<FormValues>): number | null {
   const rate = Number(v.ratePerGLkr);
   const gross = Number(v.grossG);
   const stone = Number(v.stoneG) || 0;
   if (!(rate > 0) || !(gross > stone)) return null;
-  const making = Number(v.makingLkr) || 0;
-  return ratePriceLkr(gross - stone, rate, making);
+  return Math.round((gross - stone) * rate * 100) / 100;
 }
 
 function branchDefault(): Partial<FormValues> | undefined {
@@ -164,7 +161,7 @@ function KaratPicker({
                   "group relative flex min-w-[5.5rem] flex-col items-start rounded-lg px-3 py-2 text-left transition-all duration-200",
                   on
                     ? "bg-void text-paper shadow-[inset_0_0_0_1px_rgba(205,168,83,0.5),0_12px_24px_-14px_rgba(6,42,34,0.8)]"
-                    : "bg-paper text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] hover:-translate-y-px hover:bg-gold-pale/50 hover:shadow-[inset_0_0_0_1px_rgba(168,138,62,0.45)]"
+                    : "bg-paper text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] hover:-translate-y-px hover:bg-gold-pale/50 hover:shadow-[inset_0_0_0_1px_rgba(168,138,62,0.45)]"
                 )}
               >
                 <span className={cn("g-metric text-base font-semibold", on ? "text-gold-light" : "text-ink")}>
@@ -242,7 +239,7 @@ function ImagePicker({
           "group relative flex cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl border border-dashed px-4 py-8 text-center transition-all duration-200",
           drag
             ? "scale-[1.01] border-gold-dark/70 bg-gold-pale"
-            : "border-ink/15 bg-gradient-to-b from-bone/40 to-bone/80 hover:border-gold-dark/50 hover:from-gold-pale/40 hover:to-gold-pale/70"
+            : "border-ink/20 bg-gradient-to-b from-bone/40 to-bone/80 hover:border-gold-dark/50 hover:from-gold-pale/40 hover:to-gold-pale/70"
         )}
       >
         <input
@@ -281,7 +278,7 @@ function ImagePicker({
               key={src}
               className={cn(
                 "group relative block aspect-square overflow-hidden rounded-xl",
-                i === 0 ? "ring-2 ring-gold" : "ring-1 ring-ink/10"
+                i === 0 ? "ring-2 ring-gold" : "ring-1 ring-ink/20"
               )}
             >
               <img src={src} alt={files[i]?.name ?? ""} className="size-full object-cover transition-transform duration-320 group-hover:scale-105" />
@@ -452,16 +449,13 @@ export default function NewProductPage() {
       if (v.designId) payload.designId = v.designId;
       if (v.productTypeId) payload.productTypeId = v.productTypeId;
       if (v.stoneTypeId) payload.stoneTypeId = v.stoneTypeId;
-      if (v.costLkr !== undefined && v.costLkr !== null && !Number.isNaN(Number(v.costLkr))) {
-        payload.costLkr = Number(v.costLkr);
-      }
-      // A blank selling price reads as 0, so only a real amount counts; otherwise the rate prices it.
-      const typed = Number(v.sellingPriceLkr);
-      const fromRate = priceFromRate(v);
-      if (typed > 0) {
-        payload.sellingPriceLkr = typed;
-      } else if (fromRate !== null) {
-        payload.sellingPriceLkr = fromRate;
+      // A blank cost reads as 0, so only a real amount counts; otherwise the rate costs the piece.
+      const typedCost = Number(v.costLkr);
+      const costFromTyped = costFromRate(v);
+      if (typedCost > 0) {
+        payload.costLkr = typedCost;
+      } else if (costFromTyped !== null) {
+        payload.costLkr = costFromTyped;
       }
       if (v.location?.trim()) payload.location = v.location.trim();
       if (v.notes?.trim()) payload.notes = v.notes.trim();
@@ -510,20 +504,17 @@ export default function NewProductPage() {
   const stoneN = Number(vals.stoneG);
   const net = Number.isFinite(grossN) && grossN > 0 ? grossN - (Number.isFinite(stoneN) ? stoneN : 0) : null;
   const fine = net !== null && permille ? (net * permille) / 1000 : null;
-  const priceN = Number(vals.sellingPriceLkr);
-  const price = Number.isFinite(priceN) && priceN > 0 ? priceN : null;
+  // The cost: the one typed, else net × the typed rate.
   const costN = Number(vals.costLkr);
-  const cost = Number.isFinite(costN) && costN > 0 ? costN : null;
-  const margin = price !== null && cost !== null ? ((price - cost) / price) * 100 : null;
+  const costFromTyped = costFromRate(vals as FormValues);
+  const cost = Number.isFinite(costN) && costN > 0 ? costN : costFromTyped;
   // The rate per gram: the one typed here, otherwise today's board rate for the purity.
   const typedRate = Number(vals.ratePerGLkr);
   const boardRate = vals.purityId ? rates[vals.purityId] : undefined;
   const rate = Number.isFinite(typedRate) && typedRate > 0 ? typedRate : boardRate;
   const makingN = Number(vals.makingLkr);
   const estimate = net !== null && rate ? net * rate + (Number.isFinite(makingN) ? makingN : 0) : null;
-  // Typed rate: the price it gives, used when no selling price is typed.
-  const typedPrice = priceFromRate(vals as FormValues);
-  const liveMargin = estimate !== null && cost !== null ? ((estimate - cost) / estimate) * 100 : null;
+  const margin = estimate !== null && cost !== null ? ((estimate - cost) / estimate) * 100 : null;
   const stoneShare = net !== null && grossN > 0 ? Math.min(Math.max((grossN - net) / grossN, 0), 1) : 0;
   // The old gold this piece can draw on: its own karat, and any with no karat yet. The metal is the net weight.
   const onHandMg = onHand.data ? (onHand.data.byKarat.find((k) => k.permille === permille)?.netMg ?? 0) + onHand.data.unknownMg : null;
@@ -586,14 +577,13 @@ export default function NewProductPage() {
             tone: vals.purityId && !rate ? "warn" : undefined,
           },
           { label: "Est. live price", value: estimate, format: (n) => Math.round(n).toLocaleString("en-US"), unit: "LKR", accent: true, sub: "net × board + making" },
-          { label: "Fixed price", value: price, format: (n) => Math.round(n).toLocaleString("en-US"), unit: "LKR", sub: price === null ? "uses live board" : undefined },
           { label: "Cost", value: cost, format: (n) => Math.round(n).toLocaleString("en-US"), unit: "LKR" },
           {
             label: "Margin",
-            value: margin ?? liveMargin,
+            value: margin,
             format: (n) => `${n.toFixed(1)}%`,
-            tone: (margin ?? liveMargin) == null ? undefined : (margin ?? liveMargin)! < 0 ? "bad" : "good",
-            sub: margin !== null ? "on fixed price" : liveMargin !== null ? "on live estimate" : "needs a cost",
+            tone: margin == null ? undefined : margin < 0 ? "bad" : "good",
+            sub: margin !== null ? "on live estimate" : "needs a cost",
           },
         ]}
       />
@@ -677,10 +667,10 @@ export default function NewProductPage() {
                 </div>
                 <div className="mt-3 flex items-end justify-between border-t border-paper/10 pt-3">
                   <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-paper/40">Price</span>
-                  {price !== null || estimate !== null ? (
+                  {estimate !== null ? (
                     <span className="flex items-baseline gap-1">
-                      <span className="text-[10px] text-paper/40">{price !== null ? "LKR" : "≈ LKR"}</span>
-                      <span className="g-metric text-lg text-paper">{Math.round(price ?? estimate!).toLocaleString("en-US")}</span>
+                      <span className="text-[10px] text-paper/40">≈ LKR</span>
+                      <span className="g-metric text-lg text-paper">{Math.round(estimate).toLocaleString("en-US")}</span>
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gold-light">
@@ -691,7 +681,7 @@ export default function NewProductPage() {
                 </div>
               </div>
             </div>
-            <p className="mt-2 text-center text-[10px] text-paper/35">{price === null && estimate !== null ? "Price is today's live estimate" : "Live preview of the catalogue card"}</p>
+            <p className="mt-2 text-center text-[10px] text-paper/35">{estimate !== null ? "Price is today's live estimate" : "Live preview of the catalogue card"}</p>
 
             {/* Progress */}
             <div className="mt-6">
@@ -943,29 +933,27 @@ export default function NewProductPage() {
                   ) : null}
                 </div>
                 <div className="grid gap-x-3 gap-y-3.5 sm:grid-cols-2 xl:grid-cols-4">
-                  <Field label="Gold rate / g" optional hint={typedPrice !== null ? "Typed rate — price is net × rate + making" : undefined}>
+                  <Field label="Gold rate / g" optional hint={costFromTyped !== null ? "Typed rate — cost is net × rate" : undefined}>
                     <UnitInput unit="LKR/g" placeholder={boardRate ? String(Math.round(boardRate)) : undefined} {...register("ratePerGLkr")} />
                   </Field>
                   <Field label="Making charge" optional>
                     <UnitInput unit="LKR" {...register("makingLkr")} />
                   </Field>
-                  <Field label="Cost" optional>
-                    <UnitInput unit="LKR" {...register("costLkr")} />
-                  </Field>
                   <Field
-                    label="Selling price"
+                    label="Cost"
                     optional
                     hint={
-                      price !== null
+                      costN > 0
                         ? undefined
-                        : typedPrice !== null
-                          ? `Calculated: ${typedPrice.toLocaleString("en-US")} LKR`
-                          : "Type a gold rate or a price"
+                        : costFromTyped !== null
+                          ? `Calculated: ${costFromTyped.toLocaleString("en-US")} LKR`
+                          : "Type a gold rate or a cost"
                     }
                   >
-                    <UnitInput unit="LKR" placeholder={typedPrice !== null ? String(typedPrice) : undefined} {...register("sellingPriceLkr")} />
+                    <UnitInput unit="LKR" placeholder={costFromTyped !== null ? String(costFromTyped) : undefined} {...register("costLkr")} />
                   </Field>
                 </div>
+                <p className="mt-3 text-xs text-ink-3">The selling price is set at the POS when the piece is sold.</p>
               </div>
             </div>
           </FormSection>
@@ -1086,7 +1074,7 @@ export default function NewProductPage() {
           </FormSection>
 
           {/* Floating action bar */}
-          <div className="sticky bottom-4 z-20 flex items-center justify-between gap-3 rounded-2xl bg-paper/90 px-3 py-2 shadow-[0_24px_48px_-20px_rgba(16,32,27,0.45),inset_0_0_0_1px_rgba(16,32,27,0.08)] backdrop-blur-xl sm:px-4">
+          <div className="sticky bottom-4 z-20 flex items-center justify-between gap-3 rounded-2xl bg-paper/90 px-3 py-2 shadow-[0_24px_48px_-20px_rgba(16,32,27,0.45),inset_0_0_0_1px_rgba(16,32,27,0.2)] backdrop-blur-xl sm:px-4">
             <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
             <div className="flex min-w-0 items-center gap-3">
               <ProgressRing value={doneCount} total={steps.length} />

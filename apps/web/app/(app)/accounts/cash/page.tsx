@@ -166,7 +166,7 @@ function CashView() {
             onClick={() => setModal("bank")}
             className="group flex min-h-[100px] flex-col items-center justify-center gap-2.5 rounded-[18px] border border-dashed border-ink/20 bg-paper/40 text-sm font-medium text-ink-3 transition-all duration-320 ease-brand hover:border-gold hover:bg-gold-pale/60 hover:text-ink"
           >
-            <span className="flex size-10 items-center justify-center rounded-xl bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)] transition-colors group-hover:bg-void group-hover:text-gold-light">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] transition-colors group-hover:bg-void group-hover:text-gold-light">
               <PlusIcon size={17} />
             </span>
             Add bank account
@@ -222,13 +222,13 @@ function CashView() {
         description={from === to ? from : `${from} to ${to}`}
         actions={
           book.data ? (
-            <div className="flex flex-wrap overflow-hidden rounded-xl bg-bone/80 text-xs shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
+            <div className="flex flex-wrap overflow-hidden rounded-xl bg-bone/80 text-xs shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
               {[
                 { k: "Opening", v: lkr(book.data.opening), cls: "text-ink" },
                 { k: "In", v: `+${lkr(moneyIn)}`, cls: "text-emerald-700" },
                 { k: "Out", v: `−${lkr(moneyOut)}`, cls: "text-rose-700" },
               ].map((x) => (
-                <span key={x.k} className="flex flex-col border-r border-ink/[0.07] px-3 py-1.5">
+                <span key={x.k} className="flex flex-col border-r border-ink/20 px-3 py-1.5">
                   <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-ink-5">{x.k}</span>
                   <span className={cn("g-metric", x.cls)}>{x.v}</span>
                 </span>
@@ -371,7 +371,7 @@ function AccountTile({
         "group relative flex min-h-[100px] cursor-pointer flex-col overflow-hidden rounded-2xl p-4 outline-none transition-all duration-320 ease-brand focus-visible:shadow-[0_0_0_3px_rgba(205,168,83,0.35)]",
         active
           ? "bg-void text-paper shadow-[0_24px_48px_-24px_rgba(6,42,34,0.7)]"
-          : "bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-32px_rgba(16,32,27,0.3)] hover:-translate-y-0.5 hover:shadow-[inset_0_0_0_1px_rgba(205,168,83,0.55),0_24px_48px_-30px_rgba(126,98,35,0.45)]"
+          : "bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_18px_40px_-32px_rgba(16,32,27,0.3)] hover:-translate-y-0.5 hover:shadow-[inset_0_0_0_1px_rgba(205,168,83,0.55),0_24px_48px_-30px_rgba(126,98,35,0.45)]"
       )}
     >
       {active ? (

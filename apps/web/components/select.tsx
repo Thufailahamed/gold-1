@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "./icons";
 
@@ -30,6 +31,7 @@ export function Select({
   hintInTrigger,
   buttonRef,
   id: idProp,
+  portal,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -51,11 +53,16 @@ export function Select({
   hintInTrigger?: boolean;
   buttonRef?: Ref<HTMLButtonElement>;
   id?: string;
+  /** Draw the list on the page, for a select inside a table or panel that scrolls and would clip it. */
+  portal?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const [query, setQuery] = useState("");
   const root = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  // Where a portaled list sits: under the trigger, or above it when there is no room below.
+  const [spot, setSpot] = useState<{ left: number; width: number; top?: number; bottom?: number } | null>(null);
   const list = useRef<HTMLUListElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const listId = useId();
@@ -72,7 +79,8 @@ export function Select({
   useEffect(() => {
     if (!open) return;
     const away = (e: MouseEvent) => {
-      if (!root.current?.contains(e.target as Node)) {
+      const t = e.target as Node;
+      if (!root.current?.contains(t) && !panel.current?.contains(t)) {
         setOpen(false);
         onBlur?.();
       }
@@ -88,6 +96,28 @@ export function Select({
   useEffect(() => {
     if (open && withSearch) search.current?.focus();
   }, [open, withSearch]);
+
+  useEffect(() => {
+    if (!open || !portal) return;
+    const place = () => {
+      const r = root.current?.getBoundingClientRect();
+      if (!r) return;
+      const below = window.innerHeight - r.bottom;
+      const above = r.top;
+      setSpot(
+        below < 320 && above > below
+          ? { left: r.left, width: r.width, bottom: window.innerHeight - r.top + 8 }
+          : { left: r.left, width: r.width, top: r.bottom + 8 }
+      );
+    };
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open, portal]);
 
   const show = () => {
     setQuery("");
@@ -143,6 +173,13 @@ export function Select({
     }
   };
 
+  // A portal draws the list on the page, out of any scrolling parent that would clip it.
+  const wrap = (el: ReactNode) => {
+    if (!portal) return el;
+    if (!spot || typeof document === "undefined") return null;
+    return createPortal(el, document.body);
+  };
+
   return (
     <div ref={root} className={cn("relative", className)} onKeyDown={onKeyDown}>
       <button
@@ -160,7 +197,7 @@ export function Select({
         className={cn(
           "group flex w-full items-center gap-2.5 rounded-xl bg-paper text-left text-sm text-ink",
           size === "lg" ? "h-12 px-4" : size === "sm" ? "h-9 px-2.5 text-[13px]" : "h-11 px-3.5",
-          "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-[box-shadow,background-color] duration-200",
+          "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_2px_rgba(16,32,27,0.04)] transition-[box-shadow,background-color] duration-200",
           "hover:bg-gold-pale/40 hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26),0_1px_2px_rgba(16,32,27,0.04)]",
           "focus:outline-none focus-visible:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]",
           open && "bg-paper shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)] hover:bg-paper",
@@ -194,11 +231,15 @@ export function Select({
           )}
         />
       </button>
-      {open ? (
-        <div className="g-floating absolute left-0 right-0 top-[calc(100%+8px)] z-50 origin-top animate-pop-in overflow-hidden">
+      {open ? wrap(
+        <div
+          ref={panel}
+          style={portal && spot ? { position: "fixed", zIndex: 70, left: spot.left, width: spot.width, top: spot.top, bottom: spot.bottom } : undefined}
+          className={cn("g-floating origin-top animate-pop-in overflow-hidden", !portal && "absolute left-0 right-0 top-[calc(100%+8px)] z-50")}
+        >
           <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
           {withSearch ? (
-            <div className="relative border-b border-ink/[0.06] p-1.5">
+            <div className="relative border-b border-ink/20 p-1.5">
               <SearchIcon size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-5" />
               <input
                 ref={search}

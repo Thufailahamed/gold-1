@@ -12,7 +12,7 @@ export const fmt = (c: number) => (c / 100).toLocaleString("en-US", { minimumFra
 export const signed = (c: number) => `${c > 0 ? "+" : c < 0 ? "−" : ""}${fmt(Math.abs(c))}`;
 const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 export const dayInputCls =
-  "g-metric h-8 rounded-lg bg-paper px-2.5 text-[12.5px] text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.24)]";
+  "g-metric h-8 rounded-lg bg-paper px-2.5 text-[12.5px] text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.24)]";
 
 /** Shortage red, overage amber, square green. */
 export const diffTone = (c: number | null | undefined) =>
@@ -36,7 +36,7 @@ export function DayChip({ status }: { status: string }) {
 /** Small figures strip used across the panels. */
 function Figures({ items }: { items: { k: string; v: ReactNode; tone?: string; sub?: ReactNode }[] }) {
   return (
-    <div className={cn("grid grid-cols-2 gap-px border-b border-ink/[0.06] bg-ink/[0.05]", items.length >= 4 ? "sm:grid-cols-4" : "sm:grid-cols-3")}>
+    <div className={cn("grid grid-cols-2 gap-px border-b border-ink/20 bg-ink/[0.05]", items.length >= 4 ? "sm:grid-cols-4" : "sm:grid-cols-3")}>
       {items.map((it) => (
         <div key={it.k} className="bg-paper px-4 py-2">
           <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">{it.k}</div>
@@ -48,7 +48,7 @@ function Figures({ items }: { items: { k: string; v: ReactNode; tone?: string; s
   );
 }
 
-const btnSm = "inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-[11px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/10 transition-colors hover:bg-bone hover:text-ink";
+const btnSm = "inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-[11px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/20 transition-colors hover:bg-bone hover:text-ink";
 
 /* ------------------------------------------------------- find the difference */
 
@@ -463,7 +463,7 @@ export function VariancePanel({ branchId, today, branchName }: { branchId: strin
                     setFrom(addDays(today, -n));
                     setTo(today);
                   }}
-                  className={cn("h-7 rounded-full px-2.5 font-semibold", from === addDays(today, -n) && to === today ? "bg-void text-gold-light" : "ring-1 ring-inset ring-ink/10 hover:bg-bone")}
+                  className={cn("h-7 rounded-full px-2.5 font-semibold", from === addDays(today, -n) && to === today ? "bg-void text-gold-light" : "ring-1 ring-inset ring-ink/20 hover:bg-bone")}
                 >
                   {n}d
                 </button>

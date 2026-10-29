@@ -175,7 +175,7 @@ export default function RecordsPage() {
         ) : (
           <>
             {chart.some((c) => c.board != null || c.market != null) ? (
-              <div className="h-[200px] border-b border-ink/[0.06] px-2 pt-3">
+              <div className="h-[200px] border-b border-ink/20 px-2 pt-3">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chart} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
                     <CartesianGrid vertical={false} stroke="rgba(16,32,27,0.06)" />
@@ -198,7 +198,7 @@ export default function RecordsPage() {
                     <th className="px-2 text-right">Low</th>
                     <th className="px-2 text-right">Close</th>
                     <th className="px-2 text-right">Changes</th>
-                    <th className="border-l border-ink/[0.06] px-2 text-right">Market open</th>
+                    <th className="border-l border-ink/20 px-2 text-right">Market open</th>
                     <th className="px-2 text-right">High</th>
                     <th className="px-2 text-right">Low</th>
                     <th className="px-2 text-right">Close</th>
@@ -207,7 +207,7 @@ export default function RecordsPage() {
                 </thead>
                 <tbody>
                   {(log.data?.days ?? []).map((d) => (
-                    <tr key={d.date} className="border-t border-ink/[0.05] hover:bg-gold-pale/30">
+                    <tr key={d.date} className="border-t border-ink/20 hover:bg-gold-pale/30">
                       <td className="g-metric py-1.5 pl-4 pr-2 text-ink-2">{d.date}</td>
                       <td className="g-metric px-2 text-right text-ink-3">{lkr(d.board.open)}</td>
                       <td className="g-metric px-2 text-right text-ink-4">{lkr(d.board.high)}</td>
@@ -216,7 +216,7 @@ export default function RecordsPage() {
                       <td className="px-2 text-right">
                         {d.board.changes ? <span className="g-metric rounded-full bg-void px-1.5 text-[10px] font-bold text-gold-light">{d.board.changes}</span> : <span className="text-ink-6">—</span>}
                       </td>
-                      <td className="g-metric border-l border-ink/[0.06] px-2 text-right text-ink-3">{lkr(d.market.open)}</td>
+                      <td className="g-metric border-l border-ink/20 px-2 text-right text-ink-3">{lkr(d.market.open)}</td>
                       <td className="g-metric px-2 text-right text-emerald-700">{lkr(d.market.high)}</td>
                       <td className="g-metric px-2 text-right text-rose-700">{lkr(d.market.low)}</td>
                       <td className="g-metric px-2 text-right text-ink">{lkr(d.market.close)}</td>
@@ -226,7 +226,7 @@ export default function RecordsPage() {
                 </tbody>
               </table>
             </div>
-            <p className="border-t border-ink/[0.06] px-4 py-2 text-[10.5px] text-ink-5">
+            <p className="border-t border-ink/20 px-4 py-2 text-[10.5px] text-ink-5">
               Days use the shop’s business time zone. Market figures come from stored snapshots (hourly), so days before the feed started are blank.
             </p>
           </>

@@ -293,7 +293,7 @@ export default function SetupPage() {
       <div className="grid gap-5 xl:grid-cols-12">
         <div className="xl:col-span-8 2xl:col-span-9">
           {groups.length === 0 ? (
-            <div className="flex flex-col items-center rounded-[20px] border border-dashed border-ink/15 bg-paper/70 px-6 py-12 text-center">
+            <div className="flex flex-col items-center rounded-[20px] border border-dashed border-ink/20 bg-paper/70 px-6 py-12 text-center">
               <span className="flex size-11 items-center justify-center rounded-2xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25)]">
                 <SearchIcon size={18} />
               </span>
@@ -328,7 +328,7 @@ export default function SetupPage() {
 
         <aside className="space-y-5 xl:col-span-4 2xl:col-span-3">
           {checks.length ? (
-            <section className="relative overflow-hidden rounded-[20px] bg-gradient-to-b from-white to-[#fbfaf6] shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_24px_48px_-32px_rgba(16,32,27,0.3)]">
+            <section className="relative overflow-hidden rounded-[20px] bg-gradient-to-b from-white to-[#fbfaf6] shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_24px_48px_-32px_rgba(16,32,27,0.3)]">
               <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
               <header className="flex items-center gap-3 px-5 pb-3 pt-5">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25)]">
@@ -468,7 +468,7 @@ export default function SetupPage() {
               <span className="block text-[13px] font-semibold text-ink">Need a hand?</span>
               <span className="mt-0.5 block text-[11px] text-ink-4">Open a ticket with the GoldOS team</span>
             </span>
-            <span className="flex size-8 items-center justify-center rounded-full text-ink-4 ring-1 ring-inset ring-ink/10 transition-all group-hover:bg-void group-hover:text-gold-light group-hover:ring-void">
+            <span className="flex size-8 items-center justify-center rounded-full text-ink-4 ring-1 ring-inset ring-ink/20 transition-all group-hover:bg-void group-hover:text-gold-light group-hover:ring-void">
               <ArrowRightIcon size={13} />
             </span>
           </Link>
@@ -554,7 +554,7 @@ function GroupCard({ group: g, index, delay, children }: { group: Group; index: 
       id={`setup-${g.key}`}
       aria-labelledby={`setup-${g.key}-title`}
       style={{ "--tone": g.tone, animationDelay: `${delay}ms` } as CSSProperties}
-      className="relative scroll-mt-24 break-inside-avoid animate-fade-in overflow-hidden rounded-[20px] bg-gradient-to-b from-white to-[#fbfaf6] shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_24px_48px_-32px_rgba(16,32,27,0.3)]"
+      className="relative scroll-mt-24 break-inside-avoid animate-fade-in overflow-hidden rounded-[20px] bg-gradient-to-b from-white to-[#fbfaf6] shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_24px_48px_-32px_rgba(16,32,27,0.3)]"
     >
       <div aria-hidden className="absolute inset-x-0 top-0 h-[3px]" style={{ background: `linear-gradient(90deg, ${g.tone}, ${g.tone}00 70%)` }} />
       <div aria-hidden className="pointer-events-none absolute -right-6 -top-6 opacity-[0.07]" style={{ color: g.tone }}>
@@ -619,7 +619,7 @@ function LinkRow({ link: l, loading, value, unit }: { link: SetupLink; loading: 
           <span className="mt-1 block text-[9px] font-semibold uppercase tracking-[0.12em] text-ink-5">{unit}</span>
         </span>
       ) : null}
-      <span className="flex size-7 shrink-0 items-center justify-center rounded-full text-ink-5 ring-1 ring-inset ring-ink/[0.08] transition-all duration-200 group-hover:bg-void group-hover:text-gold-light group-hover:ring-void">
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-full text-ink-5 ring-1 ring-inset ring-ink/20 transition-all duration-200 group-hover:bg-void group-hover:text-gold-light group-hover:ring-void">
         <ArrowRightIcon size={12} className="transition-transform group-hover:translate-x-px" />
       </span>
     </Link>

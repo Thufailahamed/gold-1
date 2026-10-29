@@ -42,7 +42,7 @@ export function QueryError({ message, onRetry }: { message: string; onRetry: () 
         <p className="text-[13px] font-semibold text-ink">Could not load this</p>
         <p className="truncate text-[11px] text-ink-4">{message}</p>
       </div>
-      <button type="button" onClick={onRetry} className="inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[11.5px] font-medium text-ink-3 ring-1 ring-inset ring-ink/10 hover:bg-bone hover:text-ink">
+      <button type="button" onClick={onRetry} className="inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[11.5px] font-medium text-ink-3 ring-1 ring-inset ring-ink/20 hover:bg-bone hover:text-ink">
         <RefreshCwIcon size={11} /> Retry
       </button>
     </div>
@@ -178,7 +178,7 @@ export function StockByBranch({ data, loading, error, onRetry }: PanelProps) {
         </table>
       )}
       {hidden > 0 && !loading && !error ? (
-        <p className="border-t border-ink/[0.05] px-4 py-1.5 text-center text-[11px] text-ink-4">+ {hidden} more {hidden === 1 ? "branch" : "branches"}</p>
+        <p className="border-t border-ink/20 px-4 py-1.5 text-center text-[11px] text-ink-4">+ {hidden} more {hidden === 1 ? "branch" : "branches"}</p>
       ) : null}
     </Card>
   );
@@ -327,7 +327,7 @@ export function MovementFilters({
   branches: Array<{ id: string; name: string }>;
 }) {
   return (
-    <div className="flex flex-col gap-2 border-b border-ink/[0.06] px-4 py-2.5">
+    <div className="flex flex-col gap-2 border-b border-ink/20 px-4 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
         <label className="relative w-full sm:w-60">
           <SearchIcon size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-5" />
@@ -443,7 +443,7 @@ export function PieceDetail({
           ))}
         </dl>
 
-        <div className="flex flex-wrap justify-end gap-2 border-t border-ink/[0.06] bg-bone/50 px-5 py-3">
+        <div className="flex flex-wrap justify-end gap-2 border-t border-ink/20 bg-bone/50 px-5 py-3">
           <Link href={`/products/${p.id}`} className="g-btn g-btn-secondary h-9 rounded-lg px-3.5 text-[13px]">
             View product
           </Link>

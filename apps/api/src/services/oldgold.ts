@@ -2,6 +2,7 @@ import {
   gToMg,
   lkrToCents,
   SHOP_STOCK_CUSTOMER_ID,
+  type BuyInOldGoldInput,
   type CreateOldGoldInput,
   type TestOldGoldInput,
   type ValueOldGoldInput,
@@ -133,6 +134,29 @@ export async function oldGoldCategories(db: D1Database): Promise<{ id: string; n
   return (results ?? []).map((c) => ({ ...c, isDefault: c.code.toUpperCase() === "OG" }));
 }
 
+const DEFAULT_OG_CATEGORY_ID = "cat-oldgold-og";
+
+/**
+ * The shop's default old gold category, when it has none. Returns the category
+ * and the statement that creates it; null when the code OG is already in use by
+ * another category, which is left to the shop to sort out.
+ */
+async function defaultOldGoldCategory(
+  db: D1Database
+): Promise<{ id: string; name: string; code: string; isDefault: boolean; insert: D1PreparedStatement } | null> {
+  const taken = await db.prepare("SELECT 1 AS x FROM categories WHERE code = 'OG'").first();
+  if (taken) return null;
+  return {
+    id: DEFAULT_OG_CATEGORY_ID,
+    name: "OLD GOLD OG",
+    code: "OG",
+    isDefault: true,
+    insert: db
+      .prepare("INSERT OR IGNORE INTO categories (id, name, code, is_active, created_at) VALUES (?, 'OLD GOLD OG', 'OG', 1, ?)")
+      .bind(DEFAULT_OG_CATEGORY_ID, Date.now()),
+  };
+}
+
 /**
  * `alreadyInStock`: the metal and its cost were booked by another save in the
  * same batch (a product intake), so this record only tracks the piece and posts
@@ -170,9 +194,12 @@ export async function intakeStatements(
     });
   // The category: the one chosen, else the OG category. It must be an old gold category.
   const categories = await oldGoldCategories(db);
+  // A shop that never set up an old gold category gets the default one, OLD GOLD OG, on its first intake.
+  // The id is fixed and the insert ignores a repeat, so several pieces saved in one batch share it.
+  const defaultCategory = !input.categoryId && categories.length === 0 ? await defaultOldGoldCategory(db) : null;
   const category = input.categoryId
     ? categories.find((c) => c.id === input.categoryId)
-    : categories.find((c) => c.isDefault);
+    : (categories.find((c) => c.isDefault) ?? defaultCategory);
   if (!category)
     throw Object.assign(new Error(input.categoryId ? "Pick one of the old gold categories" : "No OG old gold category is set up"), {
       code: "VALIDATION",
@@ -201,6 +228,7 @@ export async function intakeStatements(
       ]
     : [];
   const stmts: D1PreparedStatement[] = [
+    ...(defaultCategory ? [defaultCategory.insert] : []),
     ...sentinel,
     db
       .prepare(
@@ -288,6 +316,30 @@ export async function intakeStatements(
     );
   }
   return { id, number, stmts };
+}
+
+/**
+ * A piece bought from a customer and put straight into stock, in one request:
+ * taken in at its karat and price per gram, valued at that price, paid for, and
+ * released to stock. There is no testing step. If the buy cannot finish, the
+ * intake is voided and nothing stays on record. A piece already paid for is kept,
+ * and is released from its item page.
+ */
+export async function buyInItem(
+  db: D1Database,
+  input: BuyInOldGoldInput,
+  actorId: string
+): Promise<{ id: string; number: string; valueCents: number }> {
+  const item = await intakeItem(db, { ...input, needsTesting: false }, actorId);
+  try {
+    const v = await valuateItem(db, item.id, { stoneDeductionLkr: 0, processingDeductionLkr: 0 }, actorId);
+    await purchaseItem(db, item.id, { paidLkr: input.paidLkr ?? v.valueCents / 100, method: input.method }, actorId);
+    await releaseItem(db, item.id, actorId);
+    return { ...item, valueCents: v.valueCents };
+  } catch (err) {
+    await voidItem(db, item.id, "Buy-in did not finish", actorId).catch(() => {});
+    throw err;
+  }
 }
 
 export async function intakeItem(
@@ -933,6 +985,35 @@ export async function oldgoldBreakdown(
     .bind(opts.from, opts.to, ...b.vals)
     .all();
   return results ?? [];
+}
+
+/**
+ * Old gold held in stock (bought or on the shelf): its weight, fine and value,
+ * and the weight by karat. These are the pieces products are made from.
+ */
+export async function stockOnHand(db: D1Database, branchId?: string, scope: Scope = null) {
+  const b = branchFilter("o.branch_id", branchId, scope);
+  const { results } = await db
+    .prepare(
+      `SELECT o.karat AS karat, o.tested_permille AS permille, COUNT(*) AS items,
+              COALESCE(SUM(o.net_mg), 0) AS net_mg, COALESCE(SUM(o.fine_mg), 0) AS fine_mg,
+              COALESCE(SUM(o.purchase_value_cents), 0) AS value_cents
+       FROM old_gold_items o
+       WHERE o.status IN ('PURCHASED', 'AVAILABLE') AND o.net_mg > 0${b.sql}
+       GROUP BY o.tested_permille, o.karat
+       ORDER BY o.tested_permille DESC`
+    )
+    .bind(...b.vals)
+    .all<{ karat: string | null; permille: number | null; items: number; net_mg: number; fine_mg: number; value_cents: number }>();
+  const rows = results ?? [];
+  const sum = (k: "items" | "net_mg" | "fine_mg" | "value_cents") => rows.reduce((n, r) => n + r[k], 0);
+  return {
+    items: sum("items"),
+    netMg: sum("net_mg"),
+    fineMg: sum("fine_mg"),
+    valueCents: sum("value_cents"),
+    byKarat: rows.map((r) => ({ karat: r.karat, permille: r.permille, items: r.items, netMg: r.net_mg, fineMg: r.fine_mg })),
+  };
 }
 
 export async function pendingList(db: D1Database, branchId?: string, scope: Scope = null) {

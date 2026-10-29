@@ -17,7 +17,7 @@ function verbTone(action: string) {
   if (/(create|add|new|activat|receive)/.test(a)) return { hex: "#059669", chip: "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25" };
   if (/(update|edit|change|patch|set)/.test(a)) return { hex: "#0284C7", chip: "bg-sky-500/10 text-sky-800 ring-sky-500/25" };
   if (/(login|logout|auth|session)/.test(a)) return { hex: "#7C3AED", chip: "bg-violet-500/10 text-violet-800 ring-violet-500/25" };
-  return { hex: "#64748B", chip: "bg-ink/[0.05] text-ink-3 ring-ink/10" };
+  return { hex: "#64748B", chip: "bg-ink/[0.05] text-ink-3 ring-ink/20" };
 }
 
 type Row = {
@@ -100,7 +100,7 @@ export default function AuditPage() {
 
       <div className="grid gap-4 xl:grid-cols-12">
         <Card className="xl:col-span-9">
-          <div className="flex flex-wrap items-center gap-2 border-b border-ink/[0.06] px-4 py-2.5">
+          <div className="flex flex-wrap items-center gap-2 border-b border-ink/20 px-4 py-2.5">
             <div className="relative w-full max-w-xs">
               <SearchIcon size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-5" />
               <input
@@ -135,7 +135,7 @@ export default function AuditPage() {
                       setEntity(e);
                       setPage(1);
                     }}
-                    className="inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11.5px] font-medium text-ink-3 ring-1 ring-inset ring-ink/10 hover:bg-bone hover:text-ink"
+                    className="inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11.5px] font-medium text-ink-3 ring-1 ring-inset ring-ink/20 hover:bg-bone hover:text-ink"
                   >
                     {e}
                     <span className="g-metric rounded-full bg-ink/[0.05] px-1.5 text-[10px] text-ink-4">{n}</span>
@@ -191,18 +191,18 @@ export default function AuditPage() {
               </table>
             </div>
           )}
-          <div className="flex items-center justify-between gap-2 border-t border-ink/[0.06] bg-bone/40 px-4 py-2 text-[11px] text-ink-4">
+          <div className="flex items-center justify-between gap-2 border-t border-ink/20 bg-bone/40 px-4 py-2 text-[11px] text-ink-4">
             <span>
               <span className="g-metric text-ink-2">{count(rows.length)}</span> of <span className="g-metric text-ink-2">{count(total)}</span> entries
             </span>
             <span className="flex items-center gap-1">
-              <button disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page" className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/10 hover:bg-paper disabled:opacity-40">
+              <button disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page" className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/20 hover:bg-paper disabled:opacity-40">
                 <ChevronRightIcon size={13} className="rotate-180" />
               </button>
               <span className="g-metric px-1.5 text-ink-2">
                 {page} / {pages}
               </span>
-              <button disabled={page >= pages} onClick={() => setPage(page + 1)} aria-label="Next page" className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/10 hover:bg-paper disabled:opacity-40">
+              <button disabled={page >= pages} onClick={() => setPage(page + 1)} aria-label="Next page" className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/20 hover:bg-paper disabled:opacity-40">
                 <ChevronRightIcon size={13} />
               </button>
             </span>

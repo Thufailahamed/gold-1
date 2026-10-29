@@ -36,7 +36,7 @@ type Supplier = { id: string; name: string; code: string };
 const FILTERS = ["", ...ORDER_STATUSES];
 const STATUS_LABEL: Record<string, string> = { DRAFT: "Draft", SENT: "Sent", RECEIVED: "Received", CANCELLED: "Cancelled" };
 const STATUS_STYLE: Record<string, { chip: string; dot: string }> = {
-  DRAFT: { chip: "bg-bone text-ink-2 ring-ink/10", dot: "bg-ink-4" },
+  DRAFT: { chip: "bg-bone text-ink-2 ring-ink/20", dot: "bg-ink-4" },
   SENT: { chip: "bg-sky-50 text-sky-800 ring-sky-600/20", dot: "bg-sky-500" },
   RECEIVED: { chip: "bg-emerald-50 text-emerald-800 ring-emerald-600/20", dot: "bg-emerald-500" },
   CANCELLED: { chip: "bg-rose-50 text-rose-800 ring-rose-600/20", dot: "bg-rose-500" },
@@ -44,7 +44,7 @@ const STATUS_STYLE: Record<string, { chip: string; dot: string }> = {
 const PAGE_SIZE = 20;
 
 const cardShadow =
-  "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]";
+  "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]";
 const lkr = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 const day = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const initials = (name: string) =>
@@ -179,7 +179,7 @@ export default function OrdersPage() {
             </>
           }
         />
-        <div className="overflow-x-auto border-b border-ink/[0.06] px-4 py-2 scrollbar-thin">
+        <div className="overflow-x-auto border-b border-ink/20 px-4 py-2 scrollbar-thin">
           <FilterPills
             value={fStatus}
             onChange={setFilter}
@@ -284,7 +284,7 @@ export default function OrdersPage() {
                               onClick={() => setCancelling(o)}
                               aria-label={`Cancel ${o.number}`}
                               title="Cancel order"
-                              className="flex size-7 items-center justify-center rounded-md text-ink-4 ring-1 ring-inset ring-ink/10 transition hover:bg-rose-50 hover:text-rose-700 hover:ring-rose-300"
+                              className="flex size-7 items-center justify-center rounded-md text-ink-4 ring-1 ring-inset ring-ink/20 transition hover:bg-rose-50 hover:text-rose-700 hover:ring-rose-300"
                             >
                               <CircleSlashIcon size={13} />
                             </button>
@@ -419,7 +419,7 @@ function NewOrderDialog({ onClose }: { onClose: () => void }) {
 
         <PurchaseItemsEditor items={items} onChange={setItems} costLabel="Est. cost" />
 
-        <div className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl bg-ink/[0.06] ring-1 ring-ink/[0.06]">
+        <div className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl bg-ink/[0.06] ring-1 ring-ink/20">
           {[
             { k: "Items", v: String(items.length) },
             { k: "Gross weight", v: `${grossTotal.toLocaleString("en-US", { maximumFractionDigits: 3 })} g` },
@@ -517,7 +517,7 @@ function ReceiveDialog({ order, onClose }: { order: Order; onClose: () => void }
           <Label extra={<span className="text-[11px] font-normal text-ink-5">Optional</span>}>Additional charges</Label>
           <UnitInput value={charges} onChange={setCharges} unit="LKR" placeholder="0.00" invalid={!chargesOk} icon={<BanknoteIcon size={14} />} />
         </div>
-        <div className="rounded-2xl bg-bone/50 p-4 ring-1 ring-ink/[0.06]">
+        <div className="rounded-2xl bg-bone/50 p-4 ring-1 ring-ink/20">
           <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-5">Pay on receipt</div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
@@ -625,7 +625,7 @@ function CancelDialog({ order, onClose }: { order: Order; onClose: () => void })
 function Empty({ icon, title, body, action }: { icon: ReactNode; title: string; body: string; action?: ReactNode }) {
   return (
     <div className="p-5 sm:p-6">
-      <div className="relative flex flex-col items-center overflow-hidden rounded-[22px] border border-dashed border-ink/15 bg-gradient-to-b from-bone/70 to-paper px-6 py-14 text-center">
+      <div className="relative flex flex-col items-center overflow-hidden rounded-[22px] border border-dashed border-ink/20 bg-gradient-to-b from-bone/70 to-paper px-6 py-14 text-center">
         <div className="pointer-events-none absolute -top-24 left-1/2 size-72 -translate-x-1/2 rounded-full bg-gold/10 blur-[80px]" aria-hidden />
         <span className="relative mb-5 flex size-16 items-center justify-center rounded-2xl bg-void text-gold-light shadow-4">
           <span className="absolute inset-0 animate-pulse-soft rounded-2xl ring-4 ring-gold/20" aria-hidden />
@@ -644,9 +644,9 @@ function PageNav({ page, onChange, count, total }: { page: number; onChange: (p:
   const to = (page - 1) * PAGE_SIZE + count;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const btn =
-    "flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-medium text-ink transition-all shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] hover:-translate-y-px hover:bg-void hover:text-paper hover:shadow-none disabled:pointer-events-none disabled:opacity-40";
+    "flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-medium text-ink transition-all shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] hover:-translate-y-px hover:bg-void hover:text-paper hover:shadow-none disabled:pointer-events-none disabled:opacity-40";
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink/[0.06] bg-bone/40 px-5 py-3 sm:px-6">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink/20 bg-bone/40 px-5 py-3 sm:px-6">
       <span className="text-xs text-ink-4">
         Showing <span className="g-metric font-medium text-ink">{from}–{to}</span> of{" "}
         <span className="g-metric font-medium text-ink">{total.toLocaleString("en-US")}</span> orders
@@ -656,7 +656,7 @@ function PageNav({ page, onChange, count, total }: { page: number; onChange: (p:
           <ArrowLeftIcon size={12} />
           Prev
         </button>
-        <span className="g-metric flex h-9 min-w-[4.5rem] items-center justify-center rounded-xl bg-paper px-3 text-xs text-ink-3 ring-1 ring-ink/[0.06]">
+        <span className="g-metric flex h-9 min-w-[4.5rem] items-center justify-center rounded-xl bg-paper px-3 text-xs text-ink-3 ring-1 ring-ink/20">
           <span className="text-ink">{page}</span>
           <span className="mx-1 text-ink-5">/</span>
           {pages}

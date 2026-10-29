@@ -86,7 +86,7 @@ export function ModuleNav({ label, pages }: { label: string; pages: ModulePage[]
     <div className="-mx-1 mb-6 overflow-x-auto scrollbar-thin print:hidden">
       <nav
         aria-label={label}
-        className="mx-1 flex w-[calc(100%-0.5rem)] min-w-max items-center justify-center gap-1.5 rounded-2xl bg-paper p-1.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_12px_28px_-24px_rgba(16,32,27,0.35)]"
+        className="mx-1 flex w-[calc(100%-0.5rem)] min-w-max items-center justify-center gap-1.5 rounded-2xl bg-paper p-1.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_12px_28px_-24px_rgba(16,32,27,0.35)]"
       >
         <span className="hidden items-center gap-2 pl-3 pr-5 sm:flex">
           <span className="size-1.5 rounded-full bg-gold" />

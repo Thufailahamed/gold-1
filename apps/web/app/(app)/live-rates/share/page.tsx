@@ -292,7 +292,7 @@ export default function SharePage() {
                 </>
               }
             />
-            <div className="grid gap-3 border-b border-ink/[0.06] p-4 sm:grid-cols-2">
+            <div className="grid gap-3 border-b border-ink/20 p-4 sm:grid-cols-2">
               <label className="block">
                 <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-5">Shop name</span>
                 <input value={shop} onChange={(e) => setShop(e.target.value)} maxLength={40} className={fieldCls} />
@@ -341,7 +341,7 @@ export default function SharePage() {
             <div className="flex justify-center bg-bone/50 p-4">
               <canvas ref={cv} className={cn("h-auto rounded-lg shadow-[0_20px_40px_-20px_rgba(6,42,34,0.6)]", size === "story" ? "w-[46%]" : "w-[82%]")} />
             </div>
-            <div className="border-t border-ink/[0.06] p-4">
+            <div className="border-t border-ink/20 p-4">
               <div className="mb-1.5 flex items-center justify-between">
                 <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-5">WhatsApp text</span>
                 <button
@@ -358,7 +358,7 @@ export default function SharePage() {
           {/* ---------------- Gulf & world board */}
           <Card>
             <CardHead icon={LayersIcon} title="Board in other currencies" sub={live.data ? `Converted at today's rates · 1 USD = Rs ${live.data.usdLkr.toFixed(2)}` : "For customers paying from abroad"} />
-            <div className="flex flex-wrap items-center gap-1 border-b border-ink/[0.06] px-4 py-2.5">
+            <div className="flex flex-wrap items-center gap-1 border-b border-ink/20 px-4 py-2.5">
               {[...GULF, ...EXTRA].map((code) => {
                 const on = ccys.includes(code);
                 return (
@@ -367,7 +367,7 @@ export default function SharePage() {
                     onClick={() => setCcys(on ? ccys.filter((c) => c !== code) : [...ccys, code])}
                     className={cn(
                       "inline-flex h-7 items-center gap-1.5 rounded-full pl-1 pr-2.5 text-[11px] font-semibold transition-colors",
-                      on ? "bg-void text-gold-light" : "text-ink-3 ring-1 ring-inset ring-ink/10 hover:bg-bone"
+                      on ? "bg-void text-gold-light" : "text-ink-3 ring-1 ring-inset ring-ink/20 hover:bg-bone"
                     )}
                   >
                     <CountryFlag code={code} size={18} />
@@ -398,7 +398,7 @@ export default function SharePage() {
                       {ccys.map((code) => {
                         const per = lkrPer(code);
                         return (
-                          <tr key={code} className="border-t border-ink/[0.05] hover:bg-gold-pale/30">
+                          <tr key={code} className="border-t border-ink/20 hover:bg-gold-pale/30">
                             <td className="py-1.5 pl-4 pr-2">
                               <span className="flex items-center gap-2 font-semibold text-ink">
                                 <CountryFlag code={code} size={18} />
@@ -419,7 +419,7 @@ export default function SharePage() {
                   </table>
                 </div>
                 {/* quick quote */}
-                <div className="border-t border-ink/[0.06] p-4">
+                <div className="border-t border-ink/20 p-4">
                   <div className="flex flex-wrap items-center gap-2 text-[12px] text-ink-2">
                     Quote
                     <NumInput value={weight} onChange={setWeight} suffix="g" className="w-24" />

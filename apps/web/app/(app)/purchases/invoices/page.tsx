@@ -50,7 +50,7 @@ const STATUS_STYLE: Record<string, { chip: string; dot: string }> = {
   UNPAID: { chip: "bg-rose-50 text-rose-800 ring-rose-600/20", dot: "bg-rose-500" },
   PARTIAL: { chip: "bg-amber-50 text-amber-800 ring-amber-600/20", dot: "bg-amber-500" },
   PAID: { chip: "bg-emerald-50 text-emerald-800 ring-emerald-600/20", dot: "bg-emerald-500" },
-  VOID: { chip: "bg-bone text-ink-4 ring-ink/10", dot: "bg-ink-5" },
+  VOID: { chip: "bg-bone text-ink-4 ring-ink/20", dot: "bg-ink-5" },
 };
 const PAGE_SIZE = 20;
 
@@ -66,7 +66,7 @@ const initials = (name: string) =>
     .join("");
 
 const cardShadow =
-  "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]";
+  "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]";
 
 export default function InvoicesPage() {
   const [search, setSearch] = useState("");
@@ -202,7 +202,7 @@ export default function InvoicesPage() {
             </>
           }
         />
-        <div className="overflow-x-auto border-b border-ink/[0.06] px-4 py-2 scrollbar-thin">
+        <div className="overflow-x-auto border-b border-ink/20 px-4 py-2 scrollbar-thin">
           <FilterPills
             value={fStatus}
             onChange={setFilter}
@@ -328,7 +328,7 @@ export default function InvoicesPage() {
                         <Link
                           href={`/purchases/invoices/${r.id}`}
                           aria-label={`Open ${r.number}`}
-                          className="ml-auto flex size-7 items-center justify-center rounded-md text-ink-5 ring-1 ring-inset ring-ink/10 transition group-hover:bg-void group-hover:text-gold-light group-hover:ring-void"
+                          className="ml-auto flex size-7 items-center justify-center rounded-md text-ink-5 ring-1 ring-inset ring-ink/20 transition group-hover:bg-void group-hover:text-gold-light group-hover:ring-void"
                         >
                           <ArrowRightIcon size={12} />
                         </Link>
@@ -470,7 +470,7 @@ function NewInvoiceDialog({ onClose }: { onClose: () => void }) {
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
           {/* Charges & payment */}
-          <div className="space-y-4 rounded-2xl bg-bone/50 p-4 ring-1 ring-ink/[0.06]">
+          <div className="space-y-4 rounded-2xl bg-bone/50 p-4 ring-1 ring-ink/20">
             <div>
               <Label extra={<span className="text-[11px] font-normal text-ink-5">Optional</span>}>Additional charges</Label>
               <UnitInput value={charges} onChange={setCharges} unit="LKR" placeholder="0.00" invalid={!chargesOk} icon={<BanknoteIcon size={14} />} />
@@ -531,7 +531,7 @@ function Row({ k, v, strong, warn }: { k: string; v: string; strong?: boolean; w
 function Empty({ icon, title, body, action }: { icon: ReactNode; title: string; body: string; action?: ReactNode }) {
   return (
     <div className="p-5 sm:p-6">
-      <div className="relative flex flex-col items-center overflow-hidden rounded-[22px] border border-dashed border-ink/15 bg-gradient-to-b from-bone/70 to-paper px-6 py-14 text-center">
+      <div className="relative flex flex-col items-center overflow-hidden rounded-[22px] border border-dashed border-ink/20 bg-gradient-to-b from-bone/70 to-paper px-6 py-14 text-center">
         <div className="pointer-events-none absolute -top-24 left-1/2 size-72 -translate-x-1/2 rounded-full bg-gold/10 blur-[80px]" aria-hidden />
         <span className="relative mb-5 flex size-16 items-center justify-center rounded-2xl bg-void text-gold-light shadow-4">
           <span className="absolute inset-0 animate-pulse-soft rounded-2xl ring-4 ring-gold/20" aria-hidden />
@@ -550,9 +550,9 @@ function PageNav({ page, onChange, count, total }: { page: number; onChange: (p:
   const to = (page - 1) * PAGE_SIZE + count;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const btn =
-    "flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-medium text-ink transition-all shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] hover:-translate-y-px hover:bg-void hover:text-paper hover:shadow-none disabled:pointer-events-none disabled:opacity-40";
+    "flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-medium text-ink transition-all shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] hover:-translate-y-px hover:bg-void hover:text-paper hover:shadow-none disabled:pointer-events-none disabled:opacity-40";
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink/[0.06] bg-bone/40 px-5 py-3 sm:px-6">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink/20 bg-bone/40 px-5 py-3 sm:px-6">
       <span className="text-xs text-ink-4">
         Showing <span className="g-metric font-medium text-ink">{from}–{to}</span> of{" "}
         <span className="g-metric font-medium text-ink">{total.toLocaleString("en-US")}</span> invoices
@@ -562,7 +562,7 @@ function PageNav({ page, onChange, count, total }: { page: number; onChange: (p:
           <ArrowLeftIcon size={12} />
           Prev
         </button>
-        <span className="g-metric flex h-9 min-w-[4.5rem] items-center justify-center rounded-xl bg-paper px-3 text-xs text-ink-3 ring-1 ring-ink/[0.06]">
+        <span className="g-metric flex h-9 min-w-[4.5rem] items-center justify-center rounded-xl bg-paper px-3 text-xs text-ink-3 ring-1 ring-ink/20">
           <span className="text-ink">{page}</span>
           <span className="mx-1 text-ink-5">/</span>
           {pages}

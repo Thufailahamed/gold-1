@@ -15,7 +15,6 @@ import {
   CheckCircleIcon,
   CheckIcon,
   FileTextIcon,
-  FlaskConicalIcon,
   PlusIcon,
   ScaleIcon,
   SearchIcon,
@@ -41,10 +40,10 @@ const initials = (name: string) =>
     .join("");
 
 const cardShadow =
-  "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]";
+  "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]";
 
 const inputCls =
-  "h-10 w-full rounded-xl bg-paper px-3.5 text-[13px] text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)] aria-[invalid=true]:shadow-[inset_0_0_0_1px_#e11d48,0_0_0_4px_rgba(225,29,72,0.12)]";
+  "h-10 w-full rounded-xl bg-paper px-3.5 text-[13px] text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)] aria-[invalid=true]:shadow-[inset_0_0_0_1px_#e11d48,0_0_0_4px_rgba(225,29,72,0.12)]";
 
 /* ------------------------------------------------------------------ pieces */
 
@@ -78,7 +77,7 @@ function Section({
           done ? "via-gold" : "via-gold/40"
         )}
       />
-      <header className="flex items-center gap-2.5 border-b border-ink/[0.06] px-4 py-2.5">
+      <header className="flex items-center gap-2.5 border-b border-ink/20 px-4 py-2.5">
         <span className="relative flex size-7 shrink-0 items-center justify-center rounded-lg bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25)]">
           {icon}
           <span className="g-metric absolute -right-1.5 -top-1.5 flex size-[18px] items-center justify-center rounded-full bg-paper text-[9px] text-ink shadow-[0_0_0_1px_rgba(16,32,27,0.12)]">
@@ -135,7 +134,7 @@ function UnitInput({
         onChange={(e) => onChange(e.target.value)}
         className={cn(inputCls, "g-metric pr-14 text-[14px]")}
       />
-      <span className="pointer-events-none absolute inset-y-1.5 right-1.5 flex items-center rounded-lg bg-bone px-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-4 ring-1 ring-ink/[0.05] transition-colors group-focus-within:bg-void group-focus-within:text-gold-light">
+      <span className="pointer-events-none absolute inset-y-1.5 right-1.5 flex items-center rounded-lg bg-bone px-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-4 ring-1 ring-ink/20 transition-colors group-focus-within:bg-void group-focus-within:text-gold-light">
         {unit}
       </span>
     </span>
@@ -161,7 +160,7 @@ export default function IntakePage() {
   const [notes, setNotes] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [drag, setDrag] = useState(false);
-  const [created, setCreated] = useState<{ id: string; number: string; needsTesting?: boolean; shopOwned?: boolean } | null>(null);
+  const [created, setCreated] = useState<{ id: string; number: string; shopOwned?: boolean } | null>(null);
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
   // The selected-branch cookie, else the first branch the user works in. An
   // empty branch used to reach the server and come back as "Branch not found".
@@ -173,12 +172,6 @@ export default function IntakePage() {
     queryKey: ["og-summary", "today"],
     queryFn: () => api<{ items: number; gross_mg: number; fine_mg: number }>("/api/v1/oldgold/reports/summary?period=today"),
   });
-  const queueCount = useQuery({
-    retry: false,
-    staleTime: 30_000,
-    queryKey: ["og-dash", "stage", "RECEIVED"],
-    queryFn: () => api<{ rows: unknown[]; total: number }>("/api/v1/oldgold/items?status=RECEIVED&limit=1"),
-  });
 
   const oldGoldCats = useQuery({
     queryKey: ["og-categories"],
@@ -189,9 +182,8 @@ export default function IntakePage() {
   const categoryRows = oldGoldCats.data?.rows ?? [];
   const selectedCategory = categoryRows.find((c) => c.id === categoryId) ?? categoryRows.find((c) => c.isDefault);
 
-  // Testing is off by default: the karat is picked here and the piece is Tested at once.
-  // Tick Needs testing to send it to the testing queue instead.
-  const [needsTesting, setNeedsTesting] = useState(false);
+  // How a customer's piece is paid for at the counter.
+  const [paidBy, setPaidBy] = useState<"cash" | "bank">("cash");
   // The shop already holds this gold: no seller, no purchase, booked at the cost typed.
   const [shopOwned, setShopOwned] = useState(false);
   const [costLkr, setCostLkr] = useState("");
@@ -241,22 +233,37 @@ export default function IntakePage() {
 
   const intake = useMutation({
     mutationFn: async () => {
-      const res = await api<{ id: string; number: string }>("/api/v1/oldgold/items", {
-        method: "POST",
-        body: JSON.stringify({
-          customerId: shopOwned ? undefined : customer?.id ?? "",
-          shopOwned: shopOwned || undefined,
-          costLkr: shopOwned && costLkr !== "" ? Number(costLkr) : undefined,
-          branchId,
-          categoryId: selectedCategory?.id,
-          needsTesting: testing,
-          purityId: !testing ? purityId || undefined : undefined,
-          grossG: Number(grossG),
-          stoneG: stoneG === "" ? 0 : Number(stoneG),
-          quotedRateLkr: quoteRate > 0 ? quoteRate : undefined,
-          notes: notes || undefined,
-        }),
-      });
+      // The shop's own stock goes onto the shelf at its cost. A customer's piece is bought
+      // into stock in the same request: valued at its price per gram, paid, and released.
+      const res = shopOwned
+        ? await api<{ id: string; number: string }>("/api/v1/oldgold/items", {
+            method: "POST",
+            body: JSON.stringify({
+              shopOwned: true,
+              costLkr: costLkr !== "" ? Number(costLkr) : undefined,
+              branchId,
+              categoryId: selectedCategory?.id,
+              purityId: purityId || undefined,
+              grossG: Number(grossG),
+              stoneG: stoneG === "" ? 0 : Number(stoneG),
+              quotedRateLkr: quoteRate > 0 ? quoteRate : undefined,
+              notes: notes || undefined,
+            }),
+          })
+        : await api<{ id: string; number: string }>("/api/v1/oldgold/buy-in", {
+            method: "POST",
+            body: JSON.stringify({
+              customerId: customer?.id ?? "",
+              branchId,
+              categoryId: selectedCategory?.id,
+              purityId,
+              grossG: Number(grossG),
+              stoneG: stoneG === "" ? 0 : Number(stoneG),
+              quotedRateLkr: quoteRate,
+              method: paidBy,
+              notes: notes || undefined,
+            }),
+          });
       // The item exists now; a failed photo must not read as a failed intake.
       let failed = 0;
       for (const f of files.slice(0, 10)) {
@@ -269,8 +276,7 @@ export default function IntakePage() {
           failed++;
         }
       }
-      // A piece with no karat waits in the testing queue, the same as one ticked Needs testing.
-      return { ...res, failed, needsTesting: testing || !purityId, shopOwned };
+      return { ...res, failed, shopOwned };
     },
     onSuccess: (d) => {
       setCreated(d);
@@ -290,11 +296,11 @@ export default function IntakePage() {
   // Price per gram, typed at intake and optional. The price is net weight × that rate.
   const quoteRate = Number(ratePerG);
   const quote = net !== null && quoteRate > 0 ? Math.round(net * quoteRate) : null;
-  // Shop-owned stock is never sent to testing: its karat is chosen and its cost typed.
-  const testing = needsTesting && !shopOwned;
-  // Cost and karat are optional. A cost typed must still be above 0.
+  // Shop-owned stock: the cost and karat are optional, and a cost typed must still be above 0.
+  // A customer's piece: its karat and price per gram are needed to buy it.
   const costOk = costLkr === "" || Number(costLkr) > 0;
-  const canSubmit = !intake.isPending && (shopOwned ? costOk : !!customer) && !!branchId && grossOk && stoneOk;
+  const buyReady = !!customer && !!purityId && quoteRate > 0;
+  const canSubmit = !intake.isPending && (shopOwned ? costOk : buyReady) && !!branchId && grossOk && stoneOk;
 
   const steps = [
     { t: "Customer", done: shopOwned || !!customer },
@@ -305,6 +311,8 @@ export default function IntakePage() {
   const missing = [
     !shopOwned && !customer && "customer",
     shopOwned && !costOk && "a cost above 0",
+    !shopOwned && !purityId && "the karat",
+    !shopOwned && !(quoteRate > 0) && "the price per gram",
     !grossOk && "gross weight",
     !stoneOk && "a valid stone weight",
     !branchId && "a branch",
@@ -321,7 +329,7 @@ export default function IntakePage() {
     setStoneG("");
     setRatePerG("");
     setPurityId("");
-    setNeedsTesting(false);
+    setPaidBy("cash");
     setShopOwned(false);
     setCostLkr("");
     setNotes("");
@@ -336,12 +344,9 @@ export default function IntakePage() {
         accent="weighed true"
         back={{ href: "/old-gold", label: "Old gold" }}
         badge={<HeroBadge tone={steps.every((x) => x.done) ? "good" : "gold"}>{steps.filter((x) => x.done).length} of 4 steps</HeroBadge>}
-        sub="Every intake is photographed and weighed before it reaches the testing queue. An OG number is minted on save."
+        sub="Weigh and photograph each piece. Shop stock and pieces bought from customers go straight into stock, with no testing. An OG number is minted on save."
         actions={
           <>
-            <Link href="/old-gold/testing" className={heroGhost}>
-              <FlaskConicalIcon size={13} /> Testing queue
-            </Link>
             <Link href="/old-gold/items" className={heroGhost}>
               Items
             </Link>
@@ -349,7 +354,6 @@ export default function IntakePage() {
         }
         stats={[
           { label: "Taken in today", value: todaySum.data?.items, loading: todaySum.isLoading, sub: todaySum.data ? `${grams(todaySum.data.gross_mg)} g gross` : undefined },
-          { label: "Waiting for test", value: queueCount.data?.total, tone: queueCount.data?.total ? "warn" : undefined, loading: queueCount.isLoading, href: "/old-gold/testing", sub: "Received, not assayed" },
           { label: "This ticket · net", value: net !== null ? net * 1000 : null, format: grams, unit: "g", accent: true, sub: grossOk ? `${grams(gross * 1000)} g gross` : "Weigh the piece" },
           { label: "Photos", value: files.length, sub: "Up to 10" },
         ]}
@@ -376,15 +380,9 @@ export default function IntakePage() {
             </span>
             <div>
               <p className="text-[15px] font-semibold text-ink">
-                Item <span className="g-metric rounded-md bg-void px-2 py-0.5 text-gold-light">{created.number}</span> received
+                Item <span className="g-metric rounded-md bg-void px-2 py-0.5 text-gold-light">{created.number}</span> in stock
               </p>
-              <p className="mt-1 text-sm text-ink-3">
-                {created.shopOwned
-                  ? "Tag it with the OG number — it is on the shelf, ready to sell or melt."
-                  : created.needsTesting
-                    ? "Tag it with the OG number — it is now in the testing queue."
-                    : "Tag it with the OG number — it is tested and ready to value."}
-              </p>
+              <p className="mt-1 text-sm text-ink-3">Tag it with the OG number — it is in stock now, ready to make products from or melt.</p>
             </div>
           </div>
           <div className="relative flex flex-wrap gap-2">
@@ -392,7 +390,8 @@ export default function IntakePage() {
               <PlusIcon size={14} /> New intake
             </button>
             <Link href={`/old-gold/items/${created.id}`} className="g-btn g-btn-primary h-8 rounded-lg px-3 text-[12px]">
-              <FlaskConicalIcon size={14} /> Open for testing <ArrowRightIcon size={13} className="g-btn-arrow text-gold-light" />
+              Open item
+              <ArrowRightIcon size={13} className="g-btn-arrow text-gold-light" />
             </Link>
           </div>
         </section>
@@ -448,7 +447,7 @@ export default function IntakePage() {
                   ) : null}
                 </div>
                 {creating ? (
-                  <div className="mt-2 space-y-3 rounded-2xl bg-bone/60 p-4 ring-1 ring-ink/[0.06]">
+                  <div className="mt-2 space-y-3 rounded-2xl bg-bone/60 p-4 ring-1 ring-ink/20">
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="block sm:col-span-2">
                         <Label extra={<span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Required</span>}>Name</Label>
@@ -497,7 +496,7 @@ export default function IntakePage() {
                   </div>
                 )}
                 {customerSearch && !creating ? (
-                  <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto rounded-2xl bg-bone/50 p-1.5 ring-1 ring-ink/[0.06] scrollbar-thin">
+                  <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto rounded-2xl bg-bone/50 p-1.5 ring-1 ring-ink/20 scrollbar-thin">
                     {(customers.data?.rows ?? []).length === 0 && !customers.isFetching ? (
                       <li className="px-3 py-4 text-center text-xs text-ink-4">No customers match “{customerSearch}”</li>
                     ) : null}
@@ -506,7 +505,7 @@ export default function IntakePage() {
                         <button
                           type="button"
                           onClick={() => setCustomer(c)}
-                          className="flex w-full items-center gap-3 rounded-xl bg-paper px-3 py-2.5 text-left ring-1 ring-ink/[0.06] transition-all hover:-translate-y-px hover:ring-gold-dark/30"
+                          className="flex w-full items-center gap-3 rounded-xl bg-paper px-3 py-2.5 text-left ring-1 ring-ink/20 transition-all hover:-translate-y-px hover:ring-gold-dark/30"
                         >
                           <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-gold-soft to-gold-pale text-[10px] font-semibold text-gold-deep ring-1 ring-gold-dark/15">
                             {initials(c.name)}
@@ -545,9 +544,19 @@ export default function IntakePage() {
                 </select>
               </label>
               <label className="block">
-                <Label extra={<span className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-5">Optional</span>}>Karat</Label>
+                <Label
+                  extra={
+                    shopOwned ? (
+                      <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-5">Optional</span>
+                    ) : (
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Required</span>
+                    )
+                  }
+                >
+                  Karat
+                </Label>
                 <select value={purityId} onChange={(e) => setPurityId(e.target.value)} className={cn(inputCls, "pr-8")}>
-                  <option value="">Not known yet</option>
+                  <option value="">{shopOwned ? "Not known yet" : "Choose the karat…"}</option>
                   {purityRows.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.karat} ({p.permille}‰)
@@ -567,18 +576,14 @@ export default function IntakePage() {
                   />
                 </label>
               ) : (
-              <label className="flex items-start gap-2.5 sm:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={needsTesting}
-                  onChange={(e) => setNeedsTesting(e.target.checked)}
-                  className="mt-0.5 size-4 accent-[#CDA853]"
-                />
-                <span>
-                  <span className="block text-[13px] font-medium text-ink">Needs testing</span>
-                  <span className="block text-xs text-ink-4">Send it to the testing queue, even when the karat is known.</span>
-                </span>
-              </label>
+                <label className="block sm:col-span-2">
+                  <Label extra={<span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Required</span>}>Paid by</Label>
+                  <select value={paidBy} onChange={(e) => setPaidBy(e.target.value as "cash" | "bank")} className={cn(inputCls, "pr-8")}>
+                    <option value="cash">Cash</option>
+                    <option value="bank">Bank</option>
+                  </select>
+                  <span className="mt-1.5 block text-xs text-ink-4">The piece is paid for at its price, and goes straight into stock.</span>
+                </label>
               )}
             </div>
           </Section>
@@ -605,15 +610,27 @@ export default function IntakePage() {
                 ) : null}
               </label>
               <label className="block">
-                <Label extra={<span className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-5">Optional</span>}>Price per gram</Label>
+                <Label
+                  extra={
+                    shopOwned ? (
+                      <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-5">Optional</span>
+                    ) : (
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Required</span>
+                    )
+                  }
+                >
+                  Price per gram
+                </Label>
                 <UnitInput id="og-rate" unit="LKR/g" value={ratePerG} onChange={setRatePerG} />
                 <span className="mt-1.5 block text-xs text-ink-4">
                   {quote !== null ? (
                     <>
                       Price <span className="g-metric font-semibold text-ink">LKR {quote.toLocaleString("en-US")}</span> for {grams((net ?? 0) * 1000)} g net
                     </>
-                  ) : (
+                  ) : shopOwned ? (
                     "Type a rate to price the piece"
+                  ) : (
+                    "The price the shop pays for the piece"
                   )}
                 </span>
               </label>
@@ -645,7 +662,7 @@ export default function IntakePage() {
                 "group flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-5 text-center transition-all duration-200",
                 drag
                   ? "scale-[1.01] border-gold-dark/70 bg-gold-pale"
-                  : "border-ink/15 bg-gradient-to-b from-bone/40 to-bone/80 hover:border-gold-dark/50 hover:from-gold-pale/40 hover:to-gold-pale/70"
+                  : "border-ink/20 bg-gradient-to-b from-bone/40 to-bone/80 hover:border-gold-dark/50 hover:from-gold-pale/40 hover:to-gold-pale/70"
               )}
             >
               <input
@@ -678,7 +695,7 @@ export default function IntakePage() {
             {files.length > 0 ? (
               <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-6">
                 {previews.map((src, i) => (
-                  <span key={src} className={cn("group relative block aspect-square overflow-hidden rounded-xl", i === 0 ? "ring-2 ring-gold" : "ring-1 ring-ink/10")}>
+                  <span key={src} className={cn("group relative block aspect-square overflow-hidden rounded-xl", i === 0 ? "ring-2 ring-gold" : "ring-1 ring-ink/20")}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={src} alt={files[i]?.name ?? ""} className="size-full object-cover" />
                     <button
@@ -724,7 +741,7 @@ export default function IntakePage() {
                 ["Gross", grossOk ? `${gross.toLocaleString("en-US", { maximumFractionDigits: 3 })} g` : "—"],
                 ["Stone", stoneG !== "" && stoneOk ? `${stone.toLocaleString("en-US", { maximumFractionDigits: 3 })} g` : "—"],
                 ["Category", selectedCategory ? selectedCategory.code : "—"],
-                ["Karat", testing || (!shopOwned && !selectedPurity) ? "To test" : selectedPurity ? selectedPurity.karat : "—"],
+                ["Karat", selectedPurity ? selectedPurity.karat : "—"],
                 ["Price / g", ratePerG !== "" && quoteRate > 0 ? `LKR ${quoteRate.toLocaleString("en-US")}` : "—"],
                 ["Price", quote !== null ? `LKR ${quote.toLocaleString("en-US")}` : "—"],
                 ["Photos", files.length ? String(files.length) : "—"],
@@ -763,8 +780,6 @@ export default function IntakePage() {
             <p className="relative mt-3 text-center text-[11px] leading-relaxed text-paper/45">
               {missing.length ? (
                 <>Still needed: {missing.join(", ")}</>
-              ) : !shopOwned && !testing && !purityId ? (
-                "Ready — no karat yet, so it goes to the testing queue. An OG number is minted on save."
               ) : (
                 "Ready — an OG number is minted on save."
               )}

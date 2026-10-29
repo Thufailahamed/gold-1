@@ -93,7 +93,7 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   PAID: { label: "Paid", cls: "bg-emerald-50 text-emerald-800 ring-emerald-600/25" },
   PARTIAL: { label: "Part paid", cls: "bg-amber-50 text-amber-800 ring-amber-600/25" },
   UNPAID: { label: "Unpaid · on credit", cls: "bg-rose-50 text-rose-800 ring-rose-600/25" },
-  VOID: { label: "Void", cls: "bg-ink/[0.05] text-ink-3 ring-ink/15" },
+  VOID: { label: "Void", cls: "bg-ink/[0.05] text-ink-3 ring-ink/20" },
 };
 
 function methodLabel(p: { method: string; bank_account_name?: string | null; cheque_no?: string | null; cheque_bank?: string | null }) {
@@ -291,7 +291,7 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
       {/* Stage — screen-only backdrop; print CSS shows only .print-area, pinned top-left. */}
       <div
         className={cn(
-          "relative overflow-hidden rounded-[28px] bg-gradient-to-b from-mist/70 via-bone to-bone px-3 py-6 ring-1 ring-ink/[0.06] sm:px-8 sm:py-10",
+          "relative overflow-hidden rounded-[28px] bg-gradient-to-b from-mist/70 via-bone to-bone px-3 py-6 ring-1 ring-ink/20 sm:px-8 sm:py-10",
           "print:static print:overflow-visible print:rounded-none print:bg-none print:p-0 print:ring-0"
         )}
       >
@@ -315,7 +315,7 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
           oldGold={oldGold}
         />
       ) : (
-        <article className="print-area invoice-sheet mx-auto w-full max-w-[210mm] animate-fade-in overflow-hidden rounded-[18px] bg-paper text-ink shadow-[0_1px_2px_rgba(16,32,27,0.06),0_40px_80px_-36px_rgba(16,32,27,0.45)] ring-1 ring-ink/[0.08] print:max-w-none print:rounded-none print:shadow-none print:ring-0">
+        <article className="print-area invoice-sheet mx-auto w-full max-w-[210mm] animate-fade-in overflow-hidden rounded-[18px] bg-paper text-ink shadow-[0_1px_2px_rgba(16,32,27,0.06),0_40px_80px_-36px_rgba(16,32,27,0.45)] ring-1 ring-ink/20 print:max-w-none print:rounded-none print:shadow-none print:ring-0">
           {/* Letterhead */}
           <div className="h-1.5 bg-gradient-to-r from-gold-deep via-gold to-gold-light" />
           <div className="h-px bg-void/80" />
@@ -363,7 +363,7 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
           </header>
 
           {/* Parties */}
-          <section className="mx-10 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-ink/10 ring-1 ring-ink/10 print:mx-2 print:rounded-xl">
+          <section className="mx-10 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-ink/10 ring-1 ring-ink/20 print:mx-2 print:rounded-xl">
             <div className="bg-bone px-5 py-4">
               <p className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.2em] text-gold-deep"><span className="size-1.5 rounded-full bg-gold" />Bill to</p>
               <p className="mt-1.5 text-[15px] font-semibold text-ink">{invoice.customer_name ?? "Walk-in customer"}</p>
@@ -410,7 +410,7 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
               </thead>
               <tbody>
                 {items.map((it, i) => (
-                  <tr key={i} className="border-b border-ink/10 align-top">
+                  <tr key={i} className="border-b border-ink/20 align-top">
                     <td className="py-2.5 pl-2 pr-2 text-ink-4 num-tabular">{i + 1}</td>
                     <td className="py-2.5 pr-2">
                       <p className="font-medium text-ink">{it.category_name ?? it.name}</p>
@@ -466,7 +466,7 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
                           <td className="py-0.5 pl-4 text-right num-tabular text-ink">{fmt(o.value_cents)}</td>
                         </tr>
                       ))}
-                      <tr className="border-t border-ink/15 font-semibold">
+                      <tr className="border-t border-ink/20 font-semibold">
                         <td className="py-0.5" colSpan={2}>Total old gold</td>
                         <td className="py-0.5 pl-4 text-right num-tabular">{fmt(oldGold.items.reduce((s, o) => s + o.value_cents, 0))}</td>
                       </tr>
@@ -587,7 +587,7 @@ export default function SalePrintPage({ params }: { params: Promise<{ id: string
           </section>
 
           {/* Terms & signatures */}
-          <section className="mt-8 grid grid-cols-[1fr_auto_auto] items-end gap-8 border-t border-ink/10 px-10 pt-5 print:mt-4 print:break-inside-avoid print:px-2 print:pt-3">
+          <section className="mt-8 grid grid-cols-[1fr_auto_auto] items-end gap-8 border-t border-ink/20 px-10 pt-5 print:mt-4 print:break-inside-avoid print:px-2 print:pt-3">
             <div className="text-[11px] leading-relaxed text-ink-4">
               <p className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-ink-4">Terms</p>
               <p className="mt-1 whitespace-pre-line">
@@ -652,7 +652,7 @@ function ThermalReceipt({
     </p>
   );
   return (
-    <div className="print-area mx-auto w-full max-w-[80mm] animate-fade-in rounded-[10px] bg-paper p-4 font-mono text-[11.5px] leading-snug text-ink shadow-[0_1px_2px_rgba(16,32,27,0.06),0_30px_60px_-28px_rgba(16,32,27,0.45)] ring-1 ring-ink/[0.08] print:max-w-none print:rounded-none print:p-0 print:shadow-none print:ring-0">
+    <div className="print-area mx-auto w-full max-w-[80mm] animate-fade-in rounded-[10px] bg-paper p-4 font-mono text-[11.5px] leading-snug text-ink shadow-[0_1px_2px_rgba(16,32,27,0.06),0_30px_60px_-28px_rgba(16,32,27,0.45)] ring-1 ring-ink/20 print:max-w-none print:rounded-none print:p-0 print:shadow-none print:ring-0">
       <div className="text-center">
         <p className="font-sans text-lg font-bold">{shop.shopName}</p>
         {shop.header ? <p className="text-[10.5px]">{shop.header}</p> : null}

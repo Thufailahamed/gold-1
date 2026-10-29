@@ -101,7 +101,7 @@ export default function TicketPage() {
                   key={m.id}
                   className={cn(
                     "rounded-xl p-4 ring-1",
-                    m.is_internal ? "bg-amber-50 ring-amber-600/25" : m.author_type === "ADMIN" ? "ml-6 bg-paper ring-ink/[0.08]" : "mr-6 bg-bone ring-ink/[0.08]"
+                    m.is_internal ? "bg-amber-50 ring-amber-600/25" : m.author_type === "ADMIN" ? "ml-6 bg-paper ring-ink/20" : "mr-6 bg-bone ring-ink/20"
                   )}
                 >
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">

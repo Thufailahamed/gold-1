@@ -90,7 +90,7 @@ const STATUS_TONE: Record<string, "good" | "warn" | "bad" | "muted" | "gold"> = 
 /** One labelled line in a breakdown, optionally the bold total. */
 function Line({ k, v, sub, total, tone }: { k: string; v: React.ReactNode; sub?: React.ReactNode; total?: boolean; tone?: string }) {
   return (
-    <div className={cn("flex items-baseline justify-between gap-3 px-4 py-1.5", total && "border-t border-ink/[0.08] bg-gold-pale/40 py-2")}>
+    <div className={cn("flex items-baseline justify-between gap-3 px-4 py-1.5", total && "border-t border-ink/20 bg-gold-pale/40 py-2")}>
       <span className={cn("text-[12px]", total ? "font-semibold text-ink" : "text-ink-3")}>
         {k}
         {sub ? <span className="ml-1.5 text-[10.5px] text-ink-5">{sub}</span> : null}
@@ -427,7 +427,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               sub="Print-ready tag for this piece"
               action={
                 <>
-                  <button onClick={() => router.push(`/products/${id}/print`)} className="rounded-md px-2 py-1 text-[11px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/10 hover:bg-bone">
+                  <button onClick={() => router.push(`/products/${id}/print`)} className="rounded-md px-2 py-1 text-[11px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/20 hover:bg-bone">
                     Print view
                   </button>
                   <button onClick={() => window.print()} className="inline-flex items-center gap-1 rounded-md bg-void px-2 py-1 text-[11px] font-semibold text-gold-light">
@@ -454,7 +454,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               <Line k="Selling price" v={price !== null ? `LKR ${whole(price)}` : "Not set"} total={price !== null} tone={price !== null ? "text-gold-deep" : undefined} />
             </div>
             {costHidden ? null : (
-            <div className="mt-auto border-t border-ink/[0.06] px-4 py-2.5">
+            <div className="mt-auto border-t border-ink/20 px-4 py-2.5">
               <div className="flex items-baseline justify-between text-[11px]">
                 <span className="text-ink-4">
                   Cost <span className="g-metric text-ink-2">{product.cost_cents != null ? whole(product.cost_cents) : "—"}</span>
@@ -522,7 +522,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               ))}
             </dl>
             {product.notes ? (
-              <div className="border-t border-ink/[0.06] bg-gold-pale/30 px-4 py-2.5">
+              <div className="border-t border-ink/20 bg-gold-pale/30 px-4 py-2.5">
                 <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-gold-dark">Notes</div>
                 <p className="mt-0.5 whitespace-pre-wrap text-[12px] leading-relaxed text-ink-2">{product.notes}</p>
               </div>
@@ -608,7 +608,6 @@ function EditDialog({
   const [makingLkr, setMakingLkr] = useState(String(centsToLkr(product.making_cents)));
   const [wastageG, setWastageG] = useState(String(mgToG(product.wastage_mg)));
   const [costLkr, setCostLkr] = useState(product.cost_cents != null ? String(centsToLkr(product.cost_cents)) : "");
-  const [sellingPriceLkr, setSellingPriceLkr] = useState(product.selling_price_cents !== null ? String(centsToLkr(product.selling_price_cents)) : "");
   const [location, setLocation] = useState(product.location ?? "");
   const [notes, setNotes] = useState(product.notes ?? "");
   const [subcategoryId, setSubcategoryId] = useState(product.subcategory_id ?? "");
@@ -648,7 +647,6 @@ function EditDialog({
       stoneTypeId: stoneTypeId || undefined,
     };
     if (costLkr !== "") body.costLkr = Number(costLkr);
-    if (sellingPriceLkr !== "") body.sellingPriceLkr = Number(sellingPriceLkr);
 
     try {
       await api(`/api/v1/products/${product.id}`, { method: "PATCH", body: JSON.stringify(body) });
@@ -688,10 +686,6 @@ function EditDialog({
         <div>
           <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Cost (LKR)</label>
           <input type="number" step="any" value={costLkr} onChange={(e) => setCostLkr(e.target.value)} className={cls} />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Selling price (LKR, optional)</label>
-          <input type="number" step="any" value={sellingPriceLkr} onChange={(e) => setSellingPriceLkr(e.target.value)} placeholder="Not set" className={cls} />
         </div>
         <div>
           <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Subcategory</label>

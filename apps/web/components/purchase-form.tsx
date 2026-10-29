@@ -13,7 +13,7 @@ import { BanknoteIcon, CheckCircleIcon, GemIcon, LayersIcon, PlusIcon, ScaleIcon
  */
 
 export const inputCls =
-  "h-11 w-full rounded-xl bg-paper px-3.5 text-sm text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)] aria-[invalid=true]:shadow-[inset_0_0_0_1px_#e11d48,0_0_0_4px_rgba(225,29,72,0.12)]";
+  "h-11 w-full rounded-xl bg-paper px-3.5 text-sm text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)] aria-[invalid=true]:shadow-[inset_0_0_0_1px_#e11d48,0_0_0_4px_rgba(225,29,72,0.12)]";
 
 /** Parses a typed amount, tolerating thousands separators. */
 export const num = (s: string) => Number(s.replace(/,/g, ""));
@@ -79,7 +79,7 @@ export function Dialog({
         aria-modal="true"
         aria-label={title}
         onClick={(e) => e.stopPropagation()}
-        className={cn("my-auto flex w-full animate-pop-in flex-col rounded-[24px] bg-paper shadow-5 ring-1 ring-ink/[0.06]", wide ? "max-w-4xl" : "max-w-lg")}
+        className={cn("my-auto flex w-full animate-pop-in flex-col rounded-[24px] bg-paper shadow-5 ring-1 ring-ink/20", wide ? "max-w-4xl" : "max-w-lg")}
       >
         <div className="relative overflow-hidden rounded-t-[24px] bg-void px-6 pb-5 pt-6 text-paper">
           <div className="home-grid-bg pointer-events-none absolute inset-0 opacity-50" aria-hidden />
@@ -113,7 +113,7 @@ export function Dialog({
           {intro ? <div className="relative mt-3 text-xs leading-relaxed text-paper/55">{intro}</div> : null}
         </div>
         {children}
-        <div className="flex flex-col-reverse gap-3 rounded-b-[24px] border-t border-ink/[0.06] bg-bone/50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col-reverse gap-3 rounded-b-[24px] border-t border-ink/20 bg-bone/50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           {footer}
         </div>
       </div>
@@ -216,7 +216,7 @@ export function PurchaseItemsEditor({
           const miss = itemMissing(it);
           const done = miss.length === 0;
           return (
-            <div key={it.key} className={cn("relative rounded-2xl bg-bone/40 p-4 ring-1 transition-colors", done ? "ring-emerald-600/20" : "ring-ink/[0.07]")}>
+            <div key={it.key} className={cn("relative rounded-2xl bg-bone/40 p-4 ring-1 transition-colors", done ? "ring-emerald-600/20" : "ring-ink/20")}>
               <div className="mb-3 flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-2">
                   <span

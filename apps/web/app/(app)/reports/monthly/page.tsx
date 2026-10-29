@@ -54,7 +54,7 @@ function Statement({
           key={label}
           className={
             "flex items-baseline justify-between gap-3 py-2 " +
-            (kind === "total" ? "border-t border-ink/[0.12] pt-3 text-[15px] font-semibold text-ink" : kind === "sub" ? "border-t border-ink/[0.06] font-medium text-ink-2" : "text-sm text-ink-3") +
+            (kind === "total" ? "border-t border-ink/20 pt-3 text-[15px] font-semibold text-ink" : kind === "sub" ? "border-t border-ink/20 font-medium text-ink-2" : "text-sm text-ink-3") +
             (kind === "indent" ? " pl-4" : "")
           }
         >

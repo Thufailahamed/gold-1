@@ -111,7 +111,7 @@ export const when = (t: number) => new Date(t).toLocaleString("en-GB", { day: "n
 /* ---------------------------------------------------------------- inputs */
 
 export const fieldCls =
-  "g-metric h-8 w-full min-w-0 rounded-lg bg-paper px-2.5 text-[12.5px] text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] transition-shadow placeholder:text-ink-5 focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.24)] disabled:bg-bone/60 disabled:text-ink-4";
+  "g-metric h-8 w-full min-w-0 rounded-lg bg-paper px-2.5 text-[12.5px] text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] transition-shadow placeholder:text-ink-5 focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.24)] disabled:bg-bone/60 disabled:text-ink-4";
 
 export function Field({ label, hint, children, className }: { label: string; hint?: ReactNode; children: ReactNode; className?: string }) {
   return (
@@ -185,7 +185,7 @@ export function ToolStrip() {
           <Link
             key={t.href}
             href={t.href}
-            className="group relative flex items-center gap-2.5 overflow-hidden rounded-xl bg-paper px-3 py-2.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)] transition-all hover:-translate-y-px hover:shadow-[inset_0_0_0_1px_rgba(168,138,62,0.35),0_10px_24px_-16px_rgba(16,32,27,0.4)]"
+            className="group relative flex items-center gap-2.5 overflow-hidden rounded-xl bg-paper px-3 py-2.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] transition-all hover:-translate-y-px hover:shadow-[inset_0_0_0_1px_rgba(168,138,62,0.35),0_10px_24px_-16px_rgba(16,32,27,0.4)]"
           >
             <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25)] transition-transform group-hover:scale-105">
               <Icon size={15} />

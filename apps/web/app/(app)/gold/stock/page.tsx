@@ -117,7 +117,7 @@ export default function GoldStockPage() {
         {stages.isLoading ? (
           <RowsSkeleton rows={2} />
         ) : (
-          <div className="mt-3 grid grid-cols-2 gap-px border-t border-ink/[0.06] bg-ink/[0.06] lg:grid-cols-4">
+          <div className="mt-3 grid grid-cols-2 gap-px border-t border-ink/20 bg-ink/[0.06] lg:grid-cols-4">
             {STAGES.map((s, i) => (
               <Link key={s.key} href={s.href} className="group bg-paper px-4 py-3 transition-colors hover:bg-gold-pale/50">
                 <span className="flex items-center justify-between">
@@ -181,7 +181,7 @@ export default function GoldStockPage() {
                 })}
               </tbody>
               <tfoot>
-                <tr className="border-t border-ink/[0.1] bg-bone text-[12px] font-semibold text-ink">
+                <tr className="border-t border-ink/20 bg-bone text-[12px] font-semibold text-ink">
                   <td className="py-1.5 pl-4" colSpan={4}>
                     Total {avgPermille ? <span className="font-normal text-ink-4">· avg {avgPermille.toFixed(0)}‰</span> : null}
                   </td>
@@ -230,7 +230,7 @@ export default function GoldStockPage() {
                 })}
               </tbody>
               <tfoot>
-                <tr className="border-t border-ink/[0.1] bg-bone text-[12px] font-semibold text-ink">
+                <tr className="border-t border-ink/20 bg-bone text-[12px] font-semibold text-ink">
                   <td className="py-1.5 pl-4" colSpan={2}>
                     Total
                   </td>

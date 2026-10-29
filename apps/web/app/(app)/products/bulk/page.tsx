@@ -51,7 +51,6 @@ const commonSchema = z.object({
   costPerG: z.string().optional(),
   /** Gold rate per gram: the default for every piece; a row can type its own. */
   ratePerGLkr: z.string().optional(),
-  sellingPriceLkr: z.string().optional(),
   location: z.string().max(100).optional(),
   notes: z.string().max(2000).optional(),
 });
@@ -70,7 +69,6 @@ type Row = {
   subcategoryName: string;
   makingLkr: string;
   costLkr: string;
-  sellingPriceLkr: string;
   location: string;
 };
 type Cell = Exclude<keyof Row, "key">;
@@ -80,7 +78,6 @@ type OldGoldOnHand = { totalMg: number; unknownMg: number; byKarat: { permille: 
 const EXTRA_COLS: { id: Cell; label: string; unit?: string; placeholderFrom: keyof Common; numeric: boolean }[] = [
   { id: "makingLkr", label: "Making", unit: "LKR", placeholderFrom: "makingLkr", numeric: true },
   { id: "costLkr", label: "Cost", unit: "LKR", placeholderFrom: "costLkr", numeric: true },
-  { id: "sellingPriceLkr", label: "Price", unit: "LKR", placeholderFrom: "sellingPriceLkr", numeric: true },
   { id: "location", label: "Tray", placeholderFrom: "location", numeric: false },
 ];
 
@@ -95,12 +92,11 @@ const newRow = (init?: Partial<Row>): Row => ({
   subcategoryName: "",
   makingLkr: "",
   costLkr: "",
-  sellingPriceLkr: "",
   location: "",
   ...init,
 });
 
-const isBlank = (r: Row) => !r.name.trim() && !r.subcategoryName.trim() && !r.grossG.trim() && !r.rateLkr.trim() && !r.costLkr.trim() && !r.sellingPriceLkr.trim() && !r.makingLkr.trim() && !r.location.trim();
+const isBlank = (r: Row) => !r.name.trim() && !r.subcategoryName.trim() && !r.grossG.trim() && !r.rateLkr.trim() && !r.costLkr.trim() && !r.makingLkr.trim() && !r.location.trim();
 
 /** "3.250", "3.25g", "1,500" → number; blank → undefined; junk → NaN. */
 function num(s: string | undefined): number | undefined {
@@ -124,7 +120,7 @@ function checkRow(r: Row): RowCheck {
   if (gross === undefined) errors.grossG = "Weight needed";
   else if (!Number.isFinite(gross) || gross <= 0) errors.grossG = "Must be more than 0";
   else if (gross > 100000) errors.grossG = "Too heavy";
-  for (const k of ["rateLkr", "makingLkr", "costLkr", "sellingPriceLkr"] as const) {
+  for (const k of ["rateLkr", "makingLkr", "costLkr"] as const) {
     const v = num(r[k]);
     if (v !== undefined && !Number.isFinite(v)) errors[k] = "Not a number";
   }
@@ -321,24 +317,28 @@ export default function BulkProductsPage() {
   const onHandMg = onHand.data ? (onHand.data.byKarat.find((k) => k.permille === permille)?.netMg ?? 0) + onHand.data.unknownMg : null;
   const commonMaking = num(common.makingLkr);
   const commonCost = num(common.costLkr);
-  const commonPrice = num(common.sellingPriceLkr);
   const commonRate = num(common.ratePerGLkr);
   const ok = (n: number | undefined) => (n !== undefined && Number.isFinite(n) ? n : undefined);
   const costPerG = ok(num(common.costPerG));
-  /** A piece's cost: its own figure, else net × cost/g, else the shared per-piece cost. */
-  const pieceCost = (r: Row, net: number | null) =>
-    ok(num(r.costLkr)) ?? (costPerG !== undefined && net !== null ? Math.round(net * costPerG * 100) / 100 : ok(commonCost));
   /** A piece's rate per gram: its own, else the shared one. */
   const rowRate = (r: Row) => ok(num(r.rateLkr)) ?? ok(commonRate);
   /**
-   * A piece's selling price: typed, else net × rate + making when a rate is set,
-   * else undefined — the live rate prices it at the counter.
+   * A piece's cost: its own figure, else net × cost/g, else the shared per-piece
+   * cost, else net × its rate per gram. Selling prices are set at the POS.
    */
-  const rowPrice = (r: Row, net: number | null) => {
-    const typed = ok(num(r.sellingPriceLkr)) ?? ok(commonPrice);
-    if (typed !== undefined) return typed;
+  const pieceCost = (r: Row, net: number | null): number | undefined => {
+    const own = ok(num(r.costLkr));
+    if (own !== undefined) return own;
+    if (costPerG !== undefined && net !== null) return Math.round(net * costPerG * 100) / 100;
+    const shared = ok(commonCost);
+    if (shared !== undefined) return shared;
     const rr = rowRate(r);
-    if (rr === undefined || net === null) return undefined;
+    return rr !== undefined && net !== null ? Math.round(net * rr * 100) / 100 : undefined;
+  };
+  /** A piece's live estimate at today's rate: net × its rate + making; undefined with no rate. */
+  const liveValue = (r: Row, net: number | null) => {
+    const rr = rowRate(r) ?? rate;
+    if (!rr || net === null) return undefined;
     return ratePriceLkr(net, rr, ok(num(r.makingLkr)) ?? commonMaking ?? 0);
   };
 
@@ -351,15 +351,13 @@ export default function BulkProductsPage() {
       gross += c.gross ?? 0;
       net += c.net;
       if (permille) fine += (c.net * permille) / 1000;
-      const price = rowPrice(r, c.net);
-      const making = ok(num(r.makingLkr)) ?? ok(commonMaking) ?? 0;
+      const price = liveValue(r, c.net);
       if (price !== undefined) value += price;
-      else if (rate) value += c.net * rate + making;
       else valued = false;
       cost += pieceCost(r, c.net) ?? 0;
     });
     return { gross, net, fine, value: valued ? value : null, cost };
-  }, [rows, checks, permille, rate, commonMaking, commonCost, costPerG, commonPrice, commonRate]);
+  }, [rows, checks, permille, rate, commonMaking, commonCost, costPerG, commonRate]);
   const trayMg = filled.length ? totals.net * 1000 : 0;
   const blockedByGold = onHandMg !== null && trayMg > 0 && (onHandMg <= 0 || trayMg > onHandMg);
 
@@ -454,7 +452,6 @@ export default function BulkProductsPage() {
           makingLkr: n(c.makingLkr) ?? 0,
           wastageG: n(c.wastageG) ?? 0,
           costLkr: n(c.costLkr),
-          sellingPriceLkr: n(c.sellingPriceLkr),
           location: trimmed(c.location),
           notes: trimmed(c.notes),
         },
@@ -468,7 +465,6 @@ export default function BulkProductsPage() {
             grossG: n(r.grossG)!,
             makingLkr: n(r.makingLkr),
             costLkr: pieceCost(r, net),
-            sellingPriceLkr: rowPrice(r, net),
             location: trimmed(r.location),
           })),
       };
@@ -580,7 +576,7 @@ export default function BulkProductsPage() {
           { label: "Gross", value: totals.gross || null, format: (n) => n.toFixed(3), unit: "g" },
           { label: "Net", value: totals.net || null, format: (n) => n.toFixed(3), unit: "g" },
           { label: "Fine gold", value: permille ? totals.fine || null : null, format: (n) => n.toFixed(3), unit: "g", sub: purity ? `${purity.karat} · ${permille}‰` : "pick a purity" },
-          { label: "Est. value", value: totals.value || null, format: lkr, unit: "LKR", sub: totals.value === null ? "no board rate" : "price or live board" },
+          { label: "Est. value", value: totals.value || null, format: lkr, unit: "LKR", sub: totals.value === null ? "no board rate" : "live board" },
           { label: "Cost", value: totals.cost || null, format: lkr, unit: "LKR" },
         ]}
       />
@@ -658,14 +654,11 @@ export default function BulkProductsPage() {
             <Field label="Rate / g" optional hint="Gold per gram · a row can type its own">
               <UnitInput unit="LKR/g" {...register("ratePerGLkr")} />
             </Field>
-            <Field label="Cost" optional hint="Same for every piece">
+            <Field label="Cost" optional hint="Same for every piece · blank = rate × weight">
               <UnitInput unit="LKR" {...register("costLkr")} />
             </Field>
             <Field label="Cost / g" optional hint="× each piece's net weight">
               <UnitInput unit="LKR/g" {...register("costPerG")} />
-            </Field>
-            <Field label="Selling price" optional hint="Blank = rate × weight, else live">
-              <UnitInput unit="LKR" {...register("sellingPriceLkr")} />
             </Field>
             <Field label="Location" optional>
               <input className={inputCls} placeholder="Tray, showcase…" {...register("location")} />
@@ -701,7 +694,7 @@ export default function BulkProductsPage() {
                   onClick={() => setCols((cs) => (on ? cs.filter((x) => x !== c.id) : [...cs, c.id]))}
                   className={cn(
                     "rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 transition-colors",
-                    on ? "bg-void text-gold-light ring-void" : "bg-paper text-ink-3 ring-ink/10 hover:ring-gold/50"
+                    on ? "bg-void text-gold-light ring-void" : "bg-paper text-ink-3 ring-ink/20 hover:ring-gold/50"
                   )}
                 >
                   {c.label}
@@ -719,7 +712,7 @@ export default function BulkProductsPage() {
           </div>
 
           {pasteOpen ? (
-            <div className="mb-4 rounded-xl bg-bone/60 p-3 ring-1 ring-ink/[0.06]">
+            <div className="mb-4 rounded-xl bg-bone/60 p-3 ring-1 ring-ink/20">
               <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-4" htmlFor="bk-paste">
                 One piece per line
               </label>
@@ -775,7 +768,6 @@ export default function BulkProductsPage() {
                     </th>
                   ))}
                   <th className="w-20 px-1 py-1 text-right">Net g</th>
-                  <th className="w-28 px-1 py-1 text-right">Price LKR</th>
                   <th className="w-16 px-1 py-1" aria-label="Row actions" />
                 </tr>
               </thead>
@@ -820,6 +812,7 @@ export default function BulkProductsPage() {
                           options={toOptions(cats.data?.rows)}
                           placeholder="Choose"
                           ariaLabel={`Row ${i + 1} category`}
+                          portal
                           invalid={Boolean(err("categoryId"))}
                           loading={cats.isLoading}
                           size="sm"
@@ -843,12 +836,7 @@ export default function BulkProductsPage() {
                           {cellInput(x.id, {
                             numeric: x.numeric,
                             placeholder:
-                              x.id === "sellingPriceLkr"
-                                ? (() => {
-                                    const v = rowPrice(r, c.net);
-                                    return v !== undefined ? lkr(v) : "—";
-                                  })()
-                                : x.id === "costLkr"
+                              x.id === "costLkr"
                                 ? (() => {
                                     const v = pieceCost({ ...r, costLkr: "" }, c.net);
                                     return v !== undefined ? lkr(v) : "—";
@@ -863,12 +851,6 @@ export default function BulkProductsPage() {
                         ) : (
                           fmtG(c.net)
                         )}
-                      </td>
-                      <td className="g-metric px-1 text-right font-medium text-ink">
-                        {(() => {
-                          const p = rowPrice(r, c.net);
-                          return p !== undefined ? lkr(p) : <span className="text-[11px] font-normal text-ink-5">live</span>;
-                        })()}
                       </td>
                       <td className="rounded-r-lg px-1">
                         <span className="flex justify-end gap-0.5 opacity-60 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
@@ -931,7 +913,7 @@ export default function BulkProductsPage() {
         </FormSection>
 
         {/* Floating action bar */}
-        <div className="sticky bottom-4 z-20 flex items-center justify-between gap-3 rounded-2xl bg-paper/90 px-3 py-2 shadow-[0_24px_48px_-20px_rgba(16,32,27,0.45),inset_0_0_0_1px_rgba(16,32,27,0.08)] backdrop-blur-xl sm:px-4">
+        <div className="sticky bottom-4 z-20 flex items-center justify-between gap-3 rounded-2xl bg-paper/90 px-3 py-2 shadow-[0_24px_48px_-20px_rgba(16,32,27,0.45),inset_0_0_0_1px_rgba(16,32,27,0.2)] backdrop-blur-xl sm:px-4">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
             <span className="rounded-lg bg-bone px-2.5 py-1 text-ink-4">
               <span className="g-metric font-medium text-ink">{filled.length}</span> pieces
@@ -1003,7 +985,7 @@ function ResultView({ result, onAnother }: { result: BulkResult; onAnother: () =
           { label: "Cost", value: result.totals.cost_cents / 100 || null, format: lkr, unit: "LKR" },
         ]}
       />
-      <section className="overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04)]">
+      <section className="overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_2px_rgba(16,32,27,0.04)]">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[36rem] text-[13px]">
             <thead className="bg-bone/60 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-4">

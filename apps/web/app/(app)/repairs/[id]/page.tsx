@@ -304,7 +304,7 @@ export default function RepairDetailPage({ params }: { params: Promise<{ id: str
                 </div>
               ))}
             </dl>
-            <div className="grid gap-px border-t border-ink/[0.06] bg-ink/[0.06] sm:grid-cols-2">
+            <div className="grid gap-px border-t border-ink/20 bg-ink/[0.06] sm:grid-cols-2">
               {[
                 ["Condition at intake", job.condition_in],
                 ["Condition at collection", job.condition_out ?? "-"],

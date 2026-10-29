@@ -108,7 +108,7 @@ export function InvoiceDrawer({ id, onClose }: { id: string; onClose: () => void
               ]}
             />
 
-            <div className="overflow-hidden rounded-xl ring-1 ring-ink/[0.08]">
+            <div className="overflow-hidden rounded-xl ring-1 ring-ink/20">
               <table className="g-table">
                 <thead>
                   <tr>
@@ -125,7 +125,7 @@ export function InvoiceDrawer({ id, onClose }: { id: string; onClose: () => void
                   ))}
                 </tbody>
               </table>
-              <dl className="space-y-1.5 border-t border-ink/[0.07] bg-bone/60 px-5 py-3 text-sm">
+              <dl className="space-y-1.5 border-t border-ink/20 bg-bone/60 px-5 py-3 text-sm">
                 <div className="flex justify-between">
                   <dt className="text-ink-4">Total</dt>
                   <dd className="g-metric font-semibold">{money(inv.total_cents, inv.currency)}</dd>
@@ -135,7 +135,7 @@ export function InvoiceDrawer({ id, onClose }: { id: string; onClose: () => void
                   <dd className="g-metric">{money(inv.amount_paid_cents, inv.currency)}</dd>
                 </div>
                 {inv.status === "OPEN" ? (
-                  <div className="flex justify-between border-t border-ink/[0.07] pt-1.5">
+                  <div className="flex justify-between border-t border-ink/20 pt-1.5">
                     <dt className="font-semibold">Balance due</dt>
                     <dd className="g-metric font-semibold">{money(balance, inv.currency)}</dd>
                   </div>
@@ -191,7 +191,7 @@ export function InvoiceDrawer({ id, onClose }: { id: string; onClose: () => void
             </div>
 
             {manage && inv.status === "OPEN" ? (
-              <div className="flex flex-wrap gap-2 border-t border-ink/[0.07] pt-4">
+              <div className="flex flex-wrap gap-2 border-t border-ink/20 pt-4">
                 <button onClick={() => setPaying(true)} className="g-btn g-btn-primary h-10 px-4 text-sm">
                   Record payment
                 </button>

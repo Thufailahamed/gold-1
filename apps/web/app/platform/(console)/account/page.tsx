@@ -150,7 +150,7 @@ function EnrolDialog({ enrol, onClose, onDone }: { enrol: { secret: string; otpa
         <li>
           In your authenticator app, add an account by <strong>setup key</strong> and paste:
           <div className="mt-2 flex items-center gap-2">
-            <code className="flex-1 break-all rounded-lg bg-bone px-3 py-2 font-mono text-sm tracking-wider text-ink ring-1 ring-ink/[0.08]">{enrol.secret.match(/.{1,4}/g)?.join(" ")}</code>
+            <code className="flex-1 break-all rounded-lg bg-bone px-3 py-2 font-mono text-sm tracking-wider text-ink ring-1 ring-ink/20">{enrol.secret.match(/.{1,4}/g)?.join(" ")}</code>
             <button type="button" onClick={() => navigator.clipboard.writeText(enrol.secret).then(() => toast.success("Copied"))} className="g-btn g-btn-secondary h-9 shrink-0 px-3 text-xs">
               Copy
             </button>

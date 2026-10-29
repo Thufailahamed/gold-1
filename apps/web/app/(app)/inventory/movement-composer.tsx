@@ -168,7 +168,7 @@ export function MovementComposer({
     <section
       id="record-movement"
       aria-labelledby="mv-title"
-      className="relative scroll-mt-24 overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-30px_rgba(16,32,27,0.28)]"
+      className="relative scroll-mt-24 overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_18px_40px_-30px_rgba(16,32,27,0.28)]"
     >
       <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
       {/* Header */}
@@ -195,9 +195,9 @@ export function MovementComposer({
         </Link>
       </div>
 
-      <div className="grid border-t border-ink/[0.07] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+      <div className="grid border-t border-ink/20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         {/* Step 1 — scan */}
-        <div className="border-b border-ink/[0.06] bg-gradient-to-b from-bone/50 to-transparent p-4 lg:border-b-0 lg:border-r">
+        <div className="border-b border-ink/20 bg-gradient-to-b from-bone/50 to-transparent p-4 lg:border-b-0 lg:border-r">
           <StepLabel n={1} done={!!piece}>
             Scan piece
           </StepLabel>
@@ -206,7 +206,7 @@ export function MovementComposer({
           </label>
           <div
             className={cn(
-              "group relative flex h-11 items-center rounded-xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.05)] transition-shadow hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)] focus-within:shadow-[inset_0_0_0_1.5px_#10201b,0_0_0_4px_rgba(205,168,83,0.25)]",
+              "group relative flex h-11 items-center rounded-xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_2px_rgba(16,32,27,0.05)] transition-shadow hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)] focus-within:shadow-[inset_0_0_0_1.5px_#10201b,0_0_0_4px_rgba(205,168,83,0.25)]",
               notFound && "shadow-[inset_0_0_0_1.5px_#be123c] focus-within:shadow-[inset_0_0_0_1.5px_#be123c,0_0_0_4px_rgba(190,18,60,0.15)]"
             )}
           >
@@ -242,7 +242,7 @@ export function MovementComposer({
                   <XIcon size={14} />
                 </button>
               ) : null}
-              <kbd className="flex h-6 min-w-6 items-center justify-center rounded-md bg-paper px-1.5 font-mono text-[11px] font-semibold text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_0_rgba(16,32,27,0.08)]">⏎</kbd>
+              <kbd className="flex h-6 min-w-6 items-center justify-center rounded-md bg-paper px-1.5 font-mono text-[11px] font-semibold text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_0_rgba(16,32,27,0.08)]">⏎</kbd>
             </span>
           </div>
           <p id="mv-barcode-hint" className="mt-2 text-[11px] text-ink-4">
@@ -251,7 +251,7 @@ export function MovementComposer({
 
           <div className="mt-3">
             {!code ? (
-              <div className="flex items-center gap-3.5 rounded-xl border border-dashed border-ink/15 bg-paper/70 px-3.5 py-3">
+              <div className="flex items-center gap-3.5 rounded-xl border border-dashed border-ink/20 bg-paper/70 px-3.5 py-3">
                 <span className="relative flex size-9 shrink-0 items-center justify-center rounded-lg bg-void text-gold-light shadow-[0_10px_20px_-12px_rgba(6,42,34,0.8)]">
                   <span className="absolute inset-0 animate-pulse-soft rounded-xl ring-4 ring-gold/15" aria-hidden />
                   <ScanBarcodeIcon size={18} />
@@ -283,7 +283,7 @@ export function MovementComposer({
                     <StatusPill status={piece.status} />
                   </span>
                 </div>
-                <dl className="grid grid-cols-3 divide-x divide-ink/[0.06] border-t border-ink/[0.06] text-xs">
+                <dl className="grid grid-cols-3 divide-x divide-ink/[0.06] border-t border-ink/20 text-xs">
                   {[
                     ["Branch", branchName(piece.branch_id)],
                     ["Net", `${grams(piece.net_mg)} g`],
@@ -318,7 +318,7 @@ export function MovementComposer({
                     "relative flex items-start gap-2.5 overflow-hidden rounded-xl p-3 text-left ring-1 transition-all duration-200 ease-brand",
                     selected
                       ? "bg-void text-paper shadow-[0_16px_32px_-18px_rgba(6,42,34,0.9)] ring-gold/40"
-                      : "bg-paper ring-ink/10 hover:-translate-y-px hover:bg-gold-pale/40 hover:ring-gold-dark/30",
+                      : "bg-paper ring-ink/20 hover:-translate-y-px hover:bg-gold-pale/40 hover:ring-gold-dark/30",
                     impossible && !selected && "opacity-55"
                   )}
                 >
@@ -340,7 +340,7 @@ export function MovementComposer({
                     aria-hidden
                     className={cn(
                       "absolute right-3 top-3 size-3.5 rounded-full ring-2 transition-colors",
-                      selected ? "bg-gold ring-gold/30" : "bg-paper ring-ink/15"
+                      selected ? "bg-gold ring-gold/30" : "bg-paper ring-ink/20"
                     )}
                   />
                 </button>
@@ -361,7 +361,7 @@ export function MovementComposer({
                 if (e.key === "Enter") submit();
               }}
               placeholder="Why is this piece moving?"
-              className="h-9 w-full rounded-lg bg-paper px-3 text-[13px] text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]"
+              className="h-9 w-full rounded-lg bg-paper px-3 text-[13px] text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]"
             />
             <div className="mt-2 flex flex-wrap gap-1.5">
               {action.reasons.map((r) => (
@@ -373,7 +373,7 @@ export function MovementComposer({
                     "rounded-full px-2.5 py-0.5 text-[11px] font-medium ring-1 transition-all duration-200",
                     reason === r
                       ? "bg-gradient-to-b from-gold-light to-gold text-void ring-gold/40 shadow-[0_6px_14px_-8px_rgba(205,168,83,0.8)]"
-                      : "bg-paper text-ink-3 ring-ink/10 hover:-translate-y-px hover:bg-gold-pale/50 hover:text-ink"
+                      : "bg-paper text-ink-3 ring-ink/20 hover:-translate-y-px hover:bg-gold-pale/50 hover:text-ink"
                   )}
                 >
                   {r}
@@ -383,7 +383,7 @@ export function MovementComposer({
           </div>
 
           {/* Confirm bar */}
-          <div className="mt-4 flex flex-col gap-2 rounded-xl bg-bone/70 p-2.5 ring-1 ring-ink/[0.06] sm:flex-row sm:items-center sm:justify-between lg:mt-auto">
+          <div className="mt-4 flex flex-col gap-2 rounded-xl bg-bone/70 p-2.5 ring-1 ring-ink/20 sm:flex-row sm:items-center sm:justify-between lg:mt-auto">
             <div className="flex min-w-0 items-center gap-2 text-xs" aria-live="polite">
               {blocked ? (
                 <span className={cn("flex items-center gap-1.5", code ? "font-medium text-rose-700" : "text-ink-4")}>
@@ -414,7 +414,7 @@ export function MovementComposer({
       </div>
 
       {/* Routing footer */}
-      <div className="flex flex-wrap items-center gap-2 border-t border-ink/[0.06] bg-bone/40 px-4 py-2 text-[11px] text-ink-4">
+      <div className="flex flex-wrap items-center gap-2 border-t border-ink/20 bg-bone/40 px-4 py-2 text-[11px] text-ink-4">
         <span className="mr-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-gold-dark">Elsewhere</span>
         {[
           ["/pos", "Sales", "POS"],
@@ -424,7 +424,7 @@ export function MovementComposer({
           <Link
             key={href}
             href={href!}
-            className="group inline-flex items-center gap-1.5 rounded-full bg-paper px-2.5 py-0.5 ring-1 ring-ink/[0.07] transition-all hover:-translate-y-px hover:text-ink hover:ring-gold-dark/30"
+            className="group inline-flex items-center gap-1.5 rounded-full bg-paper px-2.5 py-0.5 ring-1 ring-ink/20 transition-all hover:-translate-y-px hover:text-ink hover:ring-gold-dark/30"
           >
             {k}
             <ArrowRightIcon size={10} className="text-gold-dark transition-transform group-hover:translate-x-0.5" />

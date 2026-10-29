@@ -222,7 +222,7 @@ export default function MeltingPage() {
             </table>
           </div>
         )}
-        <div className="border-t border-ink/[0.06] px-4 py-2">
+        <div className="border-t border-ink/20 px-4 py-2">
           <Pager page={page} onChange={setPage} pageSize={PAGE} count={rows.length} total={total} unit="batches" />
         </div>
       </Card>

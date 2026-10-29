@@ -64,11 +64,11 @@ export function DailyBrief({ className }: { className?: string }) {
     <section
       aria-label="Daily brief"
       className={cn(
-        "relative flex flex-col overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-30px_rgba(16,32,27,0.28)]",
+        "relative flex flex-col overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_18px_40px_-30px_rgba(16,32,27,0.28)]",
         className
       )}
     >
-      <div className="flex items-center justify-between gap-3 border-b border-ink/[0.06] px-4 py-2.5">
+      <div className="flex items-center justify-between gap-3 border-b border-ink/20 px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-3">
           <span className="ast-orb flex size-7 shrink-0 items-center justify-center text-void" aria-hidden>
             <SparklesIcon size={13} />

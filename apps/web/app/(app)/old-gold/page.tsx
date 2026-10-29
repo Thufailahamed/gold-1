@@ -64,6 +64,7 @@ type Item = {
   customer_name: string | null;
 };
 type Pending = { id: string; number: string; description: string; fine_mg: number; purchase_value_cents: number; status: string; customer_name: string | null };
+type Stock = { items: number; netMg: number; fineMg: number; valueCents: number; byKarat: { karat: string | null; items: number; netMg: number }[] };
 type Paged<R> = { rows: R[]; total: number };
 
 /** This month's buy-ins broken down one way, by fine gold. */
@@ -142,6 +143,8 @@ export default function OldGoldDashboardPage() {
   const byCustomer = useQuery(breakdown("customer"));
   const byBranch = useQuery(breakdown("branch"));
   const pending = useQuery({ ...opt, queryKey: ["og-pending"], queryFn: () => api<Pending[]>("/api/v1/oldgold/reports/pending") });
+  // The gold in stock, by weight: what products are made from.
+  const stock = useQuery({ ...opt, queryKey: ["og-stock"], queryFn: () => api<Stock>("/api/v1/oldgold/reports/stock") });
   const recent = useQuery({ ...opt, queryKey: ["og-dash", "recent", 8], queryFn: () => api<Paged<Item>>("/api/v1/oldgold/items?limit=8") });
   const queue = useQuery({ ...opt, queryKey: ["og-dash", "queue", 8], queryFn: () => api<Paged<Item>>("/api/v1/oldgold/items?status=RECEIVED&limit=8") });
 
@@ -165,7 +168,6 @@ export default function OldGoldDashboardPage() {
   const pendingValue = pendingRows.reduce((s, p) => s + (p.purchase_value_cents ?? 0), 0);
   const pendingFine = pendingRows.reduce((s, p) => s + (p.fine_mg ?? 0), 0);
   const perGram = m && m.fine_mg > 0 ? (m.value_cents / m.fine_mg) * 1000 : undefined;
-  const yieldPct = m && m.gross_mg > 0 ? (m.fine_mg / m.gross_mg) * 100 : undefined;
   const paidPct = a && a.value_cents > 0 ? Math.min(100, (a.paid_cents / a.value_cents) * 100) : undefined;
 
   return (
@@ -205,7 +207,20 @@ export default function OldGoldDashboardPage() {
         }
         stats={[
           { label: "Taken in today", value: t?.items, loading: today.isLoading, href: "/old-gold/items", sub: t ? `${grams(t.gross_mg)} g gross · ${grams(t.fine_mg)} g fine` : undefined },
-          { label: "Fine gold · month", value: m?.fine_mg, format: grams, unit: "g", accent: true, loading: month.isLoading, href: "/old-gold/reports", sub: yieldPct !== undefined ? `${yieldPct.toFixed(1)}% of ${grams(m!.gross_mg)} g gross` : "Recovered weight" },
+          {
+            label: "In stock",
+            value: stock.data?.netMg,
+            format: grams,
+            unit: "g",
+            accent: true,
+            loading: stock.isLoading,
+            href: "/old-gold/items?status=AVAILABLE",
+            sub: stock.data
+              ? stock.data.byKarat.length
+                ? stock.data.byKarat.map((k) => `${grams(k.netMg)} g ${k.karat ?? "no karat"}`).join(" · ")
+                : `${stock.data.items} items`
+              : undefined,
+          },
           { label: "Items · month", value: m?.items, loading: month.isLoading, sub: "Bought in" },
           { label: "Value · month", value: m?.value_cents, format: lkr, unit: "LKR", loading: month.isLoading, sub: perGram ? `${lkr(perGram)} LKR / g fine` : "Purchase value" },
           { label: "Paid out · month", value: m?.paid_cents, format: lkr, unit: "LKR", tone: "good", loading: month.isLoading, sub: "To customers" },
@@ -219,7 +234,6 @@ export default function OldGoldDashboardPage() {
             href: "/old-gold/reports",
             sub: paidPct !== undefined ? `${paidPct.toFixed(0)}% of all-time paid` : "Owed to customers",
           },
-          { label: "Ready to process", value: pending.data ? pendingRows.length : undefined, loading: pending.isLoading, href: "/old-gold/items?status=AVAILABLE", sub: `${grams(pendingFine)} g fine · ${lkr(pendingValue)} LKR` },
           { label: "Items in flow", value: stagesLoading ? undefined : inFlow, loading: stagesLoading, sub: a ? `${count(a.items)} bought all time` : undefined },
         ]}
       >
@@ -452,7 +466,7 @@ export default function OldGoldDashboardPage() {
                     </div>
                   ))}
                 </div>
-                <Link href="/old-gold/reports" className="group flex items-center justify-center gap-1 rounded-lg py-1.5 text-[11.5px] font-medium text-ink-3 ring-1 ring-ink/[0.08] hover:bg-void hover:text-gold-light">
+                <Link href="/old-gold/reports" className="group flex items-center justify-center gap-1 rounded-lg py-1.5 text-[11.5px] font-medium text-ink-3 ring-1 ring-ink/20 hover:bg-void hover:text-gold-light">
                   Open reports <ArrowRightIcon size={11} className="transition-transform group-hover:translate-x-0.5" />
                 </Link>
               </>

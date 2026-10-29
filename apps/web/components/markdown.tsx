@@ -92,7 +92,7 @@ function Table({ rows, k }: { rows: string[]; k: string }) {
   // A column of figures is right-aligned, its heading included.
   const numericCol = (i: number) => body.length > 0 && body.filter((r) => NUMERIC.test(r[i] ?? "")).length >= Math.ceil(body.length / 2);
   return (
-    <div className="my-3 overflow-x-auto rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08),0_12px_28px_-20px_rgba(16,32,27,0.35)]">
+    <div className="my-3 overflow-x-auto rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_12px_28px_-20px_rgba(16,32,27,0.35)]">
       <table className="w-full text-sm">
         {head && (
           <thead className="bg-gradient-to-b from-gold-pale to-paper">
@@ -107,7 +107,7 @@ function Table({ rows, k }: { rows: string[]; k: string }) {
         )}
         <tbody>
           {body.map((r, ri) => (
-            <tr key={`${k}-r${ri}`} className="border-t border-ink/[0.05] transition-colors first:border-t-0 hover:bg-gold-pale/40">
+            <tr key={`${k}-r${ri}`} className="border-t border-ink/20 transition-colors first:border-t-0 hover:bg-gold-pale/40">
               {r.map((c, ci) => (
                 <td key={`${k}-r${ri}c${ci}`} className={cn("px-4 py-2 text-[13px] text-ink-2", NUMERIC.test(c) && "g-metric whitespace-nowrap text-right text-ink")}>
                   {inline(c, `${k}-r${ri}c${ci}`)}

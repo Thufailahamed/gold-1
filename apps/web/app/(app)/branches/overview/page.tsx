@@ -239,7 +239,7 @@ export default function BranchOverviewPage() {
                         <td className="g-metric px-2 text-right text-ink-3">{whole(b.purchases.valueCents)}</td>
                         <td className="py-2 pl-2 pr-4 text-right">
                           {on ? null : (
-                            <button onClick={() => setBranchId(b.branch.id)} className="rounded-md px-2 py-1 text-[11px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/10 hover:bg-bone hover:text-ink">
+                            <button onClick={() => setBranchId(b.branch.id)} className="rounded-md px-2 py-1 text-[11px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/20 hover:bg-bone hover:text-ink">
                               View
                             </button>
                           )}
@@ -298,7 +298,7 @@ function BranchSections({ v }: { v: BranchView }) {
 
       <Card>
         <CardHead icon={BanknoteIcon} title="Cash & banks" sub="Journal balances, not month-end cash" />
-        <div className="grid grid-cols-2 gap-px border-b border-ink/[0.06] bg-ink/[0.05]">
+        <div className="grid grid-cols-2 gap-px border-b border-ink/20 bg-ink/[0.05]">
           {[
             { k: "Cash drawer · 1000", c: cash.drawer },
             { k: "Card clearing · 1020", c: cash.cardClearing },

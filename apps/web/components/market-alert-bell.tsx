@@ -114,7 +114,7 @@ export function MarketAlertBell({ enabled }: { enabled: boolean }) {
       </button>
       {open ? (
         <div className="g-floating absolute right-0 z-40 mt-2 w-[22rem] animate-fade-in overflow-hidden">
-          <div className="flex items-center justify-between border-b border-ink/[0.07] px-4 py-3">
+          <div className="flex items-center justify-between border-b border-ink/20 px-4 py-3">
             <span className="g-kicker">Price alerts</span>
             <div className="flex items-center gap-2">
               {unseen ? (
@@ -139,8 +139,8 @@ export function MarketAlertBell({ enabled }: { enabled: boolean }) {
             </ul>
           ) : (
             <div className="p-4">
-              <div className="flex flex-col items-center rounded-xl border border-dashed border-ink/15 bg-bone/50 px-5 py-8 text-center">
-                <span className="mb-3 flex size-10 items-center justify-center rounded-xl bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)]">
+              <div className="flex flex-col items-center rounded-xl border border-dashed border-ink/20 bg-bone/50 px-5 py-8 text-center">
+                <span className="mb-3 flex size-10 items-center justify-center rounded-xl bg-paper text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
                   <BellIcon size={18} />
                 </span>
                 <p className="text-sm font-medium text-ink">All clear</p>
@@ -152,7 +152,7 @@ export function MarketAlertBell({ enabled }: { enabled: boolean }) {
             <Link
               href="/live-rates/alerts"
               onClick={() => setOpen(false)}
-              className="block border-t border-ink/[0.07] px-4 py-2.5 text-center text-[12px] font-semibold text-gold-deep hover:bg-gold-pale/30"
+              className="block border-t border-ink/20 px-4 py-2.5 text-center text-[12px] font-semibold text-gold-deep hover:bg-gold-pale/30"
             >
               Manage alerts →
             </Link>

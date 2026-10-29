@@ -44,20 +44,24 @@ describe.skipIf(!sqliteAvailable)("rbac: owner/admin/staff", () => {
       INSERT INTO branch_members (user_id, branch_id) VALUES ('u1','b1'), ('u2','b1'), ('u3','b1');
       INSERT INTO categories (id, name, code, created_at) VALUES ('cat-test','Test Ring','TESTRING',0);
       INSERT INTO purities (id, karat, permille, created_at) VALUES ('purity-test','9K',375,0);
+      INSERT INTO customers (id, code, name, phone, branch_id, created_at) VALUES ('cust-test','C-TEST','Test Customer','0771234567','b1',0);
     `);
     const { createProduct } = await import("../services/products");
     const p = await createProduct(
       m.db,
-      { name: "Ring", categoryId: "cat-test", branchId: "b1", metalTypeId: "metal-gold", purityId: "purity-test", grossG: 2, stoneG: 0, makingLkr: 0, wastageG: 0, costLkr: 10000, sellingPriceLkr: 50000 },
+      { name: "Ring", categoryId: "cat-test", branchId: "b1", metalTypeId: "metal-gold", purityId: "purity-test", grossG: 2, stoneG: 0, makingLkr: 0, wastageG: 0, costLkr: 10000 },
       "u1"
     );
     pid = p.id;
     const p2 = await createProduct(
       m.db,
-      { name: "Ring B", categoryId: "cat-test", branchId: "b1", metalTypeId: "metal-gold", purityId: "purity-test", grossG: 3, stoneG: 0, makingLkr: 0, wastageG: 0, costLkr: 12000, sellingPriceLkr: 60000 },
+      { name: "Ring B", categoryId: "cat-test", branchId: "b1", metalTypeId: "metal-gold", purityId: "purity-test", grossG: 3, stoneG: 0, makingLkr: 0, wastageG: 0, costLkr: 12000 },
       "u1"
     );
     pid2 = p2.id;
+    // Pieces are created unpriced; these two carry a shelf price set at the till.
+    raw.prepare("UPDATE products SET selling_price_cents = ? WHERE id = ?").run(5000000, pid);
+    raw.prepare("UPDATE products SET selling_price_cents = ? WHERE id = ?").run(6000000, pid2);
     const { businessDateFor } = await import("../services/busdate");
     today = await businessDateFor(m.db, Date.now());
     ({ app } = await import("../app"));
@@ -127,6 +131,7 @@ describe.skipIf(!sqliteAvailable)("rbac: owner/admin/staff", () => {
     const res = await req("u3", "/api/v1/sales/invoices", {
       method: "POST",
       body: {
+        customerId: "cust-test",
         branchId: "b1",
         items: [{ productId: pid2, priceLkr: 60000, discountLkr: 0 }],
         payments: [{ method: "cash", amountLkr: 60000 }],
@@ -135,6 +140,18 @@ describe.skipIf(!sqliteAvailable)("rbac: owner/admin/staff", () => {
     expect(res.status).toBe(201);
     const { data } = (await res.json()) as { data: { invoiceId: string } };
     expect(data.invoiceId).toBeTruthy();
+  });
+
+  it("refuses a bill with no customer", async () => {
+    const res = await req("u3", "/api/v1/sales/invoices", {
+      method: "POST",
+      body: {
+        branchId: "b1",
+        items: [{ productId: pid2, priceLkr: 60000, discountLkr: 0 }],
+        payments: [{ method: "cash", amountLkr: 60000 }],
+      },
+    });
+    expect(res.status).toBe(400);
   });
 
   it("staff completes normal sales but never old-for-new exchanges", async () => {

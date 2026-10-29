@@ -439,7 +439,7 @@ export default function PurchasingDashboardPage() {
                     </div>
                   ))}
                 </div>
-                <Link href="/purchases/invoices?status=UNPAID" className="group flex items-center justify-center gap-1 rounded-lg py-1.5 text-[11.5px] font-medium text-ink-3 ring-1 ring-ink/[0.08] hover:bg-void hover:text-gold-light">
+                <Link href="/purchases/invoices?status=UNPAID" className="group flex items-center justify-center gap-1 rounded-lg py-1.5 text-[11.5px] font-medium text-ink-3 ring-1 ring-ink/20 hover:bg-void hover:text-gold-light">
                   Pay supplier bills <ArrowRightIcon size={11} className="transition-transform group-hover:translate-x-0.5" />
                 </Link>
               </>

@@ -180,7 +180,7 @@ export default function ReturnsPage() {
               </label>
             }
           />
-          <div className="border-b border-ink/[0.06] px-4 py-2">
+          <div className="border-b border-ink/20 px-4 py-2">
             <FilterPills
               value={type}
               onChange={setType}
@@ -289,7 +289,7 @@ export default function ReturnsPage() {
                   })}
                 </tbody>
                 <tfoot className="bg-bone/70">
-                  <tr className="border-t border-ink/10 text-[12px] font-semibold">
+                  <tr className="border-t border-ink/20 text-[12px] font-semibold">
                     <td colSpan={4} className="py-1.5 pl-4 text-[9.5px] uppercase tracking-[0.14em] text-gold-dark">
                       Total · {rows.length} shown
                     </td>
@@ -360,7 +360,7 @@ export default function ReturnsPage() {
                 </li>
               ))}
             </ol>
-            {rows[0] ? <p className="border-t border-ink/[0.06] bg-bone/40 px-4 py-1.5 text-[10.5px] text-ink-4">Last return {ago(rows[0].created_at)}</p> : null}
+            {rows[0] ? <p className="border-t border-ink/20 bg-bone/40 px-4 py-1.5 text-[10.5px] text-ink-4">Last return {ago(rows[0].created_at)}</p> : null}
           </Card>
         </div>
       </div>

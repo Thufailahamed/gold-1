@@ -41,7 +41,7 @@ type HistoryPoint = { t: number; priceUsd: number; priceLkr: number; lkrPerGram:
 const DAY = 86_400_000;
 const PAWN_G = 8;
 const inputCls =
-  "g-metric h-9 w-full min-w-0 rounded-lg bg-paper px-3 text-sm text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] transition-shadow focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.24)]";
+  "g-metric h-9 w-full min-w-0 rounded-lg bg-paper px-3 text-sm text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] transition-shadow focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.24)]";
 const pct = (n: number | null | undefined, dp = 2) => (n == null || !Number.isFinite(n) ? "—" : `${n > 0 ? "+" : ""}${n.toFixed(dp)}%`);
 const pctTone = (n: number | null | undefined) =>
   n == null || !Number.isFinite(n) || n === 0 ? "text-ink-4" : n > 0 ? "text-emerald-700" : "text-rose-700";
@@ -177,7 +177,7 @@ export function GoldPerformance({
       ) : (
         <div className="grid xl:grid-cols-12">
           {/* period returns + range */}
-          <div className="border-b border-ink/[0.06] xl:col-span-5 xl:border-b-0 xl:border-r">
+          <div className="border-b border-ink/20 xl:col-span-5 xl:border-b-0 xl:border-r">
             <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-4 px-4 pb-1 pt-3 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">
               <span>Period</span>
               <span className="w-16 text-right">In LKR</span>
@@ -187,7 +187,7 @@ export function GoldPerformance({
             {[{ label: "24 hours", d: 1 }, ...LOOKBACKS].map((l) => {
               const c = l.d === 1 ? (change24hPct != null ? { lkr: change24hPct, usd: null, fx: null } : model.change(1)) : model.change(l.d);
               return (
-                <div key={l.label} className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-4 border-t border-ink/[0.04] px-4 py-[7px] text-[12px]">
+                <div key={l.label} className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-4 border-t border-ink/20 px-4 py-[7px] text-[12px]">
                   <span className="font-semibold text-ink-2">{l.label}</span>
                   <span className={cn("g-metric w-16 text-right font-semibold", pctTone(c?.lkr))}>{pct(c?.lkr)}</span>
                   <span className={cn("g-metric w-14 text-right", pctTone(c?.usd))}>{pct(c?.usd)}</span>
@@ -196,7 +196,7 @@ export function GoldPerformance({
               );
             })}
             {/* 52-week range */}
-            <div className="border-t border-ink/[0.06] bg-bone/40 px-4 py-3.5">
+            <div className="border-t border-ink/20 bg-bone/40 px-4 py-3.5">
               <div className="flex items-center justify-between text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">
                 <span>Range · pure gold per gram</span>
                 {pos != null ? <span className="text-ink-4">{Math.round(pos * 100)}% of range</span> : null}
@@ -268,7 +268,7 @@ export function GoldPerformance({
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <div className="border-t border-ink/[0.06] bg-bone/50 px-4 py-2 text-[11px] text-ink-4">
+            <div className="border-t border-ink/20 bg-bone/50 px-4 py-2 text-[11px] text-ink-4">
               {Math.abs(model.total.fx) < 0.05 ? (
                 <>The rupee was steady, so the rupee price simply followed world gold.</>
               ) : (
@@ -388,7 +388,7 @@ export function VaultValue({
           </div>
           <div className="mt-3 flex-1 px-4 pb-2">
             {rows.map((r) => (
-              <div key={r.key} className="flex items-center gap-2.5 border-t border-ink/[0.05] py-[7px] text-[12px]">
+              <div key={r.key} className="flex items-center gap-2.5 border-t border-ink/20 py-[7px] text-[12px]">
                 <span className="size-2.5 shrink-0 rounded-sm" style={{ background: r.color }} />
                 <span className="min-w-0 flex-1">
                   <span className="font-semibold text-ink-2">{r.label}</span>
@@ -400,7 +400,7 @@ export function VaultValue({
             ))}
           </div>
           {purity.data?.byPurity.length ? (
-            <div className="border-t border-ink/[0.06] bg-bone/50 px-4 py-2.5">
+            <div className="border-t border-ink/20 bg-bone/50 px-4 py-2.5">
               <div className="mb-1.5 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">By purity · fine grams</div>
               <div className="flex h-2 overflow-hidden rounded-full bg-ink/[0.06]">
                 {purity.data.byPurity.map((p) => (
@@ -480,7 +480,7 @@ export function BuyBackDesk({
                 const sell = k.boardRate;
                 const margin = sell != null && buy > 0 ? ((sell - buy) / buy) * 100 : null;
                 return (
-                  <tr key={k.purityId} className="border-t border-ink/[0.05] transition-colors hover:bg-bone/60">
+                  <tr key={k.purityId} className="border-t border-ink/20 transition-colors hover:bg-bone/60">
                     <td className="py-2 pl-4 pr-2">
                       <span className={cn("inline-flex h-6 w-10 items-center justify-center rounded-md font-display text-[11px] font-extrabold shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]", kt.badge)}>{k.karat}</span>
                     </td>
@@ -510,7 +510,7 @@ export function BuyBackDesk({
           </table>
         </div>
       )}
-      <div className="border-t border-ink/[0.06] bg-bone/50 px-4 py-1.5 text-[10px] text-ink-5">
+      <div className="border-t border-ink/20 bg-bone/50 px-4 py-1.5 text-[10px] text-ink-5">
         We buy = market × (1 − deduction) · advance = market × LTV · settings saved on this device
       </div>
     </section>
@@ -670,7 +670,7 @@ export function RetailQuote({
       </div>
       <div className="flex-1 px-4 py-2">
         {parts.map((p) => (
-          <div key={p.label} className="flex items-center justify-between border-t border-ink/[0.04] py-[5px] text-[12px] first:border-t-0">
+          <div key={p.label} className="flex items-center justify-between border-t border-ink/20 py-[5px] text-[12px] first:border-t-0">
             <span className="flex items-center gap-2 text-ink-3">
               <span className="size-2 rounded-sm" style={{ background: p.color }} />
               {p.label}
@@ -773,7 +773,7 @@ export function BoardHistory({
           </>
         }
       />
-      <div className="grid grid-cols-3 gap-px border-b border-ink/[0.06] bg-ink/[0.05]">
+      <div className="grid grid-cols-3 gap-px border-b border-ink/20 bg-ink/[0.05]">
         <Stat
           label="Current board"
           value={k?.boardRate != null ? money(conv(k.boardRate)) : <span className="font-sans text-[13px] text-ink-4">Not set</span>}
@@ -832,7 +832,7 @@ export function BoardHistory({
           </ResponsiveContainer>
         )}
       </div>
-      <div className="flex items-center gap-4 border-t border-ink/[0.06] bg-bone/50 px-4 py-1.5 text-[10.5px] text-ink-5">
+      <div className="flex items-center gap-4 border-t border-ink/20 bg-bone/50 px-4 py-1.5 text-[10.5px] text-ink-5">
         <span className="flex items-center gap-1.5">
           <span className="h-2 w-4 rounded-sm bg-gradient-to-b from-gold/50 to-gold/10" /> Market (spot × purity)
         </span>

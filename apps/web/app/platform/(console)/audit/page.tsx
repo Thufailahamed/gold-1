@@ -156,7 +156,7 @@ export default function AuditPage() {
                             ).map(([label, json]) => (
                               <div key={label}>
                                 <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-4">{label}</div>
-                                <pre className="max-h-64 overflow-auto rounded-lg bg-paper p-3 font-mono text-[11px] text-ink-2 ring-1 ring-ink/[0.08]">{pretty(json) ?? "—"}</pre>
+                                <pre className="max-h-64 overflow-auto rounded-lg bg-paper p-3 font-mono text-[11px] text-ink-2 ring-1 ring-ink/20">{pretty(json) ?? "—"}</pre>
                               </div>
                             ))}
                           </div>

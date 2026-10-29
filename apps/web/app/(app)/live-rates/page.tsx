@@ -120,7 +120,7 @@ type WeightUnit = "g" | "pawn" | "tola" | "oz";
 const UNIT_G: Record<WeightUnit, number> = { g: 1, pawn: 8, tola: 11.6638, oz: 31.1035 };
 const UNIT_LABEL: Record<WeightUnit, string> = { g: "Gram", pawn: "Pawn", tola: "Tola", oz: "Troy oz" };
 const inputCls =
-  "g-metric h-9 w-full min-w-0 rounded-lg bg-paper px-3 text-sm text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] transition-shadow focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.24)]";
+  "g-metric h-9 w-full min-w-0 rounded-lg bg-paper px-3 text-sm text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] transition-shadow focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.24)]";
 const unitWord = (u: Quote["unit"] | undefined) => (u === "coin" ? "coin" : u === "lb" ? "lb" : "oz");
 /** Weights a counter quotes most, smallest first. */
 const LADDER = [
@@ -882,7 +882,7 @@ export default function LiveRatesPage() {
                   <th className="px-2 text-right font-semibold">10 g</th>
                   <th className="px-2 text-right font-semibold">Tola · 11.66 g</th>
                   <th className="px-2 text-right font-semibold">Troy oz</th>
-                  <th className="border-l border-ink/[0.06] px-3 text-right font-semibold">Your board / g</th>
+                  <th className="border-l border-ink/20 px-3 text-right font-semibold">Your board / g</th>
                   <th className="w-[220px] px-3 font-semibold">Board vs market</th>
                   {canPublish ? <th className="w-px pr-5" /> : null}
                 </tr>
@@ -890,7 +890,7 @@ export default function LiveRatesPage() {
               <tbody>
                 {live.isLoading
                   ? [0, 1, 2, 3].map((i) => (
-                      <tr key={i} className="border-t border-ink/[0.05]">
+                      <tr key={i} className="border-t border-ink/20">
                         <td colSpan={canPublish ? 9 : 8} className="px-5 py-3">
                           <Shimmer className="h-9 w-full" />
                         </td>
@@ -932,7 +932,7 @@ export default function LiveRatesPage() {
                             />
                           }
                           className={cn(
-                            "group border-t border-ink/[0.05] transition-colors duration-150",
+                            "group border-t border-ink/20 transition-colors duration-150",
                             top ? "bg-gradient-to-r from-gold-pale/70 via-gold-pale/30 to-transparent hover:from-gold-pale" : "hover:bg-bone/70"
                           )}
                         >
@@ -975,7 +975,7 @@ export default function LiveRatesPage() {
                           <td className="g-metric px-2 text-right text-ink-3">{money(conv(k.lkrPerGram * 10))}</td>
                           <td className="g-metric px-2 text-right text-ink-3">{money(conv(k.lkrPerGram * UNIT_G.tola))}</td>
                           <td className="g-metric px-2 text-right text-ink-3">{money(conv(k.lkrPerGram * UNIT_G.oz))}</td>
-                          <td className="border-l border-ink/[0.06] px-3 text-right">
+                          <td className="border-l border-ink/20 px-3 text-right">
                             {k.boardRate != null ? (
                               <div className="leading-tight">
                                 <span className="g-metric text-[13.5px] font-semibold text-ink">{money(conv(k.boardRate))}</span>
@@ -1018,7 +1018,7 @@ export default function LiveRatesPage() {
                               </div>
                             ) : (
                               <div className="flex items-center gap-2.5">
-                                <div className="relative h-1 flex-1 rounded-full border border-dashed border-ink/15">
+                                <div className="relative h-1 flex-1 rounded-full border border-dashed border-ink/20">
                                   <span className="absolute -top-1 bottom-[-4px] left-1/2 w-px bg-ink/20" aria-hidden />
                                 </div>
                                 <span className="w-[84px] text-right text-[10.5px] leading-tight text-ink-5">Publish to compare</span>
@@ -1036,7 +1036,7 @@ export default function LiveRatesPage() {
                                     ? "home-btn-gold !rounded-lg"
                                     : top
                                       ? "bg-void text-gold-light hover:bg-void/90"
-                                      : "bg-bone text-ink-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)] hover:bg-void hover:text-gold-light"
+                                      : "bg-bone text-ink-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] hover:bg-void hover:text-gold-light"
                                 )}
                               >
                                 {k.boardRate == null ? "Publish" : "Update"}
@@ -1119,7 +1119,7 @@ export default function LiveRatesPage() {
                   );
                 })}
           </div>
-          <div className="border-t border-ink/[0.06] bg-bone/50 px-4 py-1.5 text-[10px] text-ink-5">
+          <div className="border-t border-ink/20 bg-bone/50 px-4 py-1.5 text-[10px] text-ink-5">
             Bars scaled to the largest move ({maxMove.toFixed(2)}%) · tap to chart
           </div>
         </section>
@@ -1163,7 +1163,7 @@ export default function LiveRatesPage() {
               </thead>
               <tbody>
                 {LADDER.map((l, i) => (
-                  <tr key={l.label} className="border-t border-ink/[0.05] transition-colors hover:bg-gold-pale/30">
+                  <tr key={l.label} className="border-t border-ink/20 transition-colors hover:bg-gold-pale/30">
                     <td className="py-[5px] pl-4 pr-2">
                       <span className="flex items-center gap-2">
                         <span
@@ -1245,7 +1245,7 @@ export default function LiveRatesPage() {
       <div className="grid gap-4 xl:grid-cols-12">
         <section className="g-surface relative flex flex-col xl:col-span-8">
           <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
-          <div className="flex flex-col gap-3 border-b border-ink/[0.06] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-3 border-b border-ink/20 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-3">
               <MetalCoin symbol={symbol} size={32} />
               <div className="min-w-0">
@@ -1409,7 +1409,7 @@ export default function LiveRatesPage() {
               <span className="w-[86px] text-right font-semibold text-ink-4">{Math.round(stats.pos * 100)}% of range</span>
             </div>
           ) : null}
-          <div className="mt-2 grid grid-cols-4 gap-px border-t border-ink/[0.06] bg-ink/[0.06] sm:grid-cols-8">
+          <div className="mt-2 grid grid-cols-4 gap-px border-t border-ink/20 bg-ink/[0.06] sm:grid-cols-8">
             {[
               { label: "Open", v: stats?.open },
               { label: "High", v: stats?.high, cls: "text-emerald-700" },
@@ -1439,7 +1439,7 @@ export default function LiveRatesPage() {
             </div>
           </div>
           {stats && (display !== "LKR" || history.source === "yahoo") ? (
-            <div className="rounded-b-2xl border-t border-ink/[0.06] bg-bone/60 px-4 py-2 text-[10.5px] text-ink-4">
+            <div className="rounded-b-2xl border-t border-ink/20 bg-bone/60 px-4 py-2 text-[10.5px] text-ink-4">
               {history.source === "yahoo"
                 ? `History from Yahoo Finance${quoteFor?.kind === "metal" ? ` (front-month futures, shifted ${history.basisAdjustPct != null ? `${history.basisAdjustPct.toFixed(2)}%` : ""} to end on spot)` : ""}, at each day's USD/LKR. `
                 : "Recorded spot snapshots. "}
@@ -1692,7 +1692,7 @@ export default function LiveRatesPage() {
             }
           />
           {/* converter */}
-          <div className="flex flex-wrap items-center gap-2 border-b border-ink/[0.06] bg-bone/50 px-4 py-2.5">
+          <div className="flex flex-wrap items-center gap-2 border-b border-ink/20 bg-bone/50 px-4 py-2.5">
             <span className="text-[9.5px] font-semibold uppercase tracking-[0.16em] text-ink-5">Convert</span>
             <input
               type="number"
@@ -1866,7 +1866,7 @@ function PublishDialog({
             <div className="g-metric mt-1 text-lg leading-none">{money(karat.lkrPerGram)}</div>
             <div className="mt-1 text-[10px] text-paper/40">LKR per gram</div>
           </div>
-          <div className="rounded-xl bg-bone px-3.5 py-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
+          <div className="rounded-xl bg-bone px-3.5 py-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-5">Current board</div>
             <div className="g-metric mt-1 text-lg leading-none text-ink">{karat.boardRate != null ? money(karat.boardRate) : "—"}</div>
             <div className="mt-1 text-[10px] text-ink-5">LKR per gram</div>

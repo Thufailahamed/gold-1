@@ -14,11 +14,11 @@ const STATUS: Record<string, { label: string; dot: string; chip: string }> = {
   OPEN: { label: "Open", dot: "bg-sky-500", chip: "bg-sky-500/10 text-sky-800 ring-sky-500/25" },
   PENDING: { label: "Awaiting you", dot: "bg-amber-500", chip: "bg-amber-500/10 text-amber-800 ring-amber-500/25" },
   RESOLVED: { label: "Resolved", dot: "bg-emerald-500", chip: "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25" },
-  CLOSED: { label: "Closed", dot: "bg-ink/30", chip: "bg-ink/[0.04] text-ink-5 ring-ink/10" },
+  CLOSED: { label: "Closed", dot: "bg-ink/30", chip: "bg-ink/[0.04] text-ink-5 ring-ink/20" },
 };
 const PRIORITY: Record<string, string> = { URGENT: "text-rose-700", HIGH: "text-amber-700", NORMAL: "text-ink-3", LOW: "text-ink-5" };
 function StatusChip({ status }: { status: string }) {
-  const m = STATUS[status] ?? { label: status.toLowerCase(), dot: "bg-ink/30", chip: "bg-ink/[0.05] text-ink-3 ring-ink/10" };
+  const m = STATUS[status] ?? { label: status.toLowerCase(), dot: "bg-ink/30", chip: "bg-ink/[0.05] text-ink-3 ring-ink/20" };
   return (
     <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-px text-[10.5px] font-semibold ring-1 ring-inset", m.chip)}>
       <span className={cn("size-1.5 rounded-full", m.dot)} />
@@ -82,7 +82,7 @@ export default function ShopSupportPage() {
       ) : (
         <div className="grid gap-4 xl:grid-cols-12">
           <Card className="xl:col-span-8">
-            <div className="flex items-center gap-2 border-b border-ink/[0.06] px-4 py-2.5">
+            <div className="flex items-center gap-2 border-b border-ink/20 px-4 py-2.5">
               <FilterPills
                 value={show}
                 onChange={setShow}
@@ -246,7 +246,7 @@ function ThreadDrawer({ id, onClose }: { id: string; onClose: () => void }) {
         </div>
         <ol className="flex-1 space-y-3 overflow-y-auto bg-bone/50 p-5 scrollbar-thin">
           {(q.data?.messages ?? []).map((m) => (
-            <li key={m.id} className={cn("rounded-2xl p-3.5 text-[13px] shadow-[0_8px_20px_-16px_rgba(16,32,27,0.5)] ring-1 ring-ink/[0.07]", m.author_type === "ADMIN" ? "mr-8 rounded-tl-sm bg-gold-pale" : "ml-8 rounded-tr-sm bg-paper")}>
+            <li key={m.id} className={cn("rounded-2xl p-3.5 text-[13px] shadow-[0_8px_20px_-16px_rgba(16,32,27,0.5)] ring-1 ring-ink/20", m.author_type === "ADMIN" ? "mr-8 rounded-tl-sm bg-gold-pale" : "ml-8 rounded-tr-sm bg-paper")}>
               <div className="mb-1 flex justify-between text-xs">
                 <span className="font-semibold">{m.author_type === "ADMIN" ? `${m.author_name} · GoldOS` : m.author_name}</span>
                 <span className="text-ink-4">{when(m.created_at)}</span>
@@ -256,7 +256,7 @@ function ThreadDrawer({ id, onClose }: { id: string; onClose: () => void }) {
           ))}
         </ol>
         {t && t.status !== "CLOSED" ? (
-          <div className="border-t border-ink/[0.07] p-4">
+          <div className="border-t border-ink/20 p-4">
             <textarea rows={3} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Reply…" className={cn(controlClass, "h-auto w-full py-2")} />
             <div className="mt-2 flex justify-end">
               <button onClick={() => reply.mutate()} disabled={!body.trim() || reply.isPending} className="g-btn g-btn-primary h-9 px-4 text-sm">

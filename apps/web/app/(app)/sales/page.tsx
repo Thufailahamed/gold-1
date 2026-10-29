@@ -442,7 +442,7 @@ export default function SalesDashboardPage() {
                 })}
               </ul>
               {Number.isFinite(oldestCredit) ? (
-                <p className="border-t border-ink/[0.06] bg-bone/40 px-4 py-1.5 text-[10.5px] text-ink-4">Oldest open balance from {ago(oldestCredit)}</p>
+                <p className="border-t border-ink/20 bg-bone/40 px-4 py-1.5 text-[10.5px] text-ink-4">Oldest open balance from {ago(oldestCredit)}</p>
               ) : null}
             </>
           )}
@@ -471,7 +471,7 @@ export default function SalesDashboardPage() {
               </tbody>
             </table>
           )}
-          <Link href="/sales/reports" className="group mt-auto flex items-center justify-center gap-1 border-t border-ink/[0.06] py-1.5 text-[11.5px] font-medium text-ink-3 hover:bg-void hover:text-gold-light">
+          <Link href="/sales/reports" className="group mt-auto flex items-center justify-center gap-1 border-t border-ink/20 py-1.5 text-[11.5px] font-medium text-ink-3 hover:bg-void hover:text-gold-light">
             Full sales report <ArrowRightIcon size={11} className="transition-transform group-hover:translate-x-0.5" />
           </Link>
         </Card>

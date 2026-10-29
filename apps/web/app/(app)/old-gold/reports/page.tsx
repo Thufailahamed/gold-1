@@ -49,7 +49,7 @@ const PENDING_STYLE: Record<string, { label: string; chip: string; dot: string }
 };
 
 const cardShadow =
-  "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]";
+  "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]";
 
 const fmt = (c: number) => (c / 100).toLocaleString("en-US");
 const g = (mg: number) => (mg / 1000).toLocaleString("en-US", { maximumFractionDigits: 3 });
@@ -133,7 +133,7 @@ export default function OldGoldReportsPage() {
         <section className={cn("relative overflow-hidden rounded-2xl bg-paper", cardShadow)}>
           <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
 
-          <div className="space-y-2.5 border-b border-ink/[0.06] px-4 py-2.5">
+          <div className="space-y-2.5 border-b border-ink/20 px-4 py-2.5">
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2.5">
                 <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25)]">
@@ -148,7 +148,7 @@ export default function OldGoldReportsPage() {
                   </p>
                 </div>
               </div>
-              <div className="relative flex h-8 shrink-0 items-center rounded-lg bg-bone p-0.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08)]" role="group" aria-label="View">
+              <div className="relative flex h-8 shrink-0 items-center rounded-lg bg-bone p-0.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]" role="group" aria-label="View">
                 <span
                   aria-hidden
                   className={cn(
@@ -208,7 +208,7 @@ export default function OldGoldReportsPage() {
           </div>
 
           {!breakdown.isLoading && top && rows.length > 1 ? (
-            <div className="flex flex-wrap items-center gap-3 border-b border-ink/[0.06] bg-gradient-to-r from-gold-pale/70 via-gold-pale/30 to-paper px-4 py-2">
+            <div className="flex flex-wrap items-center gap-3 border-b border-ink/20 bg-gradient-to-r from-gold-pale/70 via-gold-pale/30 to-paper px-4 py-2">
               <span className="g-metric flex size-7 items-center justify-center rounded-full bg-gradient-to-b from-gold-light to-gold text-[11px] font-bold text-void">1</span>
               <p className="min-w-0 text-[12px] text-ink-3">
                 <span className="font-semibold text-ink">{name(top)}</span> leads with{" "}
@@ -267,7 +267,7 @@ export default function OldGoldReportsPage() {
                           ? "bg-gradient-to-b from-gold-light to-gold text-void"
                           : i < 3
                             ? "bg-gold-pale text-gold-deep ring-1 ring-gold-dark/15"
-                            : "text-ink-5 ring-1 ring-ink/[0.08]"
+                            : "text-ink-5 ring-1 ring-ink/20"
                       )}
                     >
                       {i + 1}
@@ -361,7 +361,7 @@ export default function OldGoldReportsPage() {
           )}
 
           {!breakdown.isLoading && rows.length > 0 ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink/[0.06] bg-bone/40 px-4 py-2 text-[10.5px] text-ink-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink/20 bg-bone/40 px-4 py-2 text-[10.5px] text-ink-4">
               <span className="inline-flex items-center gap-2">
                 <span className="h-2 w-5 rounded-full bg-gradient-to-r from-gold-dark to-gold" aria-hidden />
                 Purchase value, LKR · bars scaled to the top {meta.label.toLowerCase()}
@@ -375,7 +375,7 @@ export default function OldGoldReportsPage() {
           {/* Settlement */}
           <section className={cn("relative overflow-hidden rounded-2xl bg-paper", cardShadow)}>
             <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
-            <div className="flex items-center gap-2.5 border-b border-ink/[0.06] px-4 py-2.5">
+            <div className="flex items-center gap-2.5 border-b border-ink/20 px-4 py-2.5">
               <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25)]">
                 <CoinsIcon size={14} />
               </span>
@@ -422,7 +422,7 @@ export default function OldGoldReportsPage() {
           {/* Pending */}
           <section className={cn("relative overflow-hidden rounded-2xl bg-paper", cardShadow)}>
             <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
-            <div className="flex items-center justify-between gap-3 border-b border-ink/[0.06] px-4 py-2.5">
+            <div className="flex items-center justify-between gap-3 border-b border-ink/20 px-4 py-2.5">
               <div className="flex min-w-0 items-center gap-2.5">
                 <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25)]">
                   <ArchiveIcon size={14} />
@@ -433,7 +433,7 @@ export default function OldGoldReportsPage() {
                 </div>
               </div>
               {pend.length ? (
-                <span className="g-metric shrink-0 rounded-full bg-bone px-2.5 py-1 text-[11px] text-ink-3 ring-1 ring-ink/[0.06]">
+                <span className="g-metric shrink-0 rounded-full bg-bone px-2.5 py-1 text-[11px] text-ink-3 ring-1 ring-ink/20">
                   <span className="font-semibold text-ink">{pend.length}</span> · {g(pendFine)} g
                 </span>
               ) : null}
@@ -458,7 +458,7 @@ export default function OldGoldReportsPage() {
             ) : (
               <ul className="max-h-[28rem] divide-y divide-ink/[0.05] overflow-y-auto scrollbar-thin">
                 {pend.map((p) => {
-                  const st = PENDING_STYLE[p.status] ?? { label: p.status.replace(/_/g, " "), chip: "bg-bone text-ink-3 ring-ink/10", dot: "bg-ink-5" };
+                  const st = PENDING_STYLE[p.status] ?? { label: p.status.replace(/_/g, " "), chip: "bg-bone text-ink-3 ring-ink/20", dot: "bg-ink-5" };
                   return (
                     <li key={p.id}>
                       <Link href={`/old-gold/items/${p.id}`} className="group flex items-center gap-3 px-4 py-2 transition-colors hover:bg-bone/60">
@@ -497,7 +497,7 @@ export default function OldGoldReportsPage() {
 
 function Figure({ label, value, dot }: { label: string; value: string; dot?: string }) {
   return (
-    <div className="rounded-lg bg-bone/60 px-2.5 py-2 ring-1 ring-ink/[0.05]">
+    <div className="rounded-lg bg-bone/60 px-2.5 py-2 ring-1 ring-ink/20">
       <dt className="flex items-center gap-1.5 truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-5">
         {dot ? <span className={cn("size-1.5 rounded-full", dot)} /> : null}
         {label}
@@ -510,7 +510,7 @@ function Figure({ label, value, dot }: { label: string; value: string; dot?: str
 function Empty({ icon, title, body, action }: { icon: ReactNode; title: string; body: string; action?: ReactNode }) {
   return (
     <div className="p-3">
-      <div className="relative flex flex-col items-center overflow-hidden rounded-xl border border-dashed border-ink/15 bg-gradient-to-b from-bone/70 to-paper px-6 py-8 text-center">
+      <div className="relative flex flex-col items-center overflow-hidden rounded-xl border border-dashed border-ink/20 bg-gradient-to-b from-bone/70 to-paper px-6 py-8 text-center">
         <div className="pointer-events-none absolute -top-24 left-1/2 size-72 -translate-x-1/2 rounded-full bg-gold/10 blur-[80px]" aria-hidden />
         <span className="relative mb-3 flex size-11 items-center justify-center rounded-xl bg-void text-gold-light shadow-4">
           <span className="absolute inset-0 animate-pulse-soft rounded-2xl ring-4 ring-gold/20" aria-hidden />

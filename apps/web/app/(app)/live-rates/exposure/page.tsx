@@ -137,7 +137,7 @@ export default function ExposurePage() {
               </div>
 
               {/* what-if */}
-              <div className="rounded-xl bg-bone/60 p-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.05)]">
+              <div className="rounded-xl bg-bone/60 p-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
                 <div className="flex flex-wrap items-center gap-2 text-[12px] text-ink-2">
                   If gold moves
                   <NumInput value={move} onChange={setMove} suffix="%" className="w-24" />
@@ -148,7 +148,7 @@ export default function ExposurePage() {
                 </div>
                 <div className="mt-2 grid grid-cols-5 gap-1">
                   {[-5, -2, -1, 1, 2].map((m) => (
-                    <div key={m} className="rounded-lg bg-paper px-2 py-1.5 text-center shadow-[inset_0_0_0_1px_rgba(16,32,27,0.05)]">
+                    <div key={m} className="rounded-lg bg-paper px-2 py-1.5 text-center shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
                       <div className="text-[10px] font-semibold text-ink-5">{m > 0 ? "+" : ""}{m}%</div>
                       <div className={cn("g-metric text-[11.5px] font-semibold", toneOf(p.perPctLkr * m))}>{lkr(p.perPctLkr * m)}</div>
                     </div>
@@ -157,19 +157,19 @@ export default function ExposurePage() {
               </div>
 
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                <div className="rounded-xl px-3 py-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
+                <div className="rounded-xl px-3 py-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
                   <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">Valued, unpaid</div>
                   <div className="g-metric text-[14px] font-semibold text-ink">{gramsOf(p.committed.fineMg)} g</div>
                   <div className="text-[10.5px] text-ink-5">
                     {p.committed.count} item{p.committed.count === 1 ? "" : "s"} · Rs {lkr(p.committed.valueLkr)} fixed
                   </div>
                 </div>
-                <div className="rounded-xl px-3 py-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
+                <div className="rounded-xl px-3 py-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
                   <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">Customer gold held</div>
                   <div className="g-metric text-[14px] font-semibold text-ink">{gramsOf(p.custody.fineMg)} g</div>
                   <div className="text-[10.5px] text-ink-5">{p.custody.count} received / testing · not yours</div>
                 </div>
-                <div className="rounded-xl px-3 py-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
+                <div className="rounded-xl px-3 py-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
                   <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">Owed on orders</div>
                   <div className="g-metric text-[14px] font-semibold text-rose-700">{gramsOf(p.owedMg)} g</div>
                   <div className="text-[10.5px] text-ink-5">{p.owed.length} fixed-price order{p.owed.length === 1 ? "" : "s"}</div>
@@ -226,7 +226,7 @@ export default function ExposurePage() {
                 </thead>
                 <tbody>
                   {p.owed.map((o) => (
-                    <tr key={o.id} className="border-t border-ink/[0.05] hover:bg-gold-pale/30">
+                    <tr key={o.id} className="border-t border-ink/20 hover:bg-gold-pale/30">
                       <td className="py-1.5 pl-4 pr-2">
                         <Link href={`/custom-orders/${o.id}`} className="g-metric font-semibold text-ink hover:text-gold-deep">
                           {o.number}
@@ -281,7 +281,7 @@ export default function ExposurePage() {
                 </thead>
                 <tbody>
                   {g.lines.map((l) => (
-                    <tr key={l.key} className="relative border-t border-ink/[0.05] hover:bg-gold-pale/30">
+                    <tr key={l.key} className="relative border-t border-ink/20 hover:bg-gold-pale/30">
                       <td className="py-1.5 pl-4 pr-2 font-medium text-ink">{l.label}</td>
                       <td className="px-2 text-ink-3">{l.branch}</td>
                       <td className="g-metric px-2 text-right text-ink-3">
@@ -302,7 +302,7 @@ export default function ExposurePage() {
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t-2 border-ink/10 bg-bone/50 font-semibold">
+                  <tr className="border-t-2 border-ink/20 bg-bone/50 font-semibold">
                     <td className="py-2 pl-4 pr-2 text-ink" colSpan={2}>
                       Total
                     </td>
@@ -320,7 +320,7 @@ export default function ExposurePage() {
             </div>
           </>
         )}
-        <p className="border-t border-ink/[0.06] px-4 py-2 text-[10.5px] text-ink-5">
+        <p className="border-t border-ink/20 px-4 py-2 text-[10.5px] text-ink-5">
           A management view at spot, before selling costs and making income. It does not post anything to the books.
         </p>
       </Card>

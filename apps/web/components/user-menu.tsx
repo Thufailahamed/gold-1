@@ -93,7 +93,7 @@ export function UserMenu({ me }: { me: MeData }) {
       </button>
       {open ? (
         <div className="g-floating absolute right-0 z-40 mt-2 w-72 animate-fade-in overflow-hidden">
-          <div className="flex items-center gap-3 border-b border-ink/[0.07] px-4 py-3.5">
+          <div className="flex items-center gap-3 border-b border-ink/20 px-4 py-3.5">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-ink font-mono text-sm font-bold text-gold">
               {initials}
             </span>
@@ -102,7 +102,7 @@ export function UserMenu({ me }: { me: MeData }) {
               <div className="mt-0.5 truncate font-mono text-[11px] text-ink-4">{me.user.email}</div>
             </div>
           </div>
-          <div className="flex items-center justify-between gap-2 border-b border-ink/[0.07] px-4 py-2.5">
+          <div className="flex items-center justify-between gap-2 border-b border-ink/20 px-4 py-2.5">
             <Pill tone="success" dot icon={<CheckCircleIcon size={11} />}>
               Session active
             </Pill>

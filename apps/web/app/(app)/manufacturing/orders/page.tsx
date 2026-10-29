@@ -181,7 +181,7 @@ export default function MfgOrdersPage() {
             </>
           }
         />
-        <div className="overflow-x-auto border-b border-ink/[0.06] px-4 py-2 scrollbar-thin">
+        <div className="overflow-x-auto border-b border-ink/20 px-4 py-2 scrollbar-thin">
           <FilterPills
             value={fStatus}
             onChange={(s) => {
@@ -251,7 +251,7 @@ export default function MfgOrdersPage() {
             </table>
           </div>
         )}
-        <div className="border-t border-ink/[0.06] px-4 py-2">
+        <div className="border-t border-ink/20 px-4 py-2">
           <Pager page={page} onChange={setPage} pageSize={PAGE} count={rows.length} total={total} unit="orders" />
         </div>
       </Card>
@@ -279,7 +279,7 @@ export default function MfgOrdersPage() {
                 onClick={() => setType(x.t)}
                 className={cn(
                   "flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left ring-1 ring-inset transition",
-                  type === x.t ? "bg-void text-paper ring-void" : "bg-paper text-ink ring-ink/10 hover:ring-gold/50"
+                  type === x.t ? "bg-void text-paper ring-void" : "bg-paper text-ink ring-ink/20 hover:ring-gold/50"
                 )}
               >
                 <x.icon size={15} className={type === x.t ? "text-gold-light" : "text-ink-4"} />

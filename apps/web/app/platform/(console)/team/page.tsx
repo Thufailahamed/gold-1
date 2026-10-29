@@ -101,7 +101,7 @@ export default function TeamPage() {
                           aria-label={`Actions for ${a.name}`}
                           value=""
                           onChange={(e) => e.target.value && setAction({ kind: e.target.value as Action["kind"], admin: a })}
-                          className="h-8 rounded-lg bg-paper px-2 text-xs shadow-[inset_0_0_0_1px_rgba(16,32,27,0.14)]"
+                          className="h-8 rounded-lg bg-paper px-2 text-xs shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]"
                         >
                           <option value="">Manage…</option>
                           <option value="role">Change role</option>
@@ -123,7 +123,7 @@ export default function TeamPage() {
       <Panel title="Roles" description="What each role can do. Permissions are enforced by the API, not the menu." icon={<ShieldIcon size={16} />}>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {PLATFORM_ROLE_KEYS.map((k) => (
-            <div key={k} className="rounded-xl bg-bone/70 p-4 ring-1 ring-ink/[0.06]">
+            <div key={k} className="rounded-xl bg-bone/70 p-4 ring-1 ring-ink/20">
               <div className="font-semibold text-ink">{PLATFORM_ROLES[k].label}</div>
               <p className="mt-1 text-xs text-ink-4">{PLATFORM_ROLES[k].description}</p>
               <ul className="mt-3 space-y-1">
@@ -243,7 +243,7 @@ function RoleDialog({ admin, onClose, onDone }: { admin: Admin; onClose: () => v
     <Modal title={`Change role for ${admin.name}`} kicker="Team" onClose={onClose} onSubmit={() => m.mutate()} submitLabel="Change role" pending={m.isPending} submitDisabled={role === admin.role}>
       <div className="space-y-2">
         {PLATFORM_ROLE_KEYS.map((k) => (
-          <label key={k} className={cn("flex cursor-pointer gap-3 rounded-xl p-3 ring-1", role === k ? "bg-gold-pale ring-gold-dark/30" : "ring-ink/10")}>
+          <label key={k} className={cn("flex cursor-pointer gap-3 rounded-xl p-3 ring-1", role === k ? "bg-gold-pale ring-gold-dark/30" : "ring-ink/20")}>
             <input type="radio" checked={role === k} onChange={() => setRole(k)} className="mt-1 accent-ink" />
             <span>
               <span className="block text-sm font-medium">{PLATFORM_ROLES[k].label}</span>

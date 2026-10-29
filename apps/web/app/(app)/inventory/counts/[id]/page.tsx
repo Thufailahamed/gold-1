@@ -295,7 +295,7 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
                           <button
                             type="button"
                             onClick={() => setNoteFor(l)}
-                            className="inline-flex h-6 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-ink-3 ring-1 ring-inset ring-ink/10 hover:bg-void hover:text-paper hover:ring-0"
+                            className="inline-flex h-6 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-ink-3 ring-1 ring-inset ring-ink/20 hover:bg-void hover:text-paper hover:ring-0"
                             aria-label={`${l.note ? "Edit" : "Add"} note for ${l.barcode}`}
                           >
                             <EditIcon size={10} /> {l.note ? "Edit" : "Note"}

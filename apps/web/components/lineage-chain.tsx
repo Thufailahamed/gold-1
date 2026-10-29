@@ -56,7 +56,7 @@ export function LineageChain({ nodes, edges }: { nodes: LineageNode[]; edges: Li
   const ordered = orderNodes(nodes, edges);
   if (ordered.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-ink/15 bg-bone/60 px-4 py-6 text-center">
+      <div className="rounded-xl border border-dashed border-ink/20 bg-bone/60 px-4 py-6 text-center">
         <p className="text-xs font-medium uppercase tracking-[0.14em] text-ink-4">No lineage found</p>
       </div>
     );
@@ -67,7 +67,7 @@ export function LineageChain({ nodes, edges }: { nodes: LineageNode[]; edges: Li
         const k = getNodeKey(n, i);
         const link = n.url ?? n.link;
         const chip = (
-          <span className="inline-flex items-center gap-2 rounded-full border border-ink/10 bg-paper px-3.5 py-1.5 text-xs shadow-hairline transition-colors hover:border-gold/50">
+          <span className="inline-flex items-center gap-2 rounded-full border border-ink/20 bg-paper px-3.5 py-1.5 text-xs shadow-hairline transition-colors hover:border-gold/50">
             <span className={`size-1.5 shrink-0 rounded-full ${DOT[n.kind] ?? "bg-ink/40"}`} />
             <span className="font-mono font-medium tracking-tight text-ink">{n.label}</span>
             <span className="text-[10px] uppercase tracking-wider text-ink-4">{n.kind.replace(/_/g, " ")}</span>

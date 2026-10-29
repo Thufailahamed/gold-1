@@ -91,7 +91,7 @@ export function AssetChart({
   if (loading && !rows.length) return <div className="h-[380px] animate-pulse rounded-xl bg-ink/[0.04]" />;
   if (rows.length < 2)
     return (
-      <div className="flex h-[380px] items-center justify-center rounded-xl border border-dashed border-ink/15 text-[12px] text-ink-4">
+      <div className="flex h-[380px] items-center justify-center rounded-xl border border-dashed border-ink/20 text-[12px] text-ink-4">
         No chart data for this range yet.
       </div>
     );

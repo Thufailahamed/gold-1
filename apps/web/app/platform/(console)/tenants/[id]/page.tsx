@@ -304,7 +304,7 @@ function OverviewTab({ d, onRefreshUsage }: { d: Detail; onRefreshUsage: () => v
           <p className="text-sm text-ink-4">No plan attached.</p>
         )}
         {d.usage ? (
-          <div className="mt-6 grid grid-cols-2 gap-3 border-t border-ink/[0.07] pt-5 sm:grid-cols-3">
+          <div className="mt-6 grid grid-cols-2 gap-3 border-t border-ink/20 pt-5 sm:grid-cols-3">
             <Stat label="Sales · 30d" value={d.usage.sales_30d.toLocaleString()} />
             <Stat label="Sales value · 30d" value={money(d.usage.sales_30d_cents, d.tenant.currency)} />
             <Stat label="Health" value={<HealthBadge d={d} />} />
@@ -335,7 +335,7 @@ function OverviewTab({ d, onRefreshUsage }: { d: Detail; onRefreshUsage: () => v
         {d.events.length === 0 ? (
           <p className="text-sm text-ink-4">No events.</p>
         ) : (
-          <ol className="relative space-y-4 border-l border-ink/10 pl-5">
+          <ol className="relative space-y-4 border-l border-ink/20 pl-5">
             {d.events.map((e) => (
               <li key={e.id} className="relative">
                 <span className={cn("absolute -left-[25px] top-1.5 size-2.5 rounded-full ring-4 ring-paper", e.mrr_delta_cents > 0 ? "bg-emerald-600" : e.mrr_delta_cents < 0 ? "bg-rose-600" : "bg-ink-5")} />
@@ -367,7 +367,7 @@ function OverviewTab({ d, onRefreshUsage }: { d: Detail; onRefreshUsage: () => v
 
 function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="rounded-xl bg-bone/70 p-3 ring-1 ring-ink/[0.06]">
+    <div className="rounded-xl bg-bone/70 p-3 ring-1 ring-ink/20">
       <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-4">{label}</div>
       <div className="g-metric mt-1 text-base text-ink">{value}</div>
     </div>
@@ -428,7 +428,7 @@ function ProvisioningPanel({ d, onDone }: { d: Detail; onDone: () => void }) {
       />
       {open ? (
         <form
-          className="mt-4 space-y-2 border-t border-ink/[0.07] pt-4"
+          className="mt-4 space-y-2 border-t border-ink/20 pt-4"
           onSubmit={(e) => {
             e.preventDefault();
             retry.mutate();
@@ -494,7 +494,7 @@ function SubscriptionTab({ d, onChange }: { d: Detail; onChange: () => void }) {
             ...(s.canceled_at ? [{ label: "Cancelled", value: `${date(s.canceled_at)}${s.cancel_reason ? ` — ${s.cancel_reason}` : ""}` }] : []),
           ]}
         />
-        <p className="mt-5 border-t border-ink/[0.07] pt-4 text-xs text-ink-4">
+        <p className="mt-5 border-t border-ink/20 pt-4 text-xs text-ink-4">
           Prices are locked per account: editing a plan&rsquo;s list price never reprices existing subscribers. Plan changes take effect at the next invoice — add a one-off invoice from the Invoices tab for a mid-period adjustment.
         </p>
       </Panel>
@@ -671,7 +671,7 @@ function CancelDialog({ d, onClose, onDone }: { d: Detail; onClose: () => void; 
           [true, "At period end", `Keeps access until ${date(d.subscription?.status === "TRIALING" ? d.subscription?.trial_ends_at : d.subscription?.current_period_end)}. Can be undone until then.`],
           [false, "Immediately", "Stops recurring revenue now. Open invoices stay open."],
         ].map(([v, label, hint]) => (
-          <label key={String(v)} className={cn("flex cursor-pointer gap-3 rounded-xl p-3 ring-1", atEnd === v ? "bg-gold-pale ring-gold-dark/30" : "ring-ink/10")}>
+          <label key={String(v)} className={cn("flex cursor-pointer gap-3 rounded-xl p-3 ring-1", atEnd === v ? "bg-gold-pale ring-gold-dark/30" : "ring-ink/20")}>
             <input type="radio" checked={atEnd === v} onChange={() => setAtEnd(v as boolean)} className="mt-1 accent-ink" />
             <span>
               <span className="block text-sm font-medium">{label as string}</span>
@@ -776,7 +776,7 @@ function FeaturesTab({ d, onChange }: { d: Detail; onChange: () => void }) {
                   disabled={!manage || set.isPending}
                   value={f.override === null ? "" : f.override ? "on" : "off"}
                   onChange={(e) => set.mutate({ flagKey: f.key, enabled: e.target.value === "" ? null : e.target.value === "on" })}
-                  className="h-8 rounded-lg bg-paper px-2 text-xs shadow-[inset_0_0_0_1px_rgba(16,32,27,0.14)]"
+                  className="h-8 rounded-lg bg-paper px-2 text-xs shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]"
                 >
                   <option value="">Inherit</option>
                   <option value="on">Force on</option>

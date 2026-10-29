@@ -49,7 +49,7 @@ export default function AccountsLayout({ children }: { children: ReactNode }) {
           aria-label="Accounts sections"
           className="sticky top-[57px] z-20 mx-auto -mt-1 mb-6 max-w-7xl print:hidden"
         >
-          <div className="relative overflow-hidden rounded-2xl bg-paper/85 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.08),0_14px_34px_-24px_rgba(16,32,27,0.35)] backdrop-blur-md">
+          <div className="relative overflow-hidden rounded-2xl bg-paper/85 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_14px_34px_-24px_rgba(16,32,27,0.35)] backdrop-blur-md">
             <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-gold/45 to-transparent" />
             <div className="flex items-center gap-2 overflow-x-auto p-1.5 scrollbar-thin">
               <span className="hidden shrink-0 items-center gap-2 pl-2 pr-3 xl:flex">

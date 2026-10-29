@@ -82,7 +82,7 @@ const shiftDay = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`)
 /** A labelled money line; `total` is the bold rule-above result. */
 function Line({ k, cents, total, tone, sub }: { k: string; cents: number | null; total?: boolean; tone?: string; sub?: string }) {
   return (
-    <div className={cn("flex items-baseline justify-between gap-3 px-4 py-1.5", total && "border-t border-ink/[0.08] bg-gold-pale/40 py-2")}>
+    <div className={cn("flex items-baseline justify-between gap-3 px-4 py-1.5", total && "border-t border-ink/20 bg-gold-pale/40 py-2")}>
       <span className={cn("text-[12px]", total ? "font-semibold text-ink" : "text-ink-3")}>
         {k}
         {sub ? <span className="ml-1.5 text-[10.5px] text-ink-5">{sub}</span> : null}
@@ -402,7 +402,7 @@ export default function DayClosingPage() {
         </div>
       </GoldHero>
 
-      <div role="tablist" aria-label="Day closing" className="flex gap-1 overflow-x-auto rounded-xl bg-paper p-1 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)] scrollbar-thin">
+      <div role="tablist" aria-label="Day closing" className="flex gap-1 overflow-x-auto rounded-xl bg-paper p-1 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] scrollbar-thin">
         {tabs.map((t) => {
           const on = tab === t.key;
           return (
@@ -491,7 +491,7 @@ export default function DayClosingPage() {
                 <RowsSkeleton rows={4} />
               ) : (
                 <div className="grid md:grid-cols-2">
-                  <div className="border-ink/[0.06] py-1.5 md:border-r">
+                  <div className="border-ink/20 py-1.5 md:border-r">
                     <Line k="Opening cash" cents={r?.openingCents ?? 0} />
                     <Line k="+ Cash in" cents={r?.cashIn.totalCents ?? 0} tone="text-emerald-700" />
                     {(r?.cashIn.lines ?? []).map((l, i) => (
@@ -533,7 +533,7 @@ export default function DayClosingPage() {
                       </span>
                     </div>
                     {useSheet ? (
-                      <div className="rounded-xl bg-bone/60 p-2 ring-1 ring-inset ring-ink/[0.05]">
+                      <div className="rounded-xl bg-bone/60 p-2 ring-1 ring-inset ring-ink/20">
                         <div className="grid grid-cols-2 gap-1">
                           {LKR_DENOMINATIONS.map((face) => {
                             const n = Number(counts[face] ?? 0) || 0;
@@ -545,7 +545,7 @@ export default function DayClosingPage() {
                                   inputMode="numeric"
                                   value={counts[face] ?? ""}
                                   onChange={(e) => setCounts((c) => ({ ...c, [face]: e.target.value.replace(/\D/g, "") }))}
-                                  className="g-metric h-7 w-12 rounded-md bg-paper px-1.5 text-right text-[12px] shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b]"
+                                  className="g-metric h-7 w-12 rounded-md bg-paper px-1.5 text-right text-[12px] shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b]"
                                   aria-label={`${face} rupee pieces`}
                                 />
                                 <span className="g-metric ml-auto text-[10.5px] text-ink-4">{n ? (face * n).toLocaleString("en-US") : ""}</span>
@@ -553,7 +553,7 @@ export default function DayClosingPage() {
                             );
                           })}
                         </div>
-                        <div className="mt-1.5 flex justify-between border-t border-ink/10 px-1.5 pt-1.5 text-[12px]">
+                        <div className="mt-1.5 flex justify-between border-t border-ink/20 px-1.5 pt-1.5 text-[12px]">
                           <span className="text-ink-3">Counted</span>
                           <span className="g-metric font-semibold text-ink">{fmt(sheetCents)}</span>
                         </div>
@@ -565,7 +565,7 @@ export default function DayClosingPage() {
                         value={actual}
                         onChange={(e) => setActual(e.target.value)}
                         placeholder="0.00"
-                        className="g-metric h-11 w-full rounded-lg bg-paper px-3 text-[18px] text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.15)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.24)]"
+                        className="g-metric h-11 w-full rounded-lg bg-paper px-3 text-[18px] text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.24)]"
                       />
                     )}
 
@@ -573,7 +573,7 @@ export default function DayClosingPage() {
                       className={cn(
                         "flex items-center justify-between rounded-xl px-3 py-2.5 ring-1 ring-inset",
                         differenceCents === null
-                          ? "bg-bone/60 ring-ink/[0.06]"
+                          ? "bg-bone/60 ring-ink/20"
                           : differenceCents === 0
                             ? "bg-emerald-600/10 ring-emerald-600/25"
                             : differenceCents < 0
@@ -613,7 +613,7 @@ export default function DayClosingPage() {
                   </div>
                 </div>
               )}
-              <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-ink/[0.06] bg-bone/40 px-4 py-2.5">
+              <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-ink/20 bg-bone/40 px-4 py-2.5">
                 {canManage ? (
                   <>
                     <span className="mr-auto text-[11px] text-ink-4">
@@ -663,7 +663,7 @@ export default function DayClosingPage() {
                   </div>
                 </div>
                 {cardDifference && differenceCents && cardDifference === -differenceCents ? (
-                  <p className="border-t border-ink/[0.06] bg-amber-500/10 px-4 py-2 text-[11px] text-amber-800">
+                  <p className="border-t border-ink/20 bg-amber-500/10 px-4 py-2 text-[11px] text-amber-800">
                     The card and cash differences cancel out — a sale was probably keyed with the wrong payment method.
                   </p>
                 ) : null}
@@ -693,7 +693,7 @@ export default function DayClosingPage() {
               <Card>
                 <CardHead icon={GemIcon} title="The day in gold" sub="Fine milligrams" />
                 {r?.goldBalance ? (
-                  <div className="grid grid-cols-4 gap-px border-b border-ink/[0.06] bg-ink/[0.05]">
+                  <div className="grid grid-cols-4 gap-px border-b border-ink/20 bg-ink/[0.05]">
                     {[
                       ["Opening", r.goldBalance.openingMg, "text-ink"],
                       ["In", r.goldBalance.inMg, "text-emerald-700"],
@@ -774,7 +774,7 @@ export default function DayClosingPage() {
                         <td className="whitespace-nowrap py-1.5 pl-2 pr-4 text-right">
                           <Link
                             href={`/day-closing/report?branchId=${encodeURIComponent(c.branch_id)}&date=${c.close_date}`}
-                            className="mr-1 inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-[11px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/10 hover:bg-bone hover:text-ink"
+                            className="mr-1 inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-[11px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/20 hover:bg-bone hover:text-ink"
                           >
                             <PrinterIcon size={11} />
                             Report
@@ -792,8 +792,8 @@ export default function DayClosingPage() {
               </div>
             )}
             {(closings.data?.total ?? 0) > 20 ? (
-              <div className="flex items-center justify-end gap-1 border-t border-ink/[0.06] bg-bone/40 px-4 py-2 text-[11px] text-ink-4">
-                <button disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page" className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/10 hover:bg-paper disabled:opacity-40">
+              <div className="flex items-center justify-end gap-1 border-t border-ink/20 bg-bone/40 px-4 py-2 text-[11px] text-ink-4">
+                <button disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page" className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/20 hover:bg-paper disabled:opacity-40">
                   <ChevronRightIcon size={13} className="rotate-180" />
                 </button>
                 <span className="g-metric px-1.5 text-ink-2">
@@ -803,7 +803,7 @@ export default function DayClosingPage() {
                   disabled={page >= Math.ceil((closings.data?.total ?? 0) / 20)}
                   onClick={() => setPage(page + 1)}
                   aria-label="Next page"
-                  className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/10 hover:bg-paper disabled:opacity-40"
+                  className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/20 hover:bg-paper disabled:opacity-40"
                 >
                   <ChevronRightIcon size={13} />
                 </button>

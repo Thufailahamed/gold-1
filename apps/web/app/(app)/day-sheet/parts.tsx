@@ -129,11 +129,11 @@ const STATUS: Record<RowStatus, { label: string; cls: string }> = {
   MISMATCH: { label: "Mismatch", cls: "bg-rose-500/12 text-rose-800 ring-rose-500/25" },
   MISSING_IN_SYSTEM: { label: "Not in system", cls: "bg-amber-500/14 text-amber-900 ring-amber-500/30" },
   ACCEPTED: { label: "Accepted", cls: "bg-sky-500/12 text-sky-800 ring-sky-500/25" },
-  EMPTY: { label: "Empty", cls: "bg-ink/[0.05] text-ink-4 ring-ink/10" },
+  EMPTY: { label: "Empty", cls: "bg-ink/[0.05] text-ink-4 ring-ink/20" },
 };
 
 export function StatusChip({ status, stale }: { status: RowStatus | null; stale?: boolean }) {
-  if (!status) return <span className="inline-flex h-5 items-center rounded-full bg-ink/[0.05] px-2 text-[10px] font-semibold text-ink-4 ring-1 ring-inset ring-ink/10">New</span>;
+  if (!status) return <span className="inline-flex h-5 items-center rounded-full bg-ink/[0.05] px-2 text-[10px] font-semibold text-ink-4 ring-1 ring-inset ring-ink/20">New</span>;
   const s = STATUS[status];
   return (
     <span className={cn("inline-flex h-5 items-center whitespace-nowrap rounded-full px-2 text-[10px] font-semibold ring-1 ring-inset", s.cls, stale && "opacity-50")} title={stale ? "Save to re-check" : undefined}>
@@ -221,7 +221,7 @@ export function SheetGrid({
             const savedRow = !r.id.startsWith("new-");
             return (
               <Fragment key={r.id}>
-                <tr className={cn("border-t border-ink/[0.06] align-top", tone)}>
+                <tr className={cn("border-t border-ink/20 align-top", tone)}>
                   <td className="pt-2 text-center text-[11px] font-semibold text-ink-4">{i + 1}</td>
                   <td className="pt-1.5">
                     <StatusChip status={status} stale={dirty} />
@@ -336,7 +336,7 @@ export function ActionBtn({ children, onClick, primary }: { children: React.Reac
       onClick={onClick}
       className={cn(
         "h-6 rounded-md px-2 text-[11px] font-semibold transition-colors",
-        primary ? "bg-void text-gold-light hover:bg-void/90" : "bg-paper text-ink-2 ring-1 ring-inset ring-ink/15 hover:bg-bone"
+        primary ? "bg-void text-gold-light hover:bg-void/90" : "bg-paper text-ink-2 ring-1 ring-inset ring-ink/20 hover:bg-bone"
       )}
     >
       {children}
@@ -366,7 +366,7 @@ export function SystemTable({ rows, compact }: { rows: SystemRow[]; compact?: bo
           {rows.map((s, i) => {
             const l = systemAsSheetLine(s);
             return (
-              <tr key={s.ref} className="border-t border-ink/[0.06] align-top">
+              <tr key={s.ref} className="border-t border-ink/20 align-top">
                 <td className="py-1.5 text-center text-[11px] text-ink-4">{i + 1}</td>
                 <td className="py-1.5 pr-2 font-semibold text-ink-2">{s.href ? <Link href={s.href} className="hover:underline">{s.refNo}</Link> : s.refNo}</td>
                 <td className="py-1.5 pr-2">
@@ -423,7 +423,7 @@ export function TotalsCompare({ rec }: { rec: Reconciliation }) {
         {lines.map(([k, a, b, f]) => {
           const d = a - b;
           return (
-            <tr key={k} className="border-t border-ink/[0.06]">
+            <tr key={k} className="border-t border-ink/20">
               <td className="py-1.5 pl-2 text-ink-3">{k}</td>
               <td className="g-metric py-1.5 pr-2 text-right">{f(a)}</td>
               <td className="g-metric py-1.5 pr-2 text-right">{f(b)}</td>
@@ -494,7 +494,7 @@ export function LinkModal({
     <Modal title="Link to a transaction" kicker={`Line: ${row.name || row.refNo || "—"}`} onClose={onClose} footer={false} wide>
       <p className="mb-2 text-[12px] text-ink-4">Pick what this line on the paper is in the books. The line is then compared with that transaction only.</p>
       <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search bill no, name, phone…" className={cn(controlClass, "mb-2 w-full")} autoFocus />
-      <div className="max-h-[50vh] overflow-y-auto rounded-lg ring-1 ring-inset ring-ink/10 scrollbar-thin">
+      <div className="max-h-[50vh] overflow-y-auto rounded-lg ring-1 ring-inset ring-ink/20 scrollbar-thin">
         {list.length === 0 ? <p className="p-4 text-[12px] text-ink-4">Nothing in the books for this day matches.</p> : null}
         {list.map((s) => {
           const l = systemAsSheetLine(s);
@@ -504,7 +504,7 @@ export function LinkModal({
               type="button"
               disabled={pending}
               onClick={() => onLink(s.ref)}
-              className={cn("flex w-full items-start gap-3 border-b border-ink/[0.06] px-3 py-2 text-left text-[12px] hover:bg-gold-pale/40", row.linkedRef === s.ref && "bg-gold-pale/60")}
+              className={cn("flex w-full items-start gap-3 border-b border-ink/20 px-3 py-2 text-left text-[12px] hover:bg-gold-pale/40", row.linkedRef === s.ref && "bg-gold-pale/60")}
             >
               <span className="min-w-0 flex-1">
                 <b className="text-ink">
@@ -645,7 +645,7 @@ export function RecordModal({
               onClick={() => setKind(o.key)}
               className={cn(
                 "rounded-lg px-3 py-2 text-left ring-1 ring-inset transition-colors",
-                kind === o.key ? "bg-void text-paper ring-void" : "bg-paper text-ink ring-ink/12 hover:bg-bone"
+                kind === o.key ? "bg-void text-paper ring-void" : "bg-paper text-ink ring-ink/20 hover:bg-bone"
               )}
             >
               <span className="flex items-center gap-1.5 font-semibold">

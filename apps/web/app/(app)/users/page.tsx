@@ -128,7 +128,7 @@ export default function UsersPage() {
 
       <div className="grid gap-4 xl:grid-cols-12">
         <Card className="xl:col-span-9">
-          <div className="flex flex-wrap items-center gap-2 border-b border-ink/[0.06] px-4 py-2.5">
+          <div className="flex flex-wrap items-center gap-2 border-b border-ink/20 px-4 py-2.5">
             <div className="relative w-full max-w-xs">
               <SearchIcon size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-5" />
               <input
@@ -193,7 +193,7 @@ export default function UsersPage() {
                           <span
                             className={cn(
                               "inline-flex items-center gap-1.5 rounded-full px-2 py-px text-[10.5px] font-semibold ring-1 ring-inset",
-                              r.is_active ? "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25" : "bg-ink/[0.04] text-ink-5 ring-ink/10"
+                              r.is_active ? "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25" : "bg-ink/[0.04] text-ink-5 ring-ink/20"
                             )}
                           >
                             <span className={cn("size-1.5 rounded-full", r.is_active ? "bg-emerald-500" : "bg-ink/30")} />
@@ -205,7 +205,7 @@ export default function UsersPage() {
                             <span className="flex items-center justify-end gap-1">
                               <button
                                 onClick={() => setEditId(r.id)}
-                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/10 transition-colors hover:bg-bone hover:text-ink"
+                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/20 transition-colors hover:bg-bone hover:text-ink"
                               >
                                 <EditIcon size={11} />
                                 Edit
@@ -229,7 +229,7 @@ export default function UsersPage() {
               </table>
             </div>
           )}
-          <div className="flex items-center justify-between gap-2 border-t border-ink/[0.06] bg-bone/40 px-4 py-2 text-[11px] text-ink-4">
+          <div className="flex items-center justify-between gap-2 border-t border-ink/20 bg-bone/40 px-4 py-2 text-[11px] text-ink-4">
             <span>
               <span className="g-metric text-ink-2">{count(allRows.length)}</span> of <span className="g-metric text-ink-2">{count(total)}</span> accounts
             </span>
@@ -239,7 +239,7 @@ export default function UsersPage() {
                 disabled={page <= 1}
                 onClick={() => setPage(page - 1)}
                 aria-label="Previous page"
-                className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/10 hover:bg-paper disabled:opacity-40"
+                className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/20 hover:bg-paper disabled:opacity-40"
               >
                 <ChevronRightIcon size={13} className="rotate-180" />
               </button>
@@ -251,7 +251,7 @@ export default function UsersPage() {
                 disabled={page >= pages}
                 onClick={() => setPage(page + 1)}
                 aria-label="Next page"
-                className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/10 hover:bg-paper disabled:opacity-40"
+                className="flex size-7 items-center justify-center rounded-md ring-1 ring-inset ring-ink/20 hover:bg-paper disabled:opacity-40"
               >
                 <ChevronRightIcon size={13} />
               </button>
@@ -278,7 +278,7 @@ export default function UsersPage() {
                 ))}
               </ul>
             )}
-            <p className="border-t border-ink/[0.06] px-4 py-2 text-[10.5px] text-ink-5">
+            <p className="border-t border-ink/20 px-4 py-2 text-[10.5px] text-ink-5">
               {canApprove ? "You can change roles." : "Changing a role needs users:approve."}
             </p>
           </Card>
@@ -553,7 +553,7 @@ function DetailDrawer({ id, onClose }: { id: string; onClose: () => void }) {
           ) : (
             <ul className="space-y-2 text-sm">
               {(activity.data?.rows ?? []).map((a) => (
-                <li key={a.id} className="relative rounded-xl bg-bone/60 py-2 pl-4 pr-3 ring-1 ring-inset ring-ink/[0.06]">
+                <li key={a.id} className="relative rounded-xl bg-bone/60 py-2 pl-4 pr-3 ring-1 ring-inset ring-ink/20">
                   <span className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-gold" aria-hidden />
                   <div className="flex items-center justify-between gap-2">
                     <Pill tone="neutral" className="font-mono normal-case tracking-normal">

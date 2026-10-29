@@ -10,7 +10,7 @@ export * from "@/components/console-kit";
 
 export const BATCH_STATUSES = ["DRAFT", "LOCKED", "MELTED", "APPROVED", "VOID"] as const;
 export const BATCH_META: Record<string, { label: string; hint: string; dot: string; chip: string }> = {
-  DRAFT: { label: "Draft", hint: "Collecting old gold", dot: "bg-gold-light", chip: "bg-ink/[0.05] text-ink-3 ring-ink/10" },
+  DRAFT: { label: "Draft", hint: "Collecting old gold", dot: "bg-gold-light", chip: "bg-ink/[0.05] text-ink-3 ring-ink/20" },
   LOCKED: { label: "Locked", hint: "Ready for the furnace", dot: "bg-amber-400", chip: "bg-amber-500/10 text-amber-800 ring-amber-500/25" },
   MELTED: { label: "Melted", hint: "Awaiting assay approval", dot: "bg-gold", chip: "bg-gold/15 text-gold-deep ring-gold/35" },
   APPROVED: { label: "Approved", hint: "Output in the vault", dot: "bg-emerald-500", chip: "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25" },
@@ -18,7 +18,7 @@ export const BATCH_META: Record<string, { label: string; hint: string; dot: stri
 };
 
 export function StatusChip({ status, className }: { status: string; className?: string }) {
-  const m = BATCH_META[status] ?? { label: status, dot: "bg-ink/30", chip: "bg-ink/[0.05] text-ink-3 ring-ink/10" };
+  const m = BATCH_META[status] ?? { label: status, dot: "bg-ink/30", chip: "bg-ink/[0.05] text-ink-3 ring-ink/20" };
   return (
     <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-px text-[10.5px] font-semibold ring-1 ring-inset", m.chip, className)}>
       <span className={cn("size-1.5 rounded-full", m.dot)} />
@@ -41,7 +41,7 @@ export function DirectionGlyph({ type }: { type: string }) {
         "flex size-6 shrink-0 items-center justify-center rounded-md text-[11px] font-bold ring-1 ring-inset",
         dir === "in" && "bg-emerald-50 text-emerald-700 ring-emerald-200",
         dir === "out" && "bg-rose-50 text-rose-700 ring-rose-200",
-        dir === "move" && "bg-bone text-ink-4 ring-ink/[0.08]"
+        dir === "move" && "bg-bone text-ink-4 ring-ink/20"
       )}
       aria-label={dir === "in" ? "In" : dir === "out" ? "Out" : "Internal"}
     >

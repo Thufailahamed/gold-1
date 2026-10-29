@@ -30,7 +30,7 @@ const longDate = () =>
   new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
 const surface =
-  "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]";
+  "shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_2px_rgba(16,32,27,0.04),0_22px_44px_-32px_rgba(16,32,27,0.35)]";
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
   return (
@@ -84,7 +84,7 @@ export function HeadLink({ href, children }: { href: string; children: ReactNode
 
 export function Empty({ icon: Icon, title, desc }: { icon: IconCmp; title: string; desc: string }) {
   return (
-    <div className="relative flex flex-col items-center justify-center overflow-hidden rounded-2xl border border-dashed border-ink/[0.12] bg-gradient-to-b from-bone/70 to-paper px-6 py-10 text-center">
+    <div className="relative flex flex-col items-center justify-center overflow-hidden rounded-2xl border border-dashed border-ink/20 bg-gradient-to-b from-bone/70 to-paper px-6 py-10 text-center">
       <div aria-hidden className="pointer-events-none absolute -top-16 left-1/2 size-48 -translate-x-1/2 rounded-full bg-gold/10 blur-[60px]" />
       <span className="relative mb-3 flex size-11 items-center justify-center rounded-xl bg-void text-gold-light shadow-[0_10px_20px_-12px_rgba(6,42,34,0.8)]">
         <Icon size={18} />
@@ -172,7 +172,7 @@ export function ModuleCard({
       <p className="relative mt-1 text-xs leading-relaxed text-ink-4">{description}</p>
 
       <div className="relative mt-auto pt-6">
-        <div className="flex items-end justify-between gap-3 rounded-2xl bg-bone/70 px-3.5 py-3 ring-1 ring-ink/[0.05] transition-colors group-hover:bg-gold-pale/60">
+        <div className="flex items-end justify-between gap-3 rounded-2xl bg-bone/70 px-3.5 py-3 ring-1 ring-ink/20 transition-colors group-hover:bg-gold-pale/60">
           <div className="min-w-0">
             {loading ? (
               <Skeleton className="h-7 w-16" />
@@ -189,7 +189,7 @@ export function ModuleCard({
             )}
             <span className="mt-1.5 block truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-4">{metricLabel}</span>
           </div>
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-paper px-3 py-1.5 text-xs font-medium text-ink-3 ring-1 ring-ink/[0.08] transition-all group-hover:bg-void group-hover:text-paper group-hover:ring-transparent">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-paper px-3 py-1.5 text-xs font-medium text-ink-3 ring-1 ring-ink/20 transition-all group-hover:bg-void group-hover:text-paper group-hover:ring-transparent">
             {cta}
             <ArrowRightIcon size={12} className="transition-transform group-hover:translate-x-0.5" />
           </span>
@@ -241,7 +241,7 @@ export function Shortcut({
       </div>
       <h3 className="mt-4 font-sans text-[15px] font-semibold tracking-normal text-ink transition-colors group-hover:text-gold-deep">{title}</h3>
       <p className="mt-0.5 line-clamp-1 text-xs text-ink-4">{desc}</p>
-      <div className="mt-4 flex items-baseline gap-2 rounded-xl bg-bone/70 px-3 py-2.5 ring-1 ring-ink/[0.05] transition-colors group-hover:bg-gold-pale/60">
+      <div className="mt-4 flex items-baseline gap-2 rounded-xl bg-bone/70 px-3 py-2.5 ring-1 ring-ink/20 transition-colors group-hover:bg-gold-pale/60">
         {loading ? (
           <Skeleton className="h-6 w-12" />
         ) : (
@@ -303,7 +303,7 @@ export function StatusBoard({
             : null}
         </div>
       </div>
-      <ol className={cn("mt-5 grid gap-px border-t border-ink/[0.06] bg-ink/[0.06]", cols)}>
+      <ol className={cn("mt-5 grid gap-px border-t border-ink/20 bg-ink/[0.06]", cols)}>
         {states.map((s, i) => (
           <li key={s.status} className="bg-paper">
             <Link href={href(s.status)} className="group flex h-full items-center gap-4 px-5 py-4 transition-colors hover:bg-gold-pale/50">

@@ -306,7 +306,7 @@ function CountRow({ r }: { r: CountListRow }) {
         <span
           className={cn(
             "inline-flex h-6 items-center gap-1 rounded-md px-2 text-[11px] font-semibold transition-colors",
-            open ? "bg-void text-paper" : "text-ink-3 ring-1 ring-inset ring-ink/10 group-hover:bg-void group-hover:text-paper group-hover:ring-0"
+            open ? "bg-void text-paper" : "text-ink-3 ring-1 ring-inset ring-ink/20 group-hover:bg-void group-hover:text-paper group-hover:ring-0"
           )}
         >
           {open ? "Continue" : "View"}
@@ -391,7 +391,7 @@ function StartCountDialog({ onClose }: { onClose: () => void }) {
         aria-modal="true"
         aria-labelledby="start-count-title"
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg animate-pop-in rounded-[20px] bg-paper shadow-5 ring-1 ring-ink/[0.06]"
+        className="w-full max-w-lg animate-pop-in rounded-[20px] bg-paper shadow-5 ring-1 ring-ink/20"
       >
         {/* Header */}
         <div className="relative overflow-hidden rounded-t-[20px] bg-void px-5 py-4 text-paper">
@@ -458,7 +458,7 @@ function StartCountDialog({ onClose }: { onClose: () => void }) {
                       "relative flex flex-col items-start gap-1.5 rounded-xl p-3 text-left ring-1 transition-all duration-200 ease-brand",
                       on
                         ? "bg-void text-paper shadow-[0_14px_28px_-16px_rgba(6,42,34,0.9)] ring-gold/40"
-                        : "bg-paper text-ink ring-ink/10 hover:-translate-y-px hover:bg-gold-pale/40 hover:ring-gold-dark/30"
+                        : "bg-paper text-ink ring-ink/20 hover:-translate-y-px hover:bg-gold-pale/40 hover:ring-gold-dark/30"
                     )}
                   >
                     <span
@@ -477,7 +477,7 @@ function StartCountDialog({ onClose }: { onClose: () => void }) {
                       aria-hidden
                       className={cn(
                         "absolute right-3 top-3 size-3.5 rounded-full ring-2 transition-colors",
-                        on ? "bg-gold ring-gold/30" : "bg-paper ring-ink/15"
+                        on ? "bg-gold ring-gold/30" : "bg-paper ring-ink/20"
                       )}
                     />
                   </button>
@@ -512,7 +512,7 @@ function StartCountDialog({ onClose }: { onClose: () => void }) {
                   onChange={(e) => setLocation(e.target.value)}
                   placeholder="Showcase A"
                   autoComplete="off"
-                  className="h-10 w-full rounded-xl bg-paper pl-10 pr-3.5 text-sm text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow placeholder:text-ink-5 hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]"
+                  className="h-10 w-full rounded-xl bg-paper pl-10 pr-3.5 text-sm text-ink shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow placeholder:text-ink-5 hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]"
                 />
               </span>
               <span className="mt-1.5 block text-xs text-ink-4">Exactly as recorded on the pieces, e.g. Showcase A</span>
@@ -527,7 +527,7 @@ function StartCountDialog({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Footer */}
-        <div className="flex flex-col-reverse gap-3 rounded-b-[20px] border-t border-ink/[0.06] bg-bone/50 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col-reverse gap-3 rounded-b-[20px] border-t border-ink/20 bg-bone/50 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="truncate text-xs text-ink-4">
             {ready ? (
               <>

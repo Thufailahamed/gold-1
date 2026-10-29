@@ -2,6 +2,7 @@ import { shopR2 } from "../services/shopStorage";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import {
+  buyInOldGoldSchema,
   createOldGoldSchema,
   PERMISSIONS,
   purchaseOldGoldSchema,
@@ -14,7 +15,7 @@ import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
 import { businessDateFor, tzOffsetMinutes } from "../services/busdate";
 import { assertBranchAccess, branchScope, inScope } from "../services/branchAccess";
-import { addFiles, assertCanAddFiles, convertItem, customerOldgold, findByBarcode, getItem, intakeItem, listItems, oldGoldCategories, oldgoldBreakdown, oldgoldSummary, pendingList, purchaseItem, recordTest, releaseItem, valuateItem, voidItem } from "../services/oldgold";
+import { addFiles, assertCanAddFiles, buyInItem, convertItem, customerOldgold, findByBarcode, getItem, intakeItem, listItems, stockOnHand, oldGoldCategories, oldgoldBreakdown, oldgoldSummary, pendingList, purchaseItem, recordTest, releaseItem, valuateItem, voidItem } from "../services/oldgold";
 import { pagination, serviceError } from "./http";
 import { getShopDb } from "../platform/resolve";
 
@@ -75,6 +76,20 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     try {
       await assertBranchAccess(getShopDb(c), c.get("userId"), c.get("permissions"), parsed.data.branchId);
       const data = await intakeItem(getShopDb(c), parsed.data, c.get("userId"));
+      return c.json({ success: true, data }, 201);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  // A customer's piece taken straight into stock: no testing, paid for at the counter.
+  .post("/buy-in", requirePerm(PERMISSIONS.OLDGOLD_CREATE), requirePerm(PERMISSIONS.OLDGOLD_EDIT), async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = buyInOldGoldSchema.safeParse(body);
+    if (!parsed.success)
+      return c.json({ success: false, error: { code: "VALIDATION", message: "Invalid buy-in data" } }, 400);
+    try {
+      await assertBranchAccess(getShopDb(c), c.get("userId"), c.get("permissions"), parsed.data.branchId);
+      const data = await buyInItem(getShopDb(c), parsed.data, c.get("userId"));
       return c.json({ success: true, data }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -322,6 +337,15 @@ export const oldgold = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       const { from, to } = await dayBounds(getShopDb(c), c.req.query("period") ?? "all");
       const data = await oldgoldBreakdown(getShopDb(c), { from, to, branchId, scope, groupBy: parsed.data.groupBy });
       return c.json({ success: true, data }, 200);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  .get("/reports/stock", requirePerm(PERMISSIONS.OLDGOLD_VIEW), async (c) => {
+    try {
+      const branchId = c.req.query("branchId") || undefined;
+      const scope = await readScope(c, branchId);
+      return c.json({ success: true, data: await stockOnHand(getShopDb(c), branchId, scope) }, 200);
     } catch (err) {
       return serviceError(c, err);
     }

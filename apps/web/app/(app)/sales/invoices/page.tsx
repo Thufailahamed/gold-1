@@ -184,7 +184,7 @@ export default function SalesInvoicesPage() {
             </label>
           }
         />
-        <div className="-mx-px overflow-x-auto border-b border-ink/[0.06] px-4 py-2 scrollbar-thin">
+        <div className="-mx-px overflow-x-auto border-b border-ink/20 px-4 py-2 scrollbar-thin">
           <FilterPills
             value={fStatus}
             onChange={setFilter}
@@ -289,7 +289,7 @@ export default function SalesInvoicesPage() {
                             onClick={(e) => e.stopPropagation()}
                             title={`Print ${r.number}`}
                             aria-label={`Print ${r.number}`}
-                            className="flex size-6 items-center justify-center rounded-md text-ink-4 ring-1 ring-inset ring-ink/10 transition-colors hover:bg-gold-pale hover:text-gold-deep"
+                            className="flex size-6 items-center justify-center rounded-md text-ink-4 ring-1 ring-inset ring-ink/20 transition-colors hover:bg-gold-pale hover:text-gold-deep"
                           >
                             <PrinterIcon size={12} />
                           </Link>
@@ -305,7 +305,7 @@ export default function SalesInvoicesPage() {
         )}
 
         {rows.length > 0 ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink/[0.06] bg-bone/40 px-4 py-2 text-[11.5px] text-ink-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink/20 bg-bone/40 px-4 py-2 text-[11.5px] text-ink-4">
             <span>
               Showing{" "}
               <span className="g-metric font-medium text-ink">
@@ -319,7 +319,7 @@ export default function SalesInvoicesPage() {
                 type="button"
                 disabled={page <= 1}
                 onClick={() => setPage(page - 1)}
-                className="inline-flex h-7 items-center gap-1 rounded-lg px-2.5 font-medium text-ink ring-1 ring-inset ring-ink/10 hover:bg-void hover:text-paper disabled:pointer-events-none disabled:opacity-40"
+                className="inline-flex h-7 items-center gap-1 rounded-lg px-2.5 font-medium text-ink ring-1 ring-inset ring-ink/20 hover:bg-void hover:text-paper disabled:pointer-events-none disabled:opacity-40"
               >
                 <ArrowLeftIcon size={11} /> Prev
               </button>
@@ -330,7 +330,7 @@ export default function SalesInvoicesPage() {
                 type="button"
                 disabled={rows.length < PAGE_SIZE}
                 onClick={() => setPage(page + 1)}
-                className="inline-flex h-7 items-center gap-1 rounded-lg px-2.5 font-medium text-ink ring-1 ring-inset ring-ink/10 hover:bg-void hover:text-paper disabled:pointer-events-none disabled:opacity-40"
+                className="inline-flex h-7 items-center gap-1 rounded-lg px-2.5 font-medium text-ink ring-1 ring-inset ring-ink/20 hover:bg-void hover:text-paper disabled:pointer-events-none disabled:opacity-40"
               >
                 Next <ArrowRightIcon size={11} />
               </button>

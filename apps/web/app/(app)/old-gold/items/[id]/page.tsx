@@ -337,7 +337,7 @@ export default function OldGoldDetailPage({ params }: { params: Promise<{ id: st
                     <span className="g-metric">{Math.round(paidShare * 100)}% paid</span>
                   </p>
                 </div>
-                <dl className="mt-2 divide-y divide-ink/[0.05] border-t border-ink/[0.06] text-[12.5px]">
+                <dl className="mt-2 divide-y divide-ink/[0.05] border-t border-ink/20 text-[12.5px]">
                   {row("Value", fmt(purchase.value_cents))}
                   {row("Paid", fmt(purchase.paid_cents), "text-emerald-700")}
                   {row("Owed to customer", fmt(owed), owed > 0 ? "text-amber-700" : "text-ink")}

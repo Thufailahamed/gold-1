@@ -78,7 +78,7 @@ const REFUND_METHODS = [
 ] as const;
 
 const inputCls =
-  "h-11 w-full rounded-xl bg-paper px-3.5 text-sm text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]";
+  "h-11 w-full rounded-xl bg-paper px-3.5 text-sm text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)]";
 
 const td = "px-2 py-1.5";
 
@@ -333,7 +333,7 @@ export default function SaleDetailPage({ params }: { params: Promise<{ id: strin
                     })}
                   </tbody>
                   <tfoot className="bg-bone/70">
-                    <tr className="border-t border-ink/10 text-[12px] font-semibold">
+                    <tr className="border-t border-ink/20 text-[12px] font-semibold">
                       <td colSpan={3} className="py-1.5 pl-4 text-[9.5px] uppercase tracking-[0.14em] text-gold-dark">
                         Total · {items.length} pieces
                       </td>
@@ -432,7 +432,7 @@ export default function SaleDetailPage({ params }: { params: Promise<{ id: strin
                       <tr key={j.id} className={tr}>
                         <td className="py-1.5 pl-4 pr-2">
                           <span className="flex items-center gap-2">
-                            <span className="g-metric rounded bg-bone px-1.5 py-px text-[10.5px] text-ink-3 ring-1 ring-ink/[0.06]">{j.account_code}</span>
+                            <span className="g-metric rounded bg-bone px-1.5 py-px text-[10.5px] text-ink-3 ring-1 ring-ink/20">{j.account_code}</span>
                             <span className="truncate text-ink-2">{j.account_name ?? ""}</span>
                             {j.memo && !j.memo.startsWith("Sale ") ? <span className="truncate text-[11px] text-ink-4">· {j.memo}</span> : null}
                           </span>
@@ -443,7 +443,7 @@ export default function SaleDetailPage({ params }: { params: Promise<{ id: strin
                     ))}
                   </tbody>
                   <tfoot className="bg-bone/70">
-                    <tr className="border-t border-ink/10 text-[12px] font-semibold">
+                    <tr className="border-t border-ink/20 text-[12px] font-semibold">
                       <td className="py-1.5 pl-4 text-[9.5px] uppercase tracking-[0.14em] text-gold-dark">Totals</td>
                       <td className="g-metric px-2 py-1.5 text-right text-ink">{fmt(debit)}</td>
                       <td className="g-metric py-1.5 pl-2 pr-4 text-right text-ink">{fmt(credit)}</td>
@@ -546,7 +546,7 @@ export default function SaleDetailPage({ params }: { params: Promise<{ id: strin
               </ul>
             )}
             {invoice.notes ? (
-              <div className="flex items-start gap-2 border-t border-ink/[0.06] bg-gold-pale/40 px-4 py-2 text-[12px] text-ink-2">
+              <div className="flex items-start gap-2 border-t border-ink/20 bg-gold-pale/40 px-4 py-2 text-[12px] text-ink-2">
                 <FileTextIcon size={12} className="mt-0.5 shrink-0 text-gold-deep" />
                 <span>{invoice.notes}</span>
               </div>
@@ -675,7 +675,7 @@ function ReturnDialog({
         aria-modal="true"
         aria-labelledby="return-title"
         onClick={(e) => e.stopPropagation()}
-        className="my-auto flex w-full max-w-xl animate-pop-in flex-col rounded-[24px] bg-paper shadow-5 ring-1 ring-ink/[0.06]"
+        className="my-auto flex w-full max-w-xl animate-pop-in flex-col rounded-[24px] bg-paper shadow-5 ring-1 ring-ink/20"
       >
         {/* Header */}
         <div className="relative shrink-0 overflow-hidden rounded-t-[24px] bg-void px-6 pb-5 pt-6 text-paper">
@@ -721,7 +721,7 @@ function ReturnDialog({
                       "relative flex items-center gap-2.5 rounded-2xl p-3 text-left ring-1 transition-all duration-200 ease-brand",
                       on
                         ? "bg-void text-paper shadow-[0_14px_28px_-16px_rgba(6,42,34,0.9)] ring-gold/40"
-                        : "bg-paper text-ink ring-ink/10 hover:-translate-y-px hover:bg-gold-pale/40 hover:ring-gold-dark/30"
+                        : "bg-paper text-ink ring-ink/20 hover:-translate-y-px hover:bg-gold-pale/40 hover:ring-gold-dark/30"
                     )}
                   >
                     <span
@@ -766,7 +766,7 @@ function ReturnDialog({
                   autoComplete="off"
                   className={cn(inputCls, "pl-10 pr-12 font-mono placeholder:font-sans")}
                 />
-                <kbd className="pointer-events-none absolute right-3 top-1/2 flex h-6 min-w-6 -translate-y-1/2 items-center justify-center rounded-md bg-paper px-1.5 font-mono text-[11px] text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_0_rgba(16,32,27,0.08)]">
+                <kbd className="pointer-events-none absolute right-3 top-1/2 flex h-6 min-w-6 -translate-y-1/2 items-center justify-center rounded-md bg-paper px-1.5 font-mono text-[11px] text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_0_rgba(16,32,27,0.08)]">
                   ⏎
                 </kbd>
               </div>
@@ -782,7 +782,7 @@ function ReturnDialog({
                         onClick={() => setSelected((s) => (on ? s.filter((x) => x !== it.id) : [...s, it.id]))}
                         className={cn(
                           "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left ring-1 transition-all duration-200",
-                          on ? "bg-gold-pale/70 ring-gold-dark/35" : "bg-paper ring-ink/[0.08] hover:bg-bone/60 hover:ring-ink/15"
+                          on ? "bg-gold-pale/70 ring-gold-dark/35" : "bg-paper ring-ink/20 hover:bg-bone/60 hover:ring-ink/20"
                         )}
                       >
                         <span
@@ -808,11 +808,11 @@ function ReturnDialog({
               </ul>
             </div>
           ) : (
-            <div className="rounded-2xl bg-bone/60 p-3.5 ring-1 ring-ink/[0.06]">
+            <div className="rounded-2xl bg-bone/60 p-3.5 ring-1 ring-ink/20">
               <p className="text-xs font-medium text-ink-3">Returns every remaining piece:</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {returnable.map((it) => (
-                  <span key={it.id} className="rounded-md bg-paper px-1.5 py-0.5 font-mono text-[11px] text-ink-2 ring-1 ring-ink/[0.08]">
+                  <span key={it.id} className="rounded-md bg-paper px-1.5 py-0.5 font-mono text-[11px] text-ink-2 ring-1 ring-ink/20">
                     {it.barcode}
                   </span>
                 ))}
@@ -849,7 +849,7 @@ function ReturnDialog({
                       "inline-flex h-10 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-medium ring-1 transition-all duration-200",
                       on
                         ? "bg-void text-paper ring-gold/40 shadow-[0_10px_20px_-12px_rgba(6,42,34,0.8)]"
-                        : "bg-paper text-ink-3 ring-ink/10 hover:-translate-y-px hover:bg-gold-pale/40 hover:text-ink"
+                        : "bg-paper text-ink-3 ring-ink/20 hover:-translate-y-px hover:bg-gold-pale/40 hover:text-ink"
                     )}
                   >
                     <span className={on ? "text-gold-light" : "text-ink-5"}>{m.icon}</span>
@@ -894,7 +894,7 @@ function ReturnDialog({
         </div>
 
         {/* Footer */}
-        <div className="flex shrink-0 flex-col-reverse gap-3 rounded-b-[24px] border-t border-ink/[0.06] bg-bone/50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex shrink-0 flex-col-reverse gap-3 rounded-b-[24px] border-t border-ink/20 bg-bone/50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-ink-4">
             {pieces.length > 0 ? (
               <>

@@ -75,7 +75,7 @@ const LIVE: ReadonlyArray<RepairStatus> = ["RECEIVED", "IN_PROGRESS", "QC", "REA
 const REPAIR_TYPES = ["Resize", "Solder", "Polish", "Stone setting", "Clasp replacement", "Re-plating", "Chain repair"];
 
 const inputCls =
-  "h-11 w-full rounded-xl bg-paper px-3.5 text-sm text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)] aria-[invalid=true]:shadow-[inset_0_0_0_1px_#e11d48,0_0_0_4px_rgba(225,29,72,0.12)]";
+  "h-11 w-full rounded-xl bg-paper px-3.5 text-sm text-ink placeholder:text-ink-5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_1px_2px_rgba(16,32,27,0.04)] transition-shadow hover:shadow-[inset_0_0_0_1px_rgba(16,32,27,0.26)] focus:outline-none focus:shadow-[inset_0_0_0_1px_#10201b,0_0_0_4px_rgba(205,168,83,0.24)] aria-[invalid=true]:shadow-[inset_0_0_0_1px_#e11d48,0_0_0_4px_rgba(225,29,72,0.12)]";
 
 const ageDays = (ms: number) => Math.max(0, Math.floor((Date.now() - ms) / 86_400_000));
 
@@ -207,7 +207,7 @@ export default function RepairsPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
         {/* No overflow clip here: the branch dropdown opens below the header. */}
-        <section className="relative flex min-w-0 flex-col rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07),0_18px_40px_-30px_rgba(16,32,27,0.28)]">
+        <section className="relative flex min-w-0 flex-col rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2),0_18px_40px_-30px_rgba(16,32,27,0.28)]">
           <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
           <CardHead
             icon={HammerIcon}
@@ -248,7 +248,7 @@ export default function RepairsPage() {
               </>
             }
           />
-          <div className="overflow-x-auto border-b border-ink/[0.06] px-4 py-2 scrollbar-thin">
+          <div className="overflow-x-auto border-b border-ink/20 px-4 py-2 scrollbar-thin">
             <FilterPills
               value={status}
               onChange={pick}
@@ -345,7 +345,7 @@ export default function RepairsPage() {
                             <span
                               className={cn(
                                 "g-metric inline-flex rounded-full px-2 py-px text-[10.5px] font-semibold ring-1 ring-inset",
-                                age >= 14 ? "bg-rose-500/10 text-rose-800 ring-rose-500/25" : age >= 7 ? "bg-amber-500/10 text-amber-800 ring-amber-500/25" : "bg-ink/[0.04] text-ink-3 ring-ink/10"
+                                age >= 14 ? "bg-rose-500/10 text-rose-800 ring-rose-500/25" : age >= 7 ? "bg-amber-500/10 text-amber-800 ring-amber-500/25" : "bg-ink/[0.04] text-ink-3 ring-ink/20"
                               )}
                             >
                               {age === 0 ? "Today" : `${age}d`}
@@ -372,7 +372,7 @@ export default function RepairsPage() {
           )}
 
           {pageRows.length > 0 ? (
-            <div className="mt-auto flex flex-wrap items-center justify-between gap-2 rounded-b-2xl border-t border-ink/[0.06] bg-bone/40 px-4 py-2 text-[11.5px] text-ink-4">
+            <div className="mt-auto flex flex-wrap items-center justify-between gap-2 rounded-b-2xl border-t border-ink/20 bg-bone/40 px-4 py-2 text-[11.5px] text-ink-4">
               <span>
                 Showing{" "}
                 <span className="g-metric font-medium text-ink">
@@ -455,7 +455,7 @@ export default function RepairsPage() {
 }
 
 const pagerBtn =
-  "inline-flex h-7 items-center gap-1 rounded-lg px-2.5 font-medium text-ink ring-1 ring-inset ring-ink/10 hover:bg-void hover:text-paper disabled:pointer-events-none disabled:opacity-40";
+  "inline-flex h-7 items-center gap-1 rounded-lg px-2.5 font-medium text-ink ring-1 ring-inset ring-ink/20 hover:bg-void hover:text-paper disabled:pointer-events-none disabled:opacity-40";
 
 /* ---------------------------------------------------------------- New repair */
 
@@ -554,7 +554,7 @@ function NewRepairDialog({ me, onClose }: { me: MeData | undefined; onClose: () 
         aria-modal="true"
         aria-labelledby="new-repair-title"
         onClick={(e) => e.stopPropagation()}
-        className="my-auto flex w-full max-w-2xl animate-pop-in flex-col rounded-[24px] bg-paper shadow-5 ring-1 ring-ink/[0.06]"
+        className="my-auto flex w-full max-w-2xl animate-pop-in flex-col rounded-[24px] bg-paper shadow-5 ring-1 ring-ink/20"
       >
         {/* Header */}
         <div className="relative overflow-hidden rounded-t-[24px] bg-void px-6 pb-5 pt-6 text-paper">
@@ -628,7 +628,7 @@ function NewRepairDialog({ me, onClose }: { me: MeData | undefined; onClose: () 
                   ) : null}
                 </div>
                 {customerSearch.trim() ? (
-                  <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto rounded-2xl bg-bone/50 p-1.5 ring-1 ring-ink/[0.06] scrollbar-thin">
+                  <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto rounded-2xl bg-bone/50 p-1.5 ring-1 ring-ink/20 scrollbar-thin">
                     {customerRows.length === 0 && !customers.isFetching ? (
                       <li className="px-3 py-4 text-center text-xs text-ink-4">No customers match “{customerSearch.trim()}”</li>
                     ) : null}
@@ -637,7 +637,7 @@ function NewRepairDialog({ me, onClose }: { me: MeData | undefined; onClose: () 
                         <button
                           type="button"
                           onClick={() => setCustomer(c)}
-                          className="flex w-full items-center gap-3 rounded-xl bg-paper px-3 py-2 text-left ring-1 ring-ink/[0.06] transition-all hover:-translate-y-px hover:ring-gold-dark/30"
+                          className="flex w-full items-center gap-3 rounded-xl bg-paper px-3 py-2 text-left ring-1 ring-ink/20 transition-all hover:-translate-y-px hover:ring-gold-dark/30"
                         >
                           <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-gold-soft to-gold-pale text-[10px] font-semibold text-gold-deep ring-1 ring-gold-dark/15">
                             {c.name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")}
@@ -701,7 +701,7 @@ function NewRepairDialog({ me, onClose }: { me: MeData | undefined; onClose: () 
                         "inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-medium ring-1 transition-all duration-200",
                         on
                           ? "bg-gradient-to-b from-gold-light to-gold text-void ring-gold/40 shadow-[0_6px_14px_-8px_rgba(205,168,83,0.8)]"
-                          : "bg-paper text-ink-3 ring-ink/10 hover:-translate-y-px hover:bg-gold-pale/50 hover:text-ink"
+                          : "bg-paper text-ink-3 ring-ink/20 hover:-translate-y-px hover:bg-gold-pale/50 hover:text-ink"
                       )}
                     >
                       {on ? <CheckIcon size={10} /> : null}
@@ -801,7 +801,7 @@ function NewRepairDialog({ me, onClose }: { me: MeData | undefined; onClose: () 
         </div>
 
         {/* Footer */}
-        <div className="flex flex-col-reverse gap-3 rounded-b-[24px] border-t border-ink/[0.06] bg-bone/50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col-reverse gap-3 rounded-b-[24px] border-t border-ink/20 bg-bone/50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-ink-4">
             {ready ? (
               <span className="inline-flex items-center gap-1.5 font-medium text-emerald-700">

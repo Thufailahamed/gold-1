@@ -24,13 +24,13 @@ export const INVOICE_META: Record<string, Meta> = {
   PAID: { label: "Paid", hint: "Settled in full", dot: "bg-emerald-500", chip: "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25" },
   PARTIAL: { label: "Part-paid", hint: "Balance on credit", dot: "bg-gold", chip: "bg-gold/15 text-gold-deep ring-gold/35" },
   UNPAID: { label: "Unpaid", hint: "Nothing received yet", dot: "bg-amber-400", chip: "bg-amber-500/10 text-amber-800 ring-amber-500/25" },
-  VOID: { label: "Void", hint: "Cancelled", dot: "bg-ink/30", chip: "bg-ink/[0.04] text-ink-5 ring-ink/10" },
+  VOID: { label: "Void", hint: "Cancelled", dot: "bg-ink/30", chip: "bg-ink/[0.04] text-ink-5 ring-ink/20" },
 };
 
 /** Returns are refunds or exchanges; status follows the approval flow. */
 export const RETURN_META: Record<string, Meta> = {
   FULL: { label: "Full", hint: "Whole sale returned", dot: "bg-gold-dark", chip: "bg-gold/15 text-gold-deep ring-gold/35" },
-  PARTIAL: { label: "Partial", hint: "Some pieces back", dot: "bg-ink/40", chip: "bg-ink/[0.05] text-ink-3 ring-ink/10" },
+  PARTIAL: { label: "Partial", hint: "Some pieces back", dot: "bg-ink/40", chip: "bg-ink/[0.05] text-ink-3 ring-ink/20" },
   REFUND: { label: "Refund", hint: "Money back", dot: "bg-sky-500", chip: "bg-sky-500/10 text-sky-800 ring-sky-500/25" },
   EXCHANGE: { label: "Exchange", hint: "Swapped for another piece", dot: "bg-sky-500", chip: "bg-sky-500/10 text-sky-800 ring-sky-500/25" },
   COMPLETED: { label: "Completed", hint: "", dot: "bg-emerald-500", chip: "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25" },
@@ -38,14 +38,14 @@ export const RETURN_META: Record<string, Meta> = {
   PENDING: { label: "Pending", hint: "", dot: "bg-amber-400", chip: "bg-amber-500/10 text-amber-800 ring-amber-500/25" },
   APPROVED: { label: "Approved", hint: "", dot: "bg-emerald-500", chip: "bg-emerald-600/10 text-emerald-800 ring-emerald-600/25" },
   REJECTED: { label: "Rejected", hint: "", dot: "bg-rose-500", chip: "bg-rose-500/10 text-rose-800 ring-rose-500/25" },
-  VOID: { label: "Void", hint: "", dot: "bg-ink/30", chip: "bg-ink/[0.04] text-ink-5 ring-ink/10" },
+  VOID: { label: "Void", hint: "", dot: "bg-ink/30", chip: "bg-ink/[0.04] text-ink-5 ring-ink/20" },
 };
 
 function Chip({ meta, status, className }: { meta: Record<string, Meta>; status: string; className?: string }) {
   const m = meta[status] ?? {
     label: status.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase()),
     dot: "bg-ink/30",
-    chip: "bg-ink/[0.05] text-ink-3 ring-ink/10",
+    chip: "bg-ink/[0.05] text-ink-3 ring-ink/20",
   };
   return (
     <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-px text-[10.5px] font-semibold ring-1 ring-inset", m.chip, className)}>

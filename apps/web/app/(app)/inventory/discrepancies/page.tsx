@@ -288,7 +288,7 @@ export default function DiscrepanciesPage() {
                 type="button"
                 onClick={() => void exportCsv(tab)}
                 disabled={downloading || !branchId}
-                className="inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[11.5px] font-medium text-ink-3 ring-1 ring-inset ring-ink/10 transition-colors hover:bg-void hover:text-paper hover:ring-0 disabled:pointer-events-none disabled:opacity-50"
+                className="inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[11.5px] font-medium text-ink-3 ring-1 ring-inset ring-ink/20 transition-colors hover:bg-void hover:text-paper hover:ring-0 disabled:pointer-events-none disabled:opacity-50"
               >
                 {downloading ? <span className="size-3 animate-spin rounded-full border-2 border-gold/30 border-t-gold" /> : <FileDownIcon size={12} className="text-gold-dark" />}
                 {downloading ? "Preparing…" : "CSV"}
@@ -488,7 +488,7 @@ function TabBody({
     <div id="discrepancy-detail" className="min-w-0 scroll-mt-24">
       <Card>
         <CardHead icon={TABS[tab].icon} title={TABS[tab].label} sub={description} action={actions} />
-        <div className="-mx-px overflow-x-auto border-b border-ink/[0.06] px-4 py-2 scrollbar-thin">
+        <div className="-mx-px overflow-x-auto border-b border-ink/20 px-4 py-2 scrollbar-thin">
           <FilterPills<TabKey>
             value={tab}
             onChange={onTab}
@@ -506,7 +506,7 @@ function TabBody({
         ) : null}
         <div className="max-h-[36rem] overflow-auto scrollbar-thin">{body}</div>
         {data && data.rows.length > 0 ? (
-          <div className="border-t border-ink/[0.06] bg-bone/40 px-4 py-1.5 text-[11px] text-ink-4">
+          <div className="border-t border-ink/20 bg-bone/40 px-4 py-1.5 text-[11px] text-ink-4">
             <span className="g-metric font-semibold text-ink">{n(data.rows.length)}</span> {data.rows.length === 1 ? "row" : "rows"}
           </div>
         ) : null}
@@ -516,10 +516,10 @@ function TabBody({
 }
 
 const codeLink =
-  "inline-flex items-center gap-1 rounded-md bg-bone px-1.5 py-px font-mono text-[10.5px] font-medium text-ink-3 ring-1 ring-ink/[0.06] transition-colors hover:bg-void hover:text-gold-light hover:ring-transparent";
+  "inline-flex items-center gap-1 rounded-md bg-bone px-1.5 py-px font-mono text-[10.5px] font-medium text-ink-3 ring-1 ring-ink/20 transition-colors hover:bg-void hover:text-gold-light hover:ring-transparent";
 
 function AgeBadge({ days }: { days: number }) {
-  const tone = days >= 14 ? "bg-rose-500/10 text-rose-800 ring-rose-500/25" : days >= 7 ? "bg-amber-500/10 text-amber-800 ring-amber-500/25" : "bg-ink/[0.04] text-ink-3 ring-ink/10";
+  const tone = days >= 14 ? "bg-rose-500/10 text-rose-800 ring-rose-500/25" : days >= 7 ? "bg-amber-500/10 text-amber-800 ring-amber-500/25" : "bg-ink/[0.04] text-ink-3 ring-ink/20";
   return (
     <span className={cn("g-metric inline-flex rounded-full px-2 py-px text-[10.5px] font-semibold ring-1 ring-inset", tone)}>
       {n(days)}d
@@ -531,7 +531,7 @@ function StatusTag({ tone, children }: { tone: "amber" | "rose" | "neutral"; chi
   const cls = {
     amber: ["bg-amber-500/10 text-amber-800 ring-amber-500/25", "bg-amber-400"],
     rose: ["bg-rose-500/10 text-rose-800 ring-rose-500/25", "bg-rose-500"],
-    neutral: ["bg-ink/[0.04] text-ink-4 ring-ink/10", "bg-ink/30"],
+    neutral: ["bg-ink/[0.04] text-ink-4 ring-ink/20", "bg-ink/30"],
   }[tone];
   return (
     <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-px text-[10.5px] font-semibold ring-1 ring-inset", cls[0])}>
@@ -610,7 +610,7 @@ function ScanTable({ rows }: { rows: ScanRow[] }) {
             </td>
             <td className="whitespace-nowrap px-2 py-1.5 text-[11.5px] text-ink-3">{stamp(r.scannedAt)}</td>
             <td className="py-1.5 pl-2 pr-4">
-              <span className="rounded bg-bone px-1.5 py-px font-mono text-[10.5px] text-ink-4 ring-1 ring-ink/[0.06]">{r.scannedBy}</span>
+              <span className="rounded bg-bone px-1.5 py-px font-mono text-[10.5px] text-ink-4 ring-1 ring-ink/20">{r.scannedBy}</span>
             </td>
           </tr>
         ))}

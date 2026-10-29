@@ -383,7 +383,7 @@ export default function InventoryPage() {
           />
           <MovementTable rows={moves.data?.rows ?? []} loading={moves.isLoading} branchName={branchName} />
           {moves.data && moves.data.total > 0 ? (
-            <div className="border-t border-ink/[0.06] bg-bone/40 px-4 py-2 text-xs text-ink-4">
+            <div className="border-t border-ink/20 bg-bone/40 px-4 py-2 text-xs text-ink-4">
               <Pager page={mPage} onChange={setMPage} pageSize={25} count={moves.data.rows.length} total={moves.data.total} unit="movements" />
             </div>
           ) : null}
@@ -401,7 +401,7 @@ export default function InventoryPage() {
 function CategoryPills({ items, total, value, onChange }: { items: CategoryCount[]; total: number; value: string; onChange: (id: string) => void }) {
   const options: CategoryCount[] = [{ id: "", name: "All", pieces: total }, ...items];
   return (
-    <div role="group" aria-label="Filter by category" className="flex gap-1.5 overflow-x-auto border-b border-ink/[0.06] px-4 py-2.5 scrollbar-thin">
+    <div role="group" aria-label="Filter by category" className="flex gap-1.5 overflow-x-auto border-b border-ink/20 px-4 py-2.5 scrollbar-thin">
       {options.map((c) => {
         const on = value === c.id;
         return (
@@ -548,7 +548,7 @@ function StockTable({
           })}
         </tbody>
         <tfoot className="sticky bottom-0 bg-bone/90 backdrop-blur">
-          <tr className="border-t border-ink/10 text-[12px] font-semibold">
+          <tr className="border-t border-ink/20 text-[12px] font-semibold">
             <td className="py-1.5 pl-4 pr-2 text-[9.5px] uppercase tracking-[0.14em] text-gold-dark">Total</td>
             <td className="g-metric px-2 py-1.5 text-right text-ink">{totals.pieces.toLocaleString("en-US")}</td>
             <td className="g-metric px-2 py-1.5 text-right text-ink">{g(totals.net)}</td>
@@ -592,7 +592,7 @@ function MovementTable({ rows, loading, branchName }: { rows: Movement[]; loadin
                 </span>
               </td>
               <td className="px-2 py-1.5">
-                <span className="rounded bg-bone px-1.5 py-px font-mono text-[10.5px] text-ink-2 ring-1 ring-ink/[0.06]">{m.barcode ?? m.product_id.slice(0, 8)}</span>
+                <span className="rounded bg-bone px-1.5 py-px font-mono text-[10.5px] text-ink-2 ring-1 ring-ink/20">{m.barcode ?? m.product_id.slice(0, 8)}</span>
               </td>
               <td className="px-2 py-1.5">
                 <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-ink-4">

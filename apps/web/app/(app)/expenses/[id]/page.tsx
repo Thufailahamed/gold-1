@@ -196,7 +196,7 @@ export default function ExpenseDetailPage() {
                 <img
                   src={assetUrl(`/api/v1/expenses/${exp.id}/receipt`)}
                   alt="Expense receipt"
-                  className="max-h-64 w-full rounded-lg border border-ink/10 object-contain"
+                  className="max-h-64 w-full rounded-lg border border-ink/20 object-contain"
                 />
               ) : (
                 <p className="text-sm text-ink-4">

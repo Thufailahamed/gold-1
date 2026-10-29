@@ -109,7 +109,7 @@ function BillingInner() {
             {Object.entries(cycle)
               .filter(([k]) => k !== "errors")
               .map(([k, v]) => (
-                <div key={k} className="rounded-xl bg-bone/70 p-3 ring-1 ring-ink/[0.06]">
+                <div key={k} className="rounded-xl bg-bone/70 p-3 ring-1 ring-ink/20">
                   <dt className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-4">{titleCase(k.replace(/([A-Z])/g, " $1"))}</dt>
                   <dd className="g-metric mt-1 text-xl">{String(v)}</dd>
                 </div>
@@ -277,7 +277,7 @@ function ReceiptsTab() {
                         act.mutate({ id: r.id, action: "reject", body: { reason } });
                       }}
                     >
-                      <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for the shop" className="min-w-0 flex-1 rounded-lg px-2 py-1 text-xs ring-1 ring-ink/15" />
+                      <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for the shop" className="min-w-0 flex-1 rounded-lg px-2 py-1 text-xs ring-1 ring-ink/20" />
                       <button type="submit" disabled={act.isPending || reason.trim().length < 3} className="text-xs font-medium text-rose-700 underline underline-offset-2">
                         Send
                       </button>

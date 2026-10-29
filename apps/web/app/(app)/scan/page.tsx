@@ -131,7 +131,7 @@ export default function ScanPage() {
           {lookup.data ? (
             <ScanResult data={lookup.data} />
           ) : !lookup.isLoading && !lookup.isError ? (
-            <div className="relative flex flex-col items-center overflow-hidden rounded-2xl border border-dashed border-ink/15 bg-paper/70 px-6 py-12 text-center">
+            <div className="relative flex flex-col items-center overflow-hidden rounded-2xl border border-dashed border-ink/20 bg-paper/70 px-6 py-12 text-center">
               <div className="pointer-events-none absolute -top-24 left-1/2 size-64 -translate-x-1/2 rounded-full bg-gold/10 blur-[70px]" />
               <span className="relative flex size-12 items-center justify-center rounded-2xl bg-void text-gold-light shadow-4">
                 <span className="absolute inset-0 animate-pulse-soft rounded-2xl ring-4 ring-gold/20" />
@@ -214,7 +214,7 @@ function ScanResult({ data }: { data: Lookup }) {
             <span
               className={cn(
                 "inline-flex items-center rounded-full px-2 py-px text-[10.5px] font-semibold ring-1 ring-inset",
-                STATUS_CHIP[product.status] ?? "bg-ink/[0.05] text-ink-3 ring-ink/10"
+                STATUS_CHIP[product.status] ?? "bg-ink/[0.05] text-ink-3 ring-ink/20"
               )}
             >
               {humanize(product.status)}
@@ -225,12 +225,12 @@ function ScanResult({ data }: { data: Lookup }) {
             {product.barcode} · {product.sku}
           </div>
         </div>
-        <Link href={`/products/${product.id}`} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11.5px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/10 hover:bg-bone hover:text-ink">
+        <Link href={`/products/${product.id}`} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11.5px] font-semibold text-ink-3 ring-1 ring-inset ring-ink/20 hover:bg-bone hover:text-ink">
           Open detail
           <ArrowRightIcon size={11} />
         </Link>
       </div>
-      <div className="grid grid-cols-2 gap-px border-y border-ink/[0.06] bg-ink/[0.05] sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-px border-y border-ink/20 bg-ink/[0.05] sm:grid-cols-3">
         <div className="bg-paper px-4 py-2.5">
           <div className="flex items-center gap-1 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">
             <BanknoteIcon size={10} />

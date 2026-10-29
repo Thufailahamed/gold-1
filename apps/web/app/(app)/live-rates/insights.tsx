@@ -198,7 +198,7 @@ export function GoldMoves({ conv, display, purity, className }: { conv: (lkr: nu
         right={<Segmented ariaLabel="Range" value={range} onChange={setRange} items={[{ key: "1d", label: "24H" }, { key: "7d", label: "7D" }]} />}
       />
       <div className="grid flex-1 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <div className="grid grid-cols-2 gap-px border-b border-ink/[0.06] bg-ink/[0.05] lg:grid-cols-1 lg:border-b-0 lg:border-r">
+        <div className="grid grid-cols-2 gap-px border-b border-ink/20 bg-ink/[0.05] lg:grid-cols-1 lg:border-b-0 lg:border-r">
           {hist.isLoading
             ? [0, 1, 2, 3].map((i) => (
                 <div key={i} className="bg-paper p-3">
@@ -416,7 +416,7 @@ export function KaratBars({
           </ResponsiveContainer>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-px border-t border-ink/[0.06] bg-ink/[0.05] sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-px border-t border-ink/20 bg-ink/[0.05] sm:grid-cols-4">
         {rows.map((r) => (
           <div key={r.karat} className="bg-paper px-3 py-2">
             <div className="flex items-center gap-1.5 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">

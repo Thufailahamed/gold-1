@@ -209,7 +209,7 @@ function StatementsView() {
                   ["Gross margin", (pnl.data.grossProfitCents / pnl.data.totalRevenueCents) * 100],
                   ["Net margin", (pnl.data.netProfitCents / pnl.data.totalRevenueCents) * 100],
                 ].map(([k, v]) => (
-                  <span key={k} className="inline-flex items-baseline gap-2 rounded-full bg-bone px-3 py-1 text-xs text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
+                  <span key={k} className="inline-flex items-baseline gap-2 rounded-full bg-bone px-3 py-1 text-xs text-ink-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
                     {k}
                     <span className={cn("g-metric font-semibold", Number(v) < 0 ? "text-rose-700" : "text-ink")}>{Number(v).toFixed(1)}%</span>
                   </span>
@@ -277,7 +277,7 @@ function Section({
         </div>
       ) : null}
       {lines.length === 0 ? (
-        <div className="border-b border-ink/[0.05] py-2 text-sm text-ink-5">Nothing in this period</div>
+        <div className="border-b border-ink/20 py-2 text-sm text-ink-5">Nothing in this period</div>
       ) : (
         lines.map((l) => (
           <div key={l.code} className="group flex items-baseline gap-3 rounded-lg py-2 pl-3 pr-1 text-sm transition-colors hover:bg-gold-pale/70">
@@ -285,12 +285,12 @@ function Section({
               <span className="mr-2 font-mono text-[11px] text-ink-5 group-hover:text-gold-dark">{l.code}</span>
               {l.name}
             </span>
-            <span className="min-w-6 flex-1 -translate-y-1 border-b border-dotted border-ink/15" aria-hidden />
+            <span className="min-w-6 flex-1 -translate-y-1 border-b border-dotted border-ink/20" aria-hidden />
             <span className={cn("g-metric shrink-0", l.cents < 0 ? "text-rose-700" : "text-ink-2")}>{negative ? `(${lkr(l.cents)})` : lkrSigned(l.cents)}</span>
           </div>
         ))
       )}
-      <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-ink/[0.1] px-1 pt-2.5 text-sm font-semibold text-ink">
+      <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-ink/20 px-1 pt-2.5 text-sm font-semibold text-ink">
         <span>{totalLabel}</span>
         <span className="g-metric">{negative ? `(${lkr(total)})` : lkrSigned(total)}</span>
       </div>

@@ -71,7 +71,7 @@ function Seg<K extends string>({ value, onChange, items }: { value: K; onChange:
           onClick={() => onChange(it.key)}
           className={cn(
             "h-7 rounded-md px-2.5 text-[11.5px] font-semibold transition-colors",
-            value === it.key ? "bg-paper text-ink shadow-[0_1px_2px_rgba(16,32,27,0.12),inset_0_0_0_1px_rgba(16,32,27,0.06)]" : "text-ink-4 hover:text-ink"
+            value === it.key ? "bg-paper text-ink shadow-[0_1px_2px_rgba(16,32,27,0.12),inset_0_0_0_1px_rgba(16,32,27,0.2)]" : "text-ink-4 hover:text-ink"
           )}
         >
           {it.label}
@@ -341,10 +341,10 @@ export default function MarketAssetPage({ params }: { params: Promise<{ symbol: 
           </section>
 
           {/* market stats */}
-          <section className="overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
+          <section className="overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
             {a?.quote ? (
               <>
-                <div className="border-b border-ink/[0.06]">
+                <div className="border-b border-ink/20">
                   <Stat
                     k={`${a.instrument.venue} futures`}
                     v={`$${money(a.quote.price * purity)}`}
@@ -361,7 +361,7 @@ export default function MarketAssetPage({ params }: { params: Promise<{ symbol: 
                     }
                   />
                 </div>
-                <div className="grid grid-cols-2 divide-x divide-ink/[0.06] border-b border-ink/[0.06]">
+                <div className="grid grid-cols-2 divide-x divide-ink/[0.06] border-b border-ink/20">
                   <Stat
                     k="Volume (session)"
                     v={compact(a.quote.volume)}
@@ -373,7 +373,7 @@ export default function MarketAssetPage({ params }: { params: Promise<{ symbol: 
                   />
                   <Stat k="Avg volume 30d" v={compact(a.quote.avgVolume30d)} sub={<span className="text-ink-5">{a.kind === "crypto" ? "USD" : "contracts"}</span>} />
                 </div>
-                <div className="grid grid-cols-2 divide-x divide-ink/[0.06] border-b border-ink/[0.06]">
+                <div className="grid grid-cols-2 divide-x divide-ink/[0.06] border-b border-ink/20">
                   <Stat k="Previous close" v={a.quote.prevClose != null ? money(a.quote.prevClose * purity) : "—"} />
                   <Stat
                     k="Change today"
@@ -394,7 +394,7 @@ export default function MarketAssetPage({ params }: { params: Promise<{ symbol: 
                     <RangeBar lo={a.quote.low52} hi={a.quote.high52} value={a.quote.price} />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 divide-x divide-ink/[0.06] border-t border-ink/[0.06]">
+                <div className="grid grid-cols-2 divide-x divide-ink/[0.06] border-t border-ink/20">
                   <Stat
                     k="All-time high"
                     v={a.stats.athUsd != null ? `$${money(a.stats.athUsd * purity)}` : "—"}
@@ -402,7 +402,7 @@ export default function MarketAssetPage({ params }: { params: Promise<{ symbol: 
                   />
                   <Stat k="From ATH" v={signedPct(a.stats.fromAthPct, 1)} tone={pctTone(a.stats.fromAthPct)} sub={<span className="text-ink-5">since peak</span>} />
                 </div>
-                <div className="grid grid-cols-2 divide-x divide-ink/[0.06] border-t border-ink/[0.06]">
+                <div className="grid grid-cols-2 divide-x divide-ink/[0.06] border-t border-ink/20">
                   <Stat
                     k="All-time low"
                     v={a.stats.atlUsd != null ? `$${money(a.stats.atlUsd * purity)}` : "—"}
@@ -422,7 +422,7 @@ export default function MarketAssetPage({ params }: { params: Promise<{ symbol: 
 
           {/* 52-week position, like a profile score */}
           {position52 != null ? (
-            <div className="flex items-center gap-3 rounded-xl bg-paper px-4 py-2.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
+            <div className="flex items-center gap-3 rounded-xl bg-paper px-4 py-2.5 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
               <span className="text-[11.5px] text-ink-3">52-week position</span>
               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink/[0.06]">
                 <div className="h-full rounded-full" style={{ width: `${Math.max(2, Math.min(100, position52))}%`, background: tone }} />
@@ -434,7 +434,7 @@ export default function MarketAssetPage({ params }: { params: Promise<{ symbol: 
           ) : null}
 
           {/* instrument & sources */}
-          <section className="overflow-hidden rounded-2xl bg-paper text-[12px] shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
+          <section className="overflow-hidden rounded-2xl bg-paper text-[12px] shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
             {a ? (
               <dl className="divide-y divide-ink/[0.05]">
                 <div className="flex items-center justify-between gap-2 px-4 py-2">
@@ -480,7 +480,7 @@ export default function MarketAssetPage({ params }: { params: Promise<{ symbol: 
                         target="_blank"
                         rel="noopener noreferrer"
                         title={s.what}
-                        className="inline-flex items-center gap-1 rounded-full bg-bone px-2.5 py-1 text-[11px] font-medium text-ink-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)] transition-colors hover:bg-gold-pale hover:text-ink"
+                        className="inline-flex items-center gap-1 rounded-full bg-bone px-2.5 py-1 text-[11px] font-medium text-ink-2 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] transition-colors hover:bg-gold-pale hover:text-ink"
                       >
                         {s.name}
                         <span className="text-ink-5">· {s.what}</span>
@@ -498,12 +498,12 @@ export default function MarketAssetPage({ params }: { params: Promise<{ symbol: 
           </section>
 
           {/* converter */}
-          <section className="overflow-hidden rounded-2xl bg-paper p-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.07)]">
+          <section className="overflow-hidden rounded-2xl bg-paper p-4 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)]">
             <div className="text-[12.5px] font-semibold text-ink">
               {meta.name}
               {isGold && purity < 1 ? ` ${lens}` : ""} converter
             </div>
-            <div className="mt-2 flex overflow-hidden rounded-lg shadow-[inset_0_0_0_1px_rgba(16,32,27,0.12)] focus-within:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.24)]">
+            <div className="mt-2 flex overflow-hidden rounded-lg shadow-[inset_0_0_0_1px_rgba(16,32,27,0.2)] focus-within:shadow-[inset_0_0_0_1px_#10201b,0_0_0_3px_rgba(205,168,83,0.24)]">
               <input
                 value={amount}
                 onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
@@ -514,7 +514,7 @@ export default function MarketAssetPage({ params }: { params: Promise<{ symbol: 
               <select
                 value={cu.key}
                 onChange={(e) => setUnit(e.target.value)}
-                className="h-9 border-l border-ink/10 bg-bone/60 px-2 text-[12px] font-medium text-ink-2 focus:outline-none"
+                className="h-9 border-l border-ink/20 bg-bone/60 px-2 text-[12px] font-medium text-ink-2 focus:outline-none"
                 aria-label="Unit"
               >
                 {convUnits.map((u) => (
@@ -569,7 +569,7 @@ export default function MarketAssetPage({ params }: { params: Promise<{ symbol: 
             title={`${meta.name} price chart`}
             sub={rangeStats ? `${measure.label} · ${RANGES.find((r) => r.key === range)?.label} change ${signedPct(rangeStats.pct)}` : measure.label}
           >
-            <div className="flex flex-wrap items-center gap-2 border-b border-ink/[0.06] px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2 border-b border-ink/20 px-3 py-2">
               <Seg value={measure.key} onChange={setMeasureKey} items={measures.map((m) => ({ key: m.key, label: m.label }))} />
               <Seg
                 value={chartKind}
@@ -599,7 +599,7 @@ export default function MarketAssetPage({ params }: { params: Promise<{ symbol: 
               <AssetChart candles={a?.candles ?? []} range={range} measure={measure} kind={chartKind} log={log} overlays={overlays} tone={tone} loading={q.isLoading} />
             </div>
             {rangeStats ? (
-              <div className="grid grid-cols-3 border-t border-ink/[0.06] sm:grid-cols-6">
+              <div className="grid grid-cols-3 border-t border-ink/20 sm:grid-cols-6">
                 {[
                   { k: "Open", v: money(rangeStats.open) },
                   { k: "High", v: money(rangeStats.hi), tone: "text-emerald-700" },
@@ -608,7 +608,7 @@ export default function MarketAssetPage({ params }: { params: Promise<{ symbol: 
                   { k: "Average", v: money(rangeStats.avg) },
                   { k: "From high", v: signedPct(rangeStats.fromHi), tone: pctTone(rangeStats.fromHi) },
                 ].map((s, i) => (
-                  <div key={s.k} className={cn("px-3 py-2", i > 0 && "border-l border-ink/[0.06]", i >= 3 && "border-t border-ink/[0.06] sm:border-t-0")}>
+                  <div key={s.k} className={cn("px-3 py-2", i > 0 && "border-l border-ink/20", i >= 3 && "border-t border-ink/20 sm:border-t-0")}>
                     <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-ink-5">{s.k}</div>
                     <div className={cn("g-metric mt-0.5 text-[13px] font-semibold", s.tone ?? "text-ink")}>{s.v}</div>
                   </div>
