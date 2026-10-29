@@ -102,9 +102,8 @@ function saleable(d: Lookup, branchId: string): { price: number } | { error: str
   if (p.status === "RESERVED") return { error: `${p.barcode} is held for ${p.reserved_customer_name ?? "another customer"} — release the hold first` };
   if (p.status !== "IN_STOCK") return { error: `${p.barcode} is ${p.status.replace(/_/g, " ").toLowerCase()}, not for sale` };
   if (branchId && p.branch_id !== branchId) return { error: `${p.barcode} belongs to another branch` };
-  if (p.cost_cents === null) return { error: `${p.barcode} has no book cost — set its cost before selling` };
-  const price = p.selling_price_cents ?? d.livePrice?.amount_cents;
-  if (price === undefined) return { error: `No gold rate for ${p.karat} — set today's rate first` };
+  // With no selling price and no live rate the piece goes on the cart at 0; the cashier types its price.
+  const price = p.selling_price_cents ?? d.livePrice?.amount_cents ?? 0;
   return { price };
 }
 
@@ -255,6 +254,7 @@ export default function ExchangePage() {
     Boolean(customer) &&
     Boolean(branchId) &&
     oldIds.length > 0 &&
+    cart.every((l) => l.priceCents > 0) &&
     cart.length > 0 &&
     total > 0 &&
     (diff > 0 ? paySum === diff && !needsBank && !needsCustomer : true) &&

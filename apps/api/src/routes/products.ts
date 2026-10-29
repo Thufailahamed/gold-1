@@ -14,7 +14,7 @@ import type { Env } from "../db/client";
 import { requireAuth, type AppVariables } from "../middleware/auth";
 import { requirePerm } from "../middleware/requirePerm";
 import { buildAuditStmt } from "../middleware/audit";
-import { buildLabelSvg } from "../services/label";
+import { buildLabelSvg, buildStickerSvg } from "../services/label";
 import {
   createProduct,
   createProductsBulk,
@@ -232,20 +232,25 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
                 rateEffectiveFrom: livePrice.rate_effective_from,
               }
             : null;
-      const svg = buildLabelSvg(
-        {
-          barcode: product.barcode,
-          name: product.category_name,
-          gross_weight: mgToG(product.gross_mg),
-          net_weight: mgToG(product.net_mg),
-          karat: product.karat,
-        },
-        tagPrice,
-        // Tags carry a QR beside the bars by default, so a phone camera or a
-        // 2D scanner can bill the piece; ?qr=0 prints the bars-only tag.
-        // ?price=0 leaves the retail price off a stock-only tag.
-        { qr: c.req.query("qr") !== "0", price: c.req.query("price") !== "0" }
-      );
+      const label = {
+        barcode: product.barcode,
+        name: product.category_name,
+        gross_weight: mgToG(product.gross_mg),
+        net_weight: mgToG(product.net_mg),
+        karat: product.karat,
+      };
+      // ?sticker=1 prints the two-box sticker: a QR box and a text box with the code and weights.
+      const svg =
+        c.req.query("sticker") === "1"
+          ? buildStickerSvg(label)
+          : buildLabelSvg(
+              label,
+              tagPrice,
+              // Tags carry a QR beside the bars by default, so a phone camera or a
+              // 2D scanner can bill the piece; ?qr=0 prints the bars-only tag.
+              // ?price=0 leaves the retail price off a stock-only tag.
+              { qr: c.req.query("qr") !== "0", price: c.req.query("price") !== "0" }
+            );
       c.header("Content-Type", "image/svg+xml");
       // Price moves with the rate; never serve a stale tag from cache.
       c.header("Cache-Control", "no-store");

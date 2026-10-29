@@ -78,6 +78,29 @@ export function buildLabelSvg(
 }
 
 /**
+ * The two-sided sticker, cut across the middle and pasted on the piece's tag:
+ * the top half carries the barcode bars, the bottom half the barcode number
+ * and the weights. Sized to sit eight to a row.
+ */
+export function buildStickerSvg(product: LabelProduct): string {
+  const bars = nested(
+    bwipjs.toSVG({ bcid: "code128", text: product.barcode, scale: 2, height: 12, paddingwidth: 4 }),
+    { x: 40, y: 14, w: 220, h: 46 }
+  );
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150" viewBox="0 0 300 150">` +
+    `<rect width="300" height="150" fill="#ffffff"/>` +
+    `<rect x="3" y="3" width="294" height="69" fill="none" stroke="#000" stroke-width="3"/>` +
+    `<rect x="3" y="78" width="294" height="69" fill="none" stroke="#000" stroke-width="3"/>` +
+    `<line x1="0" y1="75" x2="300" y2="75" stroke="#000" stroke-width="1" stroke-dasharray="4 3"/>` +
+    bars +
+    `<text x="150" y="102" text-anchor="middle" font-size="15" font-weight="bold" font-family="monospace" letter-spacing="1">${esc(product.barcode)}</text>` +
+    `<text x="150" y="130" text-anchor="middle" font-size="14" font-family="sans-serif">Gross ${product.gross_weight} g · Net ${product.net_weight} g</text>` +
+    `</svg>`
+  );
+}
+
+/**
  * A bare Code128 symbol for a document number (a sales invoice), so the
  * printed bill can be scanned back at the counter for a return.
  */

@@ -289,7 +289,7 @@ export default function BatchLabelsPage({
   }
 
   const labelSrc = (id: string) => {
-    const q = new URLSearchParams({ qr: "0", price: "0" });
+    const q = new URLSearchParams({ sticker: "1" });
     if (retry) q.set("retry", String(retry));
     return assetUrl(`/api/v1/products/${encodeURIComponent(id)}/label?${q.toString()}`);
   };

@@ -17,15 +17,22 @@ import type { ApiResponse } from "@goldos/shared";
 export const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? "https://goldos-api.thufailahamed627.workers.dev").replace(/\/+$/, "");
 
 const SESSION_KEY = "goldos.session";
+const TENANT_KEY = "goldos.tenant";
 const MUTATIONS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 
 let sessionId: string | null = null;
+let tenantSlug: string | null = null;
 let loaded = false;
 const unauthorizedListeners = new Set<() => void>();
 
-export async function loadSession(): Promise<string | null> {
-  if (!loaded) {
-    sessionId = await SecureStore.getItemAsync(SESSION_KEY).catch(() => null);
+export async function loadSession(force = false): Promise<string | null> {
+  if (!loaded || force) {
+    const [storedSession, storedTenant] = await Promise.all([
+      SecureStore.getItemAsync(SESSION_KEY).catch(() => null),
+      SecureStore.getItemAsync(TENANT_KEY).catch(() => null),
+    ]);
+    sessionId = storedSession;
+    tenantSlug = storedTenant;
     loaded = true;
   }
   return sessionId;
@@ -35,11 +42,35 @@ export function hasSession(): boolean {
   return !!sessionId;
 }
 
-async function saveSession(id: string | null) {
+export function getTenantSlug(): string | null {
+  return tenantSlug;
+}
+
+export async function setTenantSlug(slug: string | null): Promise<void> {
+  tenantSlug = slug ? slug.trim() : null;
+  if (tenantSlug) {
+    await SecureStore.setItemAsync(TENANT_KEY, tenantSlug).catch(() => undefined);
+  } else {
+    await SecureStore.deleteItemAsync(TENANT_KEY).catch(() => undefined);
+  }
+}
+
+async function saveSession(id: string | null, slug?: string | null) {
   sessionId = id;
   loaded = true;
-  if (id) await SecureStore.setItemAsync(SESSION_KEY, id).catch(() => undefined);
-  else await SecureStore.deleteItemAsync(SESSION_KEY).catch(() => undefined);
+  if (slug !== undefined) {
+    tenantSlug = slug ? slug.trim() : null;
+  }
+  await Promise.all([
+    id
+      ? SecureStore.setItemAsync(SESSION_KEY, id).catch(() => undefined)
+      : SecureStore.deleteItemAsync(SESSION_KEY).catch(() => undefined),
+    slug !== undefined
+      ? slug
+        ? SecureStore.setItemAsync(TENANT_KEY, slug.trim()).catch(() => undefined)
+        : SecureStore.deleteItemAsync(TENANT_KEY).catch(() => undefined)
+      : Promise.resolve(),
+  ]);
 }
 
 /** Called whenever the API says the session is gone; the session provider signs out. */
@@ -49,12 +80,16 @@ export function onUnauthorized(fn: () => void): () => void {
 }
 
 function authHeaders(): Record<string, string> {
-  if (!sessionId) return {};
-  return {
-    Cookie: `session=${sessionId}`,
-    Authorization: `Bearer ${sessionId}`,
-    "X-Session-Id": sessionId,
-  };
+  const headers: Record<string, string> = {};
+  if (sessionId) {
+    headers["Cookie"] = `session=${sessionId}${tenantSlug ? `; goldos_tenant=${tenantSlug}` : ""}`;
+    headers["Authorization"] = `Bearer ${sessionId}`;
+    headers["X-Session-Id"] = sessionId;
+  }
+  if (tenantSlug) {
+    headers["X-Shop-Slug"] = tenantSlug;
+  }
+  return headers;
 }
 
 /** Headers for an authenticated image (expo-image `source={{ uri, headers }}`). */
@@ -75,46 +110,66 @@ async function readBody<T>(res: Response): Promise<ApiResponse<T>> {
 }
 
 function captureSession(res: Response, jsonBody?: unknown) {
+  let newSessionId: string | null = null;
   // 1. Response header: x-session-id
   const xSession = res.headers.get("x-session-id");
   if (xSession) {
-    void saveSession(xSession);
-    return;
+    newSessionId = xSession;
   }
 
   // 2. Set-Cookie header if readable
-  const raw = res.headers.get("set-cookie");
-  if (raw) {
-    const m = raw.match(/(?:^|[;,]\s*)session=([^;,]*)/);
-    if (m && m[1]) {
-      void saveSession(m[1]);
-      return;
+  if (!newSessionId) {
+    const raw = res.headers.get("set-cookie");
+    if (raw) {
+      const m = raw.match(/(?:^|[;,]\s*)session=([^;,]*)/);
+      if (m && m[1]) {
+        newSessionId = m[1];
+      }
     }
   }
 
   // 3. getSetCookie method if available
-  const getSetCookie = (res.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie;
-  if (typeof getSetCookie === "function") {
-    try {
-      const cookies = getSetCookie.call(res.headers);
-      for (const cookie of cookies) {
-        const m = cookie.match(/(?:^|[;,]\s*)session=([^;,]*)/);
-        if (m && m[1]) {
-          void saveSession(m[1]);
-          return;
+  if (!newSessionId) {
+    const getSetCookie = (res.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie;
+    if (typeof getSetCookie === "function") {
+      try {
+        const cookies = getSetCookie.call(res.headers);
+        for (const cookie of cookies) {
+          const m = cookie.match(/(?:^|[;,]\s*)session=([^;,]*)/);
+          if (m && m[1]) {
+            newSessionId = m[1];
+            break;
+          }
         }
-      }
-    } catch {}
+      } catch {}
+    }
   }
 
   // 4. Response JSON data body: token, sessionId, session
+  let capturedSlug: string | undefined = undefined;
   if (jsonBody && typeof jsonBody === "object") {
-    const data = (jsonBody as { data?: { token?: string; sessionId?: string; session?: string } }).data;
-    const token = data?.token ?? data?.sessionId ?? data?.session;
-    if (token) {
-      void saveSession(token);
-      return;
+    const data = (jsonBody as { data?: { token?: string; sessionId?: string; session?: string; slug?: string; tenantSlug?: string; tenant?: { slug?: string } } }).data;
+    if (!newSessionId) {
+      const token = data?.token ?? data?.sessionId ?? data?.session;
+      if (token) newSessionId = token;
     }
+    const s = data?.slug ?? data?.tenantSlug ?? data?.tenant?.slug;
+    if (s && typeof s === "string") capturedSlug = s;
+  }
+
+  // 5. Tenant cookie from response headers if present
+  if (!capturedSlug) {
+    const raw = res.headers.get("set-cookie");
+    if (raw) {
+      const m = raw.match(/(?:^|[;,]\s*)goldos_tenant=([^;,]*)/);
+      if (m && m[1]) capturedSlug = m[1];
+    }
+  }
+
+  if (newSessionId) {
+    void saveSession(newSessionId, capturedSlug);
+  } else if (capturedSlug) {
+    void setTenantSlug(capturedSlug);
   }
 }
 
@@ -141,6 +196,16 @@ export function errorCode(err: unknown): string | undefined {
 
 /** A human message for any thrown value. */
 export function errorMessage(err: unknown, fallback = "Something went wrong"): string {
+  const code = (err as { code?: string } | null)?.code;
+  if (code === "TENANT_SUSPENDED") {
+    return "This workspace is suspended. Contact support to restore access.";
+  }
+  if (code === "PROVISIONING") {
+    return "Your shop is still being prepared. Try again in a minute.";
+  }
+  if (code === "UNAUTHORIZED") {
+    return "Invalid email, shop or password. Please try again.";
+  }
   if (err instanceof Error && err.message) {
     if (err.name === "CancelledError" || err.message === "CancelledError") {
       return "Sign in request was interrupted. Please try again.";
@@ -251,6 +316,7 @@ export type MeData = {
   user: { id: string; email: string; name: string };
   permissions: string[];
   branchIds: string[];
+  tenant?: { id: string; slug: string; name: string } | null;
   tzOffsetMinutes?: number;
 };
 
@@ -258,17 +324,55 @@ export type LoginData = {
   user: MeData["user"];
   token?: string;
   sessionId?: string;
+  slug?: string;
+  tenantSlug?: string;
+  tenant?: { id: string; slug: string; name: string } | null;
 };
 
-export async function login(email: string, password: string) {
+export type ShopLookupItem = { slug: string; name: string };
+
+/** Look up workspaces matching an email. */
+export async function lookupShops(email: string): Promise<ShopLookupItem[]> {
+  const res = await api<{ shops: ShopLookupItem[] }>("/api/v1/auth/lookup", {
+    method: "POST",
+    body: JSON.stringify({ email: email.trim().toLowerCase() }),
+  });
+  return res?.shops ?? [];
+}
+
+export async function login(email: string, password: string, explicitSlug?: string) {
   await clearSession();
+  let slug = explicitSlug?.trim();
+  if (!slug) {
+    try {
+      const shops = await lookupShops(email);
+      if (shops.length === 1 && shops[0]?.slug) {
+        slug = shops[0].slug;
+      }
+    } catch {
+      // Lookup is best-effort fallback
+    }
+  }
+
+  if (slug) {
+    tenantSlug = slug;
+  }
+
+  const payload = slug ? { email: email.trim(), password, slug } : { email: email.trim(), password };
+  const headers: Record<string, string> = {};
+  if (slug) {
+    headers["X-Shop-Slug"] = slug;
+  }
+
   const data = await api<LoginData>("/api/v1/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(payload),
+    headers,
   });
   const token = data?.token ?? data?.sessionId;
+  const finalSlug = slug ?? data?.slug ?? data?.tenantSlug ?? data?.tenant?.slug;
   if (token) {
-    await saveSession(token);
+    await saveSession(token, finalSlug);
   }
   return data;
 }
@@ -277,11 +381,17 @@ export async function logout(): Promise<void> {
   try {
     await api("/api/v1/auth/logout", { method: "POST" });
   } finally {
-    await saveSession(null);
+    await clearSession();
   }
 }
 
 /** Drops the stored session without calling the API (after a password change). */
 export async function clearSession(): Promise<void> {
-  await saveSession(null);
+  sessionId = null;
+  tenantSlug = null;
+  loaded = false;
+  await Promise.all([
+    SecureStore.deleteItemAsync(SESSION_KEY).catch(() => undefined),
+    SecureStore.deleteItemAsync(TENANT_KEY).catch(() => undefined),
+  ]);
 }

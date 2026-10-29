@@ -651,9 +651,6 @@ export default function BulkProductsPage() {
             <Field label="Making" optional hint="Per piece">
               <UnitInput unit="LKR" {...register("makingLkr")} />
             </Field>
-            <Field label="Rate / g" optional hint="Gold per gram · a row can type its own">
-              <UnitInput unit="LKR/g" {...register("ratePerGLkr")} />
-            </Field>
             <Field label="Cost" optional hint="Same for every piece · blank = rate × weight">
               <UnitInput unit="LKR" {...register("costLkr")} />
             </Field>
@@ -681,6 +678,16 @@ export default function BulkProductsPage() {
           done={filled.length > 0 && invalidCount === 0}
           required
         >
+          {/* Gold rate: applies to every piece; a row can type its own */}
+          <div className="mb-3 flex justify-end">
+            <label
+              title="Applies to every piece; a row can type its own rate"
+              className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-4"
+            >
+              Gold rate / g
+              <UnitInput unit="LKR/g" className="!w-40" {...register("ratePerGLkr")} />
+            </label>
+          </div>
           {/* Toolbar */}
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-4">Columns</span>

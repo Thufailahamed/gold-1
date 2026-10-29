@@ -64,6 +64,10 @@ function ageTone(days: number) {
 export default function CreditsPage() {
   const [tab, setTab] = useState<"bills" | "customers" | "log">("bills");
   const [q, setQ] = useState("");
+  // Customer filters. Two people can share a name, so name, address and phone each narrow the list.
+  const [nameQ, setNameQ] = useState("");
+  const [addressQ, setAddressQ] = useState("");
+  const [phoneQ, setPhoneQ] = useState("");
   const qc = useQueryClient();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [remind, setRemind] = useState<Target[] | null>(null);
@@ -86,13 +90,19 @@ export default function CreditsPage() {
   // is found even beyond the first page of results.
   const term = q.trim();
   const searchParam = term ? `&search=${encodeURIComponent(term)}` : "";
+  const customerFilters = { customerName: nameQ.trim(), customerAddress: addressQ.trim(), customerPhone: phoneQ.trim() };
+  const customerParam = Object.entries(customerFilters)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `&${k}=${encodeURIComponent(v)}`)
+    .join("");
+  const filtering = Boolean(term || customerParam);
   const unpaid = useQuery({
-    queryKey: ["credits", "UNPAID", term],
-    queryFn: () => api<Paged>(`/api/v1/sales/invoices?status=UNPAID&limit=100${searchParam}`),
+    queryKey: ["credits", "UNPAID", term, customerFilters],
+    queryFn: () => api<Paged>(`/api/v1/sales/invoices?status=UNPAID&limit=100${searchParam}${customerParam}`),
   });
   const partial = useQuery({
-    queryKey: ["credits", "PARTIAL", term],
-    queryFn: () => api<Paged>(`/api/v1/sales/invoices?status=PARTIAL&limit=100${searchParam}`),
+    queryKey: ["credits", "PARTIAL", term, customerFilters],
+    queryFn: () => api<Paged>(`/api/v1/sales/invoices?status=PARTIAL&limit=100${searchParam}${customerParam}`),
   });
   const loading = unpaid.isLoading || partial.isLoading;
   const error = (unpaid.error ?? partial.error) as Error | null;
@@ -173,6 +183,14 @@ export default function CreditsPage() {
         />
       </Toolbar>
 
+      {tab !== "log" ? (
+        <div className="grid gap-2 sm:grid-cols-3">
+          <SearchField value={nameQ} onChange={setNameQ} placeholder="Customer name" className="sm:max-w-none" />
+          <SearchField value={addressQ} onChange={setAddressQ} placeholder="Address" className="sm:max-w-none" />
+          <SearchField value={phoneQ} onChange={setPhoneQ} placeholder="Phone number" className="sm:max-w-none" />
+        </div>
+      ) : null}
+
       {tab === "log" ? (
         <TableCard
           title="SMS sent"
@@ -229,7 +247,11 @@ export default function CreditsPage() {
         ) : error ? (
           <EmptyBlock title="Could not load credits" description={error.message} />
         ) : shown.length === 0 ? (
-          <EmptyBlock icon={<UsersIcon size={22} />} title="No credits outstanding" description="When a customer pays only part of a bill, the rest appears here until it is collected." />
+          filtering ? (
+            <EmptyBlock icon={<UsersIcon size={22} />} title="No matching credits" description="Check the name, address or phone you entered, or clear the search boxes." />
+          ) : (
+            <EmptyBlock icon={<UsersIcon size={22} />} title="No credits outstanding" description="When a customer pays only part of a bill, the rest appears here until it is collected." />
+          )
         ) : tab === "bills" ? (
           <table className="g-table">
             <thead>

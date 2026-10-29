@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCodeSvg, buildLabelSvg } from "./label";
+import { buildCodeSvg, buildLabelSvg, buildStickerSvg } from "./label";
 
 describe("buildLabelSvg", () => {
   it("embeds barcode, name, and price", () => {
@@ -65,5 +65,21 @@ describe("buildCodeSvg", () => {
     const svg = buildCodeSvg("SINV-0042");
     expect(svg).toMatch(/^<svg[^>]*viewBox="[^"]+"/);
     expect(svg).toContain("<path");
+  });
+});
+
+describe("buildStickerSvg", () => {
+  it("splits into a barcode half on top and a number-and-weight half below, cut across the middle", () => {
+    const svg = buildStickerSvg({ barcode: "RING-AA-0003", name: "Ring", gross_weight: 5.2, net_weight: 5.0, karat: "22K" });
+    // Two boxes, stacked, with a cut line between them.
+    expect(svg.match(/<rect x="3" y="\d+" width="294" height="69"/g)?.length).toBe(2);
+    expect(svg).toContain('<line x1="0" y1="75" x2="300" y2="75"');
+    // Top half: the bars, scaled into the top box.
+    expect(svg).toContain('<svg x="40" y="14" width="220" height="46"');
+    // Bottom half: the code number and both weights.
+    expect(svg).toContain("RING-AA-0003");
+    expect(svg).toContain("Gross 5.2 g · Net 5 g");
+    // No QR code anywhere on the sticker.
+    expect(svg).not.toMatch(/<svg x="14" y="14"/);
   });
 });

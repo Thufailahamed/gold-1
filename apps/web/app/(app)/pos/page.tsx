@@ -199,8 +199,8 @@ function saleable(d: Lookup, branchId: string, customer: Customer | null): { pri
     return { error: `${p.barcode} is ${p.status.replace(/_/g, " ").toLowerCase()}, not for sale` };
   if (branchId && p.branch_id !== branchId) return { error: `${p.barcode} belongs to another branch` };
   // The price set when the piece was created; a piece without one falls back to the live rate.
-  const price = p.selling_price_cents !== null && p.selling_price_cents > 0 ? p.selling_price_cents : d.livePrice?.amount_cents;
-  if (price === undefined) return { error: `No gold rate for ${p.karat} — set today's rate first` };
+  // With neither, the piece goes on the cart at 0 and the cashier types its price.
+  const price = p.selling_price_cents !== null && p.selling_price_cents > 0 ? p.selling_price_cents : (d.livePrice?.amount_cents ?? 0);
   return { price };
 }
 
@@ -548,8 +548,12 @@ export default function PosPage() {
     credit.data.creditLimitCents > 0 &&
     credit.data.balanceCents + creditDue > credit.data.creditLimitCents;
 
+  // Pieces with no price yet sit on the cart at 0 until the cashier types one.
+  const unpriced = cart.filter((l) => l.priceCents <= 0);
+
   const canComplete =
     cart.length > 0 &&
+    unpriced.length === 0 &&
     paidSum + autoCredit === due &&
     total > 0 &&
     !exchangeBlocked &&
@@ -937,7 +941,7 @@ export default function PosPage() {
                           </span>
                         </span>
                         <span className="shrink-0 text-right num-tabular text-sm font-semibold text-ink">
-                          {r.price_cents !== null ? `${fmt(r.price_cents)}` : <span className="text-rose-600">No rate</span>}
+                          {r.price_cents !== null ? `${fmt(r.price_cents)}` : <span className="text-ink-4">Enter at till</span>}
                         </span>
                       </button>
                     </li>
@@ -1103,7 +1107,7 @@ export default function PosPage() {
                         l.priceCents > l.listPriceCents && "!text-emerald-700"
                       )}
                     />
-                    {l.priceCents !== l.listPriceCents ? (
+                    {l.priceCents !== l.listPriceCents && l.listPriceCents > 0 ? (
                       <button
                         type="button"
                         onClick={() => setLine(i, { priceCents: l.listPriceCents })}
@@ -1560,6 +1564,9 @@ export default function PosPage() {
               </p>
             ) : null}
             {needsCustomer && cart.length > 0 ? <p className="mt-1 text-xs text-rose-600">Select a customer to save this bill.</p> : null}
+            {unpriced.length > 0 ? (
+              <p className="mt-1 text-xs text-rose-600">Enter a price for {unpriced.map((l) => l.barcode).join(", ")}.</p>
+            ) : null}
             {needsBank ? <p className="mt-1 text-xs text-rose-600">Choose the bank account the payment went into.</p> : null}
             {hasExchange && exchange ? (
               <p className="mt-1 text-xs text-rose-600">An old-gold exchange cannot go on a return-exchange bill — clear one of them.</p>

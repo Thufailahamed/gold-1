@@ -41,6 +41,16 @@ export default function MoreScreen() {
       </Card>
 
       <Section title="Workspace">
+        {me?.tenant ? (
+          <Row
+            icon="store"
+            iconColor={c.gold}
+            title="Shop workspace"
+            subtitle={me.tenant.slug}
+            value={me.tenant.name}
+            chevron={false}
+          />
+        ) : null}
         <Row
           icon="building"
           iconColor={c.vault2}
@@ -147,7 +157,7 @@ function ChangePasswordSheet({ visible, onClose, onDone }: { visible: boolean; o
         <Field label="New password" kind="password" value={next} onChangeText={setNext} autoComplete="new-password" hint="At least 8 characters" />
         <Field label="Confirm new password" kind="password" value={confirmPw} onChangeText={setConfirmPw} error={mismatch ? "Passwords don't match" : null} />
         <Text variant="footnote" tone="secondary">
-          You'll be signed out on every device and asked to sign in again.
+          You will be signed out on every device and asked to sign in again.
         </Text>
       </FormStack>
     </Sheet>

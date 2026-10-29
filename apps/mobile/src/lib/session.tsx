@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import * as SecureStore from "expo-secure-store";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { hasPermission } from "@goldos/shared";
-import { api, clearSession, loadSession, login as apiLogin, logout as apiLogout, onUnauthorized, type MeData } from "./api";
+import { api, clearSession, getTenantSlug, loadSession, login as apiLogin, logout as apiLogout, onUnauthorized, setTenantSlug, type MeData } from "./api";
 import { setShopOffsetMinutes } from "./format";
 
 /**
@@ -30,10 +30,12 @@ type SessionState = {
   error: unknown;
   retry: () => void;
   me: MeData | null;
+  tenant: { id: string; slug: string; name: string } | null;
+  tenantSlug: string | null;
   perms: string[];
   can: (perm: string) => boolean;
   canAny: (perms: string[]) => boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string, slug?: string) => Promise<void>;
   signOut: () => Promise<void>;
   /** After a password change the server already ended the session. */
   forgetSession: () => Promise<void>;
@@ -47,6 +49,9 @@ export const meQueryKey = ["me"] as const;
 export const fetchMe = () =>
   api<MeData>("/api/v1/auth/me").then((m) => {
     setShopOffsetMinutes(m.tzOffsetMinutes);
+    if (m.tenant?.slug) {
+      void setTenantSlug(m.tenant.slug);
+    }
     return m;
   });
 
@@ -95,8 +100,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = useCallback(
-    async (email: string, password: string) => {
-      await apiLogin(email, password);
+    async (email: string, password: string, slug?: string) => {
+      await apiLogin(email, password, slug);
       const data = await fetchMe();
       qc.setQueryData(meQueryKey, data);
       setHasToken(true);
@@ -138,6 +143,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       error: me.error,
       retry: () => void me.refetch(),
       me: me.data ?? null,
+      tenant: me.data?.tenant ?? null,
+      tenantSlug: me.data?.tenant?.slug ?? getTenantSlug(),
       perms,
       can: (p) => hasPermission(perms, p),
       canAny: (ps) => ps.some((p) => hasPermission(perms, p)),

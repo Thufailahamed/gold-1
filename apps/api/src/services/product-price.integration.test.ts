@@ -47,6 +47,39 @@ describe.skipIf(!sqliteAvailable)("product price at the till", () => {
     expect(item.cost_cents).toBe(0);
   });
 
+  it("sells a piece with no selling price and no live rate at the till price", async () => {
+    // 21K is seeded with no gold rate in this fixture.
+    const { createProduct } = await import("./products");
+    const { receiveSale } = await import("./sales");
+    const p = await createProduct(db, { ...base, purityId: "purity-21k" }, "u1");
+    const sale = await receiveSale(
+      db,
+      {
+        customerId: "c1",
+        branchId: "b1",
+        items: [{ productId: p.id, priceLkr: 50_000, discountLkr: 0 }],
+        payments: [{ method: "cash", amountLkr: 50_000 }],
+      },
+      "u1",
+      { enforceShelfPrice: true }
+    );
+    const inv = raw.prepare("SELECT total_cents FROM sales_invoices WHERE id = ?").get(sale.invoiceId) as { total_cents: number };
+    expect(inv.total_cents).toBe(5_000_000);
+  });
+
+  it("refuses a piece sold at zero", async () => {
+    const { createProduct } = await import("./products");
+    const { receiveSale } = await import("./sales");
+    const p = await createProduct(db, base, "u1");
+    await expect(
+      receiveSale(
+        db,
+        { customerId: "c1", branchId: "b1", items: [{ productId: p.id, priceLkr: 0, discountLkr: 0 }], payments: [{ method: "cash", amountLkr: 1 }] },
+        "u1"
+      )
+    ).rejects.toThrow("Enter a price");
+  });
+
   it("the till charges the price typed at the counter, not the live rate", async () => {
     const { createProduct } = await import("./products");
     const { receiveSale } = await import("./sales");

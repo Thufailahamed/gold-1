@@ -199,37 +199,41 @@ export async function buildReceiveSaleStmts(
     // A piece with no book cost sells anyway; its COGS posts as zero.
     await assertCountLock(db, p.id);
     // Shelf price: the selling-price override when set, else the live rate —
-    // the same price the tag and the scan lookup show.
-    const shelfPrice = async (): Promise<number> => {
+    // the same price the tag and the scan lookup show. Null when neither is
+    // set: the cashier types the price at the till.
+    const shelfPrice = async (): Promise<number | null> => {
       // A zero price is not a price: it would sell the piece for nothing.
       if (p.selling_price_cents !== null && p.selling_price_cents > 0) return p.selling_price_cents;
-      const { livePrice, noRate } = await priceFor(db, p.purity_id, p.net_mg, p.making_cents);
-      if (noRate || !livePrice)
-        throw Object.assign(new Error(`No rate for product: ${p.barcode}`), { code: "VALIDATION" });
-      return livePrice.amount_cents;
+      const { livePrice } = await priceFor(db, p.purity_id, p.net_mg, p.making_cents);
+      return livePrice?.amount_cents ?? null;
     };
     let priceCents: number;
     let listCents: number | null = null;
     if (it.priceLkr === undefined) {
-      priceCents = await shelfPrice();
+      priceCents = (await shelfPrice()) ?? 0;
     } else {
       priceCents = lkrToCents(it.priceLkr);
       if (opts.enforceShelfPrice) {
         const shelf = await shelfPrice();
-        // `listPriceLkr` is the shelf price the cashier saw. The till may then
-        // charge a different `priceLkr` (negotiated); a client that sends no
-        // list price must charge the shelf price, as before.
-        const seen = it.listPriceLkr === undefined ? priceCents : lkrToCents(it.listPriceLkr);
-        if (shelf !== seen)
-          throw Object.assign(
-            new Error(
-              `Price of ${p.barcode} is now ${centsToLkr(shelf).toLocaleString("en-US")} LKR (cart has ${centsToLkr(seen).toLocaleString("en-US")}) — refresh the cart`
-            ),
-            { code: "CONFLICT", productId: p.id, priceCents: shelf }
-          );
-        if (priceCents !== shelf) listCents = shelf;
+        // No shelf price to check against: the till's price stands.
+        if (shelf !== null) {
+          // `listPriceLkr` is the shelf price the cashier saw. The till may then
+          // charge a different `priceLkr` (negotiated); a client that sends no
+          // list price must charge the shelf price, as before.
+          const seen = it.listPriceLkr === undefined ? priceCents : lkrToCents(it.listPriceLkr);
+          if (shelf !== seen)
+            throw Object.assign(
+              new Error(
+                `Price of ${p.barcode} is now ${centsToLkr(shelf).toLocaleString("en-US")} LKR (cart has ${centsToLkr(seen).toLocaleString("en-US")}) — refresh the cart`
+              ),
+              { code: "CONFLICT", productId: p.id, priceCents: shelf }
+            );
+          if (priceCents !== shelf) listCents = shelf;
+        }
       }
     }
+    if (priceCents <= 0)
+      throw Object.assign(new Error(`Enter a price for ${p.barcode}`), { code: "VALIDATION" });
     const discountCents = lkrToCents(it.discountLkr);
     if (discountCents > priceCents)
       throw Object.assign(new Error("Discount exceeds line price"), { code: "VALIDATION" });
@@ -971,7 +975,16 @@ export async function listSales(
   db: D1Database,
   userId: string,
   canManageAll: boolean,
-  opts: PageOpts & { customerId?: string; branchId?: string; status?: string; from?: number; to?: number }
+  opts: PageOpts & {
+    customerId?: string;
+    customerName?: string;
+    customerPhone?: string;
+    customerAddress?: string;
+    branchId?: string;
+    status?: string;
+    from?: number;
+    to?: number;
+  }
 ) {
   const like = `%${opts.search ?? ""}%`;
   const offset = (opts.page - 1) * opts.limit;
@@ -980,6 +993,20 @@ export async function listSales(
   if (opts.customerId) {
     conds.push("i.customer_id = ?");
     vals.push(opts.customerId);
+  }
+  // Separate customer filters from the Credits page. Each one narrows the list, so a name plus an
+  // address picks out one customer when two people share a name.
+  if (opts.customerName) {
+    conds.push("i.customer_id IN (SELECT id FROM customers WHERE name LIKE ?)");
+    vals.push(`%${opts.customerName}%`);
+  }
+  if (opts.customerPhone) {
+    conds.push("i.customer_id IN (SELECT id FROM customers WHERE phone LIKE ?)");
+    vals.push(`%${opts.customerPhone}%`);
+  }
+  if (opts.customerAddress) {
+    conds.push("i.customer_id IN (SELECT id FROM customers WHERE address LIKE ?)");
+    vals.push(`%${opts.customerAddress}%`);
   }
   if (opts.branchId) {
     conds.push("i.branch_id = ?");

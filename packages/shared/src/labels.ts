@@ -6,8 +6,8 @@ export const LABEL_COPIES_MAX = 10;
 
 /** Tags per printed row the station offers. */
 export const LABELS_PER_ROW_MIN = 1;
-export const LABELS_PER_ROW_MAX = 6;
-export const LABELS_PER_ROW_DEFAULT = 2;
+export const LABELS_PER_ROW_MAX = 8;
+export const LABELS_PER_ROW_DEFAULT = 8;
 
 /** Parse `?ids=a,b,c` into a clean, ordered batch. */
 export function parseLabelIds(raw: string | undefined, max = LABEL_BATCH_MAX): string[] {

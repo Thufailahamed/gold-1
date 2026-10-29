@@ -1224,7 +1224,7 @@
   }
 }
 
-/* Tag sheets: one to six tags per row, chosen by the operator. The same
+/* Tag sheets: one to eight tags per row, chosen by the operator. The same
    variable drives the on-screen preview and the printed grid. */
 .label-sheet {
   grid-template-columns: repeat(var(--label-cols, 2), minmax(0, 1fr));

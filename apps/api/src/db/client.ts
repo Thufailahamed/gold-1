@@ -31,6 +31,8 @@ export type Env = {
   ASSISTANT_VISION_MODEL?: string;
   /** Vision model for handwritten day sheets; defaults to Mistral Small 3.1 (see ai/daysheet-scan.ts). */
   DAYSHEET_VISION_MODEL?: string;
+  /** Vision model for handwritten sale bills; defaults to the day sheet model (see ai/salebill-scan.ts). */
+  SALEBILL_VISION_MODEL?: string;
 };
 
 /**

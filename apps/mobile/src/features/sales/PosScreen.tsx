@@ -47,6 +47,7 @@ import {
   type Exchange,
   type PayRow,
 } from "./pos-parts";
+import { BillScanSheet, type LoadedBill } from "./BillScanSheet";
 
 type Draft = { cart: CartLine[]; customer: Customer | null; exchange: Exchange | null; notes: string };
 
@@ -79,6 +80,7 @@ export default function PosScreen() {
   const [done, setDone] = useState<Done | null>(null);
   const [stale, setStale] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
+  const [billOpen, setBillOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [custOpen, setCustOpen] = useState(false);
   const [branchOpen, setBranchOpen] = useState(false);
@@ -238,6 +240,7 @@ export default function PosScreen() {
 
   const canComplete =
     cart.length > 0 &&
+    cart.every((l) => l.priceCents > 0) &&
     paidSum === total &&
     total > 0 &&
     !needsCustomer &&
@@ -265,7 +268,12 @@ export default function PosScreen() {
         body: JSON.stringify({
           customerId: customer?.id,
           branchId,
-          items: cart.map((l) => ({ productId: l.productId, priceLkr: l.priceCents / 100, discountLkr: l.discountCents / 100 })),
+          items: cart.map((l) => ({
+            productId: l.productId,
+            priceLkr: l.priceCents / 100,
+            listPriceLkr: l.listPriceCents !== undefined ? l.listPriceCents / 100 : undefined,
+            discountLkr: l.discountCents / 100,
+          })),
           payments: pays.map((p) => ({
             method: p.method,
             amountLkr: Number(p.amountLkr),
@@ -313,6 +321,12 @@ export default function PosScreen() {
           toast.error(`Removed: ${ok.error}`);
           continue;
         }
+        // A paper bill's agreed price stays; only the shelf price it is checked against moves.
+        if (l.listPriceCents !== undefined) {
+          if (ok.price !== l.listPriceCents) changed++;
+          next.push({ ...l, listPriceCents: ok.price === l.priceCents ? undefined : ok.price });
+          continue;
+        }
         if (ok.price !== l.priceCents) changed++;
         next.push({ ...l, priceCents: ok.price, discountCents: Math.min(l.discountCents, ok.price) });
       }
@@ -334,6 +348,18 @@ export default function PosScreen() {
   function payAll(method: string) {
     setPays([{ method, amountLkr: total > 0 ? String(total / 100) : "" }]);
     if (method !== "cash") setTendered("");
+  }
+
+  async function loadBill(bill: LoadedBill) {
+    if (cartRef.current.length > 0 && !(await confirm({ title: "Replace the cart with the scanned bill?", confirmText: "Replace", destructive: true }))) return;
+    setCart(bill.cart);
+    setCustomer(bill.customer);
+    setPays(bill.pays);
+    setTendered("");
+    setNotes(bill.notes);
+    setExchange(null);
+    setStale(false);
+    setDone(null);
   }
 
   async function cartActions() {
@@ -400,6 +426,7 @@ export default function PosScreen() {
           {lookup.isPending ? <ActivityIndicator color={c.gold} /> : null}
         </View>
         <IconButton name="scan" variant="filled" size={50} onPress={() => setScanOpen(true)} accessibilityLabel="Scan with camera" />
+        <IconButton name="receipt" variant="filled" size={50} onPress={() => setBillOpen(true)} accessibilityLabel="Scan a paper bill" />
       </View>
 
       {isSearch && q.length >= 2 ? (
@@ -422,9 +449,7 @@ export default function PosScreen() {
                         {fmt(r.price_cents)}
                       </Text>
                     ) : (
-                      <Text variant="footnote" tone="danger">
-                        No rate
-                      </Text>
+                      <Text variant="footnote">Enter at till</Text>
                     )}
                     {r.status === "RESERVED" ? (
                       <Pill tone="warning" size="sm">
@@ -501,6 +526,11 @@ export default function PosScreen() {
                     <Text variant="body" num weight="600">
                       {fmt(l.priceCents - l.discountCents + lineTax(l))}
                     </Text>
+                    {l.listPriceCents !== undefined ? (
+                      <Text variant="caption1" tone="secondary" num>
+                        Bill price · shelf {fmt(l.listPriceCents)}
+                      </Text>
+                    ) : null}
                     {l.discountCents > 0 ? (
                       <Text variant="caption1" num color={c.greenText}>
                         −{fmt(l.discountCents)} off {fmt(l.priceCents)}
@@ -574,6 +604,7 @@ export default function PosScreen() {
         />
       </Section>
 
+      <BillScanSheet visible={billOpen} onClose={() => setBillOpen(false)} branchId={branchId} onLoad={loadBill} />
       <ScanSheet visible={scanOpen} onClose={() => setScanOpen(false)} onCode={addCode} count={cart.length} />
       <LineSheet
         line={editing}

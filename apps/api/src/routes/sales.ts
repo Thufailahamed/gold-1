@@ -33,6 +33,10 @@ import { pagination, serviceError } from "./http";
 import { assertBranchAccess, branchScope, inScope } from "../services/branchAccess";
 import type { Context } from "hono";
 import { getShopDb } from "../platform/resolve";
+import { ScanUnavailableError } from "../ai/billscan";
+import { SALEBILL_MAX_BYTES, SALEBILL_TYPES, scanSaleBill } from "../ai/salebill-scan";
+import { matchSaleBill } from "../services/salebill";
+import { bumpUsage, checkQuota } from "../assistant/agent";
 
 /**
  * Report windows must agree with journal_entries.entry_date, which is
@@ -102,6 +106,42 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       });
       return c.json({ success: true, data }, 201);
     } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  // A photo of a handwritten bill → AI reads it → lines matched to stock. A
+  // draft for the till only: nothing posts until the cashier charges it.
+  .post("/scan-bill", requirePerm(PERMISSIONS.SALES_CREATE), async (c) => {
+    const form = await c.req.parseBody();
+    const branchId = typeof form["branchId"] === "string" ? form["branchId"] : "";
+    const file = form["file"];
+    if (!branchId) return c.json({ success: false, error: { code: "VALIDATION", message: "branchId is required" } }, 400);
+    if (!(file instanceof File)) return c.json({ success: false, error: { code: "VALIDATION", message: "Attach a photo of the bill under 'file'" } }, 400);
+    if (!(SALEBILL_TYPES as readonly string[]).includes(file.type))
+      return c.json({ success: false, error: { code: "VALIDATION", message: "The photo must be a jpeg, png or webp image" } }, 400);
+    if (file.size > SALEBILL_MAX_BYTES) return c.json({ success: false, error: { code: "VALIDATION", message: "The photo must be under 6MB" } }, 400);
+    try {
+      const db = getShopDb(c);
+      await access(c, branchId);
+      const env = { ...c.env, DB: db };
+      const today = await businessDateFor(db, Date.now());
+      await checkQuota(env, c.get("userId"), today);
+      const bill = await scanSaleBill(env, { bytes: new Uint8Array(await file.arrayBuffer()), type: file.type }, today);
+      await bumpUsage(db, c.get("userId"), today);
+      return c.json({ success: true, data: await matchSaleBill(db, branchId, bill) }, 200);
+    } catch (err) {
+      const code = (err as { code?: string } | null)?.code;
+      if (err instanceof ScanUnavailableError) {
+        console.error("sale bill scan failure", err);
+        return c.json(
+          {
+            success: false,
+            error: { code, message: err.message.startsWith("The model did not") ? err.message : "The bill reader is not responding right now. Scan the pieces instead, or try again." },
+          },
+          503
+        );
+      }
+      if (code === "RATE_LIMITED") return c.json({ success: false, error: { code, message: (err as Error).message } }, 429);
       return serviceError(c, err);
     }
   })
@@ -243,6 +283,9 @@ export const sales = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       {
         ...pagination(c),
         customerId: c.req.query("customerId"),
+        customerName: c.req.query("customerName")?.trim() || undefined,
+        customerPhone: c.req.query("customerPhone")?.trim() || undefined,
+        customerAddress: c.req.query("customerAddress")?.trim() || undefined,
         branchId: c.req.query("branchId"),
         status: c.req.query("status"),
         from: num("from"),

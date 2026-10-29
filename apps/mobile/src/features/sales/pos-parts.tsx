@@ -61,6 +61,8 @@ export type CartLine = {
   karat: string;
   netMg: number;
   priceCents: number;
+  /** The shelf price, when the line charges another (a scanned paper bill's agreed price). */
+  listPriceCents?: number;
   discountCents: number;
   /** Set when the piece is held: it sells only to this customer. */
   reservedFor?: { id: string; name: string };
@@ -89,8 +91,8 @@ export function saleable(d: Lookup, branchId: string, customer: Customer | null)
     if (customer && customer.id !== p.reserved_customer_id) return { error: `${p.barcode} is held for ${p.reserved_customer_name ?? "another customer"}` };
   } else if (p.status !== "IN_STOCK") return { error: `${p.barcode} is ${p.status.replace(/_/g, " ").toLowerCase()}, not for sale` };
   if (branchId && p.branch_id !== branchId) return { error: `${p.barcode} belongs to another branch` };
-  const price = p.selling_price_cents ?? d.livePrice?.amount_cents;
-  if (price === undefined) return { error: `No gold rate for ${p.karat} — set today's rate first` };
+  // With no selling price and no live rate the piece goes on the cart at 0; the cashier types its price.
+  const price = p.selling_price_cents ?? d.livePrice?.amount_cents ?? 0;
   return { price };
 }
 
