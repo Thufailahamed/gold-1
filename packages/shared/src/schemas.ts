@@ -353,7 +353,7 @@ export const exchangeSaleSchema = z.object({
         categoryId: z.string().min(1).optional(),
       })
     )
-    .max(20)
+    .max(100)
     .default([]),
   items: z.array(saleItemSchema).min(1),
   /** Real-money legs toward the difference the customer owes. */
@@ -369,8 +369,22 @@ export type ExchangeSaleInput = z.infer<typeof exchangeSaleSchema>;
 export const TEST_METHODS = ["acid", "touchstone", "xrf", "electronic", "fire_assay"] as const;
 export const OLDGOLD_STATUSES = ["RECEIVED", "TESTED", "VALUED", "PURCHASED", "AVAILABLE", "RESERVED_FOR_MELTING", "MELTED", "RESOLD", "TRANSFERRED", "VOID"] as const;
 
+/**
+ * The built-in customer that holds the shop's own old gold (no seller). Created
+ * on first use per shop and hidden from customer lists.
+ */
+export const SHOP_STOCK_CUSTOMER_ID = "shop-stock";
+
 export const createOldGoldSchema = z.object({
-  customerId: z.string().min(1),
+  /** The seller. Blank only when the piece is the shop's own stock (shopOwned). */
+  customerId: z.string().min(1).optional(),
+  /**
+   * Old gold the shop already holds: no seller, no purchase. It goes straight to
+   * AVAILABLE at the cost given. Its cost and karat are optional; no testing queue.
+   */
+  shopOwned: z.boolean().optional(),
+  /** Book cost in LKR of a shop-owned piece: what it enters inventory at. */
+  costLkr: z.number().gt(0).max(10_000_000).optional(),
   branchId: z.string().min(1),
   /** Optional; the piece is recorded as "Old gold" when it is blank. */
   itemType: z.string().min(1).max(50).optional(),
@@ -379,8 +393,8 @@ export const createOldGoldSchema = z.object({
   /** One of the old gold categories. Blank files it under OG, the default. */
   categoryId: z.string().min(1).optional(),
   /**
-   * Off by default: the karat is known, so the piece goes straight to Tested
-   * with the karat chosen. On: it waits in the testing queue (karat not needed yet).
+   * Off by default: a karat chosen means the piece goes straight to Tested.
+   * On, or with no karat chosen: it waits in the testing queue.
    */
   needsTesting: z.boolean().optional(),
   purityId: z.string().min(1).optional(),

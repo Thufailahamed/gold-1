@@ -31,6 +31,7 @@ export const STAGES: readonly Stage[] = [
 
 const OTHER: Record<string, Omit<Stage, "icon" | "status">> = {
   RESOLD: { label: "Resold", hint: "", dot: "bg-indigo-500", chip: "bg-indigo-500/10 text-indigo-800 ring-indigo-500/25" },
+  DRAWN: { label: "Made into products", hint: "", dot: "bg-indigo-500", chip: "bg-indigo-500/10 text-indigo-800 ring-indigo-500/25" },
   TRANSFERRED: { label: "Transferred", hint: "", dot: "bg-sky-500", chip: "bg-sky-500/10 text-sky-800 ring-sky-500/25" },
   VOID: { label: "Void", hint: "", dot: "bg-rose-400", chip: "bg-rose-500/10 text-rose-800 ring-rose-500/25" },
 };

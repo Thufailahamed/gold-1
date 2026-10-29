@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0.6" y2="1">
+  <stop offset="0" stop-color="#0E4D40"/><stop offset="0.6" stop-color="#083A2F"/><stop offset="1" stop-color="#03211A"/></linearGradient>
+<radialGradient id="glow" cx="0.5" cy="0.42" r="0.55">
+  <stop offset="0" stop-color="#2FA384" stop-opacity="0.30"/><stop offset="1" stop-color="#2FA384" stop-opacity="0"/></radialGradient>
+<linearGradient id="metal" x1="0.15" y1="0" x2="0.75" y2="1">
+  <stop offset="0" stop-color="#FFF4CF"/><stop offset="0.28" stop-color="#E9CB82"/>
+  <stop offset="0.55" stop-color="#CDA853"/><stop offset="0.8" stop-color="#A2802F"/><stop offset="1" stop-color="#7A5A1E"/></linearGradient>
+<linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.85"/><stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+  <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000" flood-opacity="0.45"/></filter>
+<clipPath id="tile"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+
+</defs>
+<rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+<rect x="100" y="100" width="824" height="824" rx="185" fill="url(#glow)"/>
+<rect x="101.5" y="101.5" width="821" height="821" rx="183.5" fill="none" stroke="#9FF0D2" stroke-opacity="0.14" stroke-width="3"/>
+<g filter="url(#shadow)">
+<polygon points="212.0,430.0 362.0,280.0 662.0,280.0 812.0,430.0 512.0,790.0" fill="url(#metal)"/></g>
+<g fill="#000" fill-opacity="0.0"></g>
+<polyline points="212.0,430.0 462.5,430.0 362.0,280.0" fill="none" stroke="#062A22" stroke-opacity="0.35" stroke-width="5" stroke-linejoin="round"/>
+<polyline points="812.0,430.0 561.5,430.0 662.0,280.0" fill="none" stroke="#062A22" stroke-opacity="0.35" stroke-width="5" stroke-linejoin="round"/>
+<line x1="212" y1="430" x2="812" y2="430" stroke="#FFF6D6" stroke-opacity="0.7" stroke-width="5"/>
+<polyline points="462.5,430.0 512.0,790.0 561.5,430.0" fill="none" stroke="#062A22" stroke-opacity="0.3" stroke-width="5" stroke-linejoin="round"/>
+<line x1="362" y1="280" x2="662" y2="280" stroke="#FFFFFF" stroke-opacity="0.8" stroke-width="5"/><path d="M790 198 L797.04 222.96 L822 230 L797.04 237.04 L790 262 L782.96 237.04 L758 230 L782.96 222.96 Z" fill="#FFF8E1" fill-opacity="1"/>
+</svg>

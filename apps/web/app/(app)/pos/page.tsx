@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { BrandMark } from "@/components/brand-mark";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -41,7 +42,6 @@ import {
   LandmarkIcon,
   FileCheckIcon,
   WalletIcon,
-  GemIcon,
   LogOutIcon,
   MaximizeIcon,
   MinimizeIcon,
@@ -150,7 +150,7 @@ type Exchange = { returnId: string; number: string };
 type OldSel = { customerId: string; ids: string[] };
 
 /** A piece taken in at the counter that is not on record yet: it is saved only when the sale completes. */
-type PendingOld = { key: string; grossG: number; valueCents: number; description?: string; categoryId?: string; categoryCode?: string };
+type PendingOld = { key: string; grossG: number; valueCents: number };
 type PendingState = { customerId: string; items: PendingOld[] };
 
 type Draft = {
@@ -351,14 +351,7 @@ export default function PosPage() {
   // completed leaves nothing on the old-gold record.
   function addPending(v: NewOldGold) {
     if (!customer) return;
-    const item: PendingOld = {
-      key: crypto.randomUUID(),
-      grossG: v.grossG,
-      valueCents: Math.round(v.valueLkr * 100),
-      description: v.description,
-      categoryId: v.categoryId,
-      categoryCode: v.categoryCode,
-    };
+    const item: PendingOld = { key: crypto.randomUUID(), grossG: v.grossG, valueCents: Math.round(v.valueLkr * 100) };
     setPendingOld((s) => ({ customerId: customer.id, items: [...(s.customerId === customer.id ? s.items : []), item] }));
   }
 
@@ -627,12 +620,7 @@ export default function PosPage() {
             customerId: customer?.id,
             branchId,
             oldGoldItemIds: takenIn.map((r) => r.id),
-            newOldGold: pending.map((p) => ({
-              grossG: p.grossG,
-              valueLkr: p.valueCents / 100,
-              description: p.description,
-              categoryId: p.categoryId,
-            })),
+            newOldGold: pending.map((p) => ({ grossG: p.grossG, valueLkr: p.valueCents / 100 })),
             items,
             payments,
             payout: shopOwes > 0 ? payout : "store_credit",
@@ -765,9 +753,7 @@ export default function PosPage() {
       <header className="sticky top-0 z-30 shrink-0 border-b border-ink/[0.08] bg-paper/95 backdrop-blur-md">
         <div className="flex h-14 items-center gap-3 px-4 lg:px-5">
           <Link href="/sales" className="flex shrink-0 items-center gap-2.5" title="Back to the console">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.35)]">
-              <GemIcon size={15} />
-            </span>
+            <BrandMark size={32} className="shrink-0" />
             <span className="hidden leading-none sm:block">
               <span className="block font-serif text-[15px] font-semibold text-ink">GoldOS</span>
               <span className="mt-0.5 block text-[9px] font-semibold uppercase tracking-[0.22em] text-gold-dark">POS terminal</span>

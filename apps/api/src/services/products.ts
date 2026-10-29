@@ -16,6 +16,16 @@ import { consumeApproval, pendingApproval, requestApproval } from "./approvals";
 import { postGoldStmts } from "./gold";
 import { buildOpeningStockStmts, carriedOpeningValue, isDirectIntake } from "./openingstock";
 import { assertCountLock } from "./counts";
+import {
+  drawStmts,
+  drawnCostCents,
+  drawnFineMg,
+  hasDraws,
+  planOldGoldDraws,
+  returnDrawStmts,
+  unknownGoldEntry,
+  type PieceDraw,
+} from "./oldgolddraw";
 
 export type ProductRow = {
   id: string;
@@ -353,6 +363,8 @@ function pieceStmts(
     now: number;
     actorId: string;
     batchId?: string;
+    /** Set when the piece is drawn from old gold: the fine and cost it carries. */
+    overrides?: PieceOverrides;
   }
 ): D1PreparedStatement[] {
   const { input, weights } = p;
@@ -376,10 +388,10 @@ function pieceStmts(
         weights.grossMg,
         weights.stoneMg,
         weights.netMg,
-        fineGoldMg(weights.netMg, p.permille),
+        p.overrides?.fineMg ?? fineGoldMg(weights.netMg, p.permille),
         lkrToCents(input.makingLkr),
         gToMg(input.wastageG),
-        input.costLkr !== undefined ? lkrToCents(input.costLkr) : null,
+        p.overrides ? p.overrides.costCents : input.costLkr !== undefined ? lkrToCents(input.costLkr) : null,
         input.sellingPriceLkr !== undefined && input.sellingPriceLkr > 0 ? lkrToCents(input.sellingPriceLkr) : null,
         input.location ?? null,
         input.notes ?? null,
@@ -404,12 +416,29 @@ function pieceStmts(
   ];
 }
 
+/** The fine and cost a piece carries when it is made from old gold rather than taken in directly. */
+type PieceOverrides = { fineMg: number; costCents: number | null };
+
+/**
+ * A piece's book cost: the cost typed, else what its old gold carried. Null when
+ * neither is known, as for a direct intake with no cost.
+ */
+function drawnPieceCost(draw: PieceDraw, input: CreateProductInput): number | null {
+  if (input.costLkr !== undefined) return lkrToCents(input.costLkr);
+  return draw.matchedCostCents > 0 ? draw.matchedCostCents : null;
+}
+
+function drawnOverrides(draw: PieceDraw, input: CreateProductInput): PieceOverrides {
+  return { fineMg: drawnFineMg(draw), costCents: drawnPieceCost(draw, input) };
+}
+
 export async function buildCreateProductStmts(
   db: D1Database,
   input: CreateProductInput,
   actorId: string,
   branchId: string,
-  now: number
+  now: number,
+  overrides?: PieceOverrides
 ): Promise<BuiltProduct> {
   const weights = pieceWeights(input.grossG, input.stoneG);
   // Independent reads, run together instead of one after another.
@@ -420,53 +449,67 @@ export async function buildCreateProductStmts(
   const id = crypto.randomUUID();
   const stmts = [
     ...sub.stmts,
-    ...pieceStmts(db, { id, barcode, sku, input, subcategoryId: sub.id, name, weights, permille, branchId, now, actorId }),
+    ...pieceStmts(db, { id, barcode, sku, input, subcategoryId: sub.id, name, weights, permille, branchId, now, actorId, overrides }),
   ];
   return { stmts, id, barcode, sku, netMg: weights.netMg, permille };
 }
 
-export async function createProduct(
-  db: D1Database,
-  input: CreateProductInput,
-  actorId: string
-): Promise<ProductRow> {
+export type CreateOptions = {
+  /**
+   * Make the piece from old gold on hand at its branch: its metal is drawn from
+   * there, and the piece is refused when there is not enough. The API always
+   * passes this. Without it the piece is written as a direct intake, which is
+   * how the fixtures in the tests build stock.
+   */
+  fromOldGold?: boolean;
+};
+
+export async function createProduct(db: D1Database, input: CreateProductInput, actorId: string, opts: CreateOptions = {}): Promise<ProductRow> {
   const now = Date.now();
-  const built = await buildCreateProductStmts(db, input, actorId, input.branchId, now);
+  const draw = opts.fromOldGold
+    ? (await planOldGoldDraws(db, input.branchId, [{ netMg: pieceWeights(input.grossG, input.stoneG).netMg, permille: await validateRefs(db, input, input.branchId) }]))[0]
+    : undefined;
+  const built = await buildCreateProductStmts(db, input, actorId, input.branchId, now, draw ? drawnOverrides(draw, input) : undefined);
   // Direct intake has no purchase/manufacturing posting behind it, so without
   // this row the metal sits in held stock with no ledger inflow and
   // gold_stock_consistency fails by exactly its weight. Type OPENING is
   // deliberately excluded from the day-scoped PURCHASE cross-foot (that query
   // matches invoice documents only). The book cost, when known, enters 1100
   // against 3100 Opening Balances in the same batch (see openingstock.ts).
-  const [goldStmts, opening] = await Promise.all([
-    postGoldStmts(
-      db,
-      [
-        {
-          branchId: input.branchId,
-          source: "opening",
-          destination: `branch:${input.branchId}`,
-          type: "OPENING",
-          weightMg: built.netMg,
-          permille: built.permille,
-          refEntity: "product_intake",
-          refId: built.id,
-          productId: built.id,
-          notes: `Direct intake ${built.barcode}`,
-        },
-      ],
-      { actorId, auditAction: "product.intake.gold", auditEntity: "product", auditEntityId: built.id, branchId: input.branchId }
-    ),
-    buildOpeningStockStmts(db, {
-      productId: built.id,
-      barcode: built.barcode,
-      branchId: input.branchId,
-      deltaCents: input.costLkr !== undefined ? lkrToCents(input.costLkr) : 0,
-      actorId,
-      reason: "direct intake",
-    }),
-  ]);
-  await db.batch([...built.stmts, ...goldStmts, ...(opening?.stmts ?? [])]);
+  // A piece drawn from old gold has no inflow for the metal it took: that metal
+  // is already held. Only its unknown-karat part enters the ledger, at its karat.
+  // Its book cost moves off the old gold items and onto the piece, so the
+  // opening entry carries only the difference.
+  const goldStmts = draw
+    ? await unknownGoldEntry(db, draw, built.id, input.branchId, built.barcode, actorId)
+    : await postGoldStmts(
+        db,
+        [
+          {
+            branchId: input.branchId,
+            source: "opening",
+            destination: `branch:${input.branchId}`,
+            type: "OPENING",
+            weightMg: built.netMg,
+            permille: built.permille,
+            refEntity: "product_intake",
+            refId: built.id,
+            productId: built.id,
+            notes: `Direct intake ${built.barcode}`,
+          },
+        ],
+        { actorId, auditAction: "product.intake.gold", auditEntity: "product", auditEntityId: built.id, branchId: input.branchId }
+      );
+  const opening = await buildOpeningStockStmts(db, {
+    productId: built.id,
+    barcode: built.barcode,
+    branchId: input.branchId,
+    deltaCents: draw ? (drawnPieceCost(draw, input) ?? 0) - draw.matchedCostCents : input.costLkr !== undefined ? lkrToCents(input.costLkr) : 0,
+    actorId,
+    reason: draw ? "made from old gold" : "direct intake",
+  });
+  const drawn = draw ? drawStmts(db, draw, built.id, actorId, now) : [];
+  await db.batch([...built.stmts, ...goldStmts, ...(opening?.stmts ?? []), ...drawn]);
   const created = await db.prepare(`${WITH_NAMES} WHERE p.id = ?`).bind(built.id).first<RawRow>();
   if (!created) throw new Error("Product insert failed");
   return parseRow(created);
@@ -504,7 +547,8 @@ export type BulkCreateResult = {
 export async function createProductsBulk(
   db: D1Database,
   input: BulkCreateProductsInput,
-  actorId: string
+  actorId: string,
+  opts: CreateOptions = {}
 ): Promise<BulkCreateResult> {
   const { common, items } = input;
   const branchId = common.branchId;
@@ -567,6 +611,16 @@ export async function createProductsBulk(
     subFor.push(sub);
   }
 
+  // Every piece is planned before anything is written, so a tray that needs more
+  // old gold than the branch has is refused whole. Pieces share the tray's karat.
+  const draws = opts.fromOldGold
+    ? await planOldGoldDraws(
+        db,
+        branchId,
+        pieces.map((p) => ({ netMg: p.weights.netMg, permille }))
+      )
+    : null;
+
   const built = pieces.map((p, i) => ({
     ...p,
     id: crypto.randomUUID(),
@@ -574,6 +628,8 @@ export async function createProductsBulk(
     sku: codeFor[i]!.sku,
     subcategoryId: subFor[i]!.id,
     name: p.input.name ?? subFor[i]!.name ?? names.get(p.input.categoryId) ?? "Item",
+    draw: draws?.[i],
+    overrides: draws ? drawnOverrides(draws[i]!, p.input) : undefined,
   }));
 
   for (const b of built)
@@ -591,46 +647,55 @@ export async function createProductsBulk(
         now,
         actorId,
         batchId,
+        overrides: b.overrides,
       })
     );
 
   // One OPENING gold row per piece (the day lock is checked once for all of
   // them), so each piece's metal is traceable and a later void reverses
   // exactly its own row — see createProduct for why direct intake needs it.
-  stmts.push(
-    ...(await postGoldStmts(
-      db,
-      built.map((b) => ({
-        branchId,
-        source: "opening",
-        destination: `branch:${branchId}`,
-        type: "OPENING",
-        weightMg: b.weights.netMg,
-        permille,
-        refEntity: "product_intake",
-        refId: b.id,
-        productId: b.id,
-        notes: `Direct intake ${b.barcode}`,
-      })),
-      { actorId, auditAction: "product.intake.gold", auditEntity: "product_batch", auditEntityId: batchId, branchId }
-    ))
-  );
+  // A piece drawn from old gold posts only its unknown-karat part (see createProduct).
+  const goldEntries = built
+    .filter((b) => !b.draw || b.draw.unknownMg > 0)
+    .map((b) => ({
+      branchId,
+      source: "opening",
+      destination: `branch:${branchId}`,
+      type: "OPENING",
+      weightMg: b.draw ? b.draw.unknownMg : b.weights.netMg,
+      permille,
+      refEntity: "product_intake",
+      refId: b.id,
+      productId: b.id,
+      notes: `Direct intake ${b.barcode}`,
+    }));
+  if (goldEntries.length)
+    stmts.push(
+      ...(await postGoldStmts(db, goldEntries, { actorId, auditAction: "product.intake.gold", auditEntity: "product_batch", auditEntityId: batchId, branchId }))
+    );
 
   // Opening-stock value is carried per product (cost corrections and voids
   // net against the product's own entries), so each costed piece gets its
   // own entry. Sequential, so entry numbers follow the tray's order.
   for (const b of built) {
-    if (b.input.costLkr === undefined) continue;
+    const deltaCents = b.draw
+      ? (drawnPieceCost(b.draw, b.input) ?? 0) - b.draw.matchedCostCents
+      : b.input.costLkr !== undefined
+        ? lkrToCents(b.input.costLkr)
+        : 0;
+    if (!deltaCents) continue;
     const opening = await buildOpeningStockStmts(db, {
       productId: b.id,
       barcode: b.barcode,
       branchId,
-      deltaCents: lkrToCents(b.input.costLkr),
+      deltaCents,
       actorId,
-      reason: "direct intake",
+      reason: b.draw ? "made from old gold" : "direct intake",
     });
     if (opening) stmts.push(...opening.stmts);
   }
+
+  for (const b of built) if (b.draw) stmts.push(...drawStmts(db, b.draw, b.id, actorId, now));
 
   const products: BulkCreatedProduct[] = built.map((b) => ({
     id: b.id,
@@ -640,14 +705,17 @@ export async function createProductsBulk(
     gross_mg: b.weights.grossMg,
     stone_mg: b.weights.stoneMg,
     net_mg: b.weights.netMg,
-    fine_gold_mg: fineGoldMg(b.weights.netMg, permille),
+    fine_gold_mg: b.overrides?.fineMg ?? fineGoldMg(b.weights.netMg, permille),
   }));
   const totals = {
     count: products.length,
     gross_mg: products.reduce((n, p) => n + p.gross_mg, 0),
     net_mg: products.reduce((n, p) => n + p.net_mg, 0),
     fine_gold_mg: products.reduce((n, p) => n + p.fine_gold_mg, 0),
-    cost_cents: built.reduce((n, b) => n + (b.input.costLkr !== undefined ? lkrToCents(b.input.costLkr) : 0), 0),
+    cost_cents: built.reduce((n, b) => {
+      if (b.overrides) return n + (b.overrides.costCents ?? 0);
+      return n + (b.input.costLkr !== undefined ? lkrToCents(b.input.costLkr) : 0);
+    }, 0),
   };
   stmts.push(
     buildAuditStmt(db, {
@@ -769,13 +837,14 @@ export async function editProduct(
   // carried value on 1100 by the difference. A sold piece's COGS is already
   // booked at the old cost, so its cost is history and is not re-posted.
   let costStmts: D1PreparedStatement[] = [];
-  if (patch.costLkr !== undefined && !["SOLD", "VOID"].includes(prev.status) && (await isDirectIntake(db, id))) {
+  if (patch.costLkr !== undefined && !["SOLD", "VOID"].includes(prev.status) && ((await isDirectIntake(db, id)) || (await hasDraws(db, id)))) {
     const barcodeRow = await db.prepare("SELECT barcode FROM products WHERE id = ?").bind(id).first<{ barcode: string }>();
+    // A piece made from old gold carries its drawn cost too: that sits on the items it came from, not in the opening entry.
     const opening = await buildOpeningStockStmts(db, {
       productId: id,
       barcode: barcodeRow?.barcode ?? id,
       branchId: prev.branch_id,
-      deltaCents: lkrToCents(patch.costLkr) - (await carriedOpeningValue(db, id)),
+      deltaCents: lkrToCents(patch.costLkr) - (await carriedOpeningValue(db, id)) - (await drawnCostCents(db, id)),
       actorId,
       reason: "cost correction",
     });
@@ -971,28 +1040,42 @@ export async function voidProduct(
   // own postings, so nothing is reversed twice. Purchased pieces are voided
   // through their invoice, which reverses the receive.
   const stmts: D1PreparedStatement[] = [...built.stmts];
-  if (before && !["SOLD", "LOST", "MELTED"].includes(before.status) && (await isDirectIntake(db, id))) {
-    if (before.net_mg > 0)
+  const drawn = before ? await hasDraws(db, id) : false;
+  if (before && !["SOLD", "LOST", "MELTED"].includes(before.status) && ((await isDirectIntake(db, id)) || drawn)) {
+    // The metal the piece brought into the ledger goes back out. A piece made from
+    // old gold brought in only its unknown-karat part, so its OPENING rows are reversed
+    // as they were posted; a direct intake reverses its whole weight.
+    const inflows = drawn
+      ? (
+          await db
+            .prepare("SELECT weight_mg, permille FROM gold_ledger WHERE ref_entity = 'product_intake' AND ref_id = ? AND type = 'OPENING' AND destination LIKE 'branch:%'")
+            .bind(id)
+            .all<{ weight_mg: number; permille: number }>()
+        ).results ?? []
+      : before.net_mg > 0
+        ? [{ weight_mg: before.net_mg, permille: before.permille }]
+        : [];
+    if (inflows.length)
       stmts.push(
         ...(await postGoldStmts(
           db,
-          [
-            {
-              branchId: built.branchId,
-              source: `branch:${built.branchId}`,
-              destination: "opening",
-              type: "OPENING",
-              weightMg: before.net_mg,
-              permille: before.permille,
-              refEntity: "product_intake",
-              refId: id,
-              productId: id,
-              notes: `Void of direct intake ${before.barcode}: ${reason}`,
-            },
-          ],
+          inflows.map((r) => ({
+            branchId: built.branchId,
+            source: `branch:${built.branchId}`,
+            destination: "opening",
+            type: "OPENING",
+            weightMg: r.weight_mg,
+            permille: r.permille,
+            refEntity: "product_intake",
+            refId: id,
+            productId: id,
+            notes: `Void of direct intake ${before.barcode}: ${reason}`,
+          })),
           { actorId, auditAction: "product.void.gold", auditEntity: "product", auditEntityId: id, branchId: built.branchId }
         ))
       );
+    // The old gold the piece drew from goes back on hand, with its fine and cost.
+    stmts.push(...(await returnDrawStmts(db, id, actorId, Date.now())));
     const opening = await buildOpeningStockStmts(db, {
       productId: id,
       barcode: before.barcode,

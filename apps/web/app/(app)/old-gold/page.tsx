@@ -305,7 +305,7 @@ export default function OldGoldDashboardPage() {
                       </Link>
                     </td>
                     <td className="max-w-[180px] truncate px-2 text-ink-3">{r.description}</td>
-                    <td className="max-w-[140px] truncate px-2 text-ink-4">{r.customer_name ?? "Walk-in"}</td>
+                    <td className="max-w-[140px] truncate px-2 text-ink-4">{r.customer_name ?? "Shop stock"}</td>
                     <td className="g-metric px-2 text-right text-ink">{grams(r.net_mg)}</td>
                     <td className="whitespace-nowrap py-1.5 pl-2 pr-4 text-right text-[11px] text-amber-700">{ago(r.created_at)}</td>
                   </tr>
@@ -350,7 +350,7 @@ export default function OldGoldDashboardPage() {
                       </td>
                       <td className="max-w-[180px] px-2">
                         <span className="block truncate text-ink-3">{r.description}</span>
-                        <span className="block truncate text-[10px] text-ink-5">{r.customer_name ?? "Walk-in"}</span>
+                        <span className="block truncate text-[10px] text-ink-5">{r.customer_name ?? "Shop stock"}</span>
                       </td>
                       <td className="px-2">
                         <KaratTag k={r.karat} />
@@ -406,7 +406,7 @@ export default function OldGoldDashboardPage() {
                     </td>
                     <td className="max-w-[160px] px-2">
                       <span className="block truncate text-ink-3">{p.description}</span>
-                      <span className="block truncate text-[10px] text-ink-5">{p.customer_name ?? "Walk-in"}</span>
+                      <span className="block truncate text-[10px] text-ink-5">{p.customer_name ?? "Shop stock"}</span>
                     </td>
                     <td className="g-metric px-2 text-right text-ink">{grams(p.fine_mg)}</td>
                     <td className="g-metric px-2 text-right text-ink-3">{lkr(p.purchase_value_cents ?? 0)}</td>

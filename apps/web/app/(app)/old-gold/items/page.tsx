@@ -31,7 +31,7 @@ import {
 type Item = { id: string; number: string; description: string; status: string; net_mg: number; customer_name: string | null; category_name: string | null };
 type Paged = { rows: Item[]; total: number };
 
-const STATUSES = ["RECEIVED", "TESTED", "VALUED", "PURCHASED", "AVAILABLE", "RESERVED_FOR_MELTING", "MELTED", "RESOLD", "TRANSFERRED", "VOID"];
+const STATUSES = ["RECEIVED", "TESTED", "VALUED", "PURCHASED", "AVAILABLE", "RESERVED_FOR_MELTING", "MELTED", "RESOLD", "DRAWN", "TRANSFERRED", "VOID"];
 const PAGE_SIZE = 20;
 
 export default function OldGoldItemsPage() {

@@ -140,7 +140,7 @@ export default function OldGoldDetailPage({ params }: { params: Promise<{ id: st
         sub={
           <>
             {item.description}
-            {item.item_type ? ` · ${item.item_type}` : ""} · {customer ? `${customer.name} (${customer.code})` : "No customer"}
+            {item.item_type ? ` · ${item.item_type}` : ""} · {customer ? `${customer.name} (${customer.code})` : "Shop stock"}
             {item.notes ? ` · ${item.notes}` : ""}
           </>
         }
@@ -322,7 +322,7 @@ export default function OldGoldDetailPage({ params }: { params: Promise<{ id: st
                 </span>
               </div>
             ) : (
-              <p className="px-4 py-3 text-[12px] text-ink-4">No customer on this item.</p>
+              <p className="px-4 py-3 text-[12px] text-ink-4">The shop's own stock: no seller on this item.</p>
             )}
           </Card>
 

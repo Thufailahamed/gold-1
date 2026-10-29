@@ -49,9 +49,10 @@ describe.skipIf(!sqliteAvailable)("old gold categories", () => {
     expect(v.valueCents).toBeGreaterThan(0);
   });
 
-  it("without testing, a karat is required", async () => {
+  it("with no karat, the piece waits in the testing queue", async () => {
     const og = await import("./oldgold");
-    await expect(og.intakeItem(db, { customerId: "c1", branchId: "b1", grossG: 4, stoneG: 0 }, "u1")).rejects.toMatchObject({ code: "VALIDATION" });
+    const { id } = await og.intakeItem(db, { customerId: "c1", branchId: "b1", grossG: 4, stoneG: 0 }, "u1");
+    expect(raw.prepare("SELECT status, karat FROM old_gold_items WHERE id = ?").get(id)).toEqual({ status: "RECEIVED", karat: null });
   });
 
   it("at intake, a purchase paid entirely as credit settles the customer's open bill", async () => {

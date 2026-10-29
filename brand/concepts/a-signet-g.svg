@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0.6" y2="1">
+  <stop offset="0" stop-color="#0E4D40"/><stop offset="0.6" stop-color="#083A2F"/><stop offset="1" stop-color="#03211A"/></linearGradient>
+<radialGradient id="glow" cx="0.5" cy="0.42" r="0.55">
+  <stop offset="0" stop-color="#2FA384" stop-opacity="0.30"/><stop offset="1" stop-color="#2FA384" stop-opacity="0"/></radialGradient>
+<linearGradient id="metal" x1="0.15" y1="0" x2="0.75" y2="1">
+  <stop offset="0" stop-color="#FFF4CF"/><stop offset="0.28" stop-color="#E9CB82"/>
+  <stop offset="0.55" stop-color="#CDA853"/><stop offset="0.8" stop-color="#A2802F"/><stop offset="1" stop-color="#7A5A1E"/></linearGradient>
+<linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.85"/><stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+  <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000" flood-opacity="0.45"/></filter>
+<clipPath id="tile"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+
+</defs>
+<rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+<rect x="100" y="100" width="824" height="824" rx="185" fill="url(#glow)"/>
+<rect x="101.5" y="101.5" width="821" height="821" rx="183.5" fill="none" stroke="#9FF0D2" stroke-opacity="0.14" stroke-width="3"/>
+<g filter="url(#shadow)">
+<path d="M652.3 392.8 A205 205 0 1 0 705.0 530.0" fill="none" stroke="url(#metal)" stroke-width="104" stroke-linecap="butt"/>
+<rect x="540" y="522" width="217.0" height="89.4" rx="6" fill="url(#metal)"/>
+<rect x="653.0" y="529" width="104" height="82.4" fill="url(#metal)"/>
+</g>
+<path d="M673.7 350.2 A250.0 250.0 0 0 0 250.2 521.3" fill="none" stroke="url(#rim)" stroke-opacity="0.55" stroke-width="5" stroke-linecap="round"/><g stroke="#062A22" stroke-width="3.9" stroke-linejoin="round">
+<polygon points="614.2,300.0 656.3,254.8 700.0,300.0" fill="#E7CE8E"/>
+<polygon points="656.3,254.8 743.7,254.8 700.0,300.0" fill="#FFF7DC"/>
+<polygon points="743.7,254.8 785.8,300.0 700.0,300.0" fill="#D3B062"/>
+<polygon points="614.2,300.0 700.0,300.0 700.0,399.8" fill="#BD9844"/>
+<polygon points="700.0,300.0 785.8,300.0 700.0,399.8" fill="#8E6B28"/>
+</g>
+<line x1="618.9" y1="300.0" x2="781.1" y2="300.0" stroke="#FFF6D6" stroke-opacity="0.6" stroke-width="3.1" stroke-linecap="round"/>
+<line x1="659.4" y1="254.8" x2="740.6" y2="254.8" stroke="#FFFFFF" stroke-opacity="0.8" stroke-width="3.1" stroke-linecap="round"/><path d="M800 182 L806.6 205.4 L830 212 L806.6 218.6 L800 242 L793.4 218.6 L770 212 L793.4 205.4 Z" fill="#FFF8E1" fill-opacity="0.95"/><path d="M260 236 L263.08 246.92 L274 250 L263.08 253.08 L260 264 L256.92 253.08 L246 250 L256.92 246.92 Z" fill="#FFF8E1" fill-opacity="0.6"/>
+</svg>

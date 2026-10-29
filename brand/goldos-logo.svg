@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="214 200 2120 640">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="0.55" y2="1">
+    <stop offset="0" stop-color="#0F5545"/><stop offset="0.55" stop-color="#083A2F"/><stop offset="1" stop-color="#021A14"/>
+  </linearGradient>
+  <radialGradient id="glow" cx="0.5" cy="0.44" r="0.52">
+    <stop offset="0" stop-color="#3FBF9A" stop-opacity="0.28"/><stop offset="1" stop-color="#3FBF9A" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="metal" gradientUnits="userSpaceOnUse" x1="330" y1="250" x2="700" y2="800">
+    <stop offset="0" stop-color="#FFF3CC"/><stop offset="0.3" stop-color="#EBCD85"/>
+    <stop offset="0.6" stop-color="#CDA853"/><stop offset="1" stop-color="#8E6B28"/>
+  </linearGradient>
+  <linearGradient id="metalDark" gradientUnits="userSpaceOnUse" x1="330" y1="250" x2="700" y2="800">
+    <stop offset="0" stop-color="#D9B867"/><stop offset="0.45" stop-color="#B08C3B"/>
+    <stop offset="1" stop-color="#6B4F17"/>
+  </linearGradient>
+  <linearGradient id="sheen" gradientUnits="userSpaceOnUse" x1="0" y1="250" x2="0" y2="560">
+    <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.9"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+  </linearGradient>
+  <clipPath id="g"><path d="M723.2 355.0 A268 268 0 1 0 780.0 520.0 L560.0 520.0 L538.0 570.0 L560.0 620.0 L636.9 620.0 A160 160 0 1 1 638.1 421.5 Z"/></clipPath>
+  <filter id="shadow" x="-25%" y="-25%" width="150%" height="160%">
+    <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000" flood-opacity="0.22"/>
+  </filter>
+  <filter id="soft" x="-30%" y="-30%" width="160%" height="170%">
+    <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000" flood-opacity="0.4"/>
+  </filter>
+<linearGradient id="metal2" gradientUnits="userSpaceOnUse" x1="0" y1="380" x2="0" y2="640"><stop offset="0" stop-color="#E9CB82"/><stop offset="1" stop-color="#A88A3E"/></linearGradient>
+</defs>
+
+
+<!-- G: one solid band, bevelled like a ring shank (bright outer face, deeper inner face) -->
+<path d="M723.2 355.0 A268 268 0 1 0 780.0 520.0 L560.0 520.0 L538.0 570.0 L560.0 620.0 L636.9 620.0 A160 160 0 1 1 638.1 421.5 Z" fill="url(#metal)" filter="url(#shadow)"/>
+<g clip-path="url(#g)">
+  <circle cx="512" cy="520" r="183.0" fill="none" stroke="url(#metalDark)" stroke-width="62.0"/>
+  <circle cx="512" cy="520" r="214.0" fill="none" stroke="#FFF6D6" stroke-opacity="0.55" stroke-width="3"/>
+  <rect x="528" y="518" width="198.0" height="54.0" fill="url(#metal)"/>
+  <rect x="528" y="572.0" width="198.0" height="100" fill="url(#metalDark)"/>
+  <line x1="549" y1="572.0" x2="725.0" y2="572.0" stroke="#FFF6D6" stroke-opacity="0.55" stroke-width="3"/>
+  <circle cx="512" cy="520" r="265" fill="none" stroke="url(#sheen)" stroke-width="6"/>
+</g>
+
+
+<path d="M790 220 Q796.0 244.0 820 250 Q796.0 256.0 790 280 Q784.0 256.0 760 250 Q784.0 244.0 790 220 Z" fill="#C9A24C" fill-opacity="1"/>
+
+<text x="860" y="668" font-family="Fraunces, 'Iowan Old Style', Georgia, serif" font-size="400" font-weight="600" letter-spacing="-8" fill="#062A22">Gold<tspan fill="url(#metal2)" font-weight="500">OS</tspan></text>
+</svg>

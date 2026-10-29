@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
+import { BrandMark } from "@/components/brand-mark";
 import Link from "next/link";
 import { cn } from "@/lib/cn";
-import { GemIcon } from "@/components/icons";
 
 export function Reveal({
   children,
@@ -136,9 +136,7 @@ export function HomeNav() {
     >
       <nav aria-label="Primary" className="mx-auto flex h-14 max-w-6xl items-center justify-between px-5 sm:px-6">
         <Link href="/" className="flex items-center gap-2" aria-label="GoldOS home">
-          <span className="flex size-7 items-center justify-center rounded-[9px] bg-gradient-to-b from-gold-light to-gold-deep shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
-            <GemIcon size={13} className="text-white" />
-          </span>
+          <BrandMark size={28} />
           <span className="hx-display text-[17px] tracking-[-0.02em] text-[#10201b]">GoldOS</span>
         </Link>
 

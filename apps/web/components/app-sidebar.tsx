@@ -8,11 +8,11 @@ import { hasPermission } from "@goldos/shared";
 import { api, type MeData } from "@/lib/api";
 import { logout } from "@/lib/auth";
 import { cn } from "@/lib/cn";
+import { BrandMark } from "@/components/brand-mark";
 import {
   LayoutGridIcon,
   PackageIcon,
   ArchiveIcon,
-  GemIcon,
   CoinsIcon,
   TruckIcon,
   Building2Icon,
@@ -148,9 +148,7 @@ function canSee(me: MeData, i: NavItem) {
 export function GoldWordmark() {
   return (
     <span className="flex items-center gap-3">
-      <span className="sb-gem relative flex size-9 items-center justify-center rounded-[11px]">
-        <GemIcon size={16} className="text-[#022c22]" />
-      </span>
+      <BrandMark size={36} className="shrink-0 drop-shadow-[0_8px_18px_rgba(0,0,0,0.35)]" />
       <span className="flex flex-col leading-none">
         <span className="g-display text-[16px] font-semibold tracking-[-0.01em] text-white">
           Gold<span className="sb-mint-text">OS</span>

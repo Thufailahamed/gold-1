@@ -161,7 +161,7 @@ export default function IntakePage() {
   const [notes, setNotes] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [drag, setDrag] = useState(false);
-  const [created, setCreated] = useState<{ id: string; number: string; needsTesting?: boolean } | null>(null);
+  const [created, setCreated] = useState<{ id: string; number: string; needsTesting?: boolean; shopOwned?: boolean } | null>(null);
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<MeData>("/api/v1/auth/me") });
   // The selected-branch cookie, else the first branch the user works in. An
   // empty branch used to reach the server and come back as "Branch not found".
@@ -192,6 +192,9 @@ export default function IntakePage() {
   // Testing is off by default: the karat is picked here and the piece is Tested at once.
   // Tick Needs testing to send it to the testing queue instead.
   const [needsTesting, setNeedsTesting] = useState(false);
+  // The shop already holds this gold: no seller, no purchase, booked at the cost typed.
+  const [shopOwned, setShopOwned] = useState(false);
+  const [costLkr, setCostLkr] = useState("");
   const [purityId, setPurityId] = useState("");
   const purities = useQuery({
     queryKey: ["og-purities"],
@@ -241,11 +244,13 @@ export default function IntakePage() {
       const res = await api<{ id: string; number: string }>("/api/v1/oldgold/items", {
         method: "POST",
         body: JSON.stringify({
-          customerId: customer?.id ?? "",
+          customerId: shopOwned ? undefined : customer?.id ?? "",
+          shopOwned: shopOwned || undefined,
+          costLkr: shopOwned && costLkr !== "" ? Number(costLkr) : undefined,
           branchId,
           categoryId: selectedCategory?.id,
-          needsTesting,
-          purityId: !needsTesting ? purityId || undefined : undefined,
+          needsTesting: testing,
+          purityId: !testing ? purityId || undefined : undefined,
           grossG: Number(grossG),
           stoneG: stoneG === "" ? 0 : Number(stoneG),
           quotedRateLkr: quoteRate > 0 ? quoteRate : undefined,
@@ -264,7 +269,8 @@ export default function IntakePage() {
           failed++;
         }
       }
-      return { ...res, failed, needsTesting };
+      // A piece with no karat waits in the testing queue, the same as one ticked Needs testing.
+      return { ...res, failed, needsTesting: testing || !purityId, shopOwned };
     },
     onSuccess: (d) => {
       setCreated(d);
@@ -284,20 +290,24 @@ export default function IntakePage() {
   // Price per gram, typed at intake and optional. The price is net weight × that rate.
   const quoteRate = Number(ratePerG);
   const quote = net !== null && quoteRate > 0 ? Math.round(net * quoteRate) : null;
-  const canSubmit = !intake.isPending && !!customer && !!branchId && grossOk && stoneOk && (needsTesting || !!purityId);
+  // Shop-owned stock is never sent to testing: its karat is chosen and its cost typed.
+  const testing = needsTesting && !shopOwned;
+  // Cost and karat are optional. A cost typed must still be above 0.
+  const costOk = costLkr === "" || Number(costLkr) > 0;
+  const canSubmit = !intake.isPending && (shopOwned ? costOk : !!customer) && !!branchId && grossOk && stoneOk;
 
   const steps = [
-    { t: "Customer", done: !!customer },
+    { t: "Customer", done: shopOwned || !!customer },
     { t: "Category", done: !!selectedCategory },
     { t: "Weigh", done: grossOk && stoneOk },
     { t: "Photograph", done: files.length > 0 },
   ];
   const missing = [
-    !customer && "customer",
+    !shopOwned && !customer && "customer",
+    shopOwned && !costOk && "a cost above 0",
     !grossOk && "gross weight",
     !stoneOk && "a valid stone weight",
     !branchId && "a branch",
-    !needsTesting && !purityId && "the karat, or tick Needs testing",
   ].filter(Boolean) as string[];
 
   const addFiles = (list: FileList | File[] | null) => {
@@ -312,6 +322,8 @@ export default function IntakePage() {
     setRatePerG("");
     setPurityId("");
     setNeedsTesting(false);
+    setShopOwned(false);
+    setCostLkr("");
     setNotes("");
     setFiles([]);
   }
@@ -367,7 +379,11 @@ export default function IntakePage() {
                 Item <span className="g-metric rounded-md bg-void px-2 py-0.5 text-gold-light">{created.number}</span> received
               </p>
               <p className="mt-1 text-sm text-ink-3">
-                {created.needsTesting ? "Tag it with the OG number — it is now in the testing queue." : "Tag it with the OG number — it is tested and ready to value."}
+                {created.shopOwned
+                  ? "Tag it with the OG number — it is on the shelf, ready to sell or melt."
+                  : created.needsTesting
+                    ? "Tag it with the OG number — it is now in the testing queue."
+                    : "Tag it with the OG number — it is tested and ready to value."}
               </p>
             </div>
           </div>
@@ -385,8 +401,20 @@ export default function IntakePage() {
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0 space-y-4">
           {/* 1 Customer */}
-          <Section n="1" title="Customer" sub="Who is selling the piece" icon={<UsersIcon size={17} />} done={!!customer}>
-            {customer ? (
+          <Section n="1" title="Customer" sub="Who is selling the piece" icon={<UsersIcon size={17} />} done={shopOwned || !!customer}>
+            <label className="mb-3 flex items-start gap-2.5">
+              <input
+                type="checkbox"
+                checked={shopOwned}
+                onChange={(e) => setShopOwned(e.target.checked)}
+                className="mt-0.5 size-4 accent-[#CDA853]"
+              />
+              <span>
+                <span className="block text-[13px] font-medium text-ink">Shop&apos;s own stock</span>
+                <span className="block text-xs text-ink-4">The shop already holds this gold. No seller and no purchase; it goes on the shelf at the cost you enter.</span>
+              </span>
+            </label>
+            {shopOwned ? null : customer ? (
               <div className="flex items-center gap-3 rounded-2xl bg-gold-pale/60 p-3 ring-1 ring-gold-dark/25">
                 <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-void text-xs font-bold text-gold-light">
                   {initials(customer.name)}
@@ -516,19 +544,29 @@ export default function IntakePage() {
                   ))}
                 </select>
               </label>
-              {needsTesting ? null : (
-                <label className="block">
-                  <Label extra={<span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gold-dark">Required</span>}>Karat</Label>
-                  <select value={purityId} onChange={(e) => setPurityId(e.target.value)} className={cn(inputCls, "pr-8")}>
-                    <option value="">Choose the karat…</option>
-                    {purityRows.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.karat} ({p.permille}‰)
-                      </option>
-                    ))}
-                  </select>
+              <label className="block">
+                <Label extra={<span className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-5">Optional</span>}>Karat</Label>
+                <select value={purityId} onChange={(e) => setPurityId(e.target.value)} className={cn(inputCls, "pr-8")}>
+                  <option value="">Not known yet</option>
+                  {purityRows.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.karat} ({p.permille}‰)
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {shopOwned ? (
+                <label className="block sm:col-span-2">
+                  <Label extra={<span className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-5">Optional</span>}>Cost (LKR)</Label>
+                  <input
+                    inputMode="decimal"
+                    value={costLkr}
+                    onChange={(e) => setCostLkr(e.target.value)}
+                    placeholder="What the shop carries it at"
+                    className={inputCls}
+                  />
                 </label>
-              )}
+              ) : (
               <label className="flex items-start gap-2.5 sm:col-span-2">
                 <input
                   type="checkbox"
@@ -538,9 +576,10 @@ export default function IntakePage() {
                 />
                 <span>
                   <span className="block text-[13px] font-medium text-ink">Needs testing</span>
-                  <span className="block text-xs text-ink-4">Send it to the testing queue. Leave off when the karat is known.</span>
+                  <span className="block text-xs text-ink-4">Send it to the testing queue, even when the karat is known.</span>
                 </span>
               </label>
+              )}
             </div>
           </Section>
 
@@ -681,11 +720,11 @@ export default function IntakePage() {
 
             <dl className="relative mt-4 space-y-2 border-t border-dashed border-paper/15 pt-4 text-sm">
               {[
-                ["Customer", customer ? customer.name : "—"],
+                ["Seller", shopOwned ? "Shop stock" : customer ? customer.name : "—"],
                 ["Gross", grossOk ? `${gross.toLocaleString("en-US", { maximumFractionDigits: 3 })} g` : "—"],
                 ["Stone", stoneG !== "" && stoneOk ? `${stone.toLocaleString("en-US", { maximumFractionDigits: 3 })} g` : "—"],
                 ["Category", selectedCategory ? selectedCategory.code : "—"],
-                ["Karat", needsTesting ? "To test" : selectedPurity ? selectedPurity.karat : "—"],
+                ["Karat", testing || (!shopOwned && !selectedPurity) ? "To test" : selectedPurity ? selectedPurity.karat : "—"],
                 ["Price / g", ratePerG !== "" && quoteRate > 0 ? `LKR ${quoteRate.toLocaleString("en-US")}` : "—"],
                 ["Price", quote !== null ? `LKR ${quote.toLocaleString("en-US")}` : "—"],
                 ["Photos", files.length ? String(files.length) : "—"],
@@ -722,7 +761,13 @@ export default function IntakePage() {
               )}
             </button>
             <p className="relative mt-3 text-center text-[11px] leading-relaxed text-paper/45">
-              {missing.length ? <>Still needed: {missing.join(", ")}</> : "Ready — an OG number is minted on save."}
+              {missing.length ? (
+                <>Still needed: {missing.join(", ")}</>
+              ) : !shopOwned && !testing && !purityId ? (
+                "Ready — no karat yet, so it goes to the testing queue. An OG number is minted on save."
+              ) : (
+                "Ready — an OG number is minted on save."
+              )}
             </p>
           </section>
         </aside>

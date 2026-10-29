@@ -1,14 +1,13 @@
 "use client";
 
 // Old gold taken in against the bill at the till. The customer's valued pieces
-// are ticked, and a piece brought in today is added with its weight and amount.
-// A piece taken in here is only held until the sale completes; the balance is
-// what the counter settles — the customer pays the difference when the new
+// are ticked, and each piece brought in today is added with its weight and the
+// amount the shop pays for it. Pieces can be added one after another, each with
+// its own amount, and all of them are held until the sale completes; the balance
+// is what the counter settles — the customer pays the difference when the new
 // pieces win, or the shop pays it out when the old gold does. The POS owns the
 // selection, the payment and the save; this only shows and collects.
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/cn";
 import { Panel } from "@/components/ui";
@@ -29,26 +28,21 @@ export type HeldOldGold = {
   key: string;
   grossG: number;
   valueCents: number;
-  description?: string;
-  categoryId?: string;
-  categoryCode?: string;
 };
 
 export type ExchangePayout = "cash" | "store_credit";
 
-/** What the cashier keys for a piece taken in at the counter: its weight and the amount paid for it. */
+/** What the cashier keys for a piece taken in at the counter: its weight and the amount the shop pays for it. */
 export type NewOldGold = {
   grossG: number;
   valueLkr: number;
-  /** Optional; recorded like the intake desk's description. */
-  description?: string;
-  /** The old gold category it is filed under; blank means OG. */
-  categoryId?: string;
-  categoryCode?: string;
 };
 
 const money = (c: number) => (c / 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
 const grams = (mg: number) => (mg / 1000).toLocaleString("en-US", { maximumFractionDigits: 3 });
+
+const fieldCls =
+  "num-tabular mt-1.5 h-10 w-full rounded-xl bg-paper px-3 text-sm font-normal text-ink ring-1 ring-ink/10 focus:outline-none focus:ring-gold-dark/50";
 
 export function OldGoldExchange({
   customerName,
@@ -87,35 +81,26 @@ export function OldGoldExchange({
   const [open, setOpen] = useState(false);
   const [weight, setWeight] = useState("");
   const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
-  // The old gold categories; OG is the default. The piece is filed under the one chosen.
-  const categories = useQuery({
-    queryKey: ["og-categories"],
-    queryFn: () => api<{ rows: { id: string; name: string; code: string; isDefault: boolean }[] }>("/api/v1/oldgold/categories"),
-    staleTime: 5 * 60_000,
-  });
-  const categoryRows = categories.data?.rows ?? [];
-  const [categoryId, setCategoryId] = useState("");
-  const category = categoryRows.find((c) => c.id === categoryId) ?? categoryRows.find((c) => c.isDefault);
+  const weightRef = useRef<HTMLInputElement>(null);
   const ticked = selectedIds.length + pending.length;
   const balance = saleTotalCents - oldTotalCents;
 
   const gross = Number(weight);
   const problem = !(gross > 0) ? "Enter the weight" : !(Number(amount) > 0) ? "Enter the amount the shop pays" : null;
 
+  // Adds the piece and keeps the form open, cleared and ready for the next one.
   function submit() {
     if (problem) return;
-    onAdd({
-      grossG: gross,
-      valueLkr: Number(amount),
-      description: description.trim() || undefined,
-      categoryId: category?.id,
-      categoryCode: category?.code,
-    });
+    onAdd({ grossG: gross, valueLkr: Number(amount) });
     setWeight("");
     setAmount("");
-    setDescription("");
+    weightRef.current?.focus();
+  }
+
+  function close() {
     setOpen(false);
+    setWeight("");
+    setAmount("");
   }
 
   return (
@@ -138,53 +123,35 @@ export function OldGoldExchange({
       {open ? (
         <div className="mb-4 rounded-xl bg-bone/70 p-4 ring-1 ring-ink/[0.06]">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-medium text-ink">New piece from {customerName}</p>
+            <p className="text-sm font-medium text-ink">New pieces from {customerName}</p>
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={close}
               aria-label="Close intake"
               className="inline-flex size-7 items-center justify-center rounded-md text-ink-4 transition-colors hover:bg-ink/[0.06] hover:text-ink"
             >
               <XIcon size={14} />
             </button>
           </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-gold-dark md:col-span-2">
-              Description
-              <input
-                type="text"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="e.g. 22K rope chain, broken clasp (optional)"
-                className="mt-1.5 h-10 w-full rounded-xl bg-paper px-3 text-sm font-normal text-ink ring-1 ring-ink/10 focus:outline-none focus:ring-gold-dark/50"
-              />
-            </label>
-            <label className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-gold-dark md:col-span-2">
-              Category
-              <select
-                value={category?.id ?? ""}
-                onChange={(e) => setCategoryId(e.target.value)}
-                disabled={categoryRows.length === 0}
-                className="mt-1.5 h-10 w-full rounded-xl bg-paper px-3 text-sm font-normal text-ink ring-1 ring-ink/10 focus:outline-none focus:ring-gold-dark/50"
-              >
-                {categoryRows.length === 0 ? <option value="">No old gold category</option> : null}
-                {categoryRows.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.code})
-                  </option>
-                ))}
-              </select>
-            </label>
+          <form
+            className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end"
+            onSubmit={(e) => {
+              e.preventDefault();
+              submit();
+            }}
+          >
             <label className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-gold-dark">
               Weight (g)
               <input
+                ref={weightRef}
                 type="number"
                 step="any"
                 min={0}
                 value={weight}
                 onChange={(e) => setWeight(e.target.value)}
                 autoFocus
-                className="num-tabular mt-1.5 h-10 w-full rounded-xl bg-paper px-3 text-sm font-normal text-ink ring-1 ring-ink/10 focus:outline-none focus:ring-gold-dark/50"
+                aria-label="Weight in grams"
+                className={fieldCls}
               />
             </label>
             <label className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-gold-dark">
@@ -196,18 +163,19 @@ export function OldGoldExchange({
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="Agreed amount"
-                className="num-tabular mt-1.5 h-10 w-full rounded-xl bg-paper px-3 text-sm font-normal text-ink ring-1 ring-ink/10 focus:outline-none focus:ring-gold-dark/50"
+                aria-label="Amount the shop pays in LKR"
+                className={fieldCls}
               />
             </label>
-          </div>
+            <button type="submit" disabled={Boolean(problem)} className="g-btn g-btn-primary h-10 rounded-xl px-4 text-xs">
+              <PlusIcon size={12} /> Add piece
+            </button>
+          </form>
 
           <div className="mt-4 flex items-center justify-end gap-2">
             {problem ? <span className="mr-auto text-xs text-ink-4">{problem}</span> : null}
-            <button type="button" onClick={() => setOpen(false)} className="g-btn g-btn-secondary h-9 rounded-xl px-3 text-xs">
-              Cancel
-            </button>
-            <button type="button" onClick={submit} disabled={Boolean(problem)} className="g-btn g-btn-primary h-9 rounded-xl px-4 text-xs">
-              Add to sale
+            <button type="button" onClick={close} className="g-btn g-btn-secondary h-9 rounded-xl px-3 text-xs">
+              Done
             </button>
           </div>
         </div>
@@ -235,10 +203,7 @@ export function OldGoldExchange({
                 <GemIcon size={15} className="shrink-0 text-gold-dark" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-ink">New piece · {grams(p.grossG * 1000)} g</span>
-                  <span className="block text-xs text-ink-4">
-                  {[p.categoryCode, p.description].filter(Boolean).join(" · ")}
-                  {p.categoryCode || p.description ? " · " : ""}Saved when the sale is completed
-                </span>
+                  <span className="block text-xs text-ink-4">Saved when the sale is completed</span>
                 </span>
                 <span className="num-tabular shrink-0 text-sm font-semibold text-ink">{money(p.valueCents)}</span>
                 <button

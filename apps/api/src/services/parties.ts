@@ -1,5 +1,5 @@
 import type { CreatePartyInput } from "@goldos/shared";
-import { centsToLkr, lkrToCents } from "@goldos/shared";
+import { centsToLkr, lkrToCents, SHOP_STOCK_CUSTOMER_ID } from "@goldos/shared";
 import { buildAuditStmt } from "../middleware/audit";
 import type { PageOpts } from "./catalog";
 
@@ -132,9 +132,9 @@ export async function listParties(
 ): Promise<{ rows: PartyRow[]; total: number }> {
   const like = `%${opts.search ?? ""}%`;
   const offset = (opts.page - 1) * opts.limit;
-  const scope = canManageAll
-    ? ""
-    : "AND branch_id IN (SELECT branch_id FROM branch_members WHERE user_id = ?)";
+  // The shop's own old gold sits under a built-in customer; it is not a person to list.
+  const hidden = table === "customers" ? `AND id <> '${SHOP_STOCK_CUSTOMER_ID}'` : "";
+  const scope = `${canManageAll ? "" : "AND branch_id IN (SELECT branch_id FROM branch_members WHERE user_id = ?)"} ${hidden}`;
   const countBind = canManageAll ? [like, like, like] : [like, like, like, userId];
   const count = await db
     .prepare(`SELECT COUNT(*) AS total FROM ${table} WHERE (name LIKE ? OR phone LIKE ? OR address LIKE ?) ${scope}`)

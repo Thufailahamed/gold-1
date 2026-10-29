@@ -364,6 +364,8 @@ function ProgressRing({ value, total }: { value: number; total: number }) {
 
 /* ------------------------------------------------------------------- page */
 
+type OldGoldOnHand = { totalMg: number; unknownMg: number; byKarat: { permille: number; karat: string; netMg: number }[] };
+
 export default function NewProductPage() {
   const router = useRouter();
   const qc = useQueryClient();
@@ -405,6 +407,12 @@ export default function NewProductPage() {
   const stones = opt<Option>("stones-all", "/api/v1/masters/stone-types?limit=100");
   const purs = opt<Option>("purities-all", "/api/v1/masters/purities?limit=100");
   const branches = opt<Option>("branches", "/api/v1/branches?limit=100");
+  // A piece is made from the old gold on hand at its branch, so the form shows what is there.
+  const onHand = useQuery({
+    queryKey: ["og-on-hand", vals.branchId],
+    queryFn: () => api<OldGoldOnHand>(`/api/v1/products/old-gold-on-hand?branchId=${encodeURIComponent(vals.branchId)}`),
+    enabled: Boolean(vals.branchId),
+  });
   const board = useQuery({
     queryKey: ["gold-rates-current"],
     queryFn: () => api<{ purity_id: string; rate_per_gram: number }[]>("/api/v1/gold-rates/current"),
@@ -517,6 +525,12 @@ export default function NewProductPage() {
   const typedPrice = priceFromRate(vals as FormValues);
   const liveMargin = estimate !== null && cost !== null ? ((estimate - cost) / estimate) * 100 : null;
   const stoneShare = net !== null && grossN > 0 ? Math.min(Math.max((grossN - net) / grossN, 0), 1) : 0;
+  // The old gold this piece can draw on: its own karat, and any with no karat yet. The metal is the net weight.
+  const onHandMg = onHand.data ? (onHand.data.byKarat.find((k) => k.permille === permille)?.netMg ?? 0) + onHand.data.unknownMg : null;
+  const needMg = net !== null ? net * 1000 : null;
+  const noneOnHand = onHandMg !== null && onHandMg <= 0;
+  const shortOnHand = onHandMg !== null && needMg !== null && needMg > onHandMg;
+  const blockedByGold = noneOnHand || shortOnHand;
 
   const scrollTo = (id: string) =>
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -554,7 +568,7 @@ export default function NewProductPage() {
             <Link href="/products" className={heroGhost}>
               Cancel
             </Link>
-            <button type="submit" form="np-form" disabled={create.isPending} className={heroGold}>
+            <button type="submit" form="np-form" disabled={create.isPending || blockedByGold} className={heroGold}>
               {create.isPending ? "Saving…" : "Save product"}
             </button>
           </>
@@ -861,6 +875,16 @@ export default function NewProductPage() {
                     <UnitInput unit="g" {...register("wastageG")} />
                   </Field>
                 </div>
+
+                {onHandMg !== null ? (
+                  <p className={cn("mt-3 text-xs", blockedByGold ? "font-medium text-rose-700" : "text-ink-4")}>
+                    {noneOnHand
+                      ? `No old gold on hand for ${karat ?? "this karat"} at this branch. Take the gold in first.`
+                      : shortOnHand
+                        ? `Only ${fmtG(onHandMg / 1000)} g of old gold is on hand for ${karat ?? "this karat"}; this piece needs ${fmtG(net)} g.`
+                        : `Drawn from old gold on hand: ${fmtG(net)} g of ${fmtG(onHandMg / 1000)} g available.`}
+                  </p>
+                ) : null}
 
                 {/* Derived weights */}
                 <div className="relative mt-4 overflow-hidden rounded-2xl bg-void p-4 text-paper shadow-[0_18px_36px_-24px_rgba(6,42,34,0.9)]">

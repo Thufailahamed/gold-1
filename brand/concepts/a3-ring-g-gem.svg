@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="0.55" y2="1">
+    <stop offset="0" stop-color="#0F5545"/><stop offset="0.55" stop-color="#083A2F"/><stop offset="1" stop-color="#021A14"/>
+  </linearGradient>
+  <radialGradient id="glow" cx="0.5" cy="0.44" r="0.52">
+    <stop offset="0" stop-color="#3FBF9A" stop-opacity="0.28"/><stop offset="1" stop-color="#3FBF9A" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="metal" gradientUnits="userSpaceOnUse" x1="330" y1="250" x2="700" y2="800">
+    <stop offset="0" stop-color="#FFF3CC"/><stop offset="0.3" stop-color="#EBCD85"/>
+    <stop offset="0.6" stop-color="#CDA853"/><stop offset="1" stop-color="#8E6B28"/>
+  </linearGradient>
+  <linearGradient id="metalDark" gradientUnits="userSpaceOnUse" x1="330" y1="250" x2="700" y2="800">
+    <stop offset="0" stop-color="#D9B867"/><stop offset="0.45" stop-color="#B08C3B"/>
+    <stop offset="1" stop-color="#6B4F17"/>
+  </linearGradient>
+  <linearGradient id="sheen" gradientUnits="userSpaceOnUse" x1="0" y1="250" x2="0" y2="560">
+    <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.9"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+  </linearGradient>
+  <clipPath id="g"><path d="M723.2 355.0 A268 268 0 1 0 780.0 520.0 L560.0 520.0 L538.0 570.0 L560.0 620.0 L636.9 620.0 A160 160 0 1 1 638.1 421.5 Z"/></clipPath>
+  <filter id="shadow" x="-25%" y="-25%" width="150%" height="160%">
+    <feDropShadow dx="0" dy="22" stdDeviation="26" flood-color="#000" flood-opacity="0.5"/>
+  </filter>
+  <filter id="soft" x="-30%" y="-30%" width="160%" height="170%">
+    <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000" flood-opacity="0.4"/>
+  </filter>
+</defs>
+
+<!-- tile -->
+<rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+<rect x="100" y="100" width="824" height="824" rx="185" fill="url(#glow)"/>
+<rect x="101.5" y="101.5" width="821" height="821" rx="183.5" fill="none" stroke="#9FF0D2" stroke-opacity="0.13" stroke-width="3"/>
+
+<!-- G: one solid band, bevelled like a ring shank (bright outer face, deeper inner face) -->
+<path d="M723.2 355.0 A268 268 0 1 0 780.0 520.0 L560.0 520.0 L538.0 570.0 L560.0 620.0 L636.9 620.0 A160 160 0 1 1 638.1 421.5 Z" fill="url(#metal)" filter="url(#shadow)"/>
+<g clip-path="url(#g)">
+  <circle cx="512" cy="520" r="183.0" fill="none" stroke="url(#metalDark)" stroke-width="62.0"/>
+  <circle cx="512" cy="520" r="214.0" fill="none" stroke="#FFF6D6" stroke-opacity="0.55" stroke-width="3"/>
+  <rect x="528" y="518" width="198.0" height="54.0" fill="url(#metal)"/>
+  <rect x="528" y="572.0" width="198.0" height="100" fill="url(#metalDark)"/>
+  <line x1="549" y1="572.0" x2="725.0" y2="572.0" stroke="#FFF6D6" stroke-opacity="0.55" stroke-width="3"/>
+  <circle cx="512" cy="520" r="265" fill="none" stroke="url(#sheen)" stroke-width="6"/>
+</g>
+
+<g stroke="#062A22" stroke-width="4" stroke-linejoin="round" filter="url(#soft)">
+<polygon points="673.8,318.0 707.3,282.0 742.0,318.0" fill="#E7CE8E"/><polygon points="707.3,282.0 776.7,282.0 742.0,318.0" fill="#FFF7DC"/>
+<polygon points="776.7,282.0 810.2,318.0 742.0,318.0" fill="#D3B062"/><polygon points="673.8,318.0 742.0,318.0 742.0,397.4" fill="#BD9844"/>
+<polygon points="742.0,318.0 810.2,318.0 742.0,397.4" fill="#8E6B28"/></g>
+<path d="M838 204 Q842.4 221.6 860 226 Q842.4 230.4 838 248 Q833.6 230.4 816 226 Q833.6 221.6 838 204 Z" fill="#FFF8E1" fill-opacity="0.9"/>
+<path d="M272 235 Q274.6 245.4 285 248 Q274.6 250.6 272 261 Q269.4 250.6 259 248 Q269.4 245.4 272 235 Z" fill="#FFF8E1" fill-opacity="0.55"/>
+</svg>

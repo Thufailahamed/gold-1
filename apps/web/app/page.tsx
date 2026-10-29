@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fragment, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
+import { BrandMark } from "@/components/brand-mark";
 import { HomeNav, Reveal, ScrollScale } from "@/components/home/motion";
 import { ModuleExplorer } from "@/components/home/module-explorer";
 import { GoldDust, ScrollRibbon, SpotCard } from "@/components/home/effects";
@@ -32,7 +33,6 @@ import {
   ClipboardCheckIcon,
   CreditCardIcon,
   FlaskConicalIcon,
-  GemIcon,
   HammerIcon,
   HistoryIcon,
   ScaleIcon,
@@ -724,9 +724,7 @@ function Footer() {
         <div className="grid gap-10 py-8 sm:grid-cols-[1.4fr_repeat(3,1fr)]">
           <div>
             <Link href="/" className="inline-flex items-center gap-2" aria-label="GoldOS home">
-              <span className="flex size-7 items-center justify-center rounded-[9px] bg-gradient-to-b from-gold-light to-gold-deep">
-                <GemIcon size={13} className="text-white" />
-              </span>
+              <BrandMark size={28} />
               <span className="hx-display text-[17px] tracking-[-0.02em] text-[#10201b]">GoldOS</span>
             </Link>
             <p className="mt-3 max-w-xs text-xs leading-relaxed">Made for the showroom floor in Sri Lanka.</p>

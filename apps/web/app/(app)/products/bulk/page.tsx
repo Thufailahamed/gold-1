@@ -74,6 +74,7 @@ type Row = {
   location: string;
 };
 type Cell = Exclude<keyof Row, "key">;
+type OldGoldOnHand = { totalMg: number; unknownMg: number; byKarat: { permille: number; karat: string; netMg: number }[] };
 
 /** Optional per-piece columns; weight and name are always shown. */
 const EXTRA_COLS: { id: Cell; label: string; unit?: string; placeholderFrom: keyof Common; numeric: boolean }[] = [
@@ -311,6 +312,13 @@ export default function BulkProductsPage() {
   const purity = purs.data?.rows.find((p) => p.id === common.purityId);
   const permille = purity?.permille;
   const rate = common.purityId ? rates[common.purityId] : undefined;
+  // Every piece in the tray is made from the old gold on hand at the branch, so the tray's net must fit in it.
+  const onHand = useQuery({
+    queryKey: ["og-on-hand", common.branchId],
+    queryFn: () => api<OldGoldOnHand>(`/api/v1/products/old-gold-on-hand?branchId=${encodeURIComponent(common.branchId)}`),
+    enabled: Boolean(common.branchId),
+  });
+  const onHandMg = onHand.data ? (onHand.data.byKarat.find((k) => k.permille === permille)?.netMg ?? 0) + onHand.data.unknownMg : null;
   const commonMaking = num(common.makingLkr);
   const commonCost = num(common.costLkr);
   const commonPrice = num(common.sellingPriceLkr);
@@ -352,6 +360,8 @@ export default function BulkProductsPage() {
     });
     return { gross, net, fine, value: valued ? value : null, cost };
   }, [rows, checks, permille, rate, commonMaking, commonCost, costPerG, commonPrice, commonRate]);
+  const trayMg = filled.length ? totals.net * 1000 : 0;
+  const blockedByGold = onHandMg !== null && trayMg > 0 && (onHandMg <= 0 || trayMg > onHandMg);
 
   /* ---------------------------------------------------------------- edits */
 
@@ -560,7 +570,7 @@ export default function BulkProductsPage() {
             <Link href="/products/new" className={heroGhost}>
               Single piece
             </Link>
-            <button type="submit" form="bk-form" disabled={save.isPending || filled.length === 0} className={heroGold}>
+            <button type="submit" form="bk-form" disabled={save.isPending || filled.length === 0 || blockedByGold} className={heroGold}>
               {save.isPending ? "Saving…" : `Save ${filled.length || ""} product${filled.length === 1 ? "" : "s"}`}
             </button>
           </>
@@ -929,6 +939,11 @@ export default function BulkProductsPage() {
             <span className="hidden rounded-lg bg-bone px-2.5 py-1 text-ink-4 sm:inline">
               Net <span className="g-metric font-medium text-ink">{fmtG(totals.net || null)} g</span>
             </span>
+            {onHandMg !== null ? (
+              <span className={cn("rounded-lg px-2.5 py-1", blockedByGold ? "bg-rose-50 font-medium text-rose-700" : "bg-bone text-ink-4")}>
+                {onHandMg <= 0 ? "No old gold on hand" : <><span className="g-metric font-medium">{fmtG(onHandMg / 1000)} g</span> old gold on hand</>}
+              </span>
+            ) : null}
             {invalidCount ? (
               <span className="rounded-lg bg-rose-50 px-2.5 py-1 font-medium text-rose-700">{invalidCount} to fix</span>
             ) : null}
@@ -937,7 +952,7 @@ export default function BulkProductsPage() {
             <Link href="/products" className="g-btn h-9 rounded-lg px-4 text-sm text-ink-3 hover:bg-bone hover:text-ink">
               Cancel
             </Link>
-            <button type="submit" disabled={save.isPending || filled.length === 0} className="g-btn g-btn-primary h-9 rounded-lg px-5 text-sm">
+            <button type="submit" disabled={save.isPending || filled.length === 0 || blockedByGold} className="g-btn g-btn-primary h-9 rounded-lg px-5 text-sm">
               {save.isPending ? (
                 <>
                   <span className="size-3.5 animate-spin rounded-full border-2 border-gold-light/30 border-t-gold-light" />

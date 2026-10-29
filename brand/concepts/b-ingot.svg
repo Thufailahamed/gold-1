@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0.6" y2="1">
+  <stop offset="0" stop-color="#0E4D40"/><stop offset="0.6" stop-color="#083A2F"/><stop offset="1" stop-color="#03211A"/></linearGradient>
+<radialGradient id="glow" cx="0.5" cy="0.42" r="0.55">
+  <stop offset="0" stop-color="#2FA384" stop-opacity="0.30"/><stop offset="1" stop-color="#2FA384" stop-opacity="0"/></radialGradient>
+<linearGradient id="metal" x1="0.15" y1="0" x2="0.75" y2="1">
+  <stop offset="0" stop-color="#FFF4CF"/><stop offset="0.28" stop-color="#E9CB82"/>
+  <stop offset="0.55" stop-color="#CDA853"/><stop offset="0.8" stop-color="#A2802F"/><stop offset="1" stop-color="#7A5A1E"/></linearGradient>
+<linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.85"/><stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+  <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000" flood-opacity="0.45"/></filter>
+<clipPath id="tile"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+<linearGradient id="ingTop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF4CF"/><stop offset="1" stop-color="#E2C27A"/></linearGradient>
+<linearGradient id="ingFront" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D9B867"/><stop offset="0.6" stop-color="#B28E3C"/><stop offset="1" stop-color="#7E6223"/></linearGradient>
+</defs>
+<rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+<rect x="100" y="100" width="824" height="824" rx="185" fill="url(#glow)"/>
+<rect x="101.5" y="101.5" width="821" height="821" rx="183.5" fill="none" stroke="#9FF0D2" stroke-opacity="0.14" stroke-width="3"/>
+<g filter="url(#shadow)">
+<polygon points="264,520 760,520 730,690 294,690" fill="url(#ingFront)"/>
+<polygon points="330,430 694,430 760,520 264,520" fill="url(#ingTop)"/>
+<polygon points="264,520 330,430 294,690" fill="#000" fill-opacity="0"/>
+</g>
+<polygon points="330,430 694,430 760,520 264,520" fill="none" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="3"/>
+<text x="512" y="652" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="150" fill="#6E521A" fill-opacity="0.85">G</text>
+<text x="512" y="649" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="150" fill="#F3E2AE" fill-opacity="0.35">G</text>
+<path d="M712 326 L719.48 352.52 L746 360 L719.48 367.48 L712 394 L704.52 367.48 L678 360 L704.52 352.52 Z" fill="#FFF8E1" fill-opacity="1"/><path d="M330 316 L333.08 326.92 L344 330 L333.08 333.08 L330 344 L326.92 333.08 L316 330 L326.92 326.92 Z" fill="#FFF8E1" fill-opacity="0.6"/>
+</svg>

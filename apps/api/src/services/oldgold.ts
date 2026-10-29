@@ -1,6 +1,7 @@
 import {
   gToMg,
   lkrToCents,
+  SHOP_STOCK_CUSTOMER_ID,
   type CreateOldGoldInput,
   type TestOldGoldInput,
   type ValueOldGoldInput,
@@ -62,6 +63,7 @@ function rejectLocked(status: string): void {
 type ItemRow = {
   id: string;
   number: string;
+  /** Null for the shop's own stock, which has no seller. */
   customer_id: string;
   branch_id: string;
   item_type: string;
@@ -131,16 +133,29 @@ export async function oldGoldCategories(db: D1Database): Promise<{ id: string; n
   return (results ?? []).map((c) => ({ ...c, isDefault: c.code.toUpperCase() === "OG" }));
 }
 
+/**
+ * `alreadyInStock`: the metal and its cost were booked by another save in the
+ * same batch (a product intake), so this record only tracks the piece and posts
+ * no gold or journal of its own. Posting again would count the metal twice.
+ */
 export async function intakeStatements(
   db: D1Database,
   input: CreateOldGoldInput,
-  actorId: string
+  actorId: string,
+  opts: { alreadyInStock?: boolean } = {}
 ): Promise<{ id: string; number: string; stmts: D1PreparedStatement[] }> {
-  const customer = await db
-    .prepare("SELECT id FROM customers WHERE id = ? AND is_active = 1")
-    .bind(input.customerId)
-    .first();
-  if (!customer) throw Object.assign(new Error("Customer not found"), { code: "NOT_FOUND" });
+  const shopOwned = input.shopOwned === true;
+  if (shopOwned) {
+    // The shop's own stock is valued at cost and goes straight to the shelf: no seller, no testing queue.
+    if (input.needsTesting) throw Object.assign(new Error("Shop-owned stock needs its karat, not testing"), { code: "VALIDATION" });
+  } else {
+    if (!input.customerId) throw Object.assign(new Error("Pick the customer, or tick Shop-owned stock"), { code: "VALIDATION" });
+    const customer = await db
+      .prepare("SELECT id FROM customers WHERE id = ? AND is_active = 1")
+      .bind(input.customerId)
+      .first();
+    if (!customer) throw Object.assign(new Error("Customer not found"), { code: "NOT_FOUND" });
+  }
   const branch = await db
     .prepare("SELECT id FROM branches WHERE id = ? AND is_active = 1")
     .bind(input.branchId)
@@ -162,10 +177,9 @@ export async function intakeStatements(
     throw Object.assign(new Error(input.categoryId ? "Pick one of the old gold categories" : "No OG old gold category is set up"), {
       code: "VALIDATION",
     });
-  // Without testing, the karat is known and the piece is Tested at once; with it, the piece waits to be tested.
+  // With a karat and no testing, the piece is Tested at once. With testing, or with no karat yet, it waits in the testing queue.
   let purity: { id: string; permille: number; karat: string } | null = null;
-  if (!input.needsTesting) {
-    if (!input.purityId) throw Object.assign(new Error("Choose the karat, or tick Needs testing"), { code: "VALIDATION" });
+  if (!input.needsTesting && input.purityId) {
     purity = await db
       .prepare("SELECT id, permille, karat FROM purities WHERE id = ? AND is_active = 1")
       .bind(input.purityId)
@@ -175,29 +189,43 @@ export async function intakeStatements(
   const number = await nextOG(db);
   const id = crypto.randomUUID();
   const now = Date.now();
+  // Shop-owned stock is owned already, so it is AVAILABLE with its fine gold and book cost set.
+  const fineMg = shopOwned && purity ? Math.round((netMg * purity.permille) / 1000) : 0;
+  const costCents = shopOwned && input.costLkr !== undefined ? lkrToCents(input.costLkr) : null;
+  // The shop's own stock belongs to a built-in customer (inactive, so never offered at the counter), created on first use.
+  const sentinel = shopOwned
+    ? [
+        db
+          .prepare("INSERT OR IGNORE INTO customers (id, code, name, is_active, branch_id, created_at) VALUES (?, 'SHOP-STOCK', 'Shop stock', 0, ?, 0)")
+          .bind(SHOP_STOCK_CUSTOMER_ID, input.branchId),
+      ]
+    : [];
   const stmts: D1PreparedStatement[] = [
+    ...sentinel,
     db
       .prepare(
-        "INSERT INTO old_gold_items (id, number, customer_id, branch_id, item_type, description, gross_mg, stone_mg, net_mg, status, staff_id, notes, created_at, created_by, purity_id, tested_permille, karat) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO old_gold_items (id, number, customer_id, branch_id, item_type, description, gross_mg, stone_mg, net_mg, status, staff_id, notes, created_at, created_by, purity_id, tested_permille, karat, fine_mg, purchase_value_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       )
       .bind(
         id,
         number,
-        input.customerId,
+        shopOwned ? SHOP_STOCK_CUSTOMER_ID : input.customerId,
         input.branchId,
         input.itemType?.trim() || "Old gold",
-        input.description?.trim() || `Old gold, ${input.grossG} g`,
+        input.description?.trim() || (shopOwned ? `Shop stock, ${input.grossG} g` : `Old gold, ${input.grossG} g`),
         grossMg,
         stoneMg,
         netMg,
-        purity ? "TESTED" : "RECEIVED",
+        shopOwned ? "AVAILABLE" : purity ? "TESTED" : "RECEIVED",
         actorId,
         input.notes ?? null,
         now,
         actorId,
         purity?.id ?? null,
         purity?.permille ?? null,
-        purity?.karat ?? null
+        purity?.karat ?? null,
+        fineMg,
+        costCents
       ),
     db
       .prepare("INSERT INTO old_gold_item_categories (item_id, category_id) VALUES (?, ?)")
@@ -211,6 +239,54 @@ export async function intakeStatements(
       branchId: input.branchId,
     }),
   ];
+  if (shopOwned && !opts.alreadyInStock && purity && costCents !== null) {
+    // The metal enters branch stock as opening stock (no seller owed, no cash moved),
+    // booked at cost against 3100 Opening Balances, as a direct product intake is.
+    const journal = await buildEntryStmts(
+      db,
+      {
+        lines: [
+          { account: "1100", debitCents: costCents, creditCents: 0 },
+          { account: "3100", debitCents: 0, creditCents: costCents },
+        ],
+        refEntity: "old_gold_shop",
+        refId: id,
+        refNo: number,
+        memo: `Shop-owned old gold ${number}`,
+        branchId: input.branchId,
+        actorId,
+        auditAction: "oldgold.shop_intake",
+        auditEntity: "old_gold",
+        auditEntityId: id,
+        sourceModule: "oldgold",
+      },
+      { entryDate: await businessDateFor(db, now) }
+    );
+    stmts.push(
+      db
+        .prepare("INSERT INTO gold_movements (id, product_id, old_gold_id, direction, fine_mg, purity_permille, ref_entity, ref_id, branch_id, created_at, created_by) VALUES (?, NULL, ?, 'IN', ?, ?, 'old_gold_shop', ?, ?, ?, ?)")
+        .bind(crypto.randomUUID(), id, fineMg, purity.permille, id, input.branchId, now, actorId),
+      ...(await postGoldStmts(
+        db,
+        [
+          {
+            branchId: input.branchId,
+            source: "opening",
+            destination: `branch:${input.branchId}`,
+            type: "OPENING",
+            weightMg: netMg,
+            permille: purity.permille,
+            refEntity: "old_gold_shop",
+            refId: id,
+            oldGoldId: id,
+            notes: `Shop-owned old gold ${number}`,
+          },
+        ],
+        { actorId, auditAction: "oldgold.shop_intake.gold", auditEntity: "old_gold", auditEntityId: id, branchId: input.branchId }
+      )),
+      ...journal.stmts
+    );
+  }
   return { id, number, stmts };
 }
 
@@ -427,6 +503,8 @@ export async function purchaseItem(
 ): Promise<{ purchaseId: string }> {
   const item = await loadItem(db, itemId);
   rejectLocked(item.status);
+  if (item.customer_id === SHOP_STOCK_CUSTOMER_ID)
+    throw Object.assign(new Error("Shop-owned stock has no seller to buy from"), { code: "CONFLICT" });
   if (item.status !== "VALUED")
     throw Object.assign(new Error("Only valued items can be purchased"), { code: "CONFLICT" });
   if (item.purchase_value_cents === null)
@@ -672,10 +750,10 @@ export async function addFiles(
 
 export async function getItem(db: D1Database, id: string) {
   const item = await loadItem(db, id);
-  const customer = await db
-    .prepare("SELECT id, code, name, phone FROM customers WHERE id = ?")
-    .bind(item.customer_id)
-    .first();
+  const customer =
+    item.customer_id === SHOP_STOCK_CUSTOMER_ID
+      ? null
+      : await db.prepare("SELECT id, code, name, phone FROM customers WHERE id = ?").bind(item.customer_id).first();
   const { results: tests } = await db
     .prepare("SELECT * FROM gold_tests WHERE item_id = ? ORDER BY created_at")
     .bind(id)

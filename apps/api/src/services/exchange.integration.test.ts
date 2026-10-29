@@ -289,6 +289,40 @@ describe.skipIf(!sqliteAvailable)("old-for-new exchange over real SQLite", () =>
     expect(one<{ n: number }>("SELECT COUNT(*) AS n FROM gold_tests WHERE item_id = (SELECT id FROM old_gold_items WHERE number = ?) AND result = 'pass'", item.number).n).toBe(1);
   });
 
+  it("records every piece taken in with the sale, each at its own amount", async () => {
+    const { exchangeSale } = await import("./exchange");
+    const before = one<{ n: number }>("SELECT COUNT(*) AS n FROM old_gold_items").n;
+    const ring = await product("Ring Multi");
+    const x = await exchangeSale(
+      db,
+      {
+        customerId: "c1",
+        branchId: "b1",
+        oldGoldItemIds: [],
+        newOldGold: [
+          { grossG: 4, valueLkr: 20_000 },
+          { grossG: 2.5, valueLkr: 9_500 },
+          { grossG: 1, valueLkr: 3_000 },
+        ],
+        items: [{ productId: ring, discountLkr: 0 }],
+        // 50,000 bill less 32,500 of old gold: the customer pays the 17,500 balance.
+        payments: [{ method: "cash", amountLkr: 17_500 }],
+        payout: "cash",
+      },
+      "u1"
+    );
+    expect(x).toMatchObject({ oldGoldValueCents: 3_250_000, customerPaysCents: 1_750_000, shopPaysCents: 0 });
+    expect(one<{ n: number }>("SELECT COUNT(*) AS n FROM old_gold_items").n).toBe(before + 3);
+    const bought = raw
+      .prepare("SELECT oi.net_mg, oi.purchase_value_cents FROM old_gold_items oi JOIN old_gold_purchases og ON og.item_id = oi.id WHERE og.sales_invoice_id = ? ORDER BY oi.net_mg DESC")
+      .all(x.invoiceId) as { net_mg: number; purchase_value_cents: number }[];
+    expect(bought).toEqual([
+      { net_mg: 4000, purchase_value_cents: 2_000_000 },
+      { net_mg: 2500, purchase_value_cents: 950_000 },
+      { net_mg: 1000, purchase_value_cents: 300_000 },
+    ]);
+  });
+
   it("files a piece taken in at the till under the category chosen", async () => {
     const { exchangeSale } = await import("./exchange");
     raw.exec("INSERT INTO categories (id, name, code, created_at) VALUES ('cat-up', 'OLD GOLD UP', 'UP', 0)");

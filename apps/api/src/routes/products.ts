@@ -27,7 +27,8 @@ import {
   voidProduct,
 } from "../services/products";
 import { releaseReservation, reserveProduct } from "../services/inventory";
-import { branchScope, inScope } from "../services/branchAccess";
+import { assertBranchAccess, branchScope, inScope } from "../services/branchAccess";
+import { oldGoldOnHand } from "../services/oldgolddraw";
 import { pagination, serviceError } from "./http";
 import { getShopDb } from "../platform/resolve";
 
@@ -87,7 +88,9 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         400
       );
     try {
-      const row = await createProduct(getShopDb(c), parsed.data, c.get("userId"));
+      // Every piece is made from old gold on hand at its branch: its metal is drawn from there.
+      await assertBranchAccess(getShopDb(c), c.get("userId"), c.get("permissions"), parsed.data.branchId, "this branch");
+      const row = await createProduct(getShopDb(c), parsed.data, c.get("userId"), { fromOldGold: true });
       return c.json({ success: true, data: row }, 201);
     } catch (err) {
       return serviceError(c, err);
@@ -115,8 +118,21 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       );
     }
     try {
-      const data = await createProductsBulk(getShopDb(c), parsed.data, c.get("userId"));
+      await assertBranchAccess(getShopDb(c), c.get("userId"), c.get("permissions"), parsed.data.common.branchId, "this branch");
+      // Every piece in the tray is made from old gold on hand, or the whole tray is refused.
+      const data = await createProductsBulk(getShopDb(c), parsed.data, c.get("userId"), { fromOldGold: true });
       return c.json({ success: true, data }, 201);
+    } catch (err) {
+      return serviceError(c, err);
+    }
+  })
+  // The old gold a new piece can be made from, at a branch: by karat, and the part with no karat yet.
+  .get("/old-gold-on-hand", requirePerm(PERMISSIONS.PRODUCTS_CREATE), async (c) => {
+    const branchId = c.req.query("branchId");
+    if (!branchId) return c.json({ success: false, error: { code: "VALIDATION", message: "Pick the branch" } }, 400);
+    try {
+      await assertBranchAccess(getShopDb(c), c.get("userId"), c.get("permissions"), branchId, "this branch");
+      return c.json({ success: true, data: await oldGoldOnHand(getShopDb(c), branchId) }, 200);
     } catch (err) {
       return serviceError(c, err);
     }

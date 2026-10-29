@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#11574A"/>
+      <stop offset="0.55" stop-color="#0A3B30"/>
+      <stop offset="1" stop-color="#042119"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.46" r="0.5">
+      <stop offset="0" stop-color="#3FBF9A" stop-opacity="0.42"/>
+      <stop offset="0.6" stop-color="#2FA384" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#2FA384" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="tile">
+      <rect x="100" y="100" width="824" height="824" rx="196"/>
+    </clipPath>
+    <linearGradient id="edge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9FF0D2" stop-opacity="0.35"/>
+      <stop offset="0.4" stop-color="#9FF0D2" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Tile: Apple-style rounded square with a faint top rim light -->
+  <rect x="100" y="100" width="824" height="824" rx="196" fill="url(#bg)"/>
+  <rect x="100" y="100" width="824" height="824" rx="196" fill="url(#edge)"/>
+  <rect x="102" y="102" width="820" height="820" rx="194" fill="none" stroke="#7FE0BE" stroke-opacity="0.16" stroke-width="4"/>
+
+  <!-- Soft light behind the stone -->
+  <circle cx="512" cy="480" r="400" fill="url(#glow)" clip-path="url(#tile)"/>
+
+  <!-- Brilliant-cut gold diamond -->
+  <g transform="translate(0 -26)" stroke="#06302A" stroke-width="6" stroke-linejoin="round">
+    <!-- crown -->
+    <polygon points="292,430 400,330 512,430" fill="#E2C27A"/>
+    <polygon points="400,330 624,330 512,430" fill="#FBEFC8"/>
+    <polygon points="624,330 732,430 512,430" fill="#CDA853"/>
+    <!-- pavilion -->
+    <polygon points="292,430 512,430 512,745" fill="#B8923F"/>
+    <polygon points="512,430 732,430 512,745" fill="#8A6827"/>
+  </g>
+  <g transform="translate(0 -26)">
+    <!-- girdle and table highlights -->
+    <line x1="292" y1="430" x2="732" y2="430" stroke="#FFF6D6" stroke-opacity="0.55" stroke-width="5" stroke-linecap="round"/>
+    <line x1="400" y1="330" x2="624" y2="330" stroke="#FFFFFF" stroke-opacity="0.6" stroke-width="5" stroke-linecap="round"/>
+  </g>
+
+  <!-- Sparkles -->
+  <path d="M760 214 L772 262 L820 274 L772 286 L760 334 L748 286 L700 274 L748 262 Z" fill="#FFF8E1"/>
+  <path d="M316 236 L322 258 L344 264 L322 270 L316 292 L310 270 L288 264 L310 258 Z" fill="#FFF8E1" fill-opacity="0.85"/>
+</svg>
