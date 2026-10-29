@@ -4,6 +4,7 @@ import { closingReportCsv, investigateDay, listUnclosedDays, type DayInvestigati
 import { businessDateFor, tzOffsetMinutes } from "./busdate";
 import { PdfDoc, type Rgb } from "./pdf";
 import { reconcile, type CheckResult } from "./reconcile";
+import { getDaySheet } from "./daysheet";
 
 /* ----------------------------------------------------------------- types */
 
@@ -209,6 +210,44 @@ export async function surveyDay(db: D1Database, input: SurveyInput): Promise<Day
       add({ severity: "blocker", area: "Cash", title: "Cash difference not explained", detail: "A short or over drawer needs an explanation before it can close.", cents: differenceCents });
     if ((cardDifference ?? 0) !== 0 && !reason)
       add({ severity: "blocker", area: "Card", title: "Card terminal difference not explained", detail: "The terminal total differs from the card sales recorded; add an explanation.", cents: cardDifference });
+  }
+
+  // The counter's paper day sheet against the books. Never a blocker: the
+  // paper can be wrong too. It is what a person checks before trusting either.
+  const sheet = await getDaySheet(db, branchId, date);
+  if (!sheet.sheet) {
+    if (sheet.system.length)
+      add({
+        severity: "info",
+        area: "Day sheet",
+        title: "No day sheet uploaded",
+        detail: `The books have ${sheet.system.length} transaction${sheet.system.length === 1 ? "" : "s"} today. Upload a photo of the paper day sheet to check them line by line.`,
+      });
+  } else if (sheet.sheet.status === "DRAFT") {
+    add({ severity: "warning", area: "Day sheet", title: "Day sheet not checked yet", detail: "The photo was read but nobody has reviewed and saved the lines." });
+  } else if (sheet.reconciliation && sheet.reconciliation.status === "ISSUES") {
+    const rc = sheet.reconciliation;
+    const rows = new Map(sheet.rows.map((r) => [r.id, r]));
+    add({
+      severity: "warning",
+      area: "Day sheet",
+      title: `Day sheet disagrees with the books on ${rc.counts.mismatch + rc.counts.missingInSystem + rc.counts.missingOnSheet} line${rc.counts.mismatch + rc.counts.missingInSystem + rc.counts.missingOnSheet === 1 ? "" : "s"}`,
+      detail: `${rc.counts.mismatch} amount mismatch, ${rc.counts.missingInSystem} written but not in the system, ${rc.counts.missingOnSheet} in the system but not written.`,
+      items: [
+        ...rc.rows
+          .filter((r) => r.status === "MISMATCH" || r.status === "MISSING_IN_SYSTEM")
+          .map((r) => {
+            const row = rows.get(r.rowId);
+            const who = [row?.refNo, row?.name].filter(Boolean).join(" ") || `line ${r.lineNo}`;
+            return r.status === "MISMATCH"
+              ? `Line ${r.lineNo} ${who}: ${r.issues.map((i) => `${i.label} sheet ${i.sheet} / books ${i.system}`).join("; ")}`
+              : `Line ${r.lineNo} ${who}: not in the system`;
+          }),
+        ...rc.missingOnSheet.map((s) => `${s.kind} ${s.refNo ?? ""} ${s.name ?? ""}: in the books, not on the sheet`.replace(/\s+/g, " ")),
+      ],
+    });
+  } else {
+    add({ severity: "ok", area: "Day sheet", title: "Day sheet agrees with the books", detail: `${sheet.reconciliation?.counts.matched ?? 0} lines matched.` });
   }
 
   if (differenceCents !== null && differenceCents !== 0)

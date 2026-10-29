@@ -22,7 +22,7 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-// Barcode box inside the 400x260 label. The symbol is scaled into it with
+// Barcode box inside the 400-wide label. The symbol is scaled into it with
 // its own viewBox so the stop pattern and quiet zones are never clipped —
 // a Code128 missing either edge will not scan.
 const BOX = { x: 20, y: 62, w: 360, h: 104 };
@@ -39,7 +39,11 @@ function nested(svg: string, box: { x: number; y: number; w: number; h: number }
   return `<svg x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" viewBox="${viewBox}" preserveAspectRatio="xMidYMid meet">${inner}</svg>`;
 }
 
-export function buildLabelSvg(product: LabelProduct, price: LabelPrice, opts: { qr?: boolean } = {}): string {
+export function buildLabelSvg(
+  product: LabelProduct,
+  price: LabelPrice,
+  opts: { qr?: boolean; price?: boolean } = {}
+): string {
   const bars = bwipjs.toSVG({
     bcid: "code128",
     text: product.barcode,
@@ -53,16 +57,22 @@ export function buildLabelSvg(product: LabelProduct, price: LabelPrice, opts: { 
     ? nested(bwipjs.toSVG({ bcid: "qrcode", text: product.barcode, scale: 3, eclevel: "M", paddingwidth: 2, paddingheight: 2 }), QR_BOX)
     : "";
   const codeX = withQr ? box.x + box.w / 2 : 200;
-  const priceLine = price ? `${price.amount.toLocaleString("en-US")} LKR` : "NO RATE";
+  const priceLine =
+    opts.price === false ? "" : price ? `${price.amount.toLocaleString("en-US")} LKR` : "NO RATE";
+  // A price line needs the extra bottom band; without it the tag trims to the
+  // code so it does not waste label stock.
+  const height = priceLine ? 260 : 210;
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="260" viewBox="0 0 400 260">` +
-    `<rect width="400" height="260" fill="#ffffff"/>` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="${height}" viewBox="0 0 400 ${height}">` +
+    `<rect width="400" height="${height}" fill="#ffffff"/>` +
     `<text x="200" y="28" text-anchor="middle" font-size="20" font-family="sans-serif">${esc(product.name)}</text>` +
     `<text x="200" y="52" text-anchor="middle" font-size="14" font-family="sans-serif">${esc(product.karat)} · Gross ${product.gross_weight}g · Net ${product.net_weight}g</text>` +
     nested(bars, box) +
     qr +
     `<text x="${codeX}" y="190" text-anchor="middle" font-size="16" letter-spacing="2" font-family="monospace">${esc(product.barcode)}</text>` +
-    `<text x="200" y="232" text-anchor="middle" font-size="22" font-weight="bold" font-family="sans-serif">${esc(priceLine)}</text>` +
+    (priceLine
+      ? `<text x="200" y="232" text-anchor="middle" font-size="22" font-weight="bold" font-family="sans-serif">${esc(priceLine)}</text>`
+      : "") +
     `</svg>`
   );
 }

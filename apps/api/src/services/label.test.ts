@@ -45,6 +45,19 @@ describe("buildLabelSvg", () => {
     );
     expect(svg).toContain("NO RATE");
   });
+  it("can leave the price off a stock tag", () => {
+    const svg = buildLabelSvg(
+      { barcode: "PRD-A3F9K2", name: "Ring", gross_weight: 5.2, net_weight: 5.0, karat: "22K" },
+      { amount: 157500, ratePerGram: 28500, rateEffectiveFrom: 1759000000000 },
+      { price: false }
+    );
+    expect(svg).not.toContain("157,500");
+    expect(svg).not.toContain("LKR");
+    expect(svg).toContain("PRD-A3F9K2");
+    // Without the price line the tag is trimmed to the code, not left with a
+    // blank strip that would waste label stock.
+    expect(svg).toContain('viewBox="0 0 400 210"');
+  });
 });
 
 describe("buildCodeSvg", () => {

@@ -28,6 +28,7 @@ import {
   SparklesIcon,
   ChevronRightIcon,
   UsersIcon,
+  FileTextIcon,
 } from "./icons";
 
 type IconCmp = (props: { size?: number | string; className?: string }) => React.ReactNode;
@@ -118,6 +119,7 @@ const SECTIONS: NavSection[] = [
         icon: ClipboardCheckIcon,
         perm: "dayclose:view",
       },
+      { href: "/day-sheet", label: "Day Sheet", icon: FileTextIcon, perm: "dayclose:view" },
       {
         href: "/accounts/assistant",
         label: "Assistant",
@@ -313,6 +315,16 @@ export function AppSidebar({
   const initial = (me.user.name || me.user.email || "G").charAt(0).toUpperCase();
   const footer = FOOTER_ITEMS.filter((i) => canSee(me, i));
   const seesRates = hasPermission(me.permissions, "masters:view");
+  // Day sheets whose paper and books disagree: a count on the nav entry so
+  // nobody has to remember to look.
+  const sheetAlerts = useQuery({
+    enabled: hasPermission(me.permissions, "dayclose:view"),
+    queryKey: ["day-sheet-alerts"],
+    queryFn: () => api<{ issues: number }>("/api/v1/day-sheets/alerts"),
+    refetchInterval: 5 * 60_000,
+    staleTime: 60_000,
+  });
+  const badges: Record<string, number | undefined> = { "/day-sheet": sheetAlerts.data?.issues };
 
   // Nested routes (/inventory and /inventory/counts) both prefix-match; only
   // the most specific entry is the current page.
@@ -362,7 +374,7 @@ export function AppSidebar({
               </div>
               <div className="space-y-0.5">
                 {visible.map((item) => (
-                  <NavLink key={item.href} item={item} active={item.href === activeHref} onNavigate={onNavigate} />
+                  <NavLink key={item.href} item={item} active={item.href === activeHref} badge={badges[item.href]} onNavigate={onNavigate} />
                 ))}
               </div>
             </div>

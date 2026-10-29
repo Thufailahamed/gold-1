@@ -1,0 +1,51 @@
+{
+  "name": "goldos-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GoldOS desktop installer: a native window around the hosted web app",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc --noEmit",
+    "start": "pnpm build && electron .",
+    "dist": "pnpm build && electron-builder"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.0",
+    "typescript": "^5.5.0"
+  },
+  "build": {
+    "appId": "lk.goldos.desktop",
+    "productName": "GoldOS",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.business",
+      "target": [
+        "dmg"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "category": "Office",
+      "target": [
+        "AppImage"
+      ]
+    }
+  }
+}

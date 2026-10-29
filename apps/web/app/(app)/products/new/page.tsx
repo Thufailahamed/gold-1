@@ -10,6 +10,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { ratePriceLkr } from "@/lib/pricing";
 import { Page } from "@/components/ui";
 import { GoldHero, HeroBadge, heroGhost, heroGold } from "@/components/console-kit";
 import { Select, type SelectOption } from "@/components/select";
@@ -56,7 +57,8 @@ type FormValues = z.infer<typeof productSchema>;
 
 /**
  * The selling price a typed gold rate gives: net weight × rate per gram, plus
- * making charge. Null when no rate has been typed or there is no net weight.
+ * making charge, rounded to the nearest 100 LKR. Null when no rate has been
+ * typed or there is no net weight.
  */
 function priceFromRate(v: Partial<FormValues>): number | null {
   const rate = Number(v.ratePerGLkr);
@@ -64,7 +66,7 @@ function priceFromRate(v: Partial<FormValues>): number | null {
   const stone = Number(v.stoneG) || 0;
   if (!(rate > 0) || !(gross > stone)) return null;
   const making = Number(v.makingLkr) || 0;
-  return Math.round((gross - stone) * rate + making);
+  return ratePriceLkr(gross - stone, rate, making);
 }
 
 function branchDefault(): Partial<FormValues> | undefined {

@@ -16,6 +16,7 @@ import {
   CoinsIcon,
   CreditCardIcon,
   FileDownIcon,
+  FileTextIcon,
   GemIcon,
   HistoryIcon,
   PrinterIcon,
@@ -318,6 +319,9 @@ export default function DayClosingPage() {
             <button type="button" className={heroGhost} disabled={autoClose.isPending || !me.data} onClick={() => autoClose.mutate()}>
               <ClipboardCheckIcon size={13} /> {autoClose.isPending ? "Surveying…" : canManage ? "Auto close" : "Run survey"}
             </button>
+            <Link href={`/day-sheet?branchId=${encodeURIComponent(branchId)}&date=${date}`} className={heroGhost}>
+              <FileTextIcon size={13} /> Day sheet
+            </Link>
             <Link href={reportHref} className={heroGhost}>
               <PrinterIcon size={13} /> Report
             </Link>

@@ -29,6 +29,8 @@ export type Env = {
   ASSISTANT_REASONING_EFFORT?: string;
   /** Workers AI vision model that reads photographed bills. */
   ASSISTANT_VISION_MODEL?: string;
+  /** Vision model for handwritten day sheets; defaults to Mistral Small 3.1 (see ai/daysheet-scan.ts). */
+  DAYSHEET_VISION_MODEL?: string;
 };
 
 /**

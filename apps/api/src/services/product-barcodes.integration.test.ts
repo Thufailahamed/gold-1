@@ -49,6 +49,9 @@ describe.skipIf(!sqliteAvailable)("piece barcodes over real SQLite", () => {
     const { nextCategoryBarcode, createProduct } = await import("./products");
     expect(await nextCategoryBarcode(db, "cat-ring")).toBe("RING-AA-0006");
     expect(await nextCategoryBarcode(db, "cat-ring")).toBe("RING-AA-0006");
+    const { nextCategoryBarcodes } = await import("./products");
+    const preview = await nextCategoryBarcodes(db, "cat-ring", 3);
+    expect(preview).toEqual(["RING-AA-0006", "RING-AA-0007", "RING-AA-0008"]);
     const p = await createProduct(db, { ...base, categoryId: "cat-ring", name: "Ring C", grossG: 2 }, "u1");
     expect(p.barcode).toBe("RING-AA-0006");
   });

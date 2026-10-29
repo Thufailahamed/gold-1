@@ -169,8 +169,8 @@ export const BULK_PRODUCTS_MAX = 100;
 /**
  * Many like pieces at once (a tray of 25 rings): everything they share is
  * sent once in `common`; each item carries what differs — always its weight,
- * optionally its own name, stone, making, wastage, cost, price, tray or note.
- * An item field overrides the common one.
+ * optionally its own category, subcategory, name, stone, making, wastage, cost,
+ * price, tray or note. An item field overrides the common one.
  */
 const bulkItemSchema = createProductSchema
   .pick({
@@ -180,6 +180,8 @@ const bulkItemSchema = createProductSchema
     notes: true,
   })
   .extend({
+    categoryId: optRef,
+    subcategoryName: createProductSchema.shape.subcategoryName,
     stoneG: z.number().min(0).max(100000).optional(),
     makingLkr: z.number().min(0).optional(),
     wastageG: z.number().min(0).optional(),
@@ -188,7 +190,8 @@ const bulkItemSchema = createProductSchema
   });
 
 export const bulkCreateProductsSchema = z.object({
-  common: createProductSchema.omit({ grossG: true }),
+  // The tray may name no category; then every row must name its own.
+  common: createProductSchema.omit({ grossG: true, categoryId: true }).extend({ categoryId: optRef }),
   items: z.array(bulkItemSchema).min(1).max(BULK_PRODUCTS_MAX),
 });
 

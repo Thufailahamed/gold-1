@@ -1,5 +1,6 @@
 export * from "./permissions";
 export * from "./approvals";
+export * from "./labels";
 export * from "./schemas";
 export * from "./types";
 export * from "./units";

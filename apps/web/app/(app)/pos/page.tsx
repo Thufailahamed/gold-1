@@ -10,10 +10,10 @@ import { extractScanCode, looksLikeCode } from "@/lib/barcode";
 import { cn } from "@/lib/cn";
 import { CameraScanButton } from "@/components/camera-scan";
 import { Select } from "@/components/select";
+import { BranchSwitcher } from "@/components/branch-switcher";
+import { SALES_PAGES } from "@/components/module-nav";
 import { OldGoldExchange, type ExchangePayout, type NewOldGold, type ValuedOldGold } from "./old-gold-exchange";
 import {
-  Page,
-  Hero,
   Panel,
   TableCard,
   EmptyBlock,
@@ -37,7 +37,51 @@ import {
   ArrowLeftRightIcon,
   FileTextIcon,
   CheckCircleIcon,
+  BanknoteIcon,
+  LandmarkIcon,
+  FileCheckIcon,
+  WalletIcon,
+  GemIcon,
+  LogOutIcon,
+  MaximizeIcon,
+  MinimizeIcon,
 } from "@/components/icons";
+
+/** A keyboard shortcut hint, styled as a key cap. */
+function Kbd({ children, dark }: { children: React.ReactNode; dark?: boolean }) {
+  return (
+    <kbd
+      className={cn(
+        "inline-flex h-5 min-w-5 items-center justify-center rounded-md px-1.5 font-mono text-[10px] font-semibold leading-none",
+        dark
+          ? "bg-paper/10 text-paper/80 shadow-[inset_0_-1px_0_rgba(255,255,255,0.12),inset_0_0_0_1px_rgba(255,255,255,0.08)]"
+          : "bg-paper text-ink-3 shadow-[inset_0_-1px_0_rgba(16,32,27,0.12),inset_0_0_0_1px_rgba(16,32,27,0.1)]"
+      )}
+    >
+      {children}
+    </kbd>
+  );
+}
+
+/** One live figure in the terminal header. */
+function HeaderStat({ label, value, accent }: { label: string; value: React.ReactNode; accent?: boolean }) {
+  return (
+    <div className="min-w-0 px-4 py-2.5 first:pl-0 sm:px-5">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-paper/45">{label}</p>
+      <p className={cn("num-tabular mt-0.5 truncate font-semibold", accent ? "text-xl text-gold-light" : "text-lg text-paper")}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+const METHOD_ICON: Record<string, (p: { size?: number }) => React.ReactNode> = {
+  cash: BanknoteIcon,
+  cheque: FileCheckIcon,
+  card: CreditCardIcon,
+  bank: LandmarkIcon,
+  credit: WalletIcon,
+};
 
 type Lookup = {
   product: {
@@ -199,6 +243,29 @@ export default function PosPage() {
   const customerRef = useRef(customer);
   customerRef.current = customer;
   const [branchId, setBranchId] = useState(branchDefault);
+  // Set after mount so the server render and the first client render agree.
+  const [clock, setClock] = useState<Date | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  // The terminal covers the console shell; the page behind it must not scroll.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    setClock(new Date());
+    const t = setInterval(() => setClock(new Date()), 15_000);
+    const onFs = () => setFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onFs);
+    return () => {
+      document.body.style.overflow = prev;
+      clearInterval(t);
+      document.removeEventListener("fullscreenchange", onFs);
+    };
+  }, []);
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    else void document.documentElement.requestFullscreen?.().catch(() => undefined);
+  }
 
   useEffect(() => {
     if (!branchId) {
@@ -694,26 +761,119 @@ export default function PosPage() {
   }
 
   return (
-    <Page>
-      <Hero
-        kicker="Sales"
-        title="Point of sale"
-        description="Scan a tag or QR, or type a product name. Apply discounts, split payments, print the bill."
-        note="F2 scan / search · ↑↓ pick · F9 pay · Enter completes the sale"
-        meta={
-          <>
-            <Pill tone="ghost" className="!text-paper">{cart.length} item{cart.length === 1 ? "" : "s"}</Pill>
-            <Pill tone="ghost" className="!text-paper">{(netMg / 1000).toLocaleString("en-US")} g net</Pill>
-            <Pill tone="ghost" className="!text-paper">{dueLabel}</Pill>
-          </>
-        }
-      >
+    <div className="fixed inset-0 z-40 flex flex-col overflow-y-auto bg-bone text-ink animate-fade-in lg:overflow-hidden">
+      <header className="sticky top-0 z-30 shrink-0 border-b border-ink/[0.08] bg-paper/95 backdrop-blur-md">
+        <div className="flex h-14 items-center gap-3 px-4 lg:px-5">
+          <Link href="/sales" className="flex shrink-0 items-center gap-2.5" title="Back to the console">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-void text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.35)]">
+              <GemIcon size={15} />
+            </span>
+            <span className="hidden leading-none sm:block">
+              <span className="block font-serif text-[15px] font-semibold text-ink">GoldOS</span>
+              <span className="mt-0.5 block text-[9px] font-semibold uppercase tracking-[0.22em] text-gold-dark">POS terminal</span>
+            </span>
+          </Link>
+          <span className="hidden h-6 w-px bg-ink/10 md:block" aria-hidden />
+          <nav aria-label="Sales" className="hidden min-w-0 items-center gap-0.5 overflow-x-auto scrollbar-thin md:flex">
+            {SALES_PAGES.filter((p) => !p.perm || hasPermission(me.data?.permissions ?? [], p.perm)).map((p) => {
+              const Icon = p.icon;
+              const on = p.href === "/pos";
+              return (
+                <Link
+                  key={p.href}
+                  href={p.href}
+                  aria-current={on ? "page" : undefined}
+                  className={cn(
+                    "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors",
+                    on ? "bg-void text-paper" : "text-ink-3 hover:bg-ink/[0.05] hover:text-ink"
+                  )}
+                >
+                  <Icon size={14} />
+                  {p.label}
+                </Link>
+              );
+            })}
+          </nav>
+          <div className="ml-auto flex items-center gap-2">
+            {clock ? (
+              <span className="hidden flex-col items-end leading-none xl:flex">
+                <span className="num-tabular text-sm font-semibold text-ink">
+                  {clock.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+                <span className="mt-0.5 text-[10px] text-ink-4">
+                  {clock.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
+                </span>
+              </span>
+            ) : null}
+            {me.data ? (
+              <span className="hidden items-center gap-2 rounded-lg bg-bone px-2.5 py-1.5 lg:inline-flex">
+                <span className="flex size-6 items-center justify-center rounded-md bg-void text-[10px] font-semibold text-gold-light">
+                  {me.data.user.name.slice(0, 1).toUpperCase()}
+                </span>
+                <span className="max-w-36 truncate text-xs font-medium text-ink-2">{me.data.user.name}</span>
+              </span>
+            ) : null}
+            <BranchSwitcher />
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              aria-label={fullscreen ? "Exit full screen" : "Full screen"}
+              title={fullscreen ? "Exit full screen" : "Full screen"}
+              className="flex size-9 items-center justify-center rounded-lg text-ink-3 ring-1 ring-ink/10 transition-colors hover:bg-ink/[0.05] hover:text-ink"
+            >
+              {fullscreen ? <MinimizeIcon size={16} /> : <MaximizeIcon size={16} />}
+            </button>
+            <Link
+              href="/sales"
+              className="g-btn g-btn-secondary h-9 px-3 text-xs"
+              title="Leave the terminal"
+            >
+              <LogOutIcon size={14} /> <span className="hidden sm:inline">Exit</span>
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      <div className="grid flex-1 grid-cols-1 lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_400px] xl:grid-cols-[minmax(0,1fr)_440px]">
+      <div className="min-w-0 space-y-4 p-4 scrollbar-thin lg:min-h-0 lg:overflow-y-auto lg:p-5">
+      <section className="relative rounded-2xl bg-void text-paper shadow-4">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+          <div className="home-grid-bg absolute inset-0 opacity-30" />
+          <div className="absolute -right-24 -top-32 size-72 rounded-full bg-gold/[0.12] blur-[90px]" />
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
+        </div>
+
+        <div className="relative flex flex-col gap-4 border-b border-paper/[0.07] px-5 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-3.5">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gold/15 text-gold-light shadow-[inset_0_0_0_1px_rgba(205,168,83,0.35)]">
+              <ScanBarcodeIcon size={20} />
+            </span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="g-display text-[22px] leading-tight text-paper">Point of sale</h1>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                  <span className="size-1.5 animate-pulse-soft rounded-full bg-emerald-400" />
+                  {branchId ? "Till open" : "No branch"}
+                </span>
+              </div>
+              <p className="mt-0.5 truncate text-xs text-paper/50">
+                Scan a tag or QR, or type a product name. Apply discounts, split payments, print the bill.
+              </p>
+            </div>
+          </div>
+          <div className="flex divide-x divide-paper/[0.08]">
+            <HeaderStat label="Items" value={cart.length} />
+            <HeaderStat label="Net weight" value={`${(netMg / 1000).toLocaleString("en-US")} g`} />
+            <HeaderStat label="Amount due" value={dueLabel.replace(/ due$/, "")} accent />
+          </div>
+        </div>
+
         <form
           onSubmit={(e) => {
             e.preventDefault();
             submitScan();
           }}
-          className="relative mt-6 flex items-start gap-2"
+          className="relative flex items-start gap-2 px-5 pt-4 sm:px-6"
         >
           <div className="relative flex-1">
             {isSearch ? (
@@ -756,9 +916,8 @@ export default function PosPage() {
               <ul
                 id="pos-results"
                 role="listbox"
-                // In flow, not absolute: the hero card clips overflow, and the
-                // list pushing the page down keeps every match visible.
-                className="mt-2 max-h-80 overflow-y-auto rounded-xl bg-paper p-1.5 text-ink shadow-4 ring-1 ring-ink/10 scrollbar-thin"
+                // Floats over the cart so the terminal layout never jumps while searching.
+                className="absolute inset-x-0 top-[calc(100%+8px)] z-30 max-h-[min(24rem,60vh)] overflow-y-auto rounded-xl bg-paper p-1.5 text-ink shadow-5 ring-1 ring-ink/10 scrollbar-thin animate-pop-in"
               >
                 {catalog.isFetching && results.length === 0 ? (
                   <li className="px-3 py-3 text-sm text-ink-4">Searching…</li>
@@ -801,7 +960,18 @@ export default function PosPage() {
             Add
           </button>
         </form>
-      </Hero>
+        <div className="relative flex flex-wrap items-center gap-x-5 gap-y-2 px-5 pb-4 pt-3 text-[11px] text-paper/50 sm:px-6">
+          <span className="inline-flex items-center gap-1.5"><Kbd dark>F2</Kbd> Scan / search</span>
+          <span className="inline-flex items-center gap-1.5"><Kbd dark>↑</Kbd><Kbd dark>↓</Kbd> Pick</span>
+          <span className="inline-flex items-center gap-1.5"><Kbd dark>F9</Kbd> Pay</span>
+          <span className="inline-flex items-center gap-1.5"><Kbd dark>Enter</Kbd> Complete sale</span>
+          {lookup.isPending ? (
+            <span className="ml-auto inline-flex items-center gap-1.5 text-gold-light">
+              <RefreshCwIcon size={12} className="animate-spin" /> Looking up…
+            </span>
+          ) : null}
+        </div>
+      </section>
 
       {!branchId ? (
         <Callout tone="warning" title="No branch selected">
@@ -847,7 +1017,20 @@ export default function PosPage() {
       <TableCard
         title="Cart"
         icon={<ScanBarcodeIcon size={17} />}
-        description={`${cart.length} item${cart.length === 1 ? "" : "s"}`}
+        description={`${cart.length} item${cart.length === 1 ? "" : "s"} · ${(netMg / 1000).toLocaleString("en-US")} g net`}
+        footer={
+          cart.length > 0 ? (
+            <>
+              <span className="num-tabular">
+                {cart.length} item{cart.length === 1 ? "" : "s"} · {(netMg / 1000).toLocaleString("en-US")} g net
+                {discount + markdown > 0 ? ` · ${fmt(discount + markdown)} LKR off shelf` : ""}
+              </span>
+              <span className="num-tabular text-sm text-ink-3">
+                Cart total <span className="ml-2 text-base font-semibold text-ink">{fmt(total)} LKR</span>
+              </span>
+            </>
+          ) : null
+        }
         actions={
           <span className="flex items-center gap-3">
             {cart.length > 0 ? (
@@ -865,16 +1048,32 @@ export default function PosPage() {
                 </button>
               </>
             ) : null}
-            <span className="g-metric text-[11px] font-medium uppercase tracking-[0.14em] text-ink-4">{dueLabel}</span>
+            <span className="rounded-full bg-gold-pale px-2.5 py-1 g-metric text-[11px] font-semibold uppercase tracking-[0.12em] text-gold-deep shadow-[inset_0_0_0_1px_rgba(168,138,62,0.2)]">
+              {dueLabel}
+            </span>
           </span>
         }
       >
         {cart.length === 0 ? (
-          <EmptyBlock title="Cart is empty" description="Scan a tag or its QR code, or type a product name above to start the sale." />
+          <EmptyBlock
+            icon={<ScanBarcodeIcon size={22} />}
+            title="Cart is empty"
+            description="Scan a tag or its QR code, or type a product name above to start the sale."
+            action={
+              <button
+                type="button"
+                onClick={() => scanRef.current?.focus()}
+                className="g-btn g-btn-secondary h-9 px-3.5 text-xs"
+              >
+                <Kbd>F2</Kbd> Start scanning
+              </button>
+            }
+          />
         ) : (
           <table className="g-table">
             <thead>
               <tr>
+                <th className="w-10">#</th>
                 <th>Barcode</th>
                 <th>Item</th>
                 <th className="!text-right">Net g</th>
@@ -887,6 +1086,7 @@ export default function PosPage() {
             <tbody>
               {cart.map((l, i) => (
                 <tr key={l.productId}>
+                  <td className="num-tabular text-xs text-ink-4">{i + 1}</td>
                   <td className="g-metric text-xs">{l.barcode}</td>
                   <td className="font-medium text-ink">
                     {l.name} <span className="text-ink-4">· {l.karat}</span>
@@ -977,7 +1177,32 @@ export default function PosPage() {
         />
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Panel title="Discount" icon={<TagsIcon size={17} />} description={`${pct.toFixed(1)}% of subtotal`} bodyClassName="py-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-xl bg-gradient-to-br from-void to-[#0b3a2e] px-4 py-3 shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25)]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">Discount given</p>
+              <p className="num-tabular mt-1 text-xl font-semibold text-paper">
+                {fmt(discount + markdown)} <span className="text-xs font-medium text-gold-light">LKR</span>
+              </p>
+            </div>
+            <div className="rounded-xl bg-bone/70 px-4 py-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Of shelf price</p>
+              <p className="num-tabular mt-1 text-xl font-semibold text-ink">{pct.toFixed(1)}%</p>
+            </div>
+            <div className="rounded-xl bg-bone/70 px-4 py-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Sale total</p>
+              <p className="num-tabular mt-1 text-xl font-semibold text-ink">{fmt(total)}</p>
+            </div>
+          </div>
+          <p className="mt-3 flex items-center gap-2 text-xs text-ink-4">
+            <span className="size-1.5 shrink-0 rounded-full bg-gold" />
+            Edit a price or discount in the cart. What you enter is what is charged and booked.
+          </p>
+        </Panel>
+      </div>
+
+      <aside className="flex min-w-0 flex-col border-t border-ink/[0.08] bg-paper/55 lg:min-h-0 lg:border-l lg:border-t-0">
+      <div className="space-y-4 p-4 scrollbar-thin lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:p-5">
         <Panel title="Customer" icon={<UserCheckIcon size={17} />} description="Optional — required for credit">
           {customer ? (
             <>
@@ -1130,76 +1355,68 @@ export default function PosPage() {
             />
           </label>
         </Panel>
-        <Panel title="Discount" icon={<TagsIcon size={17} />} description={`${pct.toFixed(1)}% of subtotal`} className="!overflow-visible">
-          <div className="rounded-xl bg-gradient-to-br from-void to-[#0b3a2e] px-4 py-3.5 shadow-[inset_0_0_0_1px_rgba(205,168,83,0.25)]">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold-light">Discount given</p>
-            <p className="num-tabular mt-1 text-2xl font-semibold text-paper">
-              {fmt(discount + markdown)} <span className="text-sm font-medium text-gold-light">LKR</span>
-            </p>
-          </div>
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-bone/70 px-3.5 py-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Of shelf price</p>
-              <p className="num-tabular mt-1 text-lg font-semibold text-ink">{pct.toFixed(1)}%</p>
-            </div>
-            <div className="rounded-xl bg-bone/70 px-3.5 py-3 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Sale total</p>
-              <p className="num-tabular mt-1 text-lg font-semibold text-ink">{fmt(total)}</p>
-            </div>
-          </div>
-          <p className="mt-3 rounded-lg bg-gold/10 px-3 py-2 text-xs leading-relaxed text-ink-3">
-            Edit a price or discount in the cart. What you enter is what is charged and booked.
-          </p>
-        </Panel>
         <Panel
           title="Payment"
           icon={<CreditCardIcon size={17} />}
           description={hasExchange ? (shopOwes > 0 ? `${fmt(shopOwes)} LKR ${payout === "cash" ? "cash to customer" : "to clear open bills"}` : `Customer pays ${fmt(due)} LKR`) : `Total ${fmt(total)} LKR`}
           className="!overflow-visible"
         >
-          <dl className="mb-3 grid grid-cols-2 gap-y-1.5 rounded-xl bg-bone/70 px-4 py-3 text-sm num-tabular shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
-            <dt className="text-ink-3">Subtotal</dt>
-            <dd className="text-right text-ink">{fmt(subtotal)}</dd>
-            {discount > 0 ? (
-              <>
-                <dt className="text-ink-3">Discount</dt>
-                <dd className="text-right text-ink">−{fmt(discount)}</dd>
-              </>
-            ) : null}
-            {taxRateBp > 0 ? (
-              <>
-                <dt className="text-ink-3">{taxLabel} {(taxRateBp / 100).toFixed(2).replace(/\.00$/, "")}%</dt>
-                <dd className="text-right text-ink">{fmt(tax)}</dd>
-              </>
-            ) : null}
-            {hasExchange ? (
-              <>
-                <dt className="text-ink-3">Old gold in</dt>
-                <dd className="text-right text-ink">−{fmt(oldTotal)}</dd>
-              </>
-            ) : null}
-            <dt className="mt-1 border-t border-ink/[0.08] pt-2 font-semibold text-ink">
-              {shopOwes > 0 ? (payout === "cash" ? "Cash to customer" : "Clears open bills") : hasExchange ? "Customer pays" : "Total due"}
-            </dt>
-            <dd className="mt-1 border-t border-ink/[0.08] pt-2 text-right text-base font-semibold text-ink">
-              {fmt(shopOwes > 0 ? shopOwes : due)}
-            </dd>
-          </dl>
+          <div className="mb-4 overflow-hidden rounded-xl bg-bone/70 shadow-[inset_0_0_0_1px_rgba(16,32,27,0.06)]">
+            <dl className="grid grid-cols-2 gap-y-1.5 px-4 pb-3 pt-3.5 text-sm num-tabular">
+              <dt className="text-ink-3">Subtotal</dt>
+              <dd className="text-right text-ink">{fmt(subtotal)}</dd>
+              {discount > 0 ? (
+                <>
+                  <dt className="text-ink-3">Discount</dt>
+                  <dd className="text-right text-ink">−{fmt(discount)}</dd>
+                </>
+              ) : null}
+              {taxRateBp > 0 ? (
+                <>
+                  <dt className="text-ink-3">{taxLabel} {(taxRateBp / 100).toFixed(2).replace(/\.00$/, "")}%</dt>
+                  <dd className="text-right text-ink">{fmt(tax)}</dd>
+                </>
+              ) : null}
+              {hasExchange ? (
+                <>
+                  <dt className="text-ink-3">Old gold in</dt>
+                  <dd className="text-right text-ink">−{fmt(oldTotal)}</dd>
+                </>
+              ) : null}
+            </dl>
+          </div>
           {due > 0 ? (
-            <div className="mb-1 flex flex-wrap gap-1.5">
-              {["cash", "cheque", "card", "bank", ...(customer ? ["credit"] : [])].map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => payAll(m)}
-                  className="g-btn g-btn-secondary h-7 px-2.5 text-[11px] capitalize"
-                >
-                  All {m}
-                </button>
-              ))}
+            <div className="mb-1">
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-4">Quick tender · full amount</p>
+              <div className={cn("grid gap-1.5", customer ? "grid-cols-5" : "grid-cols-4")}>
+                {["cash", "cheque", "card", "bank", ...(customer ? ["credit"] : [])].map((m) => {
+                  const Icon = METHOD_ICON[m] ?? CreditCardIcon;
+                  const on = pays.length === 1 && pays[0]?.method === m && cents(pays[0].amountLkr) === due;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => payAll(m)}
+                      aria-pressed={on}
+                      aria-label={`All ${m}`}
+                      title={`Take the full amount by ${m}`}
+                      className={cn(
+                        "flex h-14 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium capitalize ring-1 transition-colors",
+                        on
+                          ? "bg-gold-pale text-gold-deep ring-gold-dark/40"
+                          : "bg-paper text-ink-2 ring-ink/10 hover:bg-bone hover:ring-ink/20"
+                      )}
+                    >
+                      <Icon size={16} />
+                      {m}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           ) : null}
           <form
+            id="pos-pay-form"
             onSubmit={(e) => {
               e.preventDefault();
               if (canComplete && !complete.isPending) complete.mutate();
@@ -1353,15 +1570,46 @@ export default function PosPage() {
                 Over {customer?.name}&apos;s credit limit of {fmt(credit.data!.creditLimitCents)} LKR — take more now or collect the balance first.
               </p>
             ) : null}
-            <button
-              type="submit"
-              disabled={complete.isPending || !canComplete}
-              className="g-btn g-btn-primary mt-4 h-12 w-full rounded-xl text-sm"
-            >
-              {complete.isPending ? "Posting…" : "Complete sale (Enter)"}
-            </button>
           </form>
         </Panel>
+      </div>
+
+        {/* Pinned checkout: the total and the one button that matters are always on screen. */}
+        <div className="sticky bottom-0 z-20 shrink-0 border-t border-ink/[0.08] bg-paper px-4 pb-4 pt-3.5 shadow-[0_-18px_40px_-28px_rgba(16,32,27,0.35)] lg:static lg:px-5 lg:pb-5">
+          <div className="flex items-end justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-4">
+                {shopOwes > 0 ? (payout === "cash" ? "Cash to customer" : "Clears open bills") : hasExchange ? "Customer pays" : "Total due"}
+              </p>
+              {shopOwes > 0 ? null : (
+                <p className={cn("num-tabular mt-1 text-xs", paidSum === due && due > 0 ? "font-medium text-emerald-700" : "text-ink-4")}>
+                  Paid {fmt(paidSum)}
+                  {autoCredit > 0 ? ` · ${fmt(autoCredit)} on credit` : ""}
+                  {change !== null && change > 0 ? ` · change ${fmt(change)}` : ""}
+                </p>
+              )}
+            </div>
+            <p className="num-tabular text-[30px] font-semibold leading-none tracking-tight text-ink">
+              {fmt(shopOwes > 0 ? shopOwes : due)} <span className="text-sm font-medium text-gold-dark">LKR</span>
+            </p>
+          </div>
+          <button
+            type="submit"
+            form="pos-pay-form"
+            disabled={complete.isPending || !canComplete}
+            className="g-btn g-btn-primary mt-3.5 h-14 w-full rounded-xl text-[15px] font-semibold"
+          >
+            {complete.isPending ? (
+              "Posting…"
+            ) : (
+              <>
+                <CheckCircleIcon size={17} /> Complete sale
+                <span className="ml-1 opacity-70"><Kbd>Enter</Kbd></span>
+              </>
+            )}
+          </button>
+        </div>
+      </aside>
       </div>
 
       {done ? (
@@ -1436,6 +1684,6 @@ export default function PosPage() {
           </div>
         </Modal>
       ) : null}
-    </Page>
+    </div>
   );
 }

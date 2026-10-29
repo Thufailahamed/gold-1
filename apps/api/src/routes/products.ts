@@ -2,6 +2,7 @@ import { shopR2 } from "../services/shopStorage";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
+  BULK_PRODUCTS_MAX,
   bulkCreateProductsSchema,
   centsToLkr,
   createProductSchema,
@@ -21,7 +22,7 @@ import {
   findByBarcode,
   getProduct,
   listProducts,
-  nextCategoryBarcode,
+  nextCategoryBarcodes,
   priceFor,
   voidProduct,
 } from "../services/products";
@@ -127,12 +128,18 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
       const v = c.req.query(k);
       return v === undefined ? undefined : Number(v);
     };
+    // The label station resolves a deep-linked batch in chunks. D1 caps bound
+    // parameters per query, so keep the explicit batch well inside that limit.
+    const ids = Array.from(
+      new Set((c.req.query("ids") ?? "").split(",").map((s) => s.trim()).filter(Boolean))
+    ).slice(0, 90);
     const data = await listProducts(getShopDb(c), c.get("userId"), canManageAll, {
       ...pagination(c),
       status: c.req.query("status"),
       categoryId: c.req.query("categoryId"),
       purityId: c.req.query("purityId"),
       branchId: c.req.query("branchId"),
+      ids: ids.length ? ids : undefined,
       minG: num("minG"),
       maxG: num("maxG"),
       minPriceLkr: num("minPriceLkr"),
@@ -153,9 +160,10 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
     const categoryId = c.req.query("categoryId");
     if (!categoryId)
       return c.json({ success: false, error: { code: "VALIDATION", message: "categoryId required" } }, 400);
+    const count = Math.min(Math.max(Number(c.req.query("count")) || 1, 1), BULK_PRODUCTS_MAX);
     try {
-      const barcode = await nextCategoryBarcode(getShopDb(c), categoryId);
-      return c.json({ success: true, data: { barcode } }, 200);
+      const barcodes = await nextCategoryBarcodes(getShopDb(c), categoryId, count);
+      return c.json({ success: true, data: { barcode: barcodes[0], barcodes } }, 200);
     } catch (err) {
       return serviceError(c, err);
     }
@@ -219,7 +227,8 @@ export const products = new Hono<{ Bindings: Env; Variables: AppVariables }>()
         tagPrice,
         // Tags carry a QR beside the bars by default, so a phone camera or a
         // 2D scanner can bill the piece; ?qr=0 prints the bars-only tag.
-        { qr: c.req.query("qr") !== "0" }
+        // ?price=0 leaves the retail price off a stock-only tag.
+        { qr: c.req.query("qr") !== "0", price: c.req.query("price") !== "0" }
       );
       c.header("Content-Type", "image/svg+xml");
       // Price moves with the rate; never serve a stale tag from cache.

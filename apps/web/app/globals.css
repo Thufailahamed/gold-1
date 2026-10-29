@@ -1224,6 +1224,12 @@
   }
 }
 
+/* Tag sheets: one to six tags per row, chosen by the operator. The same
+   variable drives the on-screen preview and the printed grid. */
+.label-sheet {
+  grid-template-columns: repeat(var(--label-cols, 2), minmax(0, 1fr));
+}
+
 @media print {
   body * {
     visibility: hidden;
@@ -1257,6 +1263,20 @@
   .label-img {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+  /* Tag sheets print two-up. The grid uses the page's usable width, so the
+     same sheet works on A4 and Letter without a fixed page size. */
+  .label-sheet {
+    display: grid !important;
+    grid-template-columns: repeat(var(--label-cols, 2), minmax(0, 1fr));
+    gap: 4mm;
+    width: 100%;
+    align-items: start;
+  }
+  .label-sheet .label-img {
+    width: 100%;
+    max-width: none;
+    height: auto;
   }
 }
 

@@ -123,12 +123,22 @@ async function categoryCode(db: D1Database, categoryId: string): Promise<string>
  * the product form before the piece is saved.
  */
 export async function nextCategoryBarcode(db: D1Database, categoryId: string): Promise<string> {
+  return (await nextCategoryBarcodes(db, categoryId, 1))[0]!;
+}
+
+/**
+ * The barcodes the category's next `n` pieces will get, in order, without
+ * taking them. A preview for a tray: a number already on a product is skipped
+ * when the pieces are actually saved.
+ */
+export async function nextCategoryBarcodes(db: D1Database, categoryId: string, n: number): Promise<string[]> {
   const code = await categoryCode(db, categoryId);
   const row = await db
     .prepare("SELECT next FROM counters WHERE name = ?")
     .bind(barcodeCounter(categoryId))
     .first<{ next: number }>();
-  return categoryBarcode(code, row?.next ?? 1);
+  const start = row?.next ?? 1;
+  return Array.from({ length: n }, (_, k) => categoryBarcode(code, start + k));
 }
 
 /**
@@ -498,9 +508,17 @@ export async function createProductsBulk(
 ): Promise<BulkCreateResult> {
   const { common, items } = input;
   const branchId = common.branchId;
+  // A row may name its own category, otherwise it takes the tray's. The tray's
+  // subcategory belongs to the tray's category, so only rows that keep it inherit it.
   const pieces = items.map((it, i) => {
+    const categoryId = it.categoryId ?? common.categoryId;
+    if (!categoryId) throw Object.assign(new Error(`Row ${i + 1}: Pick a category`), { code: "VALIDATION" });
+    const sameCategory = categoryId === common.categoryId;
     const merged: CreateProductInput = {
       ...common,
+      categoryId,
+      subcategoryId: sameCategory ? common.subcategoryId : undefined,
+      subcategoryName: it.subcategoryName ?? (sameCategory ? common.subcategoryName : undefined),
       name: it.name ?? common.name,
       grossG: it.grossG,
       stoneG: it.stoneG ?? common.stoneG,
@@ -515,20 +533,49 @@ export async function createProductsBulk(
   });
 
   const now = Date.now();
-  const [permille, codes] = await Promise.all([validateRefs(db, common, branchId), uniqueCodeBatch(db, common.categoryId, pieces.length)]);
-  const sub = await resolveSubcategory(db, common, actorId, now);
-  const fallbackName = common.name ?? sub.name ?? (await categoryName(db, common.categoryId));
   const batchId = crypto.randomUUID();
+  const stmts: D1PreparedStatement[] = [];
+
+  // Per category, once: its references are checked and its barcodes taken from
+  // its own counter, in the tray's order. Per category and subcategory name, once:
+  // a typed subcategory is matched or created a single time for the tray.
+  const byCategory = new Map<string, number[]>();
+  pieces.forEach((p, i) => byCategory.set(p.input.categoryId, [...(byCategory.get(p.input.categoryId) ?? []), i]));
+  const codeFor: { barcode: string; sku: string }[] = [];
+  const names = new Map<string, string>();
+  let permille = 0;
+  for (const [categoryId, idx] of byCategory) {
+    const [pm, batch] = await Promise.all([
+      validateRefs(db, pieces[idx[0]!]!.input, branchId),
+      uniqueCodeBatch(db, categoryId, idx.length),
+    ]);
+    permille = pm;
+    idx.forEach((i, j) => (codeFor[i] = batch[j]!));
+    names.set(categoryId, await categoryName(db, categoryId));
+  }
+  const subFor: { id: string | undefined; name: string | undefined }[] = [];
+  const subByKey = new Map<string, { id: string | undefined; name: string | undefined }>();
+  for (const p of pieces) {
+    const key = `${p.input.categoryId}|${p.input.subcategoryId ?? ""}|${(p.input.subcategoryName ?? "").toLowerCase()}`;
+    let sub = subByKey.get(key);
+    if (!sub) {
+      const resolved = await resolveSubcategory(db, p.input, actorId, now);
+      stmts.push(...resolved.stmts);
+      sub = { id: resolved.id, name: resolved.name };
+      subByKey.set(key, sub);
+    }
+    subFor.push(sub);
+  }
 
   const built = pieces.map((p, i) => ({
     ...p,
     id: crypto.randomUUID(),
-    barcode: codes[i]!.barcode,
-    sku: codes[i]!.sku,
-    name: p.input.name ?? fallbackName,
+    barcode: codeFor[i]!.barcode,
+    sku: codeFor[i]!.sku,
+    subcategoryId: subFor[i]!.id,
+    name: p.input.name ?? subFor[i]!.name ?? names.get(p.input.categoryId) ?? "Item",
   }));
 
-  const stmts: D1PreparedStatement[] = [...sub.stmts];
   for (const b of built)
     stmts.push(
       ...pieceStmts(db, {
@@ -536,7 +583,7 @@ export async function createProductsBulk(
         barcode: b.barcode,
         sku: b.sku,
         input: b.input,
-        subcategoryId: sub.id,
+        subcategoryId: b.subcategoryId,
         name: b.name,
         weights: b.weights,
         permille,
@@ -758,6 +805,8 @@ export type ProductListOpts = PageOpts & {
   categoryId?: string;
   purityId?: string;
   branchId?: string;
+  /** An explicit batch (label printing) instead of a catalogue page. */
+  ids?: string[];
   minG?: number;
   maxG?: number;
   minPriceLkr?: number;
@@ -774,6 +823,10 @@ export async function listProducts(
   const offset = (opts.page - 1) * opts.limit;
   const conds = ["(p.name LIKE ? OR p.barcode LIKE ? OR p.sku LIKE ?)"];
   const vals: unknown[] = [like, like, like];
+  if (opts.ids?.length) {
+    conds.push(`p.id IN (${opts.ids.map(() => "?").join(",")})`);
+    vals.push(...opts.ids);
+  }
   if (opts.status) {
     conds.push("p.status = ?");
     vals.push(opts.status);

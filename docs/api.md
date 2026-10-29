@@ -59,11 +59,11 @@ Keys are per session. 5xx outcomes and multipart uploads are never stored.
 | PATCH | /customers/:id | masters:edit | field updates; optional reason |
 | PATCH | /customers/:id/status | masters:cancel | isActive + reason required |
 | POST | /products | products:create | auto JW- barcode + SKU; grams/LKR in, mg/cents stored |
-| GET | /products | products:view | filters: status, categoryId, purityId, branchId, min/max grams, min/max LKR; paginated |
+| GET | /products | products:view | filters: status, categoryId, purityId, branchId, ids, min/max grams, min/max LKR; paginated |
 | GET | /products/:id | products:view | detail + live price in cents (or no_rate) |
 | PATCH | /products/:id | products:edit | refs/charges/cost/price/location/notes; weights locked |
 | GET | /products/barcode/:code | products:view | scan lookup PRD-/JW-, case-insensitive |
-| GET | /products/:id/label | products:view | Code128 SVG label, image/svg+xml |
+| GET | /products/:id/label | products:view | Code128 SVG label, image/svg+xml; `?qr=0` bars only, `?price=0` no price |
 | POST | /products/:id/images | products:edit | multipart ≤5MB jpeg/png/webp, ≤10 per product → R2 |
 | GET | /products/:id/images/:img | products:view | streams image from R2 |
 | PATCH | /products/:id/void | products:cancel | reason required; writes VOID movement; never deletes |
@@ -132,6 +132,17 @@ Keys are per session. 5xx outcomes and multipart uploads are never stored.
 | GET | /day-closings/:id/report | accounts:view | the frozen report, for printing or export |
 | POST | /day-closings | accounts:manage | {branchId, date, actualCents, differenceReason?, denominations?, cardTerminalCents?, postDifference?}; the note sheet must equal actualCents; a card difference needs a reason; postDifference posts the cash difference to 6090; 409 if a check fails, 409 on unrecognised cash, 409 if already closed, 400 on a difference with no reason |
 | POST | /day-closings/:id/reopen | accounts:manage | {reason, approvedBy}; the approver must hold accounts:manage and be neither the requester nor whoever closed the day |
+| GET | /day-sheets | dayclose:view | ?branchId&from&to&status; saved paper day sheets with their last check counts |
+| GET | /day-sheets/alerts | dayclose:view | {issues}: sheets in the caller's branches whose paper and books disagree (sidebar badge) |
+| GET | /day-sheets/day | dayclose:view | ?branchId&date; {sheet, rows, system, reconciliation, dayClosed}. `system` is derived live from posted journal entries (one line per document, old gold traded against a bill merged onto the bill's line); the check is re-run on every read |
+| PUT | /day-sheets/day | dayclose:manage | {branchId, date, rows[], draft?}; replaces the paper lines; without draft the sheet becomes VERIFIED or ISSUES. 409 when the day is closed |
+| POST | /day-sheets/scan | dayclose:manage | multipart branchId, date, mode=replace\|append, file (1–4 jpeg/png/webp, 6MB each); the photo is read by the vision model (DAYSHEET_VISION_MODEL, default Mistral Small 3.1) into a DRAFT; a total that does not add up triggers one re-read; counts against the assistant daily limit |
+| GET | /day-sheets/:id/images/:n | dayclose:view | streams the nth photo |
+| POST | /day-sheets/:id/rows/:rowId/link | dayclose:manage | {ref \| null}; pairs a paper line with a system document (`refEntity:refId`) by hand |
+| POST | /day-sheets/:id/rows/:rowId/accept | dayclose:manage | {accepted, note}; a difference a person accepted stops counting as an issue |
+| POST | /day-sheets/:id/rows/:rowId/record | dayclose:manage + accounts:manage | {action: customer_receipt \| cash_entry, …}; records the line through the receipt or cash-entry service dated the sheet's day, then links it |
+| POST | /day-sheets/:id/append | dayclose:manage | {ref}; adds a system document as a new paper line, linked |
+| POST | /day-sheets/:id/ignore | dayclose:manage | {ref, ignore, note}; a system document that never goes on the paper sheet |
 | GET | /accounts | accounts:view | 24 accounts + balance_cents, entry_count, is_system, is_editable; optional ?branchId= |
 | POST | /accounts | accounts:manage | create account; code /\d{4}/, unique, is_system=0 |
 | PATCH | /accounts/:code | accounts:manage | rename/describe; refuses system accounts and any account with journal lines |

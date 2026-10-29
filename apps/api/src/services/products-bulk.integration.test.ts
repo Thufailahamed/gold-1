@@ -119,6 +119,41 @@ describe.skipIf(!sqliteAvailable)("bulk product intake over real SQLite", () => 
     expect(n("SELECT COUNT(*) AS n FROM products")).toBe(before);
   });
 
+  it("lets a row take its own category, barcode series and subcategory", async () => {
+    const { createProductsBulk } = await import("./products");
+    const r = await createProductsBulk(
+      db,
+      parse({
+        common: { ...common, subcategoryName: "Kids rings" },
+        items: [{ grossG: 2 }, { grossG: 3, categoryId: "cat-chain" }, { grossG: 4, categoryId: "cat-chain", subcategoryName: "Figaro" }],
+      }),
+      "u1"
+    );
+    const [ring, chainA, chainB] = r.products;
+    // The chain pieces take the category's own series from its first number.
+    expect(chainA!.barcode).toBe("CHAIN-AA-0001");
+    expect(chainB!.barcode).toBe("CHAIN-AA-0002");
+    expect(ring!.barcode.startsWith("CHAIN-")).toBe(false);
+    const placed = raw
+      .prepare("SELECT p.id, p.category_id AS category, s.name AS sub FROM products p LEFT JOIN subcategories s ON s.id = p.subcategory_id WHERE p.id IN (?, ?, ?)")
+      .all(ring!.id, chainA!.id, chainB!.id) as { id: string; category: string; sub: string | null }[];
+    const by = Object.fromEntries(placed.map((p) => [p.id, p]));
+    expect(by[ring!.id]).toMatchObject({ category: "cat-ring", sub: "Kids rings" });
+    // A row in another category does not inherit the tray's subcategory.
+    expect(by[chainA!.id]).toMatchObject({ category: "cat-chain", sub: null });
+    expect(by[chainB!.id]).toMatchObject({ category: "cat-chain", sub: "Figaro" });
+  });
+
+  it("refuses a row that names no category, when the tray names none either", async () => {
+    const { createProductsBulk } = await import("./products");
+    const { categoryId: _none, ...noCategory } = common;
+    const before = n("SELECT COUNT(*) AS n FROM products");
+    await expect(
+      createProductsBulk(db, parse({ common: noCategory, items: [{ grossG: 2 }, { grossG: 3, categoryId: "cat-ring" }] }), "u1")
+    ).rejects.toMatchObject({ code: "VALIDATION", message: expect.stringContaining("Row 1") });
+    expect(n("SELECT COUNT(*) AS n FROM products")).toBe(before);
+  });
+
   it("caps a request at the bulk maximum and requires at least one piece", () => {
     expect(bulkCreateProductsSchema.safeParse({ common, items: [] }).success).toBe(false);
     expect(bulkCreateProductsSchema.safeParse({ common, items: Array.from({ length: 101 }, () => ({ grossG: 1 })) }).success).toBe(false);
